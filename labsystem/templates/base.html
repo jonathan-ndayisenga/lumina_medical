@@ -1,0 +1,379 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Lumina Medical Services{% endblock %}</title>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <style>
+        /* Modern CSS Variables for consistent branding */
+        :root {
+            --brand-dark: #122B4B; /* Matches your dark blue logo */
+            --brand-light: #f0f4f8;
+            --accent-blue: #2563eb;
+            --accent-hover: #1d4ed8;
+            --text-main: #1f2937;
+            --text-muted: #6b7280;
+            --danger: #ef4444;
+            --danger-hover: #dc2626;
+            --success: #10b981;
+            --bg-body: #f3f4f6;
+            --bg-surface: #ffffff;
+            --border-radius: 8px;
+            --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+            --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-body);
+            color: var(--text-main);
+            line-height: 1.6;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* --- SCREEN NAVBAR --- */
+        .navbar {
+            background-color: var(--brand-dark);
+            padding: 1rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: var(--shadow-md);
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+        }
+
+        .navbar-brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: white;
+            text-decoration: none;
+            letter-spacing: 0.5px;
+        }
+
+        .navbar-logo {
+            height: 40px; /* Adjust based on your logo crop */
+            width: auto;
+            border-radius: 4px;
+        }
+
+        .navbar-menu {
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+        }
+
+        .navbar-menu a {
+            color: #e5e7eb;
+            text-decoration: none;
+            padding: 0.5rem 1rem;
+            border-radius: var(--border-radius);
+            font-weight: 500;
+            font-size: 0.95rem;
+            transition: all 0.2s ease;
+        }
+
+        .navbar-menu a:hover {
+            background-color: rgba(255, 255, 255, 0.1);
+            color: white;
+        }
+
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-left: 1rem;
+            padding-left: 1.5rem;
+            border-left: 1px solid rgba(255, 255, 255, 0.2);
+            color: white;
+            font-weight: 500;
+        }
+
+        .btn-logout {
+            background-color: var(--danger);
+            color: white !important;
+        }
+        .btn-logout:hover {
+            background-color: var(--danger-hover) !important;
+        }
+
+        /* --- LAYOUT & CARDS --- */
+        .container {
+            max-width: 1200px;
+            margin: 2rem auto;
+            padding: 0 2rem;
+        }
+
+        .content {
+            background-color: var(--bg-surface);
+            padding: 2.5rem;
+            border-radius: var(--border-radius);
+            box-shadow: var(--shadow-sm);
+            border: 1px solid #e5e7eb;
+        }
+
+        /* --- BUTTONS --- */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0.6rem 1.2rem;
+            background-color: var(--accent-blue);
+            color: white;
+            text-decoration: none;
+            border-radius: var(--border-radius);
+            border: none;
+            cursor: pointer;
+            font-weight: 500;
+            font-size: 0.95rem;
+            transition: background-color 0.2s ease, transform 0.1s ease;
+        }
+
+        .btn:hover {
+            background-color: var(--accent-hover);
+            transform: translateY(-1px);
+        }
+
+        .btn-print {
+            background-color: var(--success);
+        }
+        .btn-print:hover {
+            background-color: #059669;
+        }
+
+        /* --- TABLES --- */
+        table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            margin: 1.5rem 0;
+            border-radius: var(--border-radius);
+            overflow: hidden;
+            border: 1px solid #e5e7eb;
+        }
+
+        th, td {
+            padding: 1rem;
+            text-align: left;
+            border-bottom: 1px solid #e5e7eb;
+        }
+
+        th {
+            background-color: var(--brand-light);
+            font-weight: 600;
+            color: var(--brand-dark);
+            text-transform: uppercase;
+            font-size: 0.85rem;
+            letter-spacing: 0.05em;
+        }
+
+        tr:last-child td {
+            border-bottom: none;
+        }
+
+        tr:hover td {
+            background-color: #f9fafb;
+        }
+
+        /* --- ALERTS --- */
+        .alert {
+            padding: 1rem 1.5rem;
+            margin-bottom: 1.5rem;
+            border-radius: var(--border-radius);
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+        }
+        .alert-error {
+            background-color: #fef2f2;
+            color: #991b1b;
+            border: 1px solid #fecaca;
+        }
+        .alert-success {
+            background-color: #ecfdf5;
+            color: #065f46;
+            border: 1px solid #a7f3d0;
+        }
+
+        /* --- PRINT HEADER (Hidden on Screen) --- */
+        .print-only {
+            display: none;
+        }
+
+        /* --- PRINT STYLES (Crucial for Reports) --- */
+        @media print {
+            body {
+                background-color: white;
+                font-size: 11pt; /* Better readability for print */
+                color: black;
+            }
+            .no-print, .navbar, .alert {
+                display: none !important;
+            }
+            .container {
+                margin: 0;
+                padding: 0;
+                max-width: 100%;
+            }
+            .content {
+                box-shadow: none;
+                border: none;
+                padding: 0;
+            }
+            
+            /* Show the official header only when printing */
+            .print-only {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                border-bottom: 2px solid var(--brand-dark);
+                padding-bottom: 1.5rem;
+                margin-bottom: 2rem;
+            }
+            .print-logo-container {
+                display: flex;
+                align-items: center;
+                gap: 15px;
+            }
+            .print-logo {
+                height: 60px;
+            }
+            .print-hospital-info {
+                text-align: right;
+                font-size: 0.9rem;
+                color: var(--text-muted);
+            }
+            .print-hospital-info h2 {
+                color: var(--brand-dark);
+                margin-bottom: 4px;
+                font-size: 1.4rem;
+            }
+        }
+
+        /* --- MOBILE OPTIMIZATION --- */
+        @media (max-width: 768px) {
+            .navbar {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 0.5rem;
+            }
+            .navbar-menu {
+                width: 100%;
+                flex-wrap: wrap;
+                gap: 0.5rem;
+            }
+            .navbar-menu a,
+            .user-info {
+                padding: 0.6rem 0.8rem;
+                background: rgba(255,255,255,0.06);
+                border-radius: 6px;
+            }
+            .container {
+                padding: 0 1rem;
+                margin: 1rem auto;
+            }
+            .content {
+                padding: 1.25rem;
+            }
+            table {
+                display: block;
+                overflow-x: auto;
+                white-space: nowrap;
+            }
+            .stats-grid,
+            .action-bar {
+                grid-template-columns: 1fr !important;
+                flex-direction: column !important;
+            }
+            .action-bar {
+                align-items: stretch;
+            }
+            .action-bar .btn,
+            .navbar-menu a {
+                width: 100%;
+                text-align: center;
+            }
+        }
+    </style>
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+    <nav class="navbar no-print">
+        <a href="{% url 'report_list' %}" class="navbar-brand">
+            <img src="{% static 'images/lumina-logo.jpeg' %}" alt="Lumina Logo" class="navbar-logo">
+            LUMINA MEDICAL SERVICES
+        </a>
+        <div class="navbar-menu">
+            {% if user.is_authenticated %}
+                <a href="{% url 'report_list' %}">Dashboard</a>
+                <a href="{% url 'report_create' %}">New Lab Report</a>
+                <span class="user-info">
+                    {{ user.get_full_name|default:user.username }}
+                    <a href="{% url 'logout' %}" class="btn-logout">Logout</a>
+                </span>
+            {% endif %}
+        </div>
+    </nav>
+
+    <div class="container">
+        <div class="print-only">
+            <div class="print-logo-container">
+                <img src="{% static 'images/lumina-logo.jpeg' %}" alt="Lumina Logo" class="print-logo">
+                <div>
+                    <h1 style="color: var(--brand-dark); margin: 0;">LUMINA MEDICAL SERVICES</h1>
+                    <span style="letter-spacing: 1px; font-size: 0.85rem; color: #666; text-transform: uppercase;">lighting up your health.</span>
+                </div>
+            </div>
+            <div class="print-hospital-info">
+                <h2>Official Medical Report</h2>
+                <p>PO BOX: 200132, Kampala</p>
+                <p>Location: Kisaasi Kyanja road</p>
+                <p>Phone: 0750639410 / 0780105909</p>
+                <p>Date: {% now "F j, Y" %}</p>
+            </div>
+        </div>
+
+        {% if messages %}
+            {% for message in messages %}
+                <div class="alert alert-{{ message.tags }} no-print">
+                    {{ message }}
+                </div>
+            {% endfor %}
+        {% endif %}
+
+        <div class="content">
+            {% block content %}
+            {% endblock %}
+        </div>
+    </div>
+
+    <script>
+        // Optional: Auto-dismiss alerts after 5 seconds
+        document.addEventListener('DOMContentLoaded', function() {
+            setTimeout(function() {
+                let alerts = document.querySelectorAll('.alert');
+                alerts.forEach(function(alert) {
+                    alert.style.display = 'none';
+                });
+            }, 5000);
+        });
+    </script>
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

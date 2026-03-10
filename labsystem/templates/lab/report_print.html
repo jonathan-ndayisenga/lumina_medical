@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+
+{% block title %}Print Report - {{ report.patient_name }}{% endblock %}
+
+{% block extra_css %}
+<style>
+    .print-wrapper {
+        background: #fff;
+        padding: 1rem 1.5rem;
+    }
+    .print-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-bottom: 2px solid var(--brand-dark);
+        padding-bottom: 1rem;
+        margin-bottom: 1.5rem;
+    }
+    .print-header img {
+        height: 60px;
+    }
+    .print-meta {
+        text-align: right;
+        font-size: 0.9rem;
+        color: #555;
+    }
+    .meta-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 0.5rem 1rem;
+        margin-bottom: 1rem;
+    }
+    .meta-grid strong {
+        color: var(--brand-dark);
+    }
+    .print-table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+    .print-table th,
+    .print-table td {
+        border: 1px solid #ddd;
+        padding: 8px 10px;
+        font-size: 0.95rem;
+    }
+    .print-table th {
+        background: var(--brand-light);
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+    }
+    .abnormal {
+        color: #b91c1c;
+        font-weight: 600;
+    }
+    @media print {
+        .no-print { display: none !important; }
+        body { background: #fff; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="print-wrapper">
+    <div class="print-header">
+        <div style="display:flex;align-items:center;gap:12px;">
+            <img src="{% static 'images/lumina-logo.jpeg' %}" alt="Lumina Logo">
+            <div>
+                <div style="font-weight:700;color:var(--brand-dark);font-size:1.2rem;">LUMINA MEDICAL SERVICES</div>
+                <div style="color:#555;">lighting up your health.</div>
+                <div style="color:#555; font-size:0.9rem;">PO BOX: 200132, Kampala · Kisaasi Kyanja road</div>
+                <div style="color:#555; font-size:0.9rem;">Phone: 0750639410 / 0780105909</div>
+            </div>
+        </div>
+        <div class="print-meta">
+            <div><strong>Date:</strong> {% now "d/m/Y" %}</div>
+            <div><strong>Printed By:</strong> {{ request.user.get_full_name|default:request.user.username }}</div>
+        </div>
+    </div>
+
+    <div class="meta-grid">
+        <div><strong>Patient:</strong> {{ report.patient_name }}</div>
+        <div><strong>Age:</strong> {{ report.patient_age }}</div>
+        <div><strong>Sex:</strong> {{ report.get_patient_sex_display }}</div>
+        <div><strong>Sample Date:</strong> {{ report.sample_date|date:"d/m/Y" }}</div>
+        <div><strong>Specimen:</strong> {{ report.specimen_type }}</div>
+        <div><strong>Attendant:</strong> {{ report.attendant_name }}</div>
+    </div>
+
+    <table class="print-table">
+        <thead>
+            <tr>
+                <th>Test</th>
+                <th>Result</th>
+                <th>Reference Range</th>
+                <th>Unit</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for result in results %}
+            <tr>
+                <td>{{ result.test.name }}</td>
+                <td>{{ result.result_value }}</td>
+                <td>{{ result.reference_range }}</td>
+                <td>{{ result.unit }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    {% if report.comments %}
+        <p style="margin-top:1rem;"><strong>Comments:</strong> {{ report.comments }}</p>
+    {% endif %}
+</div>
+
+<script>
+    // Auto-open print dialog when the print view loads
+    window.addEventListener('load', function() {
+        window.print();
+    });
+</script>
+{% endblock %}

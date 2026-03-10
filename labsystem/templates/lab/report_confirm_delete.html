@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+
+{% block title %}Delete Report{% endblock %}
+
+{% block content %}
+<div class="content">
+    <h2>Delete Lab Report</h2>
+    <p>Are you sure you want to delete the report for <strong>{{ report.patient_name }}</strong> dated {{ report.sample_date }}?</p>
+    <form method="post" class="no-print" style="margin-top:1rem; display:flex; gap:12px;">
+        {% csrf_token %}
+        <button type="submit" class="btn" style="background:#b91c1c;">Yes, delete</button>
+        <a href="{% url 'report_detail' report.pk %}" class="btn" style="background:#6b7280;">Cancel</a>
+    </form>
+</div>
+{% endblock %}

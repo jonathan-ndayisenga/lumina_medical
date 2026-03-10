@@ -1,0 +1,393 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Lab Report - {{ report.patient_name }}{% endblock %}
+
+{% block extra_css %}
+<style>
+    /* Professional Clinical Styling */
+    .report-card {
+        padding: 1rem;
+    }
+
+    .report-title {
+        color: var(--brand-dark);
+        font-weight: 800;
+        letter-spacing: 1px;
+        text-transform: uppercase;
+        border-bottom: 2px solid var(--brand-light);
+        padding-bottom: 0.5rem;
+        margin-bottom: 2rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .patient-info-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 1.5rem;
+        background-color: #fafafa;
+        padding: 1.5rem;
+        border-radius: var(--border-radius);
+        margin-bottom: 2.5rem;
+        border: 1px solid #eee;
+    }
+
+    .info-item {
+        font-size: 0.95rem;
+    }
+
+    .info-label {
+        color: var(--text-muted);
+        font-weight: 500;
+        text-transform: uppercase;
+        font-size: 0.75rem;
+        display: block;
+        margin-bottom: 2px;
+        letter-spacing: 0.3px;
+    }
+
+    .info-value {
+        color: var(--brand-dark);
+        font-weight: 600;
+    }
+
+    .test-section-title {
+        color: var(--brand-dark);
+        font-size: 1.1rem;
+        font-weight: 700;
+        margin-bottom: 1rem;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    /* Result Highlighting */
+    .result-value {
+        font-size: 1.1rem;
+        font-weight: 700;
+        color: var(--accent-blue);
+    }
+
+    .result-abnormal {
+        color: #dc2626 !important;
+        font-weight: 700;
+        position: relative;
+    }
+
+    .result-abnormal:after {
+        content: "*";
+        position: absolute;
+        color: #dc2626;
+        font-size: 1.2rem;
+        margin-left: 4px;
+    }
+
+    tr.abnormal-row {
+        background-color: rgba(220, 38, 38, 0.05);
+    }
+
+    .comment-box {
+        margin-top: 2rem;
+        padding: 1rem;
+        background-color: var(--brand-light);
+        border-left: 4px solid var(--brand-dark);
+        border-radius: 4px;
+    }
+
+    .signature-area {
+        margin-top: 4rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-end;
+    }
+
+    .sig-line {
+        border-top: 1px solid #ccc;
+        width: 200px;
+        text-align: center;
+        padding-top: 5px;
+        font-size: 0.85rem;
+        color: var(--text-muted);
+    }
+
+    .status-badge {
+        display: inline-block;
+        padding: 0.25rem 0.75rem;
+        border-radius: 9999px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
+    .status-printed {
+        background-color: #d1fae5;
+        color: #065f46;
+    }
+
+    .status-draft {
+        background-color: #fef3c7;
+        color: #92400e;
+    }
+
+    .test-table {
+        margin-bottom: 2rem;
+    }
+
+    .test-table th {
+        background-color: var(--brand-dark);
+        color: white;
+        font-size: 0.85rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
+    .test-table td {
+        padding: 0.75rem 1rem;
+    }
+
+    .reference-range {
+        color: var(--text-muted);
+        font-style: italic;
+        font-size: 0.9rem;
+    }
+
+    .units {
+        color: var(--text-muted);
+        font-size: 0.85rem;
+    }
+
+    /* Print Styles */
+    @media print {
+        .patient-info-grid {
+            background-color: transparent !important;
+            border: 1px solid #000;
+            box-shadow: none;
+        }
+        
+        .test-section-title {
+            border-bottom: 1px solid #eee;
+        }
+        
+        .no-print {
+            display: none !important;
+        }
+        
+        .report-card {
+            padding: 0;
+        }
+        
+        .result-abnormal:after {
+            content: " *";
+            color: #000;
+        }
+        
+        .signature-area {
+            margin-top: 2rem;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Action Buttons - Hidden when printing -->
+<div class="no-print" style="margin-bottom: 2rem; display: flex; gap: 10px; flex-wrap: wrap;">
+    <button onclick="window.print()" class="btn btn-print">
+        <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="margin-right: 8px;">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-4a2 2 0 00-2-2H6a2 2 0 00-2 2v4a2 2 0 002 2z"></path>
+        </svg>
+        Print Medical Report
+    </button>
+    
+    <a href="{% url 'report_edit' report.pk %}" class="btn" style="background-color: #f39c12;">
+        <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="margin-right: 8px;">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+        </svg>
+        Edit Report
+    </a>
+    
+    <a href="{% url 'report_list' %}" class="btn" style="background-color: #6b7280;">
+        <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="margin-right: 8px;">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path>
+        </svg>
+        Back to Dashboard
+    </a>
+    
+    {% if not report.printed %}
+    <a href="?mark_printed=1" class="btn" style="background-color: #27ae60;">
+        <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="margin-right: 8px;">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+        </svg>
+        Mark as Printed
+    </a>
+    {% endif %}
+</div>
+
+<!-- Main Report Card -->
+<div class="report-card">
+    <!-- Report Header with Status -->
+    <div class="report-title">
+        <span>
+            Laboratory Investigation Report
+            <span class="status-badge {% if report.printed %}status-printed{% else %}status-draft{% endif %}" style="margin-left: 1rem;">
+                {% if report.printed %}PRINTED{% else %}DRAFT{% endif %}
+            </span>
+        </span>
+        <span style="font-size: 0.8rem; color: var(--text-muted);">REF: #LUM-{{ report.id|stringformat:"05d" }}</span>
+    </div>
+
+    <!-- Patient Information Grid -->
+    <div class="patient-info-grid">
+        <div class="info-item">
+            <span class="info-label">Patient Name</span>
+            <span class="info-value" style="font-size: 1.2rem;">{{ report.patient_name }}</span>
+        </div>
+        <div class="info-item">
+            <span class="info-label">Sample ID / Specimen</span>
+            <span class="info-value">{{ report.specimen_type }}</span>
+        </div>
+        <div class="info-item">
+            <span class="info-label">Age / Sex</span>
+            <span class="info-value">{{ report.patient_age }} / {{ report.get_patient_sex_display }}</span>
+        </div>
+        <div class="info-item">
+            <span class="info-label">Collection Date</span>
+            <span class="info-value">{{ report.sample_date|date:"d M Y" }}</span>
+        </div>
+        <div class="info-item">
+            <span class="info-label">Technician</span>
+            <span class="info-value">
+                {% with att=report.attendant %}
+                    {% if report.attendant_name %}{{ report.attendant_name }}
+                    {% elif att %}{{ att.get_full_name|default:att.username }}
+                    {% else %}N/A{% endif %}
+                {% endwith %}
+            </span>
+        </div>
+        {% if report.printed_at %}
+        <div class="info-item">
+            <span class="info-label">Printed On</span>
+            <span class="info-value">{{ report.printed_at|date:"d M Y H:i" }}</span>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Diagnostic Results Section -->
+    <h3 class="test-section-title">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+        </svg>
+        Diagnostic Results
+    </h3>
+    
+    <!-- Results Table -->
+    <table class="test-table">
+        <thead>
+            <tr>
+                <th style="width: 40%;">Investigation</th>
+                <th style="width: 20%;">Result</th>
+                <th style="width: 25%;">Reference Range</th>
+                <th style="width: 15%;">Units</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for result in results %}
+            <tr>
+                <td style="font-weight: 500;">{{ result.test.name }}</td>
+                <td>
+                    <span class="result-value">{{ result.result_value }}</span>
+                </td>
+                <td class="reference-range">{{ result.reference_range|default:"-" }}</td>
+                <td class="units">{{ result.unit|default:"-" }}</td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="4" style="text-align: center; padding: 3rem; color: var(--text-muted);">
+                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" style="margin: 0 auto 1rem; opacity: 0.5;">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    <p>No test results found for this report.</p>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <!-- Clinical Comments Section -->
+    {% if report.comments %}
+    <div class="comment-box">
+        <span class="info-label" style="color: var(--brand-dark);">Clinical Remarks:</span>
+        <p style="margin-top: 5px; line-height: 1.6;">{{ report.comments }}</p>
+    </div>
+    {% endif %}
+
+    <!-- Signature and Footer Area -->
+    <div class="signature-area">
+        <div>
+            <p style="font-size: 0.85rem; margin-bottom: 40px; color: var(--text-muted);">Electronically verified and authorized by:</p>
+            <div class="sig-line">
+                <strong style="font-size: 1rem;">
+                    {% with att=report.attendant %}
+                        {% if report.attendant_name %}{{ report.attendant_name }}
+                        {% elif att %}{{ att.get_full_name|default:att.username }}
+                        {% else %}N/A{% endif %}
+                    {% endwith %}
+                </strong><br>
+                <span style="color: var(--text-muted);">Lab Technologist</span>
+            </div>
+        </div>
+        <div style="text-align: right;">
+            <p style="font-size: 0.85rem; color: var(--text-muted); line-height: 1.6;">
+                Report Generated: {% now "d/m/Y H:i" %}<br>
+                <span style="font-style: italic;">Electronically Generated Report</span><br>
+                <span style="font-size: 0.75rem;">{{ report.created_at|date:"d M Y" }} - LUM-{{ report.id|stringformat:"05d" }}</span>
+            </p>
+        </div>
+    </div>
+
+    <!-- Footer Note -->
+    <div style="margin-top: 2rem; padding-top: 1rem; border-top: 1px dashed #ccc; text-align: center; font-size: 0.7rem; color: var(--text-muted);">
+        <p>This is a computer generated report and does not require a physical signature.</p>
+        <p>LUMINA MEDICAL SERVICES · lighting up your health · PO BOX: 200132, Kampala · Kisaasi Kyanja road · Phone: 0750639410 / 0780105909</p>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Auto-trigger print dialog if coming from print action
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.get('print') === '1') {
+            setTimeout(() => {
+                window.print();
+            }, 500);
+        }
+
+        // Add keyboard shortcut (Ctrl+P) for printing
+        document.addEventListener('keydown', function(e) {
+            if (e.ctrlKey && e.key === 'p') {
+                e.preventDefault();
+                window.print();
+            }
+        });
+
+        // Warn if trying to print a draft
+        const printButton = document.querySelector('button[onclick="window.print()"]');
+        if (printButton) {
+            printButton.addEventListener('click', function(e) {
+                {% if not report.printed %}
+                const confirmPrint = confirm('This report is still in DRAFT status. Do you want to continue printing?');
+                if (!confirmPrint) {
+                    e.preventDefault();
+                    return false;
+                }
+                {% endif %}
+            });
+        }
+    });
+</script>
+{% endblock %}

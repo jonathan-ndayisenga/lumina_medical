@@ -1,0 +1,121 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Login - Lumina Medical Services{% endblock %}
+
+{% block extra_css %}
+<style>
+    /* Center the login card on the screen */
+    .login-container {
+        max-width: 400px;
+        margin: 2rem auto;
+        padding: 1rem;
+    }
+
+    .login-header {
+        text-align: center;
+        margin-bottom: 2.5rem;
+    }
+
+    .login-logo {
+        height: 80px;
+        width: auto;
+        margin-bottom: 1rem;
+    }
+
+    .login-header h2 {
+        color: var(--brand-dark);
+        font-weight: 700;
+        font-size: 1.75rem;
+        letter-spacing: -0.5px;
+    }
+
+    .login-header p {
+        color: var(--text-muted);
+        font-size: 0.9rem;
+    }
+
+    .form-group {
+        margin-bottom: 1.25rem;
+    }
+
+    .form-group label {
+        display: block;
+        margin-bottom: 0.5rem;
+        font-weight: 500;
+        font-size: 0.9rem;
+        color: var(--brand-dark);
+    }
+
+    .form-control {
+        width: 100%;
+        padding: 0.75rem 1rem;
+        font-size: 1rem;
+        border: 1px solid #d1d5db;
+        border-radius: var(--border-radius);
+        background-color: #f9fafb;
+        transition: all 0.2s ease;
+        font-family: inherit;
+    }
+
+    .form-control:focus {
+        outline: none;
+        border-color: var(--accent-blue);
+        background-color: #fff;
+        box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.1);
+    }
+
+    .login-footer {
+        text-align: center;
+        margin-top: 1.5rem;
+        font-size: 0.85rem;
+        color: var(--text-muted);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="login-container">
+    <div class="login-header">
+        <img src="{% static 'images/lumina-logo.jpeg' %}" alt="Lumina Logo" class="login-logo">
+        <h2>Welcome Back</h2>
+        <p>Lab Attendant Portal Access</p>
+    </div>
+    
+    {% if form.errors %}
+        <div class="alert alert-error">
+            <svg width="20" height="20" fill="currentColor" style="margin-right: 10px;" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"></path>
+            </svg>
+            Invalid username or password.
+        </div>
+    {% endif %}
+
+    <form method="post" action="{% url 'login' %}">
+        {% csrf_token %}
+        
+        <div class="form-group">
+            <label for="username">Username</label>
+            <input type="text" name="username" id="username" class="form-control" 
+                   placeholder="Enter your username" required autocomplete="username">
+        </div>
+
+        <div class="form-group">
+            <label for="password">Password</label>
+            <input type="password" name="password" id="password" class="form-control" 
+                   placeholder="********" required autocomplete="current-password">
+        </div>
+
+        <button type="submit" class="btn" style="width: 100%; padding: 0.8rem; font-size: 1rem;">
+            Secure Log In
+        </button>
+        
+        <input type="hidden" name="next" value="{{ next }}">
+    </form>
+
+    <div class="login-footer">
+        &copy; 2026 Lumina Medical Services. <br>
+        For authorized personnel only.
+    </div>
+</div>
+{% endblock %}
