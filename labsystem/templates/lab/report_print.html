@@ -1,61 +1,29 @@
 {% extends "base.html" %}
 
+{% load static %}
 {% block title %}Print Report - {{ report.patient_name }}{% endblock %}
+{% block print_header %}{% endblock %}
 
 {% block extra_css %}
 <style>
-    .print-wrapper {
-        background: #fff;
-        padding: 1rem 1.5rem;
-    }
-    .print-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        border-bottom: 2px solid var(--brand-dark);
-        padding-bottom: 1rem;
-        margin-bottom: 1.5rem;
-    }
-    .print-header img {
-        height: 60px;
-    }
-    .print-meta {
-        text-align: right;
-        font-size: 0.9rem;
-        color: #555;
-    }
-    .meta-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-        gap: 0.5rem 1rem;
-        margin-bottom: 1rem;
-    }
-    .meta-grid strong {
-        color: var(--brand-dark);
-    }
-    .print-table {
-        width: 100%;
-        border-collapse: collapse;
-    }
-    .print-table th,
-    .print-table td {
-        border: 1px solid #ddd;
-        padding: 8px 10px;
-        font-size: 0.95rem;
-    }
-    .print-table th {
-        background: var(--brand-light);
-        text-transform: uppercase;
-        letter-spacing: 0.03em;
-    }
-    .abnormal {
-        color: #b91c1c;
-        font-weight: 600;
-    }
-    @media print {
-        .no-print { display: none !important; }
-        body { background: #fff; }
-    }
+    /* Borrow styling from report_detail for a consistent look */
+    .print-wrapper { background:#fff; padding:1rem 1.5rem; }
+    .print-header { display:flex; justify-content:space-between; align-items:center; border-bottom:2px solid var(--brand-dark); padding-bottom:1rem; margin-bottom:1.5rem; }
+    .print-header img { height:60px; }
+    .print-meta { text-align:right; font-size:0.9rem; color:#555; }
+    .report-title { color: var(--brand-dark); font-weight: 800; letter-spacing: 1px; text-transform: uppercase; border-bottom: 2px solid var(--brand-light); padding-bottom: 0.5rem; margin-bottom: 1.5rem; display:flex; justify-content:space-between; align-items:center; }
+    .patient-info-grid { display:grid; grid-template-columns: repeat(2, 1fr); gap:1.2rem; background:#fafafa; padding:1.25rem; border-radius: var(--border-radius); margin-bottom: 1.75rem; border:1px solid #eee; }
+    .info-item { font-size:0.95rem; }
+    .info-label { color: var(--text-muted); font-weight:500; text-transform:uppercase; font-size:0.75rem; display:block; margin-bottom:2px; letter-spacing:0.3px; }
+    .info-value { color: var(--brand-dark); font-weight:600; }
+    .test-table { width:100%; border-collapse: collapse; margin-top:0.75rem; }
+    .test-table th, .test-table td { border:1px solid #ddd; padding:10px; font-size:0.95rem; }
+    .test-table th { background: var(--brand-light); text-transform: uppercase; letter-spacing: 0.03em; }
+    .result-value { font-size:1.05rem; font-weight:700; color: var(--accent-blue); }
+    .comment-box { margin-top: 1.5rem; padding: 1rem; background: var(--brand-light); border-left: 4px solid var(--brand-dark); border-radius: 4px; }
+    .signature-area { margin-top: 3rem; display:flex; justify-content: space-between; align-items:flex-end; }
+    .sig-line { border-top: 1px solid #ccc; width: 200px; text-align: center; padding-top: 5px; font-size: 0.85rem; color: var(--text-muted); }
+    @media print { .no-print { display:none !important; } body { background:#fff; } }
 </style>
 {% endblock %}
 
@@ -71,45 +39,114 @@
                 <div style="color:#555; font-size:0.9rem;">Phone: 0750639410 / 0780105909</div>
             </div>
         </div>
-        <div class="print-meta">
-            <div><strong>Date:</strong> {% now "d/m/Y" %}</div>
-            <div><strong>Printed By:</strong> {{ request.user.get_full_name|default:request.user.username }}</div>
+    <div class="print-meta">
+        <div><strong>Date:</strong> {% now "d/m/Y" %}</div>
+        <div><strong>Printed By:</strong> {{ request.user.get_full_name|default:request.user.username }}</div>
+    </div>
+    </div>
+
+    <div class="report-card">
+        <div class="report-title">
+            <div>Laboratory Investigation Report</div>
+            <div style="font-size:0.9rem; color: var(--text-muted);">LUM-{{ report.id|stringformat:"05d" }}</div>
+        </div>
+
+        <div class="patient-info-grid">
+            <div class="info-item">
+                <span class="info-label">Patient Name</span>
+                <span class="info-value">{{ report.patient_name }}</span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">Age / Sex</span>
+                <span class="info-value">{{ report.patient_age }} / {{ report.get_patient_sex_display }}</span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">Collection Date</span>
+                <span class="info-value">{{ report.sample_date|date:"d M Y" }}</span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">Specimen Type</span>
+                <span class="info-value">{{ report.specimen_type }}</span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">Technician</span>
+                <span class="info-value">
+                    {% with att=report.attendant %}
+                        {% if report.attendant_name %}{{ report.attendant_name }}
+                        {% elif att %}{{ att.get_full_name|default:att.username }}
+                        {% else %}N/A{% endif %}
+                    {% endwith %}
+                </span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">Report ID</span>
+                <span class="info-value">LUM-{{ report.id|stringformat:"05d" }}</span>
+            </div>
+        </div>
+
+        <h3 class="test-section-title" style="margin-bottom: 0.75rem;">Diagnostic Results</h3>
+        <table class="test-table">
+            <thead>
+                <tr>
+                    <th style="width: 40%;">Investigation</th>
+                    <th style="width: 20%;">Result</th>
+                    <th style="width: 25%;">Reference Range</th>
+                    <th style="width: 15%;">Units</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for result in results %}
+                <tr>
+                    <td style="font-weight: 500;">{{ result.test.name }}</td>
+                    <td><span class="result-value">{{ result.result_value }}</span></td>
+                    <td class="reference-range">{{ result.reference_range|default:"-" }}</td>
+                    <td class="units">{{ result.unit|default:"-" }}</td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="4" style="text-align: center; padding: 2rem; color: var(--text-muted);">
+                        No test results available.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        {% if report.comments %}
+        <div class="comment-box">
+            <span class="info-label" style="color: var(--brand-dark);">Clinical Remarks:</span>
+            <p style="margin-top: 5px; line-height: 1.6;">{{ report.comments }}</p>
+        </div>
+        {% endif %}
+
+        <div class="signature-area">
+            <div>
+                <p style="font-size: 0.85rem; margin-bottom: 40px; color: var(--text-muted);">Electronically verified and authorized by:</p>
+                <div class="sig-line">
+                    <strong style="font-size: 1rem;">
+                        {% with att=report.attendant %}
+                            {% if report.attendant_name %}{{ report.attendant_name }}
+                            {% elif att %}{{ att.get_full_name|default:att.username }}
+                            {% else %}N/A{% endif %}
+                        {% endwith %}
+                    </strong><br>
+                    <span style="color: var(--text-muted);">Lab Technologist</span>
+                </div>
+            </div>
+            <div style="text-align: right;">
+                <p style="font-size: 0.85rem; color: var(--text-muted); line-height: 1.6;">
+                    Report Generated: {% now "d/m/Y H:i" %}<br>
+                    <span style="font-style: italic;">Electronically Generated Report</span><br>
+                    <span style="font-size: 0.75rem;">{{ report.created_at|date:"d M Y" }} - LUM-{{ report.id|stringformat:"05d" }}</span>
+                </p>
+            </div>
+        </div>
+
+        <div style="margin-top: 1.5rem; padding-top: 1rem; border-top: 1px dashed #ccc; text-align: center; font-size: 0.75rem; color: var(--text-muted);">
+            <p>This is a computer generated report and does not require a physical signature.</p>
+            <p>LUMINA MEDICAL SERVICES · lighting up your health · PO BOX: 200132, Kampala · Kisaasi Kyanja road · Phone: 0750639410 / 0780105909</p>
         </div>
     </div>
-
-    <div class="meta-grid">
-        <div><strong>Patient:</strong> {{ report.patient_name }}</div>
-        <div><strong>Age:</strong> {{ report.patient_age }}</div>
-        <div><strong>Sex:</strong> {{ report.get_patient_sex_display }}</div>
-        <div><strong>Sample Date:</strong> {{ report.sample_date|date:"d/m/Y" }}</div>
-        <div><strong>Specimen:</strong> {{ report.specimen_type }}</div>
-        <div><strong>Attendant:</strong> {{ report.attendant_name }}</div>
-    </div>
-
-    <table class="print-table">
-        <thead>
-            <tr>
-                <th>Test</th>
-                <th>Result</th>
-                <th>Reference Range</th>
-                <th>Unit</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for result in results %}
-            <tr>
-                <td>{{ result.test.name }}</td>
-                <td>{{ result.result_value }}</td>
-                <td>{{ result.reference_range }}</td>
-                <td>{{ result.unit }}</td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-
-    {% if report.comments %}
-        <p style="margin-top:1rem;"><strong>Comments:</strong> {{ report.comments }}</p>
-    {% endif %}
 </div>
 
 <script>

@@ -332,6 +332,7 @@
     </nav>
 
     <div class="container">
+        {% block print_header %}
         <div class="print-only">
             <div class="print-logo-container">
                 <img src="{% static 'images/lumina-logo.jpeg' %}" alt="Lumina Logo" class="print-logo">
@@ -348,6 +349,7 @@
                 <p>Date: {% now "F j, Y" %}</p>
             </div>
         </div>
+        {% endblock %}
 
         {% if messages %}
             {% for message in messages %}
