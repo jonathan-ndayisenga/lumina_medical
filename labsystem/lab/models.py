@@ -10,7 +10,7 @@ class LabReport(models.Model):
     sample_date = models.DateField()
     specimen_type = models.CharField(max_length=50, default='BLOOD')
     attendant = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)
-    attendant_name = models.CharField(max_length=100, blank=True)
+    attendant_name = models.CharField(max_length=100, blank=True, help_text="Lab attendant's name")
     comments = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     printed = models.BooleanField(default=False)
@@ -24,7 +24,7 @@ class LabReport(models.Model):
 
 
 class TestCatalog(models.Model):
-    """Predefined tests (e.g., WBC, RBC) – set up once via admin."""
+    """Learned and suggested test names from prior report entry."""
     name = models.CharField(max_length=100, unique=True)
     unit = models.CharField(max_length=20, blank=True)
     display_order = models.IntegerField(default=0)

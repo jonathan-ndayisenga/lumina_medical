@@ -1,6 +1,7 @@
 from django import forms
-from django.forms import inlineformset_factory
-from .models import LabReport, TestResult, TestCatalog
+from django.forms import BaseInlineFormSet, inlineformset_factory
+
+from .models import LabReport, TestResult
 
 
 class LabReportForm(forms.ModelForm):
@@ -22,25 +23,48 @@ class LabReportForm(forms.ModelForm):
 
 
 class TestResultForm(forms.ModelForm):
+    test_name = forms.CharField(
+        label='Test',
+        max_length=100,
+        required=True,
+        widget=forms.TextInput(
+            attrs={
+                'placeholder': 'Type or choose a test',
+                'class': 'test-name-field',
+                'list': 'test-name-suggestions',
+                'autocomplete': 'off',
+            }
+        ),
+    )
+
     class Meta:
         model = TestResult
-        fields = ['test', 'result_value', 'reference_range', 'unit']
+        fields = ['result_value', 'reference_range', 'unit']
         widgets = {
-            'test': forms.Select(attrs={'class': 'test-select'}),
-            'result_value': forms.TextInput(attrs={'placeholder': 'Result'}),
+            'result_value': forms.TextInput(attrs={'placeholder': 'Result', 'class': 'result-field'}),
             'reference_range': forms.TextInput(attrs={'placeholder': 'e.g. 23.5-33.7', 'class': 'range-field'}),
             'unit': forms.TextInput(attrs={'placeholder': 'e.g. g/dL', 'class': 'unit-field'}),
         }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields['test'].queryset = TestCatalog.objects.order_by('display_order', 'name')
+        if self.instance and self.instance.pk and self.instance.test_id:
+            self.fields['test_name'].initial = self.instance.test.name
+
+
+class TestResultInlineFormSet(BaseInlineFormSet):
+    def add_fields(self, form, index):
+        super().add_fields(form, index)
+        row_number = (index or 0) + 1
+        form.fields['test_name'].error_messages['required'] = f'Row {row_number}: test name is required.'
+        form.fields['result_value'].error_messages['required'] = f'Row {row_number}: result value is required.'
 
 
 TestResultFormSet = inlineformset_factory(
     LabReport,
     TestResult,
     form=TestResultForm,
+    formset=TestResultInlineFormSet,
     extra=1,
     can_delete=True,
 )

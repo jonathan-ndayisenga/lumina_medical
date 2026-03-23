@@ -171,8 +171,23 @@
         color: #1e40af;
     }
 
+    .action-btn-delete {
+        background-color: #fee2e2;
+        color: #b91c1c;
+    }
+
     .action-btn:hover {
         filter: brightness(0.95);
+    }
+
+    .action-form {
+        margin: 0;
+    }
+
+    .action-form button {
+        font-family: inherit;
+        border: none;
+        cursor: pointer;
     }
 
     .empty-state {
@@ -338,6 +353,15 @@
                         </svg>
                         Print
                     </a>
+                    <form method="post" action="{% url 'report_delete' report.pk %}" class="action-form" onsubmit="return confirm('Delete this report permanently?');">
+                        {% csrf_token %}
+                        <button type="submit" class="action-btn action-btn-delete" title="Delete Report">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 6h18M8 6V4h8v2m-7 0v14m6-14v14M5 6l1 14h12l1-14"/>
+                            </svg>
+                            Delete
+                        </button>
+                    </form>
                 </div>
             </td>
         </tr>

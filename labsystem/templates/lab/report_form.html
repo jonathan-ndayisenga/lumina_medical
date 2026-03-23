@@ -50,6 +50,12 @@
         margin-top: 0.25rem;
     }
 
+    .field-errors {
+        margin-top: 0.35rem;
+        font-size: 0.75rem;
+        color: var(--danger);
+    }
+
     /* Style for Django's auto-generated inputs */
     input[type="text"], 
     input[type="number"], 
@@ -119,6 +125,10 @@
         background-color: #f3f4f6;
     }
 
+    .test-table td > input[type="text"] {
+        min-width: 0;
+    }
+
     .unit-badge {
         font-size: 0.8rem;
         background: #f3f4f6;
@@ -186,6 +196,35 @@
         content: "*";
         color: var(--danger);
         margin-left: 4px;
+    }
+
+    .delete-row {
+        width: 36px;
+        height: 36px;
+        border: none;
+        border-radius: 9999px;
+        background: #fee2e2;
+        color: #b91c1c;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        transition: transform 0.15s ease, background-color 0.2s ease;
+    }
+
+    .delete-row:hover {
+        background: #fecaca;
+        transform: translateY(-1px);
+    }
+
+    .delete-row:disabled {
+        opacity: 0.55;
+        cursor: not-allowed;
+        transform: none;
+    }
+
+    .is-hidden-row {
+        display: none;
     }
 
     /* Responsive adjustments */
@@ -313,10 +352,15 @@
     
     <!-- Quick Entry Tips -->
     <div style="margin-bottom: 1rem; padding: 0.75rem; background-color: #e0f2fe; border-radius: 6px; font-size: 0.9rem;">
-        <strong>💡 Quick Entry Tips:</strong> 
-        Tab key moves to next field. Enter numeric values with decimal points (e.g., 30.6). 
-        Use dropdowns for qualitative results.
+        <strong>Quick Entry Tips:</strong>
+        Type a new investigation name or choose a previous one from suggestions. If this age group already has a learned range, it will fill automatically and you can still edit it.
     </div>
+
+    <datalist id="test-name-suggestions">
+        {% for test_name in existing_tests %}
+        <option value="{{ test_name }}"></option>
+        {% endfor %}
+    </datalist>
     
     <table class="test-table">
         <thead>
@@ -332,8 +376,9 @@
             {% for result_form in formset %}
             <tr>
                 <td>
-                    {{ result_form.test }}
-                    {% if result_form.test.errors %}<div class="field-errors">{{ result_form.test.errors|striptags }}</div>{% endif %}
+                    {{ result_form.id }}
+                    {{ result_form.test_name }}
+                    {% if result_form.test_name.errors %}<div class="field-errors">{{ result_form.test_name.errors|striptags }}</div>{% endif %}
                 </td>
                 <td>
                     {{ result_form.result_value }}
@@ -341,21 +386,29 @@
                 </td>
                 <td>
                     <div style="display:flex; gap:6px;">
-                        <span style="flex:1;">{{ result_form.reference_range }}</span>
-                        <span style="flex:1;">{{ result_form.unit }}</span>
+                        <span style="flex:1;">
+                            {{ result_form.reference_range }}
+                            {% if result_form.reference_range.errors %}<div class="field-errors">{{ result_form.reference_range.errors|striptags }}</div>{% endif %}
+                        </span>
+                        <span style="flex:1;">
+                            {{ result_form.unit }}
+                            {% if result_form.unit.errors %}<div class="field-errors">{{ result_form.unit.errors|striptags }}</div>{% endif %}
+                        </span>
                     </div>
                 </td>
                 <td style="text-align:center;">
-                    {% if result_form.can_delete %}
-                        {{ result_form.DELETE }}
-                        <button type="button" class="delete-row" title="Remove" style="background:none;border:none;cursor:pointer;font-size:16px;">🗑️</button>
-                    {% endif %}
+                    <span style="display:none;">{{ result_form.DELETE }}</span>
+                    <button type="button" class="delete-row" title="Remove">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M3 6h18M8 6V4h8v2m-7 0v14m6-14v14M5 6l1 14h12l1-14" />
+                        </svg>
+                    </button>
                 </td>
             </tr>
             {% empty %}
             <tr>
                 <td colspan="4" style="text-align: center; color: var(--text-muted); padding: 1rem;">
-                    No test rows yet. Use “Add Test” to start.
+                    No test rows yet. Use "Add Test" to start.
                 </td>
             </tr>
             {% endfor %}
@@ -366,7 +419,7 @@
     </button>
     <script type="text/template" id="empty-row-template">
         <tr>
-            <td>{{ formset.empty_form.test }}</td>
+            <td>{{ formset.empty_form.id }}{{ formset.empty_form.test_name }}</td>
             <td>{{ formset.empty_form.result_value }}</td>
             <td>
                 <div style="display:flex; gap:6px;">
@@ -374,7 +427,14 @@
                     <span style="flex:1;">{{ formset.empty_form.unit }}</span>
                 </div>
             </td>
-            <td style="text-align:center;">{{ formset.empty_form.DELETE }}<button type="button" class="delete-row" title="Remove" style="background:none;border:none;cursor:pointer;font-size:16px;">🗑️</button></td>
+            <td style="text-align:center;">
+                <span style="display:none;">{{ formset.empty_form.DELETE }}</span>
+                <button type="button" class="delete-row" title="Remove">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M3 6h18M8 6V4h8v2m-7 0v14m6-14v14M5 6l1 14h12l1-14" />
+                    </svg>
+                </button>
+            </td>
         </tr>
     </script>
 </div>
@@ -449,41 +509,98 @@
         const addRowBtn = document.getElementById('add-row-btn');
         const tbody = document.getElementById('results-body');
         const totalFormsInput = document.querySelector('[name="{{ formset.prefix }}-TOTAL_FORMS"]');
+        const formsetPrefix = '{{ formset.prefix }}';
         const templateHtml = document.getElementById('empty-row-template').textContent.trim();
 
+        function replaceIndex(value, index) {
+            if (!value) return value;
+            const prefixPattern = new RegExp(`${formsetPrefix}-(\\d+|__prefix__)`, 'g');
+            return value.replace(prefixPattern, `${formsetPrefix}-${index}`);
+        }
+
+        function updateElementIndex(element, index) {
+            ['name', 'id', 'for'].forEach(attribute => {
+                if (element.hasAttribute && element.hasAttribute(attribute)) {
+                    element.setAttribute(attribute, replaceIndex(element.getAttribute(attribute), index));
+                }
+            });
+        }
+
+        function updateFormIndices() {
+            const rows = Array.from(tbody.querySelectorAll('tr'));
+            rows.forEach((row, index) => {
+                row.querySelectorAll('input, textarea, select, label').forEach(element => {
+                    updateElementIndex(element, index);
+                });
+            });
+            totalFormsInput.value = rows.length;
+        }
+
+        function markUserEdited(input) {
+            if (!input) return;
+            input.dataset.userEdited = 'true';
+        }
+
+        function fillEditableField(input, value) {
+            if (!input) return;
+            if (!input.value || input.dataset.userEdited !== 'true') {
+                input.value = value || '';
+            }
+        }
+
         function bindRow(row) {
-            const testSelect = row.querySelector('select');
+            const testInput = row.querySelector('.test-name-field');
             const rangeField = row.querySelector('.range-field');
             const unitField = row.querySelector('.unit-field');
             const ageInput = document.getElementById('{{ form.patient_age.id_for_label }}');
             const deleteBtn = row.querySelector('.delete-row');
             const deleteCheckbox = row.querySelector('input[type="checkbox"][name$="DELETE"]');
+            const rowIdInput = row.querySelector('input[type="hidden"][name$="-id"]');
 
             function fetchDefault() {
-                if (!testSelect || !testSelect.value || !ageInput) return;
-                fetch(`{% url 'default_range' %}?test=${testSelect.value}&age=${encodeURIComponent(ageInput.value)}`)
+                if (!testInput || !ageInput || !ageInput.value.trim()) return;
+                if (!testInput.value.trim()) {
+                    fillEditableField(rangeField, '');
+                    fillEditableField(unitField, '');
+                    return;
+                }
+                fetch(`{% url 'default_range' %}?test=${encodeURIComponent(testInput.value.trim())}&age=${encodeURIComponent(ageInput.value.trim())}`)
                     .then(r => r.json())
                     .then(data => {
-                        if (data.found) {
-                            if (rangeField) { rangeField.value = data.reference_range; rangeField.readOnly = true; }
-                            if (unitField) { unitField.value = data.unit; unitField.readOnly = true; }
-                        } else {
-                            if (rangeField) rangeField.readOnly = false;
-                            if (unitField) unitField.readOnly = false;
-                        }
+                        fillEditableField(rangeField, data.reference_range || '');
+                        fillEditableField(unitField, data.unit || '');
                     }).catch(() => {});
             }
 
-            if (testSelect) {
-                testSelect.addEventListener('change', fetchDefault);
-                // prefill on load for existing rows
+            if (rangeField) {
+                rangeField.addEventListener('input', () => markUserEdited(rangeField));
+            }
+
+            if (unitField) {
+                unitField.addEventListener('input', () => markUserEdited(unitField));
+            }
+
+            if (testInput) {
+                testInput.addEventListener('change', () => {
+                    if (rangeField) delete rangeField.dataset.userEdited;
+                    if (unitField) delete unitField.dataset.userEdited;
+                    fetchDefault();
+                });
+                testInput.addEventListener('blur', fetchDefault);
                 fetchDefault();
             }
 
             if (deleteBtn && deleteCheckbox) {
                 deleteBtn.addEventListener('click', () => {
-                    deleteCheckbox.checked = true;
-                    row.style.display = 'none';
+                    if (rowIdInput && rowIdInput.value) {
+                        deleteCheckbox.checked = true;
+                        deleteBtn.disabled = true;
+                        row.classList.add('is-hidden-row');
+                        return;
+                    }
+
+                    row.remove();
+                    updateFormIndices();
                 });
             }
         }
@@ -491,14 +608,27 @@
         // bind existing rows
         tbody.querySelectorAll('tr').forEach(bindRow);
 
+        if (ageInput) {
+            ageInput.addEventListener('blur', () => {
+                tbody.querySelectorAll('tr').forEach(row => {
+                    if (!row.classList.contains('is-hidden-row')) {
+                        const testInput = row.querySelector('.test-name-field');
+                        if (testInput && testInput.value.trim()) {
+                            testInput.dispatchEvent(new Event('change'));
+                        }
+                    }
+                });
+            });
+        }
+
         function addRow() {
-            const current = parseInt(totalFormsInput.value, 10);
+            const current = tbody.querySelectorAll('tr').length;
             const html = templateHtml.replace(/__prefix__/g, current);
             const temp = document.createElement('tbody');
             temp.innerHTML = html;
             const row = temp.querySelector('tr');
             tbody.appendChild(row);
-            totalFormsInput.value = current + 1;
+            updateFormIndices();
             bindRow(row);
         }
 

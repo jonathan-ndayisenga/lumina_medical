@@ -36,6 +36,103 @@ def get_age_category(age_str: str) -> str:
     return 'adult'
 
 
+def get_or_create_test_definition(test_name: str, unit: str = '') -> TestCatalog:
+    """Normalize free-text test names into our known-test table."""
+    normalized_name = ' '.join((test_name or '').split())
+    test = TestCatalog.objects.filter(name__iexact=normalized_name).first()
+    if test:
+        if unit and not test.unit:
+            test.unit = unit
+            test.save(update_fields=['unit'])
+        return test
+    return TestCatalog.objects.create(name=normalized_name, unit=unit or '')
+
+
+def save_results_from_formset(report: LabReport, formset) -> None:
+    """Persist edited/new rows and handle row deletion in one place."""
+    age_category = get_age_category(report.patient_age)
+
+    for result_form in formset.forms:
+        cleaned = getattr(result_form, 'cleaned_data', None)
+        if not cleaned:
+            continue
+
+        instance = result_form.instance
+        should_delete = cleaned.get('DELETE', False)
+        if should_delete:
+            if instance and instance.pk:
+                instance.delete()
+            continue
+
+        test_name = ' '.join((cleaned.get('test_name') or '').split())
+        result_value = cleaned.get('result_value')
+        reference_range = cleaned.get('reference_range') or ''
+        unit = cleaned.get('unit') or ''
+
+        # Skip untouched blank extra rows.
+        if not any([test_name, result_value, reference_range, unit]):
+            continue
+
+        instance = result_form.save(commit=False)
+        instance.lab_report = report
+        instance.test = get_or_create_test_definition(test_name, unit)
+        instance.reference_range = reference_range
+        instance.unit = unit
+        instance.save()
+
+        default_exists = ReferenceRangeDefault.objects.filter(
+            test=instance.test,
+            age_category=age_category,
+        ).exists()
+        if not default_exists and reference_range and unit:
+            ReferenceRangeDefault.objects.create(
+                test=instance.test,
+                age_category=age_category,
+                reference_range=reference_range,
+                unit=unit,
+            )
+
+
+def build_report_form_context(form, formset, **extra_context):
+    context = {
+        'form': form,
+        'formset': formset,
+        'existing_tests': TestCatalog.objects.order_by('name').values_list('name', flat=True),
+    }
+    context.update(extra_context)
+    return context
+
+
+def handle_report_form(request, report=None):
+    """Shared create/edit handler for report entry."""
+    is_edit = report is not None
+    report = report or LabReport(attendant=request.user)
+
+    if request.method == 'POST':
+        form = LabReportForm(request.POST, instance=report)
+        formset = TestResultFormSet(request.POST, instance=report)
+        if form.is_valid() and formset.is_valid():
+            report = form.save(commit=False)
+            if not report.attendant:
+                report.attendant = request.user
+            if not report.attendant_name:
+                report.attendant_name = request.user.get_full_name() or request.user.username
+            report.save()
+            save_results_from_formset(report, formset)
+            messages.success(request, 'Report updated.' if is_edit else 'Report saved successfully.')
+            return redirect('report_detail', pk=report.pk)
+        messages.error(request, 'Please fix the errors below.')
+    else:
+        form = LabReportForm(instance=report)
+        formset = TestResultFormSet(instance=report)
+
+    return render(
+        request,
+        'lab/report_form.html',
+        build_report_form_context(form, formset, edit_mode=is_edit, report=report if is_edit else None),
+    )
+
+
 @login_required
 @staff_required
 def report_list(request):
@@ -55,38 +152,7 @@ def report_list(request):
 @staff_required
 @transaction.atomic
 def report_create(request):
-    if request.method == 'POST':
-        form = LabReportForm(request.POST)
-        formset = TestResultFormSet(request.POST)
-        if form.is_valid() and formset.is_valid():
-            report = form.save(commit=False)
-            report.attendant = request.user
-            if not report.attendant_name:
-                report.attendant_name = request.user.get_full_name() or request.user.username
-            report.save()
-            formset.instance = report
-            results = formset.save(commit=False)
-            age_category = get_age_category(report.patient_age)
-            for res in results:
-                res.lab_report = report
-                res.save()
-                if res.test:
-                    exists = ReferenceRangeDefault.objects.filter(test=res.test, age_category=age_category).exists()
-                    if not exists:
-                        ReferenceRangeDefault.objects.create(
-                            test=res.test,
-                            age_category=age_category,
-                            reference_range=res.reference_range,
-                            unit=res.unit,
-                        )
-            formset.save_m2m()
-            messages.success(request, 'Report saved successfully.')
-            return redirect('report_detail', pk=report.pk)
-        messages.error(request, 'Please fix the errors below.')
-    else:
-        form = LabReportForm()
-        formset = TestResultFormSet()
-    return render(request, 'lab/report_form.html', {'form': form, 'formset': formset})
+    return handle_report_form(request)
 
 
 @login_required
@@ -94,38 +160,7 @@ def report_create(request):
 @transaction.atomic
 def report_edit(request, pk):
     report = get_object_or_404(LabReport, pk=pk)
-    if request.method == 'POST':
-        form = LabReportForm(request.POST, instance=report)
-        formset = TestResultFormSet(request.POST, instance=report)
-        if form.is_valid() and formset.is_valid():
-            report = form.save(commit=False)
-            if not report.attendant:
-                report.attendant = request.user
-            if not report.attendant_name:
-                report.attendant_name = request.user.get_full_name() or request.user.username
-            report.save()
-            results = formset.save(commit=False)
-            age_category = get_age_category(report.patient_age)
-            for res in results:
-                res.lab_report = report
-                res.save()
-                if res.test:
-                    exists = ReferenceRangeDefault.objects.filter(test=res.test, age_category=age_category).exists()
-                    if not exists:
-                        ReferenceRangeDefault.objects.create(
-                            test=res.test,
-                            age_category=age_category,
-                            reference_range=res.reference_range,
-                            unit=res.unit,
-                        )
-            formset.save_m2m()
-            messages.success(request, 'Report updated.')
-            return redirect('report_detail', pk=report.pk)
-        messages.error(request, 'Please fix the errors below.')
-    else:
-        form = LabReportForm(instance=report)
-        formset = TestResultFormSet(instance=report)
-    return render(request, 'lab/report_form.html', {'form': form, 'formset': formset, 'edit_mode': True, 'report': report})
+    return handle_report_form(request, report=report)
 
 
 @login_required
@@ -164,19 +199,21 @@ def report_delete(request, pk):
 @login_required
 @staff_required
 def default_range(request):
-    """AJAX endpoint to fetch default reference range for a test+age."""
-    test_id = request.GET.get('test')
+    """AJAX endpoint to fetch default reference range for a test name + age."""
+    test_name = ' '.join((request.GET.get('test') or '').split())
     age = request.GET.get('age', '')
-    try:
-        test = TestCatalog.objects.get(id=test_id)
-    except (TestCatalog.DoesNotExist, ValueError, TypeError):
-        return JsonResponse({'found': False})
+    if not test_name:
+        return JsonResponse({})
+
+    test = TestCatalog.objects.filter(name__iexact=test_name).first()
+    if not test:
+        return JsonResponse({})
+
     age_cat = get_age_category(age)
     default = ReferenceRangeDefault.objects.filter(test=test, age_category=age_cat).first()
     if not default:
-        return JsonResponse({'found': False})
+        return JsonResponse({})
     return JsonResponse({
-        'found': True,
         'reference_range': default.reference_range,
         'unit': default.unit,
     })
