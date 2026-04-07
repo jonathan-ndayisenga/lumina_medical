@@ -1,0 +1,586 @@
+# Lumina Medical Services Deployment Guide
+
+Prepared: April 7, 2026
+
+This guide explains how to take the current Lumina laboratory system from local development to production on GitHub and DigitalOcean.
+
+It covers:
+
+- repository preparation,
+- production Django settings,
+- GitHub push steps,
+- DigitalOcean App Platform deployment,
+- DigitalOcean Droplet deployment,
+- required environment variables,
+- database, static files, domain, and SSL setup,
+- and post-deployment checks.
+
+---
+
+## 1. Recommended Deployment Path
+
+For this project, the recommended production path is:
+
+1. push the code to GitHub,
+2. deploy the Django app to **DigitalOcean App Platform**,
+3. attach a **managed PostgreSQL database**,
+4. point your domain to the app,
+5. enable HTTPS and production security settings.
+
+This is the fastest and lowest-maintenance option.
+
+---
+
+## 2. Alternative Deployment Path
+
+If you want more server control, use:
+
+- a **DigitalOcean Ubuntu Droplet**,
+- **Gunicorn** as the app server,
+- **Nginx** as the reverse proxy and static-file server,
+- and either:
+  - PostgreSQL, or
+  - SQLite for small internal use only.
+
+For production with real staff usage, **PostgreSQL is strongly recommended**.
+
+---
+
+## 3. What You Need Before Deployment
+
+### Accounts and services
+
+- a GitHub account with access to the repository,
+- a DigitalOcean account,
+- optionally a custom domain,
+- optionally a DigitalOcean Managed PostgreSQL database,
+- optionally an SSH key for Droplet deployment.
+
+### Project access
+
+This project is already linked to:
+
+- GitHub remote: `https://github.com/jonathan-ndayisenga/lumina_medical.git`
+- branch: `main`
+
+### Minimum production stack
+
+- Python 3.12
+- Django 6
+- Gunicorn
+- WhiteNoise
+- PostgreSQL driver (`psycopg`)
+
+---
+
+## 4. Deployment Preparation Added to the Project
+
+The project has now been prepared for deployment with the following changes:
+
+- `labsystem/labsystem/settings.py`
+  - environment-driven secret key,
+  - environment-driven debug mode,
+  - environment-driven allowed hosts,
+  - environment-driven CSRF trusted origins,
+  - production-ready static and media paths,
+  - optional PostgreSQL `DATABASE_URL` support,
+  - secure proxy / HTTPS settings,
+  - conditional WhiteNoise static-file support.
+
+- `requirements.txt`
+  - includes:
+    - `gunicorn`
+    - `psycopg[binary]`
+    - `whitenoise`
+
+- `.env.example`
+  - provides the production environment variables you need.
+
+- `.gitignore`
+  - ignores runtime and environment artifacts.
+
+- `labsystem/requirements.txt`
+  - allows App Platform to build from the Django source directory cleanly.
+
+- `.do/app.yaml.example`
+  - sample DigitalOcean App Platform spec for this project.
+
+---
+
+## 5. Production Environment Variables
+
+Use these environment variables in production:
+
+### Required
+
+- `DJANGO_SECRET_KEY`
+- `DJANGO_DEBUG=0`
+- `DJANGO_ALLOWED_HOSTS`
+- `DJANGO_CSRF_TRUSTED_ORIGINS`
+
+### Strongly recommended
+
+- `DATABASE_URL`
+- `DJANGO_SECURE_SSL_REDIRECT=1`
+- `DJANGO_SECURE_HSTS_SECONDS=3600`
+- `DJANGO_SECURE_HSTS_INCLUDE_SUBDOMAINS=1`
+- `DJANGO_SECURE_HSTS_PRELOAD=0`
+- `DB_CONN_MAX_AGE=60`
+
+### Example
+
+```env
+DJANGO_SECRET_KEY=replace-with-a-long-random-secret
+DJANGO_DEBUG=0
+DJANGO_ALLOWED_HOSTS=your-app.ondigitalocean.app,your-domain.com,www.your-domain.com
+DJANGO_CSRF_TRUSTED_ORIGINS=https://your-app.ondigitalocean.app,https://your-domain.com,https://www.your-domain.com
+DJANGO_SECURE_SSL_REDIRECT=1
+DJANGO_SECURE_HSTS_SECONDS=3600
+DJANGO_SECURE_HSTS_INCLUDE_SUBDOMAINS=1
+DJANGO_SECURE_HSTS_PRELOAD=0
+DB_CONN_MAX_AGE=60
+DATABASE_URL=postgresql://username:password@host:25060/database_name?sslmode=require
+```
+
+---
+
+## 6. Local Pre-Deployment Checklist
+
+Before pushing:
+
+```powershell
+cd C:\Users\USER\Desktop\Projects\Lumina_medical_services\labsystem
+..\ven\Scripts\python.exe manage.py check
+..\ven\Scripts\python.exe manage.py migrate
+```
+
+If you want an extra production-style check:
+
+```powershell
+$env:DJANGO_DEBUG="0"
+$env:DJANGO_SECRET_KEY="replace-this-before-real-deploy"
+$env:DJANGO_ALLOWED_HOSTS="127.0.0.1,localhost"
+$env:DJANGO_CSRF_TRUSTED_ORIGINS="http://127.0.0.1,http://localhost"
+..\ven\Scripts\python.exe manage.py check --deploy
+```
+
+---
+
+## 7. Pushing the Project to GitHub
+
+From the repository root:
+
+```powershell
+cd C:\Users\USER\Desktop\Projects\Lumina_medical_services
+git status
+git add .
+git commit -m "Prepare Lumina lab system for DigitalOcean deployment"
+git push origin main
+```
+
+### Important note
+
+Before running `git add .`, make sure you do **not** want to push:
+
+- local database changes,
+- temporary files,
+- compiled cache files,
+- personal environment files.
+
+The new `.gitignore` helps with this, but already-tracked files may still need manual care.
+
+---
+
+## 8. Recommended DigitalOcean App Platform Deployment
+
+This is the easiest deployment path.
+
+### Step 1 - Push code to GitHub
+
+Push the repository to:
+
+- `jonathan-ndayisenga/lumina_medical`
+
+### Step 2 - Create an App Platform app
+
+In DigitalOcean:
+
+1. open **App Platform**,
+2. choose **Create App**,
+3. connect GitHub,
+4. select repository:
+   - `jonathan-ndayisenga/lumina_medical`
+5. choose branch:
+   - `main`
+
+### Step 3 - Configure the app component
+
+Use:
+
+- **Type:** Web Service
+- **Environment:** Python
+- **Source Directory:** `labsystem`
+
+### Step 4 - Build and run commands
+
+Build command:
+
+```bash
+pip install -r requirements.txt && python manage.py collectstatic --noinput
+```
+
+Run command:
+
+```bash
+gunicorn labsystem.wsgi:application --workers 3 --bind 0.0.0.0:$PORT
+```
+
+### Step 5 - HTTP port
+
+Set:
+
+- `8080`
+
+App Platform will provide `PORT=8080` automatically when `http_port` is set.
+
+### Step 6 - Instance size
+
+Recommended starting point:
+
+- `apps-s-1vcpu-1gb`
+
+If more staff will use the system at once, increase later.
+
+### Step 7 - Environment variables
+
+Add all variables from `.env.example`, replacing placeholders with real values.
+
+### Step 8 - Attach a database
+
+Recommended:
+
+- create a **Managed PostgreSQL** database in DigitalOcean,
+- copy the connection URL,
+- set it as:
+  - `DATABASE_URL`
+
+### Step 9 - First deployment tasks
+
+After the app is live, open the console and run:
+
+```bash
+python manage.py migrate
+python manage.py createsuperuser
+```
+
+### Step 10 - Domain and HTTPS
+
+Then:
+
+- add your domain in App Platform,
+- point DNS records to DigitalOcean,
+- verify HTTPS is active,
+- update:
+  - `DJANGO_ALLOWED_HOSTS`
+  - `DJANGO_CSRF_TRUSTED_ORIGINS`
+
+---
+
+## 9. Using the Included App Spec
+
+This repo includes:
+
+- `.do/app.yaml.example`
+
+You can use it as a starting point for App Platform or `doctl`.
+
+Before using it:
+
+1. copy it to your real app spec file,
+2. replace the placeholder secret key,
+3. replace the placeholder domain names,
+4. replace the example `DATABASE_URL`,
+5. confirm the region and instance size you want.
+
+---
+
+## 10. DigitalOcean Droplet Deployment
+
+Use this path if you want full server control.
+
+### Recommended Droplet
+
+- Ubuntu 24.04 LTS
+- 2 GB RAM minimum
+- 1 vCPU minimum
+- region near your users
+
+### Packages to install
+
+```bash
+sudo apt update
+sudo apt install -y python3 python3-venv python3-pip nginx postgresql postgresql-contrib git
+```
+
+### Clone the repo
+
+```bash
+git clone https://github.com/jonathan-ndayisenga/lumina_medical.git
+cd lumina_medical/labsystem
+```
+
+### Create virtual environment and install packages
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+### Create environment file
+
+Create `.env` with the same values shown in `.env.example`.
+
+### Collect static and migrate
+
+```bash
+python manage.py collectstatic --noinput
+python manage.py migrate
+python manage.py createsuperuser
+```
+
+### Gunicorn test run
+
+```bash
+gunicorn labsystem.wsgi:application --bind 0.0.0.0:8000
+```
+
+If that works, stop it and create a systemd service.
+
+### Example Gunicorn systemd service
+
+Create:
+
+- `/etc/systemd/system/lumina-lab.service`
+
+Example:
+
+```ini
+[Unit]
+Description=Lumina Lab Django Application
+After=network.target
+
+[Service]
+User=root
+Group=www-data
+WorkingDirectory=/root/lumina_medical/labsystem
+EnvironmentFile=/root/lumina_medical/labsystem/.env
+ExecStart=/root/lumina_medical/labsystem/.venv/bin/gunicorn labsystem.wsgi:application --workers 3 --bind 127.0.0.1:8000
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Then:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable lumina-lab
+sudo systemctl start lumina-lab
+sudo systemctl status lumina-lab
+```
+
+### Example Nginx site config
+
+Create:
+
+- `/etc/nginx/sites-available/lumina-lab`
+
+Example:
+
+```nginx
+server {
+    listen 80;
+    server_name your-domain.com www.your-domain.com;
+
+    location /static/ {
+        alias /root/lumina_medical/labsystem/staticfiles/;
+    }
+
+    location /media/ {
+        alias /root/lumina_medical/labsystem/media/;
+    }
+
+    location / {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+
+Enable it:
+
+```bash
+sudo ln -s /etc/nginx/sites-available/lumina-lab /etc/nginx/sites-enabled/
+sudo nginx -t
+sudo systemctl restart nginx
+```
+
+### Add SSL
+
+```bash
+sudo apt install -y certbot python3-certbot-nginx
+sudo certbot --nginx -d your-domain.com -d www.your-domain.com
+```
+
+After SSL is active, keep:
+
+- `DJANGO_SECURE_SSL_REDIRECT=1`
+
+---
+
+## 11. Static Files in Production
+
+This project now supports:
+
+- `STATIC_ROOT = labsystem/staticfiles`
+- WhiteNoise when installed
+- Nginx static serving on Droplets
+
+### App Platform
+
+Static files are prepared with:
+
+```bash
+python manage.py collectstatic --noinput
+```
+
+WhiteNoise is included in `requirements.txt` to simplify App Platform deployment.
+
+### Droplet
+
+Nginx serves the collected static files from `staticfiles/`.
+
+---
+
+## 12. Database Recommendation
+
+### Recommended
+
+- DigitalOcean Managed PostgreSQL
+
+### Acceptable only for very small internal testing
+
+- SQLite
+
+SQLite is fine for development, but for multi-user production use, PostgreSQL is safer and more durable.
+
+---
+
+## 13. Post-Deployment Checklist
+
+After deployment:
+
+- open the app URL,
+- confirm login works,
+- confirm static assets load,
+- confirm the logo loads,
+- create a lab report,
+- load CBC template,
+- load Urinalysis template,
+- print a report,
+- confirm logout returns to login,
+- confirm admin login works,
+- confirm database writes persist after restart.
+
+---
+
+## 14. Backup and Operations
+
+### Recommended backups
+
+- enable DigitalOcean database backups,
+- keep periodic repository backups,
+- export important reports if needed for offline archival.
+
+### Monitoring
+
+Watch:
+
+- deployment status,
+- memory usage,
+- restart count,
+- application logs,
+- database connection errors,
+- 500 errors from Django.
+
+---
+
+## 15. Troubleshooting
+
+### Static files missing
+
+Check:
+
+- `collectstatic` ran successfully,
+- `STATIC_ROOT` exists,
+- WhiteNoise is installed for App Platform,
+- Nginx alias paths are correct on Droplet.
+
+### Invalid host / CSRF errors
+
+Check:
+
+- `DJANGO_ALLOWED_HOSTS`
+- `DJANGO_CSRF_TRUSTED_ORIGINS`
+
+### PostgreSQL connection errors
+
+Check:
+
+- `DATABASE_URL`
+- firewall/network access,
+- SSL mode in the connection string,
+- database user permissions.
+
+### App Platform health-check failure
+
+Check:
+
+- Gunicorn is binding to `$PORT`,
+- `http_port` is `8080`,
+- the app starts without migration/import errors.
+
+---
+
+## 16. Files Added or Updated for Deployment
+
+- `labsystem/labsystem/settings.py`
+- `requirements.txt`
+- `labsystem/requirements.txt`
+- `.env.example`
+- `.gitignore`
+- `.do/app.yaml.example`
+
+---
+
+## 17. Final Recommendation
+
+For this Lumina system, use:
+
+- **GitHub** for source control,
+- **DigitalOcean App Platform** for hosting,
+- **DigitalOcean Managed PostgreSQL** for the database,
+- **a custom domain + HTTPS** for production access.
+
+That path gives the best balance of:
+
+- speed,
+- lower server maintenance,
+- simpler scaling,
+- and cleaner future expansion when you add doctors, reception, and overall admin roles.

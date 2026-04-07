@@ -1,439 +1,287 @@
 {% extends 'base.html' %}
-{% load static %}
 
-{% block title %}Lab Reports - Lumina Medical Services{% endblock %}
+{% block title %}Laboratory Dashboard - Lumina Medical Services{% endblock %}
+{% block page_title %}Laboratory Dashboard{% endblock %}
+{% block page_subtitle %}Review reports, track printing, and jump into new CBC or urinalysis entries from one screen.{% endblock %}
 
 {% block extra_css %}
 <style>
-    /* Dashboard Stats Cards */
     .stats-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-        gap: 1.5rem;
-        margin-bottom: 2rem;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 1rem;
+        margin-bottom: 1.4rem;
     }
 
     .stat-card {
-        background: white;
-        padding: 1.5rem;
-        border-radius: var(--border-radius);
-        box-shadow: var(--shadow-sm);
-        border: 1px solid #e5e7eb;
+        border: 1px solid var(--brand-border);
+        border-radius: 18px;
+        background: var(--surface);
+        padding: 1.2rem;
     }
 
-    .stat-value {
+    .stat-card .value {
         font-size: 2rem;
-        font-weight: 700;
         color: var(--brand-dark);
-        margin-bottom: 0.25rem;
+        font-weight: 700;
     }
 
-    .stat-label {
+    .stat-card .label {
         color: var(--text-muted);
-        font-size: 0.875rem;
         text-transform: uppercase;
-        letter-spacing: 0.5px;
+        letter-spacing: 0.08em;
+        font-size: 0.78rem;
     }
 
-    /* Search and Filter Bar */
-    .action-bar {
+    .toolbar {
         display: flex;
         justify-content: space-between;
-        align-items: center;
-        margin-bottom: 2rem;
-        flex-wrap: wrap;
         gap: 1rem;
+        align-items: end;
+        flex-wrap: wrap;
+        margin-bottom: 1.2rem;
     }
 
-    .search-box {
+    .search-group {
         display: flex;
-        gap: 0.5rem;
-        flex: 1;
-        max-width: 400px;
+        gap: 0.75rem;
+        flex-wrap: wrap;
+        flex: 1 1 460px;
     }
 
-    .search-box input {
+    .search-group input {
+        min-width: 280px;
         flex: 1;
-        padding: 0.75rem;
-        border: 1px solid #e5e7eb;
-        border-radius: 6px;
-        font-size: 0.95rem;
-    }
-
-    .search-box button {
-        padding: 0.75rem 1.5rem;
+        border: 1px solid var(--brand-border);
+        border-radius: 12px;
+        padding: 0.8rem 0.9rem;
+        font: inherit;
     }
 
     .filter-tabs {
-        display: flex;
-        gap: 0.5rem;
-        background: #f3f4f6;
-        padding: 0.25rem;
-        border-radius: 8px;
+        display: inline-flex;
+        gap: 0.45rem;
+        flex-wrap: wrap;
     }
 
     .filter-tab {
-        padding: 0.5rem 1rem;
-        border-radius: 6px;
-        font-size: 0.875rem;
-        font-weight: 500;
+        padding: 0.75rem 1rem;
+        border-radius: 12px;
+        background: var(--surface);
+        border: 1px solid var(--brand-border);
+        color: var(--brand-dark);
+        font-weight: 600;
         cursor: pointer;
-        transition: all 0.2s;
     }
 
     .filter-tab.active {
-        background: white;
-        box-shadow: var(--shadow-sm);
-        color: var(--brand-dark);
+        background: var(--brand-dark);
+        color: #fff;
+        border-color: var(--brand-dark);
     }
 
-    /* Reports Table */
-    .reports-table {
+    .report-table {
         width: 100%;
-        border-collapse: separate;
-        border-spacing: 0 0.5rem;
+        border: 1px solid var(--brand-border);
+        border-radius: 18px;
+        overflow: hidden;
     }
 
-    .reports-table th {
-        padding: 0.75rem 1rem;
-        text-align: left;
-        font-weight: 600;
-        font-size: 0.8rem;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-        color: var(--text-muted);
-        border-bottom: 2px solid var(--brand-light);
-    }
-
-    .reports-table td {
-        padding: 1rem;
-        background-color: white;
-        border-radius: 8px;
-        box-shadow: var(--shadow-sm);
-    }
-
-    .patient-name-cell {
-        font-weight: 600;
+    .report-table td strong {
         color: var(--brand-dark);
-        margin-bottom: 4px;
     }
 
-    .status-badge {
-        display: inline-block;
-        padding: 0.25rem 0.75rem;
-        border-radius: 9999px;
-        font-size: 0.75rem;
-        font-weight: 600;
-        text-transform: uppercase;
-        letter-spacing: 0.3px;
+    .muted {
+        color: var(--text-muted);
+        font-size: 0.85rem;
     }
 
-    .status-printed {
-        background-color: #d1fae5;
-        color: #065f46;
-    }
-
-    .status-draft {
-        background-color: #fef3c7;
-        color: #92400e;
-    }
-
-    .action-buttons {
-        display: flex;
-        gap: 0.5rem;
-        justify-content: flex-end;
-    }
-
-    .action-btn {
-        padding: 0.4rem 0.8rem;
-        border-radius: 6px;
-        font-size: 0.8rem;
-        font-weight: 500;
-        text-decoration: none;
-        transition: all 0.2s;
+    .status-pill {
         display: inline-flex;
         align-items: center;
-        gap: 4px;
+        padding: 0.35rem 0.7rem;
+        border-radius: 999px;
+        background: var(--brand-soft);
+        color: var(--brand-dark);
+        font-size: 0.78rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
     }
 
-    .action-btn-view {
-        background-color: #e0f2fe;
-        color: #0369a1;
+    .actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 0.45rem;
+        flex-wrap: wrap;
     }
 
-    .action-btn-edit {
-        background-color: #fef9c3;
-        color: #854d0e;
-    }
-
-    .action-btn-print {
-        background-color: #dbeafe;
-        color: #1e40af;
-    }
-
-    .action-btn-delete {
-        background-color: #fee2e2;
-        color: #b91c1c;
-    }
-
-    .action-btn:hover {
-        filter: brightness(0.95);
-    }
-
-    .action-form {
+    .actions form {
         margin: 0;
     }
 
-    .action-form button {
-        font-family: inherit;
-        border: none;
-        cursor: pointer;
-    }
-
     .empty-state {
+        border: 1px dashed var(--brand-border);
+        border-radius: 18px;
+        padding: 3rem 2rem;
         text-align: center;
-        padding: 4rem 2rem;
-        background: white;
-        border-radius: var(--border-radius);
-        border: 2px dashed #e5e7eb;
-    }
-
-    .empty-state svg {
-        width: 64px;
-        height: 64px;
-        color: #9ca3af;
-        margin-bottom: 1rem;
-    }
-
-    .empty-state h3 {
-        color: var(--brand-dark);
-        margin-bottom: 0.5rem;
-    }
-
-    .empty-state p {
+        background: var(--surface);
         color: var(--text-muted);
-        margin-bottom: 1.5rem;
     }
 
-    @media (max-width: 768px) {
-        .action-bar {
-            flex-direction: column;
-            align-items: stretch;
-        }
+    .pagination {
+        margin-top: 1.25rem;
+        display: flex;
+        justify-content: center;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+    }
 
-        .search-box {
-            max-width: none;
-        }
-
-        .reports-table {
-            display: block;
-            overflow-x: auto;
-        }
-
-        .action-buttons {
-            flex-direction: column;
+    @media (max-width: 900px) {
+        .stats-grid {
+            grid-template-columns: 1fr;
         }
     }
 </style>
 {% endblock %}
 
 {% block content %}
-<!-- Statistics Cards -->
 <div class="stats-grid">
     <div class="stat-card">
-        <div class="stat-value">{{ total_reports }}</div>
-        <div class="stat-label">Total Reports</div>
+        <div class="value">{{ total_reports }}</div>
+        <div class="label">Total Reports</div>
     </div>
     <div class="stat-card">
-        <div class="stat-value">{{ printed_count }}</div>
-        <div class="stat-label">Printed</div>
+        <div class="value">{{ printed_count }}</div>
+        <div class="label">Printed Reports</div>
     </div>
     <div class="stat-card">
-        <div class="stat-value">{{ draft_count }}</div>
-        <div class="stat-label">Drafts</div>
+        <div class="value">{{ draft_count }}</div>
+        <div class="label">Draft Reports</div>
     </div>
 </div>
 
-<!-- Action Bar -->
-<div class="action-bar">
-    <div class="search-box">
-        <input type="text" id="searchInput" placeholder="Search by patient name or ID..." value="{{ request.GET.search }}">
-        <button class="btn" onclick="searchReports()">Search</button>
+<div class="toolbar">
+    <div class="search-group">
+        <input type="text" id="searchInput" placeholder="Search patient name, referred by, specimen, or report ID" value="{{ request.GET.search }}">
+        <button type="button" class="btn" onclick="searchReports()">Search</button>
     </div>
-    
-    <div style="display: flex; gap: 1rem;">
-        <div class="filter-tabs">
-            <span class="filter-tab {% if not request.GET.filter %}active{% endif %}" onclick="filterReports('all')">All</span>
-            <span class="filter-tab {% if request.GET.filter == 'printed' %}active{% endif %}" onclick="filterReports('printed')">Printed</span>
-            <span class="filter-tab {% if request.GET.filter == 'draft' %}active{% endif %}" onclick="filterReports('draft')">Draft</span>
-        </div>
-        
-        <a href="{% url 'report_create' %}" class="btn" style="background: linear-gradient(135deg, var(--brand-dark) 0%, var(--accent-blue) 100%);">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="margin-right: 8px;">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
-            </svg>
-            New Lab Report
-        </a>
+    <div class="filter-tabs">
+        <button type="button" class="filter-tab {% if not request.GET.filter %}active{% endif %}" onclick="filterReports('all')">All</button>
+        <button type="button" class="filter-tab {% if request.GET.filter == 'printed' %}active{% endif %}" onclick="filterReports('printed')">Printed</button>
+        <button type="button" class="filter-tab {% if request.GET.filter == 'draft' %}active{% endif %}" onclick="filterReports('draft')">Draft</button>
+        <a href="{% url 'report_create' %}" class="btn">New Lab Report</a>
     </div>
 </div>
 
-<!-- Reports Table -->
-<table class="reports-table">
+{% if reports.object_list %}
+<table class="report-table">
     <thead>
         <tr>
-            <th>Patient Information</th>
-            <th>Demographics</th>
+            <th>Patient</th>
+            <th>Template / Specimen</th>
             <th>Sample Date</th>
-            <th>Technician</th>
-            <th>Processing Status</th>
-            <th style="text-align: right;">Actions</th>
+            <th>Technician / Referral</th>
+            <th>Status</th>
+            <th style="text-align:right;">Actions</th>
         </tr>
     </thead>
     <tbody>
         {% for report in reports %}
         <tr>
             <td>
-                <div class="patient-name-cell">{{ report.patient_name }}</div>
-                <div style="font-size: 0.75rem; color: var(--text-muted);">REF: #LUM-{{ report.id|stringformat:"05d" }}</div>
+                <strong>{{ report.patient_name }}</strong>
+                <div class="muted">{{ report.patient_age }} · {{ report.get_patient_sex_display }}</div>
+                <div class="muted">REF: LUM-{{ report.id|stringformat:"05d" }}</div>
             </td>
             <td>
-                <div style="font-weight: 500;">{{ report.patient_age }}</div>
-                <div style="font-size: 0.85rem; color: var(--text-muted);">{{ report.get_patient_sex_display }}</div>
+                <strong>{{ report.profile.name|default:"Manual Entry" }}</strong>
+                <div class="muted">{{ report.specimen_type }}</div>
             </td>
             <td>
-                <div style="font-weight: 500;">{{ report.sample_date|date:"d M Y" }}</div>
+                <strong>{{ report.sample_date|date:"d M Y" }}</strong>
+                <div class="muted">Created {{ report.created_at|date:"d M Y" }}</div>
             </td>
             <td>
-                {% with att=report.attendant %}
-                <div style="font-weight: 500;">
-                    {% if report.attendant_name %}{{ report.attendant_name }}
-                    {% elif att %}{{ att.get_full_name|default:att.username }}
-                    {% else %}N/A{% endif %}
-                </div>
-                <div style="font-size: 0.75rem; color: var(--text-muted);">
-                    ID: LAB-{% if att %}{{ att.id|stringformat:"03d" }}{% else %}000{% endif %}
-                </div>
-                {% endwith %}
+                <strong>
+                    {% with att=report.attendant %}
+                        {% if report.attendant_name %}{{ report.attendant_name }}
+                        {% elif att %}{{ att.get_full_name|default:att.username }}
+                        {% else %}N/A{% endif %}
+                    {% endwith %}
+                </strong>
+                <div class="muted">Referred by: {{ report.referred_by|default:"Not captured" }}</div>
             </td>
             <td>
-                {% if report.printed %}
-                    <span class="status-badge status-printed">
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="margin-right: 4px;">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
-                        </svg>
-                        Printed
-                    </span>
-                    {% if report.printed_at %}
-                        <div style="font-size: 0.7rem; color: var(--text-muted); margin-top: 4px;">
-                            {{ report.printed_at|date:"d M Y" }}
-                        </div>
-                    {% endif %}
-                {% else %}
-                    <span class="status-badge status-draft">Draft</span>
+                <span class="status-pill">{% if report.printed %}Printed{% else %}Draft{% endif %}</span>
+                {% if report.printed_at %}
+                    <div class="muted">{{ report.printed_at|date:"d M Y H:i" }}</div>
                 {% endif %}
             </td>
-            <td style="text-align: right;">
-                <div class="action-buttons">
-                    <a href="{% url 'report_detail' report.pk %}" class="action-btn action-btn-view" title="View Report">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
-                        </svg>
-                        View
-                    </a>
-                    <a href="{% url 'report_edit' report.pk %}" class="action-btn action-btn-edit" title="Edit Report">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
-                        </svg>
-                        Edit
-                    </a>
-                    <a href="{% url 'report_print' report.pk %}" class="action-btn action-btn-print" title="Print Report" target="_blank">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-4a2 2 0 00-2-2H6a2 2 0 00-2 2v4a2 2 0 002 2z"/>
-                        </svg>
-                        Print
-                    </a>
-                    <form method="post" action="{% url 'report_delete' report.pk %}" class="action-form" onsubmit="return confirm('Delete this report permanently?');">
+            <td>
+                <div class="actions">
+                    <a href="{% url 'report_detail' report.pk %}" class="btn btn-secondary btn-sm">View</a>
+                    <a href="{% url 'report_edit' report.pk %}" class="btn btn-secondary btn-sm">Edit</a>
+                    <a href="{% url 'report_print' report.pk %}" class="btn btn-secondary btn-sm" target="_blank">Print</a>
+                    <form method="post" action="{% url 'report_delete' report.pk %}" onsubmit="return confirm('Delete this report permanently?');">
                         {% csrf_token %}
-                        <button type="submit" class="action-btn action-btn-delete" title="Delete Report">
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 6h18M8 6V4h8v2m-7 0v14m6-14v14M5 6l1 14h12l1-14"/>
-                            </svg>
-                            Delete
-                        </button>
+                        <button type="submit" class="btn btn-secondary btn-sm">Delete</button>
                     </form>
-                </div>
-            </td>
-        </tr>
-        {% empty %}
-        <tr>
-            <td colspan="6">
-                <div class="empty-state">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-                    </svg>
-                    <h3>No Lab Reports Found</h3>
-                    <p>Get started by creating your first laboratory report</p>
-                    <a href="{% url 'report_create' %}" class="btn" style="background: linear-gradient(135deg, var(--brand-dark) 0%, var(--accent-blue) 100%);">
-                        Create New Report
-                    </a>
                 </div>
             </td>
         </tr>
         {% endfor %}
     </tbody>
 </table>
-
-<!-- Pagination -->
-{% if reports.has_other_pages %}
-<div style="margin-top: 2rem; display: flex; justify-content: center; gap: 0.5rem;">
-    {% if reports.has_previous %}
-        <a href="?page={{ reports.previous_page_number }}{% if request.GET.search %}&search={{ request.GET.search }}{% endif %}{% if request.GET.filter %}&filter={{ request.GET.filter }}{% endif %}" class="btn" style="padding: 0.5rem 1rem;">&laquo;</a>
-    {% endif %}
-    
-    {% for i in reports.paginator.page_range %}
-        {% if reports.number == i %}
-            <span class="btn" style="background-color: var(--brand-dark); color: white; padding: 0.5rem 1rem;">{{ i }}</span>
-        {% else %}
-            <a href="?page={{ i }}{% if request.GET.search %}&search={{ request.GET.search }}{% endif %}{% if request.GET.filter %}&filter={{ request.GET.filter }}{% endif %}" class="btn" style="padding: 0.5rem 1rem;">{{ i }}</a>
-        {% endif %}
-    {% endfor %}
-    
-    {% if reports.has_next %}
-        <a href="?page={{ reports.next_page_number }}{% if request.GET.search %}&search={{ request.GET.search }}{% endif %}{% if request.GET.filter %}&filter={{ request.GET.filter }}{% endif %}" class="btn" style="padding: 0.5rem 1rem;">&raquo;</a>
-    {% endif %}
+{% else %}
+<div class="empty-state">
+    <h3 style="color: var(--brand-dark); margin-bottom: 0.5rem;">No reports found</h3>
+    <p style="margin-bottom: 1rem;">Start by creating a new CBC, urinalysis, or manual laboratory report.</p>
+    <a href="{% url 'report_create' %}" class="btn">Create New Lab Report</a>
 </div>
 {% endif %}
 
+{% if reports.has_other_pages %}
+<div class="pagination">
+    {% if reports.has_previous %}
+        <a href="?page={{ reports.previous_page_number }}{% if request.GET.search %}&search={{ request.GET.search }}{% endif %}{% if request.GET.filter %}&filter={{ request.GET.filter }}{% endif %}" class="btn btn-secondary btn-sm">Previous</a>
+    {% endif %}
+    {% for i in reports.paginator.page_range %}
+        {% if reports.number == i %}
+            <span class="btn btn-sm">{{ i }}</span>
+        {% else %}
+            <a href="?page={{ i }}{% if request.GET.search %}&search={{ request.GET.search }}{% endif %}{% if request.GET.filter %}&filter={{ request.GET.filter }}{% endif %}" class="btn btn-secondary btn-sm">{{ i }}</a>
+        {% endif %}
+    {% endfor %}
+    {% if reports.has_next %}
+        <a href="?page={{ reports.next_page_number }}{% if request.GET.search %}&search={{ request.GET.search }}{% endif %}{% if request.GET.filter %}&filter={{ request.GET.filter }}{% endif %}" class="btn btn-secondary btn-sm">Next</a>
+    {% endif %}
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
 <script>
-    function searchReports() {
-        const searchTerm = document.getElementById('searchInput').value;
-        const currentFilter = new URLSearchParams(window.location.search).get('filter') || '';
-        window.location.href = `?search=${encodeURIComponent(searchTerm)}${currentFilter ? '&filter=' + currentFilter : ''}`;
+function searchReports() {
+    const searchTerm = document.getElementById('searchInput').value;
+    const currentFilter = new URLSearchParams(window.location.search).get('filter') || '';
+    window.location.href = `?search=${encodeURIComponent(searchTerm)}${currentFilter ? '&filter=' + currentFilter : ''}`;
+}
+
+function filterReports(filter) {
+    const searchTerm = document.getElementById('searchInput').value;
+    if (filter === 'all') {
+        window.location.href = searchTerm ? `?search=${encodeURIComponent(searchTerm)}` : window.location.pathname;
+        return;
     }
+    window.location.href = `?filter=${filter}${searchTerm ? '&search=' + encodeURIComponent(searchTerm) : ''}`;
+}
 
-    function filterReports(filter) {
-        const searchTerm = document.getElementById('searchInput').value;
-        if (filter === 'all') {
-            window.location.href = searchTerm ? `?search=${encodeURIComponent(searchTerm)}` : window.location.pathname;
-        } else {
-            window.location.href = `?filter=${filter}${searchTerm ? '&search=' + encodeURIComponent(searchTerm) : ''}`;
-        }
+document.getElementById('searchInput').addEventListener('keypress', function (event) {
+    if (event.key === 'Enter') {
+        event.preventDefault();
+        searchReports();
     }
-
-    // Enter key in search input
-    document.getElementById('searchInput').addEventListener('keypress', function(e) {
-        if (e.key === 'Enter') {
-            searchReports();
-        }
-    });
-
-    // Highlight active filter tab
-    document.querySelectorAll('.filter-tab').forEach(tab => {
-        tab.addEventListener('click', function() {
-            document.querySelectorAll('.filter-tab').forEach(t => t.classList.remove('active'));
-            this.classList.add('active');
-        });
-    });
+});
 </script>
 {% endblock %}

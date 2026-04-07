@@ -5,377 +5,496 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Lumina Medical Services{% endblock %}</title>
-    
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    
     <style>
-        /* Modern CSS Variables for consistent branding */
         :root {
-            --brand-dark: #122B4B; /* Matches your dark blue logo */
-            --brand-light: #f0f4f8;
-            --accent-blue: #2563eb;
-            --accent-hover: #1d4ed8;
-            --text-main: #1f2937;
-            --text-muted: #6b7280;
-            --danger: #ef4444;
-            --danger-hover: #dc2626;
-            --success: #10b981;
-            --bg-body: #f3f4f6;
-            --bg-surface: #ffffff;
-            --border-radius: 8px;
-            --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-            --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            --brand-dark: #1d3557;
+            --brand-dark-2: #27496d;
+            --brand-soft: #e8eef5;
+            --brand-border: #cfd8e3;
+            --surface: #ffffff;
+            --surface-muted: #f7f9fc;
+            --text-main: #1f2a37;
+            --text-muted: #5f6b7a;
+            --danger-soft: #eef2f7;
+            --shadow-sm: 0 1px 2px rgba(17, 24, 39, 0.06);
+            --shadow-md: 0 12px 24px rgba(29, 53, 87, 0.08);
+            --radius: 16px;
         }
 
         * {
+            box-sizing: border-box;
             margin: 0;
             padding: 0;
-            box-sizing: border-box;
         }
 
         body {
             font-family: 'Inter', sans-serif;
-            background-color: var(--bg-body);
+            background: var(--surface-muted);
             color: var(--text-main);
             line-height: 1.6;
-            -webkit-font-smoothing: antialiased;
         }
 
-        /* --- SCREEN NAVBAR --- */
-        .navbar {
-            background-color: var(--brand-dark);
-            padding: 1rem 2rem;
+        a {
+            color: inherit;
+        }
+
+        .app-shell {
+            min-height: 100vh;
+            display: grid;
+            grid-template-columns: 280px 1fr;
+        }
+
+        .sidebar {
+            background: var(--brand-dark);
+            color: #fff;
+            padding: 1.75rem 1.25rem;
             display: flex;
-            justify-content: space-between;
-            align-items: center;
-            box-shadow: var(--shadow-md);
+            flex-direction: column;
+            gap: 1.5rem;
             position: sticky;
             top: 0;
-            z-index: 1000;
+            height: 100vh;
         }
 
-        .navbar-brand {
+        .sidebar-brand {
             display: flex;
             align-items: center;
-            gap: 12px;
-            font-size: 1.5rem;
+            gap: 0.85rem;
+            text-decoration: none;
+            color: #fff;
+        }
+
+        .sidebar-brand img {
+            width: 56px;
+            height: 56px;
+            border-radius: 12px;
+            object-fit: cover;
+            background: #fff;
+        }
+
+        .sidebar-brand-text {
+            display: flex;
+            flex-direction: column;
+            gap: 0.15rem;
+        }
+
+        .sidebar-brand-text strong {
+            font-size: 1rem;
+            letter-spacing: 0.04em;
+        }
+
+        .sidebar-brand-text span {
+            font-size: 0.8rem;
+            color: rgba(255, 255, 255, 0.75);
+        }
+
+        .sidebar-section-title {
+            font-size: 0.72rem;
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
+            color: rgba(255, 255, 255, 0.6);
+            margin-bottom: 0.5rem;
+        }
+
+        .sidebar-nav {
+            display: grid;
+            gap: 0.45rem;
+        }
+
+        .sidebar-link {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.85rem 1rem;
+            border-radius: 12px;
+            text-decoration: none;
+            color: rgba(255, 255, 255, 0.86);
+            font-weight: 500;
+            transition: background-color 0.2s ease, color 0.2s ease, transform 0.15s ease;
+        }
+
+        .sidebar-link:hover,
+        .sidebar-link.active {
+            background: rgba(255, 255, 255, 0.12);
+            color: #fff;
+            transform: translateX(2px);
+        }
+
+        .sidebar-link svg {
+            width: 18px;
+            height: 18px;
+            flex-shrink: 0;
+        }
+
+        .sidebar-footer {
+            margin-top: auto;
+            padding: 1rem;
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 16px;
+            background: rgba(255, 255, 255, 0.06);
+        }
+
+        .sidebar-footer .label {
+            font-size: 0.72rem;
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+            color: rgba(255, 255, 255, 0.6);
+        }
+
+        .sidebar-footer .value {
             font-weight: 600;
-            color: white;
-            text-decoration: none;
-            letter-spacing: 0.5px;
+            margin-top: 0.35rem;
         }
 
-        .navbar-logo {
-            height: 40px; /* Adjust based on your logo crop */
+        .sidebar-logout-form,
+        .top-logout-form {
+            margin: 0;
+        }
+
+        .sidebar-logout-button,
+        .top-logout-button {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            border: 1px solid transparent;
+            cursor: pointer;
+            font: inherit;
+        }
+
+        .sidebar-logout-button {
             width: auto;
-            border-radius: 4px;
+            padding: 0.7rem 0.9rem;
+            border-radius: 10px;
+            background: rgba(255, 255, 255, 0.08);
+            color: rgba(255, 255, 255, 0.9);
+            justify-content: flex-start;
         }
 
-        .navbar-menu {
+        .sidebar-logout-button:hover {
+            background: rgba(255, 255, 255, 0.14);
+            color: #fff;
+        }
+
+        .main-panel {
+            padding: 1.5rem 2rem;
+        }
+
+        .top-strip {
             display: flex;
-            gap: 1rem;
             align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
         }
 
-        .navbar-menu a {
-            color: #e5e7eb;
-            text-decoration: none;
-            padding: 0.5rem 1rem;
-            border-radius: var(--border-radius);
-            font-weight: 500;
+        .top-strip h1 {
+            font-size: 1.6rem;
+            color: var(--brand-dark);
+        }
+
+        .top-strip p {
+            color: var(--text-muted);
             font-size: 0.95rem;
-            transition: all 0.2s ease;
         }
 
-        .navbar-menu a:hover {
-            background-color: rgba(255, 255, 255, 0.1);
-            color: white;
+        .logout-link {
+            text-decoration: none;
+            color: var(--brand-dark);
+            font-weight: 600;
+            background: var(--surface);
+            border: 1px solid var(--brand-border);
+            border-radius: 12px;
+            padding: 0.75rem 1rem;
+            box-shadow: var(--shadow-sm);
         }
 
-        .user-info {
-            display: flex;
-            align-items: center;
-            gap: 1rem;
-            margin-left: 1rem;
-            padding-left: 1.5rem;
-            border-left: 1px solid rgba(255, 255, 255, 0.2);
-            color: white;
-            font-weight: 500;
+        .top-logout-button {
+            color: var(--brand-dark);
+            font-weight: 600;
+            background: var(--surface);
+            border-color: var(--brand-border);
+            border-radius: 12px;
+            padding: 0.75rem 1rem;
+            box-shadow: var(--shadow-sm);
         }
 
-        .btn-logout {
-            background-color: var(--danger);
-            color: white !important;
-        }
-        .btn-logout:hover {
-            background-color: var(--danger-hover) !important;
+        .top-logout-button:hover {
+            background: var(--brand-soft);
         }
 
-        /* --- LAYOUT & CARDS --- */
         .container {
-            max-width: 1200px;
-            margin: 2rem auto;
-            padding: 0 2rem;
+            max-width: 1320px;
         }
 
         .content {
-            background-color: var(--bg-surface);
-            padding: 2.5rem;
-            border-radius: var(--border-radius);
-            box-shadow: var(--shadow-sm);
-            border: 1px solid #e5e7eb;
+            background: var(--surface);
+            border: 1px solid var(--brand-border);
+            border-radius: 24px;
+            padding: 1.75rem;
+            box-shadow: var(--shadow-md);
         }
 
-        /* --- BUTTONS --- */
         .btn {
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            padding: 0.6rem 1.2rem;
-            background-color: var(--accent-blue);
-            color: white;
-            text-decoration: none;
-            border-radius: var(--border-radius);
-            border: none;
-            cursor: pointer;
-            font-weight: 500;
+            gap: 0.5rem;
+            border: 1px solid transparent;
+            border-radius: 12px;
+            padding: 0.8rem 1.2rem;
             font-size: 0.95rem;
-            transition: background-color 0.2s ease, transform 0.1s ease;
+            font-weight: 600;
+            text-decoration: none;
+            cursor: pointer;
+            background: var(--brand-dark);
+            color: #fff;
+            transition: transform 0.15s ease, background-color 0.2s ease, border-color 0.2s ease;
         }
 
         .btn:hover {
-            background-color: var(--accent-hover);
+            background: var(--brand-dark-2);
             transform: translateY(-1px);
         }
 
-        .btn-print {
-            background-color: var(--success);
-        }
-        .btn-print:hover {
-            background-color: #059669;
+        .btn-secondary {
+            background: var(--surface);
+            color: var(--brand-dark);
+            border-color: var(--brand-border);
         }
 
-        /* --- TABLES --- */
+        .btn-secondary:hover {
+            background: var(--brand-soft);
+        }
+
+        .btn-sm {
+            padding: 0.55rem 0.85rem;
+            font-size: 0.85rem;
+            border-radius: 10px;
+        }
+
+        .alert {
+            margin-bottom: 1rem;
+            padding: 1rem 1.2rem;
+            border-radius: 14px;
+            border: 1px solid var(--brand-border);
+            background: var(--surface);
+            color: var(--brand-dark);
+        }
+
         table {
             width: 100%;
-            border-collapse: separate;
-            border-spacing: 0;
-            margin: 1.5rem 0;
-            border-radius: var(--border-radius);
-            overflow: hidden;
-            border: 1px solid #e5e7eb;
+            border-collapse: collapse;
         }
 
-        th, td {
-            padding: 1rem;
+        th,
+        td {
+            padding: 0.95rem 1rem;
+            border-bottom: 1px solid #e6ecf3;
             text-align: left;
-            border-bottom: 1px solid #e5e7eb;
         }
 
         th {
-            background-color: var(--brand-light);
-            font-weight: 600;
             color: var(--brand-dark);
+            background: var(--brand-soft);
             text-transform: uppercase;
-            font-size: 0.85rem;
             letter-spacing: 0.05em;
+            font-size: 0.78rem;
         }
 
-        tr:last-child td {
-            border-bottom: none;
-        }
-
-        tr:hover td {
-            background-color: #f9fafb;
-        }
-
-        /* --- ALERTS --- */
-        .alert {
-            padding: 1rem 1.5rem;
-            margin-bottom: 1.5rem;
-            border-radius: var(--border-radius);
-            font-weight: 500;
-            display: flex;
-            align-items: center;
-        }
-        .alert-error {
-            background-color: #fef2f2;
-            color: #991b1b;
-            border: 1px solid #fecaca;
-        }
-        .alert-success {
-            background-color: #ecfdf5;
-            color: #065f46;
-            border: 1px solid #a7f3d0;
-        }
-
-        /* --- PRINT HEADER (Hidden on Screen) --- */
         .print-only {
             display: none;
         }
 
-        /* --- PRINT STYLES (Crucial for Reports) --- */
+        .auth-shell {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 2rem 1rem;
+            background: var(--surface-muted);
+        }
+
+        .auth-panel {
+            width: min(100%, 520px);
+        }
+
         @media print {
             body {
-                background-color: white;
-                font-size: 11pt; /* Better readability for print */
-                color: black;
+                background: #fff;
             }
-            .no-print, .navbar, .alert {
+
+            .app-shell {
+                display: block;
+            }
+
+            .sidebar,
+            .top-strip,
+            .alert,
+            .no-print {
                 display: none !important;
             }
-            .container {
+
+            .main-panel,
+            .container,
+            .content {
                 margin: 0;
                 padding: 0;
                 max-width: 100%;
-            }
-            .content {
+                background: #fff;
                 box-shadow: none;
                 border: none;
-                padding: 0;
             }
-            
-            /* Show the official header only when printing */
+
             .print-only {
                 display: flex;
-                align-items: center;
                 justify-content: space-between;
-                border-bottom: 2px solid var(--brand-dark);
-                padding-bottom: 1.5rem;
-                margin-bottom: 2rem;
-            }
-            .print-logo-container {
-                display: flex;
                 align-items: center;
-                gap: 15px;
-            }
-            .print-logo {
-                height: 60px;
-            }
-            .print-hospital-info {
-                text-align: right;
-                font-size: 0.9rem;
-                color: var(--text-muted);
-            }
-            .print-hospital-info h2 {
-                color: var(--brand-dark);
-                margin-bottom: 4px;
-                font-size: 1.4rem;
+                border-bottom: 2px solid var(--brand-dark);
+                padding-bottom: 1rem;
+                margin-bottom: 1.5rem;
             }
         }
 
-        /* --- MOBILE OPTIMIZATION --- */
-        @media (max-width: 768px) {
-            .navbar {
-                flex-direction: column;
-                align-items: flex-start;
-                gap: 0.5rem;
+        @media (max-width: 960px) {
+            .app-shell {
+                grid-template-columns: 1fr;
             }
-            .navbar-menu {
-                width: 100%;
-                flex-wrap: wrap;
-                gap: 0.5rem;
+
+            .sidebar {
+                position: static;
+                height: auto;
             }
-            .navbar-menu a,
-            .user-info {
-                padding: 0.6rem 0.8rem;
-                background: rgba(255,255,255,0.06);
-                border-radius: 6px;
+
+            .main-panel {
+                padding: 1rem;
             }
-            .container {
-                padding: 0 1rem;
-                margin: 1rem auto;
-            }
+
             .content {
-                padding: 1.25rem;
+                padding: 1.2rem;
+                border-radius: 18px;
             }
+
             table {
                 display: block;
                 overflow-x: auto;
                 white-space: nowrap;
-            }
-            .stats-grid,
-            .action-bar {
-                grid-template-columns: 1fr !important;
-                flex-direction: column !important;
-            }
-            .action-bar {
-                align-items: stretch;
-            }
-            .action-bar .btn,
-            .navbar-menu a {
-                width: 100%;
-                text-align: center;
             }
         }
     </style>
     {% block extra_css %}{% endblock %}
 </head>
 <body>
-    <nav class="navbar no-print">
-        <a href="{% url 'report_list' %}" class="navbar-brand">
-            <img src="{% static 'images/lumina-logo.jpeg' %}" alt="Lumina Logo" class="navbar-logo">
-            LUMINA MEDICAL SERVICES
-        </a>
-        <div class="navbar-menu">
-            {% if user.is_authenticated %}
-                <a href="{% url 'report_list' %}">Dashboard</a>
-                <a href="{% url 'report_create' %}">New Lab Report</a>
-                <span class="user-info">
-                    {{ user.get_full_name|default:user.username }}
-                    <a href="{% url 'logout' %}" class="btn-logout">Logout</a>
-                </span>
-            {% endif %}
-        </div>
-    </nav>
+    {% if user.is_authenticated %}
+        <div class="app-shell">
+            <aside class="sidebar no-print">
+                <a href="{% url 'report_list' %}" class="sidebar-brand">
+                    <img src="{% static 'images/lumina-logo.jpeg' %}" alt="Lumina Logo">
+                    <div class="sidebar-brand-text">
+                        <strong>LUMINA MEDICAL SERVICES</strong>
+                        <span>lighting up your health.</span>
+                    </div>
+                </a>
 
-    <div class="container">
-        {% block print_header %}
-        <div class="print-only">
-            <div class="print-logo-container">
-                <img src="{% static 'images/lumina-logo.jpeg' %}" alt="Lumina Logo" class="print-logo">
                 <div>
-                    <h1 style="color: var(--brand-dark); margin: 0;">LUMINA MEDICAL SERVICES</h1>
-                    <span style="letter-spacing: 1px; font-size: 0.85rem; color: #666; text-transform: uppercase;">lighting up your health.</span>
+                    <div class="sidebar-section-title">Navigation</div>
+                    <nav class="sidebar-nav">
+                        <a href="{% url 'report_list' %}" class="sidebar-link {% if active_nav == 'dashboard' %}active{% endif %}">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M3 12l9-9 9 9M5 10v10h14V10" />
+                            </svg>
+                            Dashboard
+                        </a>
+                        <a href="{% url 'report_create' %}" class="sidebar-link {% if active_nav == 'new_report' %}active{% endif %}">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M12 5v14M5 12h14" />
+                            </svg>
+                            New Lab Report
+                        </a>
+                        <a href="{% url 'template_library' %}" class="sidebar-link {% if active_nav == 'templates' %}active{% endif %}">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M4 7h16M4 12h16M4 17h16" />
+                            </svg>
+                            Test Templates
+                        </a>
+                    </nav>
                 </div>
-            </div>
-            <div class="print-hospital-info">
-                <h2>Official Medical Report</h2>
-                <p>PO BOX: 200132, Kampala</p>
-                <p>Location: Kisaasi Kyanja road</p>
-                <p>Phone: 0750639410 / 0780105909</p>
-                <p>Date: {% now "F j, Y" %}</p>
-            </div>
-        </div>
-        {% endblock %}
 
+                <div class="sidebar-footer">
+                    <div class="label">Logged In As</div>
+                    <div class="value">{{ user.get_full_name|default:user.username }}</div>
+                    <div style="margin-top: 1rem;">
+                        <form method="post" action="{% url 'logout' %}" class="sidebar-logout-form">
+                            {% csrf_token %}
+                            <button type="submit" class="sidebar-logout-button">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M10 17l5-5-5-5M15 12H3" />
+                                </svg>
+                                Logout
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </aside>
+
+            <main class="main-panel">
+                <div class="top-strip no-print">
+                    <div>
+                        <h1>{% block page_title %}Laboratory Dashboard{% endblock %}</h1>
+                        <p>{% block page_subtitle %}Manage patient biodata, templates, and laboratory reports from one place.{% endblock %}</p>
+                    </div>
+                    <form method="post" action="{% url 'logout' %}" class="top-logout-form">
+                        {% csrf_token %}
+                        <button type="submit" class="top-logout-button">Logout</button>
+                    </form>
+                </div>
+
+                <div class="container">
+                    {% block print_header %}
+                    <div class="print-only">
+                        <div style="display:flex; align-items:center; gap:12px;">
+                            <img src="{% static 'images/lumina-logo.jpeg' %}" alt="Lumina Logo" style="height:56px; border-radius:10px;">
+                            <div>
+                                <div style="font-size:1.25rem; font-weight:700; color:var(--brand-dark);">LUMINA MEDICAL SERVICES</div>
+                                <div style="color:var(--text-muted);">lighting up your health.</div>
+                            </div>
+                        </div>
+                        <div style="text-align:right; color:var(--text-muted); font-size:0.9rem;">
+                            <div>PO BOX: 200132, Kampala</div>
+                            <div>Kisaasi Kyanja road</div>
+                            <div>0750639410 / 0780105909</div>
+                        </div>
+                    </div>
+                    {% endblock %}
         {% if messages %}
             {% for message in messages %}
-                <div class="alert alert-{{ message.tags }} no-print">
-                    {{ message }}
-                </div>
+                <div class="alert no-print">{{ message }}</div>
             {% endfor %}
         {% endif %}
-
-        <div class="content">
-            {% block content %}
-            {% endblock %}
+                    <div class="content">
+    {% else %}
+        <main class="auth-shell">
+            <div class="auth-panel">
+                {% if messages %}
+                    {% for message in messages %}
+                        <div class="alert">{{ message }}</div>
+                    {% endfor %}
+                {% endif %}
+                <div class="content">
+    {% endif %}
+                    {% block content %}{% endblock %}
+                </div>
+    {% if user.is_authenticated %}
+                </div>
+            </main>
         </div>
-    </div>
-
-    <script>
-        // Optional: Auto-dismiss alerts after 5 seconds
-        document.addEventListener('DOMContentLoaded', function() {
-            setTimeout(function() {
-                let alerts = document.querySelectorAll('.alert');
-                alerts.forEach(function(alert) {
-                    alert.style.display = 'none';
-                });
-            }, 5000);
-        });
-    </script>
+    {% else %}
+            </div>
+        </main>
+    {% endif %}
     {% block extra_js %}{% endblock %}
 </body>
 </html>

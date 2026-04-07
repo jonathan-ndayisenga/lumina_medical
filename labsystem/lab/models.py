@@ -2,11 +2,37 @@ from django.conf import settings
 from django.db import models
 
 
+class TestProfile(models.Model):
+    """Reusable starter templates such as CBC or urinalysis."""
+
+    name = models.CharField(max_length=100, unique=True)
+    code = models.SlugField(max_length=50, unique=True)
+    default_specimen_type = models.CharField(max_length=50, blank=True)
+    description = models.TextField(blank=True)
+    is_active = models.BooleanField(default=True)
+    display_order = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ['display_order', 'name']
+
+    def __str__(self):
+        return self.name
+
+
 class LabReport(models.Model):
     """Main lab report record."""
+
+    profile = models.ForeignKey(
+        TestProfile,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='reports',
+    )
     patient_name = models.CharField(max_length=200)
     patient_age = models.CharField(max_length=20, help_text="e.g., 22YRS")
     patient_sex = models.CharField(max_length=10, choices=[('M', 'Male'), ('F', 'Female'), ('O', 'Other')])
+    referred_by = models.CharField(max_length=150, blank=True)
     sample_date = models.DateField()
     specimen_type = models.CharField(max_length=50, default='BLOOD')
     attendant = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)
@@ -25,6 +51,7 @@ class LabReport(models.Model):
 
 class TestCatalog(models.Model):
     """Learned and suggested test names from prior report entry."""
+
     name = models.CharField(max_length=100, unique=True)
     unit = models.CharField(max_length=20, blank=True)
     display_order = models.IntegerField(default=0)
@@ -57,16 +84,51 @@ class ReferenceRangeDefault(models.Model):
         return f"{self.test.name} ({self.age_category}): {self.reference_range} {self.unit}"
 
 
+class TestProfileParameter(models.Model):
+    """Parameters that belong to a reusable test profile."""
+
+    INPUT_TYPE_CHOICES = [
+        ('text', 'Text'),
+        ('numeric', 'Numeric'),
+        ('choice', 'Choice'),
+    ]
+
+    profile = models.ForeignKey(TestProfile, on_delete=models.CASCADE, related_name='parameters')
+    test = models.ForeignKey(TestCatalog, on_delete=models.CASCADE, related_name='profile_parameters')
+    section_name = models.CharField(max_length=100, blank=True)
+    display_order = models.PositiveIntegerField(default=0)
+    input_type = models.CharField(max_length=20, choices=INPUT_TYPE_CHOICES, default='text')
+    choice_options = models.TextField(blank=True, help_text="Optional newline-separated values for choice inputs.")
+    default_reference_range = models.CharField(max_length=50, blank=True)
+    default_unit = models.CharField(max_length=20, blank=True)
+    default_comment = models.CharField(max_length=255, blank=True)
+    is_required = models.BooleanField(default=False)
+    allow_range_learning = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ['profile__display_order', 'display_order', 'id']
+
+    def __str__(self):
+        return f"{self.profile.name} - {self.test.name}"
+
+    def choice_list(self):
+        return [item.strip() for item in self.choice_options.splitlines() if item.strip()]
+
+
 class TestResult(models.Model):
     """Test result tied to catalog + stored range/unit."""
+
     lab_report = models.ForeignKey(LabReport, on_delete=models.CASCADE, related_name='results')
     test = models.ForeignKey(TestCatalog, on_delete=models.CASCADE)
+    section_name = models.CharField(max_length=100, blank=True)
+    display_order = models.PositiveIntegerField(default=0)
     result_value = models.CharField(max_length=50)
     reference_range = models.CharField(max_length=50, blank=True)
     unit = models.CharField(max_length=20, blank=True)
+    comment = models.CharField(max_length=255, blank=True)
 
     class Meta:
-        ordering = ['id']
+        ordering = ['display_order', 'id']
 
     def __str__(self):
         return f"{self.test.name}: {self.result_value}"

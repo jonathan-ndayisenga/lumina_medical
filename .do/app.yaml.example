@@ -1,0 +1,52 @@
+name: lumina-medical-lab
+region: fra
+services:
+  - name: web
+    environment_slug: python
+    github:
+      repo: jonathan-ndayisenga/lumina_medical
+      branch: main
+      deploy_on_push: true
+    source_dir: labsystem
+    http_port: 8080
+    instance_count: 1
+    instance_size_slug: apps-s-1vcpu-1gb
+    build_command: pip install -r requirements.txt && python manage.py collectstatic --noinput
+    run_command: gunicorn labsystem.wsgi:application --workers 3 --bind 0.0.0.0:$PORT
+    envs:
+      - key: DJANGO_SECRET_KEY
+        value: replace-with-a-long-random-secret
+        scope: RUN_TIME
+        type: SECRET
+      - key: DJANGO_DEBUG
+        value: "0"
+        scope: RUN_TIME
+        type: GENERAL
+      - key: DJANGO_ALLOWED_HOSTS
+        value: your-app.ondigitalocean.app,your-domain.com,www.your-domain.com
+        scope: RUN_TIME
+        type: GENERAL
+      - key: DJANGO_CSRF_TRUSTED_ORIGINS
+        value: https://your-app.ondigitalocean.app,https://your-domain.com,https://www.your-domain.com
+        scope: RUN_TIME
+        type: GENERAL
+      - key: DJANGO_SECURE_SSL_REDIRECT
+        value: "1"
+        scope: RUN_TIME
+        type: GENERAL
+      - key: DJANGO_SECURE_HSTS_SECONDS
+        value: "3600"
+        scope: RUN_TIME
+        type: GENERAL
+      - key: DJANGO_SECURE_HSTS_INCLUDE_SUBDOMAINS
+        value: "1"
+        scope: RUN_TIME
+        type: GENERAL
+      - key: DJANGO_SECURE_HSTS_PRELOAD
+        value: "0"
+        scope: RUN_TIME
+        type: GENERAL
+      - key: DATABASE_URL
+        value: postgresql://username:password@host:25060/database_name?sslmode=require
+        scope: RUN_TIME
+        type: SECRET

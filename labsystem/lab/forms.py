@@ -1,16 +1,24 @@
 from django import forms
 from django.forms import BaseInlineFormSet, inlineformset_factory
 
-from .models import LabReport, TestResult
+from .models import LabReport, TestResult, TestProfile
 
 
 class LabReportForm(forms.ModelForm):
+    profile = forms.ModelChoiceField(
+        queryset=TestProfile.objects.filter(is_active=True).order_by('display_order', 'name'),
+        required=False,
+        empty_label='Manual Entry',
+    )
+
     class Meta:
         model = LabReport
         fields = [
+            'profile',
             'patient_name',
             'patient_age',
             'patient_sex',
+            'referred_by',
             'sample_date',
             'specimen_type',
             'attendant_name',
@@ -39,11 +47,14 @@ class TestResultForm(forms.ModelForm):
 
     class Meta:
         model = TestResult
-        fields = ['result_value', 'reference_range', 'unit']
+        fields = ['section_name', 'display_order', 'result_value', 'reference_range', 'unit', 'comment']
         widgets = {
+            'section_name': forms.HiddenInput(),
+            'display_order': forms.HiddenInput(),
             'result_value': forms.TextInput(attrs={'placeholder': 'Result', 'class': 'result-field'}),
             'reference_range': forms.TextInput(attrs={'placeholder': 'e.g. 23.5-33.7', 'class': 'range-field'}),
             'unit': forms.TextInput(attrs={'placeholder': 'e.g. g/dL', 'class': 'unit-field'}),
+            'comment': forms.TextInput(attrs={'placeholder': 'Comment', 'class': 'comment-field'}),
         }
 
     def __init__(self, *args, **kwargs):
