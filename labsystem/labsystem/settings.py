@@ -42,7 +42,17 @@ def env_list(key, default=""):
 
 def database_config():
     database_url = env("DATABASE_URL")
+    if database_url:
+        database_url = database_url.strip()
     if not database_url:
+        return {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": BASE_DIR / "db.sqlite3",
+        }
+    # App Platform can leave unresolved bindable placeholders like ${db.DATABASE_URL}
+    # during builds or when the backing resource is missing. Fall back to SQLite
+    # instead of crashing settings import.
+    if database_url.startswith("${") and database_url.endswith("}"):
         return {
             "ENGINE": "django.db.backends.sqlite3",
             "NAME": BASE_DIR / "db.sqlite3",
