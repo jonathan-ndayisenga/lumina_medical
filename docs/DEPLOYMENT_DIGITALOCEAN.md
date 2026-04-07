@@ -100,10 +100,13 @@ The project has now been prepared for deployment with the following changes:
   - ignores runtime and environment artifacts.
 
 - `labsystem/requirements.txt`
-  - allows App Platform to build from the Django source directory cleanly.
+  - contains the Python dependencies directly inside the App Platform source directory so the Python buildpack can install them reliably.
 
 - `labsystem/runtime.txt`
   - pins App Platform to Python 3.12 instead of using a newer default runtime.
+
+- `labsystem/.python-version`
+  - explicitly pins App Platform to Python 3.12 for builders that check `.python-version`.
 
 - `.do/app.yaml.example`
   - sample DigitalOcean App Platform spec for this project.
@@ -224,6 +227,7 @@ Use:
 - **Environment:** Python
 - **Source Directory:** `labsystem`
 - **HTTP Port:** `8080`
+- **Python version files present inside source directory:** `.python-version` and `runtime.txt`
 
 ### Step 4 - Build and run commands
 
@@ -260,6 +264,8 @@ If more staff will use the system at once, increase later.
 Add all variables from `.env.example`, replacing placeholders with real values.
 
 When you open the Environment Variable Editor, paste values in `KEY=VALUE` format, one per line.
+
+If the interface gives you a scope option, make sure the Django variables below are available to the web service at runtime. If there is a build-time visibility option, it is also safe to enable it for `DJANGO_SECRET_KEY` and `DJANGO_DEBUG`.
 
 Recommended first set:
 
@@ -318,6 +324,22 @@ python manage.py createsuperuser
 9. Open the console and run migrations.
 10. Create the superuser.
 11. Test login, report creation, CBC, urinalysis, and printing.
+
+### If App Platform shows a build error
+
+Check these first:
+
+1. source directory is exactly `labsystem`,
+2. `labsystem/requirements.txt` exists and contains the full dependency list,
+3. `labsystem/.python-version` exists so App Platform does not default to Python 3.14,
+4. run command is exactly:
+
+```bash
+gunicorn --worker-tmp-dir /dev/shm labsystem.wsgi:application --workers 2 --bind 0.0.0.0:$PORT
+```
+
+5. if you attached PostgreSQL, confirm `DATABASE_URL` is present,
+6. if you are not attaching PostgreSQL yet, leave `DATABASE_URL` unset so the app falls back to SQLite.
 
 ### Step 10 - Domain and HTTPS
 
