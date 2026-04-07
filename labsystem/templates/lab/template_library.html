@@ -78,6 +78,32 @@
         color: var(--text-muted);
         font-size: 0.84rem;
     }
+
+    @media (max-width: 760px) {
+        .template-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .template-card-body {
+            padding: 1rem;
+        }
+    }
+
+    @media (max-width: 520px) {
+        .template-card {
+            border-radius: 16px;
+        }
+
+        .template-meta {
+            flex-direction: column;
+            align-items: stretch;
+        }
+
+        .meta-pill {
+            width: 100%;
+            justify-content: center;
+        }
+    }
 </style>
 {% endblock %}
 
