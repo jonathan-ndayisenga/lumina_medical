@@ -102,6 +102,9 @@ The project has now been prepared for deployment with the following changes:
 - `labsystem/requirements.txt`
   - allows App Platform to build from the Django source directory cleanly.
 
+- `labsystem/runtime.txt`
+  - pins App Platform to Python 3.12 instead of using a newer default runtime.
+
 - `.do/app.yaml.example`
   - sample DigitalOcean App Platform spec for this project.
 
@@ -220,19 +223,20 @@ Use:
 - **Type:** Web Service
 - **Environment:** Python
 - **Source Directory:** `labsystem`
+- **HTTP Port:** `8080`
 
 ### Step 4 - Build and run commands
 
 Build command:
 
 ```bash
-pip install -r requirements.txt && python manage.py collectstatic --noinput
+python manage.py collectstatic --noinput
 ```
 
 Run command:
 
 ```bash
-gunicorn labsystem.wsgi:application --workers 3 --bind 0.0.0.0:$PORT
+gunicorn --worker-tmp-dir /dev/shm labsystem.wsgi:application --workers 2 --bind 0.0.0.0:$PORT
 ```
 
 ### Step 5 - HTTP port
@@ -255,6 +259,22 @@ If more staff will use the system at once, increase later.
 
 Add all variables from `.env.example`, replacing placeholders with real values.
 
+When you open the Environment Variable Editor, paste values in `KEY=VALUE` format, one per line.
+
+Recommended first set:
+
+```env
+DJANGO_SECRET_KEY=replace-with-a-long-random-secret
+DJANGO_DEBUG=0
+DJANGO_ALLOWED_HOSTS=${APP_DOMAIN}
+DJANGO_CSRF_TRUSTED_ORIGINS=${APP_URL}
+DJANGO_SECURE_SSL_REDIRECT=1
+DJANGO_SECURE_HSTS_SECONDS=3600
+DJANGO_SECURE_HSTS_INCLUDE_SUBDOMAINS=1
+DJANGO_SECURE_HSTS_PRELOAD=0
+DB_CONN_MAX_AGE=60
+```
+
 ### Step 8 - Attach a database
 
 Recommended:
@@ -264,6 +284,18 @@ Recommended:
 - set it as:
   - `DATABASE_URL`
 
+If you name the managed database `lumina-db`, the bindable variable normally looks like:
+
+```env
+DATABASE_URL=${lumina-db.DATABASE_URL}
+```
+
+Important:
+
+- Django migrations create tables inside a database.
+- They do **not** create the DigitalOcean managed database service itself.
+- So on App Platform, you should create or attach the database first, then deploy, then run `python manage.py migrate`.
+
 ### Step 9 - First deployment tasks
 
 After the app is live, open the console and run:
@@ -272,6 +304,20 @@ After the app is live, open the console and run:
 python manage.py migrate
 python manage.py createsuperuser
 ```
+
+### App Platform step-by-step summary
+
+1. Push code to GitHub.
+2. Create App in App Platform.
+3. Select repository `jonathan-ndayisenga/lumina_medical`.
+4. Set source directory to `labsystem`.
+5. Confirm build command and run command.
+6. Add environment variables in the editor.
+7. Create and attach a managed PostgreSQL database.
+8. Deploy the app.
+9. Open the console and run migrations.
+10. Create the superuser.
+11. Test login, report creation, CBC, urinalysis, and printing.
 
 ### Step 10 - Domain and HTTPS
 

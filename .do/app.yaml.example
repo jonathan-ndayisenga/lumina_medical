@@ -11,8 +11,8 @@ services:
     http_port: 8080
     instance_count: 1
     instance_size_slug: apps-s-1vcpu-1gb
-    build_command: pip install -r requirements.txt && python manage.py collectstatic --noinput
-    run_command: gunicorn labsystem.wsgi:application --workers 3 --bind 0.0.0.0:$PORT
+    build_command: python manage.py collectstatic --noinput
+    run_command: gunicorn --worker-tmp-dir /dev/shm labsystem.wsgi:application --workers 2 --bind 0.0.0.0:$PORT
     envs:
       - key: DJANGO_SECRET_KEY
         value: replace-with-a-long-random-secret
