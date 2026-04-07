@@ -141,6 +141,85 @@
         .stats-grid {
             grid-template-columns: 1fr;
         }
+
+        .search-group {
+            flex-basis: 100%;
+        }
+
+        .search-group input {
+            min-width: 0;
+        }
+
+        .filter-tabs,
+        .filter-tab,
+        .filter-tabs .btn {
+            width: 100%;
+        }
+    }
+
+    @media (max-width: 760px) {
+        .report-table {
+            border: none;
+            background: transparent;
+        }
+
+        .report-table thead {
+            display: none;
+        }
+
+        .report-table tbody {
+            display: grid;
+            gap: 1rem;
+        }
+
+        .report-table tr {
+            display: block;
+            border: 1px solid var(--brand-border);
+            border-radius: 18px;
+            background: var(--surface);
+            overflow: hidden;
+        }
+
+        .report-table td {
+            display: grid;
+            grid-template-columns: minmax(110px, 38%) 1fr;
+            gap: 0.75rem;
+            align-items: start;
+            padding: 0.85rem 1rem;
+            white-space: normal;
+        }
+
+        .report-table td::before {
+            content: attr(data-label);
+            color: var(--text-muted);
+            font-size: 0.72rem;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        .actions {
+            justify-content: flex-start;
+        }
+
+        .actions > * {
+            flex: 1 1 calc(50% - 0.45rem);
+        }
+
+        .actions .btn,
+        .actions button {
+            width: 100%;
+        }
+    }
+
+    @media (max-width: 520px) {
+        .report-table td {
+            grid-template-columns: 1fr;
+        }
+
+        .actions > * {
+            flex-basis: 100%;
+        }
     }
 </style>
 {% endblock %}
@@ -189,20 +268,20 @@
     <tbody>
         {% for report in reports %}
         <tr>
-            <td>
+            <td data-label="Patient">
                 <strong>{{ report.patient_name }}</strong>
                 <div class="muted">{{ report.patient_age }} · {{ report.get_patient_sex_display }}</div>
                 <div class="muted">REF: LUM-{{ report.id|stringformat:"05d" }}</div>
             </td>
-            <td>
+            <td data-label="Template / Specimen">
                 <strong>{{ report.profile.name|default:"Manual Entry" }}</strong>
                 <div class="muted">{{ report.specimen_type }}</div>
             </td>
-            <td>
+            <td data-label="Sample Date">
                 <strong>{{ report.sample_date|date:"d M Y" }}</strong>
                 <div class="muted">Created {{ report.created_at|date:"d M Y" }}</div>
             </td>
-            <td>
+            <td data-label="Technician / Referral">
                 <strong>
                     {% with att=report.attendant %}
                         {% if report.attendant_name %}{{ report.attendant_name }}
@@ -212,13 +291,13 @@
                 </strong>
                 <div class="muted">Referred by: {{ report.referred_by|default:"Not captured" }}</div>
             </td>
-            <td>
+            <td data-label="Status">
                 <span class="status-pill">{% if report.printed %}Printed{% else %}Draft{% endif %}</span>
                 {% if report.printed_at %}
                     <div class="muted">{{ report.printed_at|date:"d M Y H:i" }}</div>
                 {% endif %}
             </td>
-            <td>
+            <td data-label="Actions">
                 <div class="actions">
                     <a href="{% url 'report_detail' report.pk %}" class="btn btn-secondary btn-sm">View</a>
                     <a href="{% url 'report_edit' report.pk %}" class="btn btn-secondary btn-sm">Edit</a>

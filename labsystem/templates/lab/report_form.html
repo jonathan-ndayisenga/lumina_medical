@@ -108,6 +108,9 @@
 
     .results-table-wrap {
         overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        margin-inline: -0.15rem;
+        padding-bottom: 0.35rem;
     }
 
     .results-table {
@@ -126,6 +129,7 @@
 
     .results-table td {
         vertical-align: top;
+        white-space: normal;
     }
 
     .results-table .section-divider td {
@@ -139,13 +143,15 @@
     }
 
     .results-table input,
-    .results-table select {
+    .results-table select,
+    .results-table textarea {
         width: 100%;
         border: 1px solid var(--brand-border);
         border-radius: 10px;
         padding: 0.7rem 0.75rem;
         background: #fff;
         font: inherit;
+        min-width: 0;
     }
 
     .paper-readonly {
@@ -242,6 +248,50 @@
     @media (max-width: 900px) {
         .form-grid {
             grid-template-columns: 1fr;
+        }
+
+        .panel {
+            padding: 1.15rem;
+        }
+
+        .template-toolbar {
+            align-items: stretch;
+        }
+
+        .template-toolbar > * {
+            width: 100%;
+        }
+
+        .actions-row {
+            flex-direction: column;
+        }
+
+        .actions-row .btn-group {
+            width: 100%;
+        }
+
+        .actions-row .btn-group > * {
+            flex: 1 1 100%;
+            width: 100%;
+        }
+    }
+
+    @media (max-width: 640px) {
+        .stack {
+            gap: 1rem;
+        }
+
+        .panel {
+            padding: 1rem;
+            border-radius: 16px;
+        }
+
+        .results-table {
+            min-width: 760px;
+        }
+
+        .results-table.urinalysis-mode {
+            min-width: 640px;
         }
     }
 </style>

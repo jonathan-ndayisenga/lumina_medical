@@ -67,6 +67,11 @@
         background: var(--surface);
     }
 
+    .results-table-wrap {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
     .section-heading {
         padding: 0.95rem 1rem;
         background: var(--brand-soft);
@@ -149,6 +154,20 @@
         .patient-grid {
             grid-template-columns: 1fr;
         }
+
+        .report-actions > * {
+            flex: 1 1 100%;
+        }
+    }
+
+    @media (max-width: 640px) {
+        .report-header h2 {
+            font-size: 1.2rem;
+        }
+
+        .results-table {
+            min-width: 640px;
+        }
     }
 </style>
 {% endblock %}
@@ -214,28 +233,30 @@
     {% for group in result_groups %}
     <section class="section-block{% if report.profile and report.profile.code == 'cbc' %} paper-section{% endif %}">
         <div class="section-heading">{{ group.name }}</div>
-        <table class="results-table">
-            <thead>
-                <tr>
-                    <th style="width: 32%;">Test</th>
-                    <th style="width: 16%;">Result</th>
-                    <th style="width: 22%;">Reference Range</th>
-                    <th style="width: 12%;">Units</th>
-                    <th style="width: 18%;">Comment</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for result in group.results %}
-                <tr>
-                    <td><strong>{{ result.test.name }}</strong></td>
-                    <td>{{ result.result_value|default:"-" }}</td>
-                    <td>{{ result.reference_range|default:"-" }}</td>
-                    <td>{{ result.unit|default:"-" }}</td>
-                    <td>{{ result.comment|default:"-" }}</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+        <div class="results-table-wrap">
+            <table class="results-table">
+                <thead>
+                    <tr>
+                        <th style="width: 32%;">Test</th>
+                        <th style="width: 16%;">Result</th>
+                        <th style="width: 22%;">Reference Range</th>
+                        <th style="width: 12%;">Units</th>
+                        <th style="width: 18%;">Comment</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for result in group.results %}
+                    <tr>
+                        <td><strong>{{ result.test.name }}</strong></td>
+                        <td>{{ result.result_value|default:"-" }}</td>
+                        <td>{{ result.reference_range|default:"-" }}</td>
+                        <td>{{ result.unit|default:"-" }}</td>
+                        <td>{{ result.comment|default:"-" }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
     </section>
     {% empty %}
     <section class="section-block">

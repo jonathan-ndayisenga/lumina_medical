@@ -149,6 +149,12 @@
             margin-top: 0.35rem;
         }
 
+        .sidebar-overlay,
+        .mobile-nav-toggle,
+        .sidebar-close {
+            display: none;
+        }
+
         .sidebar-logout-form,
         .top-logout-form {
             margin: 0;
@@ -189,6 +195,22 @@
             justify-content: space-between;
             gap: 1rem;
             margin-bottom: 1.5rem;
+        }
+
+        .top-strip-primary {
+            display: flex;
+            align-items: flex-start;
+            gap: 0.85rem;
+            flex: 1 1 auto;
+            min-width: 0;
+        }
+
+        .top-strip-actions {
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 0.75rem;
+            flex-wrap: wrap;
         }
 
         .top-strip h1 {
@@ -360,22 +382,107 @@
         }
 
         @media (max-width: 960px) {
+            body.nav-open {
+                overflow: hidden;
+            }
+
             .app-shell {
-                grid-template-columns: 1fr;
+                display: block;
             }
 
             .sidebar {
-                position: static;
-                height: auto;
+                position: fixed;
+                top: 0;
+                left: 0;
+                bottom: 0;
+                width: min(84vw, 320px);
+                height: 100vh;
+                z-index: 30;
+                overflow-y: auto;
+                transform: translateX(-100%);
+                transition: transform 0.25s ease;
+                box-shadow: var(--shadow-md);
+            }
+
+            .app-shell.sidebar-open .sidebar {
+                transform: translateX(0);
+            }
+
+            .sidebar-overlay {
+                display: block;
+                position: fixed;
+                inset: 0;
+                z-index: 20;
+                border: none;
+                background: rgba(17, 24, 39, 0.45);
+                opacity: 0;
+                pointer-events: none;
+                transition: opacity 0.2s ease;
+            }
+
+            .app-shell.sidebar-open .sidebar-overlay {
+                opacity: 1;
+                pointer-events: auto;
+            }
+
+            .sidebar-close {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                align-self: flex-end;
+                width: 40px;
+                height: 40px;
+                border: 1px solid rgba(255, 255, 255, 0.18);
+                border-radius: 999px;
+                background: rgba(255, 255, 255, 0.08);
+                color: #fff;
+                cursor: pointer;
+            }
+
+            .mobile-nav-toggle {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                width: 44px;
+                height: 44px;
+                border-radius: 12px;
+                border: 1px solid var(--brand-border);
+                background: var(--surface);
+                color: var(--brand-dark);
+                box-shadow: var(--shadow-sm);
+                flex-shrink: 0;
             }
 
             .main-panel {
                 padding: 1rem;
             }
 
+            .top-strip {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .top-strip-primary,
+            .top-strip-actions {
+                width: 100%;
+            }
+
+            .top-strip-actions .top-logout-form {
+                width: 100%;
+            }
+
             .content {
                 padding: 1.2rem;
                 border-radius: 18px;
+            }
+
+            .btn,
+            .top-logout-button {
+                width: 100%;
+            }
+
+            .top-logout-button {
+                justify-content: center;
             }
 
             table {
@@ -384,13 +491,51 @@
                 white-space: nowrap;
             }
         }
+
+        @media (max-width: 640px) {
+            .sidebar {
+                padding: 1.25rem 1rem;
+            }
+
+            .sidebar-brand img {
+                width: 48px;
+                height: 48px;
+            }
+
+            .sidebar-brand-text strong {
+                font-size: 0.92rem;
+            }
+
+            .main-panel {
+                padding: 0.8rem;
+            }
+
+            .content {
+                padding: 1rem;
+                border-radius: 16px;
+            }
+
+            .top-strip h1 {
+                font-size: 1.35rem;
+            }
+
+            .top-strip p {
+                font-size: 0.9rem;
+            }
+        }
     </style>
     {% block extra_css %}{% endblock %}
 </head>
-<body>
+    <body>
     {% if user.is_authenticated %}
-        <div class="app-shell">
-            <aside class="sidebar no-print">
+        <div class="app-shell" id="appShell">
+            <button type="button" class="sidebar-overlay no-print" id="sidebarOverlay" aria-label="Close navigation"></button>
+            <aside class="sidebar no-print" id="appSidebar">
+                <button type="button" class="sidebar-close" id="sidebarClose" aria-label="Close navigation">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M18 6L6 18M6 6l12 12" />
+                    </svg>
+                </button>
                 <a href="{% url 'report_list' %}" class="sidebar-brand">
                     <img src="{% static 'images/lumina-logo.jpeg' %}" alt="Lumina Logo">
                     <div class="sidebar-brand-text">
@@ -442,14 +587,23 @@
 
             <main class="main-panel">
                 <div class="top-strip no-print">
-                    <div>
-                        <h1>{% block page_title %}Laboratory Dashboard{% endblock %}</h1>
-                        <p>{% block page_subtitle %}Manage patient biodata, templates, and laboratory reports from one place.{% endblock %}</p>
+                    <div class="top-strip-primary">
+                        <button type="button" class="mobile-nav-toggle" id="mobileNavToggle" aria-controls="appSidebar" aria-expanded="false" aria-label="Open navigation">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M4 7h16M4 12h16M4 17h16" />
+                            </svg>
+                        </button>
+                        <div>
+                            <h1>{% block page_title %}Laboratory Dashboard{% endblock %}</h1>
+                            <p>{% block page_subtitle %}Manage patient biodata, templates, and laboratory reports from one place.{% endblock %}</p>
+                        </div>
                     </div>
-                    <form method="post" action="{% url 'logout' %}" class="top-logout-form">
-                        {% csrf_token %}
-                        <button type="submit" class="top-logout-button">Logout</button>
-                    </form>
+                    <div class="top-strip-actions">
+                        <form method="post" action="{% url 'logout' %}" class="top-logout-form">
+                            {% csrf_token %}
+                            <button type="submit" class="top-logout-button">Logout</button>
+                        </form>
+                    </div>
                 </div>
 
                 <div class="container">
@@ -495,6 +649,57 @@
             </div>
         </main>
     {% endif %}
+    <script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const appShell = document.getElementById('appShell');
+        const openButton = document.getElementById('mobileNavToggle');
+        const closeButton = document.getElementById('sidebarClose');
+        const overlay = document.getElementById('sidebarOverlay');
+        const navLinks = document.querySelectorAll('.sidebar-link');
+
+        if (!appShell || !openButton || !closeButton || !overlay) {
+            return;
+        }
+
+        function setSidebarState(isOpen) {
+            appShell.classList.toggle('sidebar-open', isOpen);
+            document.body.classList.toggle('nav-open', isOpen);
+            openButton.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+        }
+
+        openButton.addEventListener('click', function () {
+            setSidebarState(!appShell.classList.contains('sidebar-open'));
+        });
+
+        closeButton.addEventListener('click', function () {
+            setSidebarState(false);
+        });
+
+        overlay.addEventListener('click', function () {
+            setSidebarState(false);
+        });
+
+        navLinks.forEach(function (link) {
+            link.addEventListener('click', function () {
+                if (window.innerWidth <= 960) {
+                    setSidebarState(false);
+                }
+            });
+        });
+
+        document.addEventListener('keydown', function (event) {
+            if (event.key === 'Escape') {
+                setSidebarState(false);
+            }
+        });
+
+        window.addEventListener('resize', function () {
+            if (window.innerWidth > 960) {
+                setSidebarState(false);
+            }
+        });
+    });
+    </script>
     {% block extra_js %}{% endblock %}
 </body>
 </html>
