@@ -382,6 +382,51 @@ Grouping comes from `TestResult.section_name`.
 - report-level comments are shown in a separate remarks block,
 - `printed_at` is now updated when a report is printed.
 
+## 9.1 Print layout optimization update - April 11, 2026
+
+The printed report layout has now been tightened for business use so paper is not wasted by oversized text, tall biodata blocks, or unnecessary metadata.
+
+### Print goals now implemented
+
+- CBC should normally fit on one page and only spill to a second page in heavier cases,
+- urinalysis should normally fit on one page and only spill to a second page in heavier cases,
+- manual-entry reports are now optimized for a single page when the number of rows is within a normal lab workflow,
+- print spacing is reduced throughout the sheet,
+- patient biodata is arranged horizontally instead of stacking label and value on separate lines.
+
+### Print changes now live
+
+- print font sizes were reduced,
+- row padding and general line spacing were reduced,
+- page margins were tightened for A4 portrait printing,
+- the patient biodata block now uses inline label/value pairs,
+- the print header keeps Lumina branding but removes the extra print timestamp block,
+- the print footer line stating that the report is computer-generated was removed,
+- report detail printing now follows the same compact layout rules as the dedicated print page,
+- status-heavy metadata such as `Printed On` is no longer emphasized in the printable layout.
+
+### Practical result
+
+This means:
+
+- CBC and urinalysis now print much more compactly,
+- the patient block consumes less vertical space,
+- more result rows fit onto a page before a page break occurs,
+- the printout is cleaner and more suitable for day-to-day lab operations.
+
+### Important browser note
+
+The application can remove report-level timestamp text inside the page itself, but browser-generated print headers and footers are controlled by the browser print dialog.
+
+If the browser still shows:
+
+- page title,
+- URL,
+- date,
+- time,
+
+the operator should disable `Headers and footers` in the browser print dialog.
+
 ## 10. Dashboard Improvements Integrated
 
 The dashboard now supports:
