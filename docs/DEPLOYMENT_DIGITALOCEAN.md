@@ -216,7 +216,7 @@ If `DATABASE_URL` is missing, the project falls back to SQLite in `labsystem/lab
 On DigitalOcean App Platform, the application filesystem is not persistent across redeployments. This means:
 
 - live SQLite changes can disappear when a new container is deployed,
-- if `db.sqlite3` is still tracked in Git, the app can appear to “revert” to the older database snapshot stored in the repository,
+- if `db.sqlite3` is still tracked in Git, the app can appear to "revert" to the older database snapshot stored in the repository,
 - data can therefore look altered, reset, or out of date after a GitHub push triggers a new deployment.
 
 For App Platform, PostgreSQL should be treated as the real production database.
@@ -316,6 +316,13 @@ Recommended:
 - set it as:
   - `DATABASE_URL`
 
+Important distinction:
+
+- an **App Platform Dev Database** is useful for quick testing inside the app platform,
+- a **Managed PostgreSQL** database is the better production choice,
+- if you need to import data from your own laptop or another external machine, use **Managed PostgreSQL**,
+- a dev database may only be reachable from the attached app components, so local import tooling can fail even when the app itself is live.
+
 If you name the managed database `lumina-db`, the bindable variable normally looks like:
 
 ```env
@@ -402,6 +409,7 @@ print(LabReport.objects.count())
 - Keep a backup copy of both:
   - `labsystem/db.sqlite3`
   - `lumina-data.json`
+- If you are using an **App Platform Dev Database** and your laptop cannot connect to it directly, perform the import from the **App Platform console** instead of your local terminal.
 
 ### If App Platform shows a build error
 
