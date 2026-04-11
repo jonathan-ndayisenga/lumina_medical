@@ -323,6 +323,7 @@ Important distinction:
 - if you need to import data from your own laptop or another external machine, use **Managed PostgreSQL**,
 - a dev database may only be reachable from the attached app components, so local import tooling can fail even when the app itself is live.
 - the project accepts either a standard PostgreSQL URL like `postgresql://user:pass@host:25060/dbname?sslmode=require` or a libpq-style DSN like `host=... port=25060 username=... password=... database=... sslmode=require`.
+- if you are editing the variable in a key/value form, put only the raw value in the value box; do not include extra wrappers like `DATABASE_URL=...`, `export DATABASE_URL=...`, or surrounding quotes unless you are using the bulk `KEY=VALUE` editor.
 
 If you name the managed database `lumina-db`, the bindable variable normally looks like:
 

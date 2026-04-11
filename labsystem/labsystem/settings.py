@@ -45,6 +45,21 @@ def database_config():
     database_url = env("DATABASE_URL")
     if database_url:
         database_url = database_url.strip()
+        # Be forgiving with common App Platform/UI paste formats, such as:
+        # - quoted values: "postgresql://..."
+        # - assignment values pasted into a single value field: DATABASE_URL=...
+        # - export commands copied from a shell: export DATABASE_URL=...
+        while True:
+            normalized = database_url
+            if len(normalized) >= 2 and normalized[0] == normalized[-1] and normalized[0] in {"'", '"'}:
+                normalized = normalized[1:-1].strip()
+            if normalized.lower().startswith("export database_url="):
+                normalized = normalized.split("=", 1)[1].strip()
+            elif normalized.lower().startswith("database_url="):
+                normalized = normalized.split("=", 1)[1].strip()
+            if normalized == database_url:
+                break
+            database_url = normalized
     if not database_url:
         return {
             "ENGINE": "django.db.backends.sqlite3",
