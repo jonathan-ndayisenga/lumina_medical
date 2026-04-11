@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load static %}
 
 {% block title %}Laboratory Report - Lumina Medical Services{% endblock %}
 {% block print_header %}{% endblock %}
@@ -24,20 +25,37 @@
     }
 
     .report-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 0.8rem;
         padding-bottom: 0.75rem;
         border-bottom: 2px solid var(--brand-dark);
     }
 
-    .report-header h2 {
-        color: var(--brand-dark);
-        letter-spacing: 0.08em;
-        font-size: 1.3rem;
+    .report-brand {
+        display: flex;
+        align-items: flex-start;
+        gap: 0.65rem;
     }
 
-    .report-header p {
+    .report-brand img {
+        height: 42px;
+        border-radius: 8px;
+    }
+
+    .report-brand strong {
+        display: block;
+        color: var(--brand-dark);
+        font-size: 0.98rem;
+        line-height: 1.1;
+    }
+
+    .report-brand span,
+    .report-meta {
         color: var(--text-muted);
-        font-size: 0.9rem;
-        margin-top: 0.2rem;
+        font-size: 0.72rem;
+        line-height: 1.15;
     }
 
     .patient-grid {
@@ -154,6 +172,15 @@
         line-height: 1.35;
     }
 
+    .report-footer {
+        border-top: 1px solid var(--brand-border);
+        padding-top: 0.45rem;
+        text-align: center;
+        color: var(--text-muted);
+        font-size: 0.72rem;
+        line-height: 1.2;
+    }
+
     @media print {
         body {
             -webkit-print-color-adjust: exact;
@@ -175,12 +202,13 @@
             padding-bottom: 0.4rem;
         }
 
-        .report-header h2 {
-            font-size: 1rem;
+        .report-brand strong {
+            font-size: 0.98rem;
         }
 
-        .report-header p {
-            display: none;
+        .report-brand span,
+        .report-meta {
+            font-size: 0.72rem;
         }
 
         .patient-grid {
@@ -238,9 +266,17 @@
             font-size: 0.76rem;
             line-height: 1.18;
         }
+
+        .report-footer {
+            font-size: 0.64rem;
+        }
     }
 
     @media (max-width: 900px) {
+        .report-header {
+            flex-direction: column;
+        }
+
         .patient-grid {
             grid-template-columns: 1fr;
         }
@@ -251,10 +287,6 @@
     }
 
     @media (max-width: 640px) {
-        .report-header h2 {
-            font-size: 1.15rem;
-        }
-
         .results-table {
             min-width: 640px;
         }
@@ -271,8 +303,19 @@
     </div>
 
     <div class="report-header">
-        <h2>LABORATORY REPORT</h2>
-        <p>{{ report.profile.name|default:"Manual Laboratory Report" }}</p>
+        <div class="report-brand">
+            <img src="{% static 'images/lumina-logo.jpeg' %}" alt="Lumina Logo">
+            <div>
+                <strong>LUMINA MEDICAL SERVICES</strong>
+                <span>lighting up your health.</span><br>
+                <span>PO BOX: 200132, Kampala · Kisaasi Kyanja road</span><br>
+                <span>Phone: 0750639410 / 0780105909</span>
+            </div>
+        </div>
+        <div class="report-meta">
+            <div><strong>LABORATORY REPORT</strong></div>
+            <div>{{ report.profile.name|default:"Manual Laboratory Report" }}</div>
+        </div>
     </div>
 
     <div class="patient-grid">
@@ -335,5 +378,10 @@
         <div class="remarks-body">{{ report.comments }}</div>
     </section>
     {% endif %}
+
+    <div class="report-footer">
+        <div><strong>LUMINA MEDICAL SERVICES</strong> · lighting up your health.</div>
+        <div>PO BOX: 200132, Kampala · Kisaasi Kyanja road · Phone: 0750639410 / 0780105909</div>
+    </div>
 </div>
 {% endblock %}

@@ -171,6 +171,15 @@
         line-height: 1.18;
     }
 
+    .report-footer {
+        border-top: 1px solid var(--brand-border);
+        padding-top: 0.35rem;
+        text-align: center;
+        color: var(--text-muted);
+        font-size: 0.68rem;
+        line-height: 1.15;
+    }
+
     @media print {
         body {
             -webkit-print-color-adjust: exact;
@@ -192,6 +201,10 @@
 
         .results-table tr {
             break-inside: avoid;
+        }
+
+        .report-footer {
+            font-size: 0.64rem;
         }
     }
 
@@ -289,6 +302,11 @@
         <div class="remarks-body">{{ report.comments }}</div>
     </section>
     {% endif %}
+
+    <div class="report-footer">
+        <div><strong>LUMINA MEDICAL SERVICES</strong> · lighting up your health.</div>
+        <div>PO BOX: 200132, Kampala · Kisaasi Kyanja road · Phone: 0750639410 / 0780105909</div>
+    </div>
 </div>
 {% endblock %}
 

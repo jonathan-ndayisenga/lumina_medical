@@ -401,6 +401,7 @@ The printed report layout has now been tightened for business use so paper is no
 - page margins were tightened for A4 portrait printing,
 - the patient biodata block now uses inline label/value pairs,
 - the print header keeps Lumina branding but removes the extra print timestamp block,
+- the compact Lumina contact header is retained and the same contact block is repeated in the footer at a smaller font size,
 - the print footer line stating that the report is computer-generated was removed,
 - report detail printing now follows the same compact layout rules as the dedicated print page,
 - status-heavy metadata such as `Printed On` is no longer emphasized in the printable layout.
