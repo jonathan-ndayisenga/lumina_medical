@@ -13,7 +13,7 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 import importlib.util
 import os
 from pathlib import Path
-from urllib.parse import unquote, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 
 from django.core.exceptions import ImproperlyConfigured
 
@@ -61,9 +61,14 @@ def database_config():
     parsed = urlparse(database_url)
     scheme = parsed.scheme.lower()
     conn_max_age = int(env("DB_CONN_MAX_AGE", "60"))
+    query_options = {
+        key: values[-1]
+        for key, values in parse_qs(parsed.query).items()
+        if values and values[-1]
+    }
 
     if scheme in {"postgres", "postgresql", "pgsql"}:
-        return {
+        config = {
             "ENGINE": "django.db.backends.postgresql",
             "NAME": unquote(parsed.path.lstrip("/")),
             "USER": unquote(parsed.username or ""),
@@ -73,6 +78,14 @@ def database_config():
             "CONN_MAX_AGE": conn_max_age,
             "CONN_HEALTH_CHECKS": True,
         }
+        options = {}
+        for option_key in ("sslmode", "sslrootcert", "sslcert", "sslkey", "target_session_attrs"):
+            option_value = query_options.get(option_key)
+            if option_value:
+                options[option_key] = option_value
+        if options:
+            config["OPTIONS"] = options
+        return config
 
     if scheme == "sqlite":
         db_name = unquote(parsed.path.lstrip("/")) or "db.sqlite3"

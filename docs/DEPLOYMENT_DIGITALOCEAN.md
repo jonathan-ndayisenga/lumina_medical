@@ -195,6 +195,32 @@ Before running `git add .`, make sure you do **not** want to push:
 
 The new `.gitignore` helps with this, but already-tracked files may still need manual care.
 
+### One-time SQLite safety cleanup
+
+If `labsystem/db.sqlite3` was committed earlier, `.gitignore` alone does **not** stop Git from continuing to track it.
+
+Run this once from the repository root:
+
+```powershell
+git rm --cached labsystem/db.sqlite3
+git commit -m "Stop tracking local SQLite database"
+git push origin main
+```
+
+This removes the SQLite file from Git **without deleting your local copy**.
+
+### Why App Platform data appears to change after redeploys
+
+If `DATABASE_URL` is missing, the project falls back to SQLite in `labsystem/labsystem/settings.py`.
+
+On DigitalOcean App Platform, the application filesystem is not persistent across redeployments. This means:
+
+- live SQLite changes can disappear when a new container is deployed,
+- if `db.sqlite3` is still tracked in Git, the app can appear to “revert” to the older database snapshot stored in the repository,
+- data can therefore look altered, reset, or out of date after a GitHub push triggers a new deployment.
+
+For App Platform, PostgreSQL should be treated as the real production database.
+
 ---
 
 ## 8. Recommended DigitalOcean App Platform Deployment
@@ -324,6 +350,58 @@ python manage.py createsuperuser
 9. Open the console and run migrations.
 10. Create the superuser.
 11. Test login, report creation, CBC, urinalysis, and printing.
+
+### Step 9.1 - Migrate existing SQLite data into PostgreSQL
+
+If your current data lives in SQLite and you want to preserve it, use this workflow **before** relying on the new PostgreSQL database.
+
+#### If the live App Platform data is the source of truth
+
+Open the App Platform console and export the data first:
+
+```bash
+python manage.py dumpdata --natural-foreign --natural-primary -e contenttypes -e auth.permission --indent 2 > lumina-data.json
+```
+
+Download or copy that JSON safely before the next redeploy.
+
+#### If your local SQLite file is the source of truth
+
+From the local project:
+
+```powershell
+cd C:\Users\USER\Desktop\Projects\Lumina_medical_services\labsystem
+..\ven\Scripts\python.exe manage.py dumpdata --natural-foreign --natural-primary -e contenttypes -e auth.permission --indent 2 > lumina-data.json
+```
+
+#### After the PostgreSQL `DATABASE_URL` is configured
+
+Run:
+
+```bash
+python manage.py migrate
+python manage.py loaddata lumina-data.json
+```
+
+Then verify:
+
+```bash
+python manage.py shell
+```
+
+And check a few records, for example:
+
+```python
+from lab.models import LabReport
+print(LabReport.objects.count())
+```
+
+#### Important migration note
+
+- Do not run `loaddata` repeatedly on the same PostgreSQL database unless you know the target is empty or you are intentionally restoring a snapshot.
+- Keep a backup copy of both:
+  - `labsystem/db.sqlite3`
+  - `lumina-data.json`
 
 ### If App Platform shows a build error
 
