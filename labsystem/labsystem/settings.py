@@ -12,6 +12,7 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 
 import importlib.util
 import os
+import shlex
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
@@ -67,25 +68,35 @@ def database_config():
         if values and values[-1]
     }
 
-    if scheme in {"postgres", "postgresql", "pgsql"}:
+    def postgres_config(name="", user="", password="", host="", port="", extra_options=None):
         config = {
             "ENGINE": "django.db.backends.postgresql",
-            "NAME": unquote(parsed.path.lstrip("/")),
-            "USER": unquote(parsed.username or ""),
-            "PASSWORD": unquote(parsed.password or ""),
-            "HOST": parsed.hostname or "",
-            "PORT": str(parsed.port or ""),
+            "NAME": name,
+            "USER": user,
+            "PASSWORD": password,
+            "HOST": host,
+            "PORT": str(port or ""),
             "CONN_MAX_AGE": conn_max_age,
             "CONN_HEALTH_CHECKS": True,
         }
         options = {}
         for option_key in ("sslmode", "sslrootcert", "sslcert", "sslkey", "target_session_attrs"):
-            option_value = query_options.get(option_key)
+            option_value = (extra_options or {}).get(option_key)
             if option_value:
                 options[option_key] = option_value
         if options:
             config["OPTIONS"] = options
         return config
+
+    if scheme in {"postgres", "postgresql", "pgsql"}:
+        return postgres_config(
+            name=unquote(parsed.path.lstrip("/")),
+            user=unquote(parsed.username or ""),
+            password=unquote(parsed.password or ""),
+            host=parsed.hostname or "",
+            port=parsed.port or "",
+            extra_options=query_options,
+        )
 
     if scheme == "sqlite":
         db_name = unquote(parsed.path.lstrip("/")) or "db.sqlite3"
@@ -94,8 +105,37 @@ def database_config():
             "NAME": BASE_DIR / db_name,
         }
 
+    # Some platforms surface PostgreSQL credentials as a libpq-style DSN such as:
+    # "host=... port=25060 user=... password=... dbname=... sslmode=require".
+    # Support that shape as well so builds do not fail on a non-URL DATABASE_URL.
+    if "=" in database_url and "://" not in database_url:
+        dsn_parts = {}
+        for chunk in shlex.split(database_url):
+            if "=" not in chunk:
+                continue
+            key, value = chunk.split("=", 1)
+            dsn_parts[key.strip().lower()] = value.strip()
+
+        if dsn_parts:
+            name = (
+                dsn_parts.get("dbname")
+                or dsn_parts.get("database")
+                or dsn_parts.get("name")
+                or ""
+            )
+            user = dsn_parts.get("user") or dsn_parts.get("username") or ""
+            if name and user:
+                return postgres_config(
+                    name=name,
+                    user=user,
+                    password=dsn_parts.get("password", ""),
+                    host=dsn_parts.get("host", ""),
+                    port=dsn_parts.get("port", ""),
+                    extra_options=dsn_parts,
+                )
+
     raise ImproperlyConfigured(
-        "Unsupported DATABASE_URL scheme. Use postgres/postgresql or sqlite."
+        "Unsupported DATABASE_URL scheme. Use postgres/postgresql/sqlite or a libpq-style Postgres DSN."
     )
 
 
