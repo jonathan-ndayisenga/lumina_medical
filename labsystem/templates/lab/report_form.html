@@ -66,6 +66,19 @@
         resize: vertical;
     }
 
+    .inline-field-row {
+        display: flex;
+        gap: 0.75rem;
+    }
+
+    .inline-field-grow {
+        flex: 1 1 auto;
+    }
+
+    .inline-field-unit {
+        flex: 0 0 150px;
+    }
+
     .field-group .help-text,
     .template-note {
         color: var(--text-muted);
@@ -250,6 +263,14 @@
             grid-template-columns: 1fr;
         }
 
+        .inline-field-row {
+            flex-direction: column;
+        }
+
+        .inline-field-unit {
+            flex-basis: auto;
+        }
+
         .panel {
             padding: 1.15rem;
         }
@@ -334,9 +355,19 @@
                 {% if form.patient_name.errors %}<ul class="errorlist">{{ form.patient_name.errors }}</ul>{% endif %}
             </div>
             <div class="field-group">
-                <label for="{{ form.patient_age.id_for_label }}">Age</label>
+                <label for="{{ form.age_value.id_for_label }}">Age</label>
                 {{ form.patient_age }}
-                <div class="help-text">Example: 22YRS or 6MTH</div>
+                <div class="inline-field-row">
+                    <div class="inline-field inline-field-grow">
+                        {{ form.age_value }}
+                    </div>
+                    <div class="inline-field inline-field-unit">
+                        {{ form.age_unit }}
+                    </div>
+                </div>
+                <div class="help-text">Choose whether the age is in years or months.</div>
+                {% if form.age_value.errors %}<ul class="errorlist">{{ form.age_value.errors }}</ul>{% endif %}
+                {% if form.age_unit.errors %}<ul class="errorlist">{{ form.age_unit.errors }}</ul>{% endif %}
                 {% if form.patient_age.errors %}<ul class="errorlist">{{ form.patient_age.errors }}</ul>{% endif %}
             </div>
             <div class="field-group">
@@ -484,6 +515,8 @@ document.addEventListener('DOMContentLoaded', function () {
     const templateSelect = document.getElementById('{{ form.profile.id_for_label }}');
     const specimenInput = document.getElementById('{{ form.specimen_type.id_for_label }}');
     const ageInput = document.getElementById('{{ form.patient_age.id_for_label }}');
+    const ageValueInput = document.getElementById('{{ form.age_value.id_for_label }}');
+    const ageUnitInput = document.getElementById('{{ form.age_unit.id_for_label }}');
     const patientNameInput = document.getElementById('{{ form.patient_name.id_for_label }}');
     const totalFormsInput = document.querySelector('[name="{{ formset.prefix }}-TOTAL_FORMS"]');
     const formsetPrefix = '{{ formset.prefix }}';
@@ -496,6 +529,16 @@ document.addEventListener('DOMContentLoaded', function () {
     const rangeHeaderCell = document.querySelector('.header-range');
     const unitHeaderCell = document.querySelector('.header-unit');
     const commentHeaderCell = document.querySelector('.header-comment');
+
+    function syncAgeValue() {
+        const numericAge = ageValueInput ? ageValueInput.value.trim() : '';
+        const ageUnit = ageUnitInput ? ageUnitInput.value : 'YRS';
+        const normalizedAge = numericAge ? `${numericAge}${ageUnit}` : '';
+        if (ageInput) {
+            ageInput.value = normalizedAge;
+        }
+        return normalizedAge;
+    }
 
     function replaceIndex(value, index) {
         if (!value) return value;
@@ -610,9 +653,10 @@ document.addEventListener('DOMContentLoaded', function () {
         const testInput = row.querySelector('.test-name-field');
         const rangeField = row.querySelector('.range-field');
         const unitField = row.querySelector('.unit-field');
-        if (!testInput || !ageInput || !ageInput.value.trim() || !testInput.value.trim()) return;
+        const ageValue = syncAgeValue();
+        if (!testInput || !ageValue || !testInput.value.trim()) return;
 
-        fetch(`{% url 'default_range' %}?test=${encodeURIComponent(testInput.value.trim())}&age=${encodeURIComponent(ageInput.value.trim())}`)
+        fetch(`{% url 'default_range' %}?test=${encodeURIComponent(testInput.value.trim())}&age=${encodeURIComponent(ageValue)}`)
             .then(response => response.json())
             .then(data => {
                 fillEditableField(rangeField, data.reference_range || rangeField.value);
@@ -903,15 +947,21 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
-    if (ageInput) {
-        ageInput.addEventListener('blur', function () {
-            const value = this.value.trim().toUpperCase();
-            if (value && !isNaN(parseInt(value, 10)) && !value.includes('YRS') && !value.includes('MTH')) {
-                this.value = `${value}YRS`;
-            }
+    if (ageValueInput) {
+        ageValueInput.addEventListener('blur', function () {
+            syncAgeValue();
             visibleRows().forEach(row => fetchDefault(row));
         });
     }
+
+    if (ageUnitInput) {
+        ageUnitInput.addEventListener('change', function () {
+            syncAgeValue();
+            visibleRows().forEach(row => fetchDefault(row));
+        });
+    }
+
+    syncAgeValue();
 
     if (templateSelect) {
         templateSelect.addEventListener('change', function () {
