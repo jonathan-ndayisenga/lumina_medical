@@ -27,7 +27,77 @@
 
     <div class="card">
         <h3 class="text-sm font-semibold text-text-main mb-4">Hospital Patients</h3>
-        <div class="overflow-x-auto">
+        <div class="space-y-3 md:hidden">
+            {% for row in patient_rows %}
+            <article class="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm space-y-3">
+                <div class="flex items-start justify-between gap-3">
+                    <div>
+                        <h4 class="text-sm font-semibold text-text-main">{{ row.patient.name }}</h4>
+                        <p class="text-xs text-text-muted">{{ row.patient.get_sex_display }} · {{ row.patient.age }}</p>
+                    </div>
+                    <span class="inline-flex items-center px-2 py-1 rounded-full text-[11px] font-semibold bg-gray-100 text-gray-700">{{ row.patient.visit_count }} visit{{ row.patient.visit_count|pluralize }}</span>
+                </div>
+                <dl class="space-y-2 text-sm">
+                    <div>
+                        <dt class="text-xs uppercase tracking-wide text-text-muted">Registered</dt>
+                        <dd class="text-text-main">
+                            {% if row.patient.registration_date %}
+                                {{ row.patient.registration_date|date:"M d, Y" }}
+                            {% else %}
+                                {{ row.patient.created_at|date:"M d, Y" }}
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs uppercase tracking-wide text-text-muted">Weight</dt>
+                        <dd class="text-text-main">{{ row.patient.weight_kg|default:'-' }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs uppercase tracking-wide text-text-muted">Contact</dt>
+                        <dd class="text-text-main">{{ row.patient.contact|default:"-" }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs uppercase tracking-wide text-text-muted">Last Visit</dt>
+                        <dd class="text-text-main">
+                            {% if row.patient.last_visit_date %}
+                                {{ row.patient.last_visit_date|date:"M d, Y H:i" }}
+                            {% else %}
+                                No prior visits recorded
+                            {% endif %}
+                        </dd>
+                    </div>
+                </dl>
+                {% if row.recent_visits %}
+                    <div class="space-y-2">
+                        <div class="text-xs uppercase tracking-wide text-text-muted">Recent Visits</div>
+                        {% for visit in row.recent_visits %}
+                            <div class="rounded-lg border border-gray-200 bg-gray-50 p-2 text-xs">
+                                <div class="flex items-center justify-between gap-2">
+                                    <span>{{ visit.visit_date|date:"M d, Y H:i" }}</span>
+                                    <span class="font-semibold">{{ visit.get_status_display }}</span>
+                                </div>
+                                <div class="mt-1 text-text-muted">Bill: {{ visit.total_amount }}</div>
+                            </div>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+                <div class="flex flex-col gap-2">
+                    <a href="{% url 'patient_visits' row.patient.pk %}" class="btn btn-secondary">Visits</a>
+                    <a href="{% url 'visit_create' row.patient.pk %}" class="btn btn-secondary">+ New Visit</a>
+                    {% if row.latest_editable_visit %}
+                        <a href="{% url 'visit_edit' row.latest_editable_visit.pk %}" class="btn btn-secondary">Edit Latest</a>
+                        <a href="{% url 'visit_delete' row.latest_editable_visit.pk %}" class="btn btn-danger">Delete Latest</a>
+                    {% endif %}
+                </div>
+            </article>
+            {% empty %}
+            <div class="rounded-2xl border border-dashed border-gray-300 bg-gray-50 px-4 py-8 text-center text-text-muted italic">
+                No patients matched your search yet.
+            </div>
+            {% endfor %}
+        </div>
+
+        <div class="overflow-x-auto hidden md:block">
             <table class="w-full">
                 <thead class="bg-gray-50 border-b border-gray-200">
                     <tr>

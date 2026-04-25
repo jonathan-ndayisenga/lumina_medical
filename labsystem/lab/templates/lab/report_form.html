@@ -238,11 +238,15 @@
             <div class="flex gap-2">
                 <button type="button" id="add-row-btn" class="btn btn-secondary">Add Test Row</button>
             </div>
-            <div class="flex gap-2 flex-wrap">
+            <div class="flex gap-2 flex-wrap items-start">
                 <a href="{% url 'report_list' %}" class="btn btn-secondary">Cancel</a>
                 <button type="submit" name="action" value="save_report" class="btn btn-primary">{% if edit_mode %}Update Report{% else %}Save Report{% endif %}</button>
                 {% if can_send_to_doctor %}
                     <button type="submit" name="action" value="send_to_doctor" class="btn btn-secondary">Send to Doctor</button>
+                {% elif pending_requested_services %}
+                    <span class="inline-flex items-center rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-800">
+                        Finish all requested tests before sending this report back to the doctor.
+                    </span>
                 {% endif %}
             </div>
         </div>

@@ -9,7 +9,58 @@
     <div class="card">
         <h4 class="text-sm font-semibold text-text-main mb-2">Waiting for Consultation</h4>
         <p class="text-xs text-text-muted mb-4">Live doctor queue, including patients returning with lab results.</p>
-        <div class="overflow-x-auto">
+        <div class="space-y-3 md:hidden">
+            {% for item in queue_entries %}
+                {% with entry=item.entry %}
+                <article class="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm space-y-3 {% if item.is_results_ready %}ring-1 ring-emerald-200 bg-emerald-50/40{% endif %}">
+                    <div class="flex items-start justify-between gap-3">
+                        <div>
+                            <h5 class="text-sm font-semibold text-text-main">{{ entry.visit.patient.name }}</h5>
+                            <p class="text-xs text-text-muted">{{ entry.visit.patient.age }} / {{ entry.visit.patient.get_sex_display }}</p>
+                        </div>
+                        {% if item.is_results_ready %}
+                            <span class="inline-flex items-center px-2 py-1 rounded-full text-[11px] font-semibold bg-emerald-100 text-emerald-800">Lab results ready</span>
+                        {% endif %}
+                    </div>
+                    <dl class="space-y-2 text-sm">
+                        <div>
+                            <dt class="text-xs uppercase tracking-wide text-text-muted">Visit Date</dt>
+                            <dd class="text-text-main">{{ entry.visit.visit_date|date:"M d, Y H:i" }}</dd>
+                        </div>
+                        <div>
+                            <dt class="text-xs uppercase tracking-wide text-text-muted">Hospital</dt>
+                            <dd class="text-text-main">{{ entry.hospital.name }}</dd>
+                        </div>
+                        <div>
+                            <dt class="text-xs uppercase tracking-wide text-text-muted">Reason</dt>
+                            <dd class="text-text-main">{{ entry.reason|default:entry.notes|default:"General consultation" }}</dd>
+                        </div>
+                        <div>
+                            <dt class="text-xs uppercase tracking-wide text-text-muted">Requested By</dt>
+                            <dd class="text-text-main">
+                                {% if entry.requested_by %}
+                                    {% if entry.requested_by.get_full_name %}
+                                        {{ entry.requested_by.get_full_name }}
+                                    {% else %}
+                                        {{ entry.requested_by.username }}
+                                    {% endif %}
+                                {% else %}
+                                    System
+                                {% endif %}
+                            </dd>
+                        </div>
+                    </dl>
+                    <a href="{% url 'consultation' entry.visit.pk %}" class="btn btn-primary">Consult</a>
+                </article>
+                {% endwith %}
+            {% empty %}
+                <div class="rounded-2xl border border-dashed border-gray-300 bg-gray-50 px-4 py-8 text-center text-sm text-text-muted">
+                    No consultations waiting.
+                </div>
+            {% endfor %}
+        </div>
+
+        <div class="overflow-x-auto hidden md:block">
             <table class="w-full min-w-full">
                 <thead>
                     <tr class="border-b-2 border-gray-200">
@@ -67,7 +118,63 @@
     <div class="card">
         <h4 class="text-sm font-semibold text-text-main mb-2">Recent Consultation History</h4>
         <p class="text-xs text-text-muted mb-4">Completed consultations with nurse handoff status and billing readiness.</p>
-        <div class="overflow-x-auto">
+        <div class="space-y-3 md:hidden">
+            {% for item in recent_consultations %}
+                <article class="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm space-y-3">
+                    <div class="flex items-start justify-between gap-3">
+                        <div>
+                            <h5 class="text-sm font-semibold text-text-main">{{ item.consultation.visit.patient.name }}</h5>
+                            <p class="text-xs text-text-muted">{{ item.consultation.created_at|date:"M d, Y" }}</p>
+                        </div>
+                        <span class="inline-flex items-center px-2 py-1 rounded-full text-[11px] font-semibold bg-gray-100 text-gray-700">{{ item.consultation.visit.get_status_display }}</span>
+                    </div>
+                    <dl class="space-y-2 text-sm">
+                        <div>
+                            <dt class="text-xs uppercase tracking-wide text-text-muted">Consulted By</dt>
+                            <dd class="text-text-main">
+                                {% if item.consultation.created_by %}
+                                    {% if item.consultation.created_by.get_full_name %}
+                                        {{ item.consultation.created_by.get_full_name }}
+                                    {% else %}
+                                        {{ item.consultation.created_by.username }}
+                                    {% endif %}
+                                {% else %}
+                                    Team
+                                {% endif %}
+                            </dd>
+                        </div>
+                        <div>
+                            <dt class="text-xs uppercase tracking-wide text-text-muted">Nurse Status</dt>
+                            <dd>
+                                {% if item.latest_nurse_entry %}
+                                    {% if item.latest_nurse_entry.processed %}
+                                        <span class="inline-block px-2 py-1 rounded-full text-xs font-medium bg-green-50 text-green-700">Completed</span>
+                                    {% else %}
+                                        <span class="inline-block px-2 py-1 rounded-full text-xs font-medium bg-yellow-50 text-yellow-700">Pending Nurse</span>
+                                    {% endif %}
+                                {% else %}
+                                    <span class="inline-block px-2 py-1 rounded-full text-xs font-medium bg-gray-50 text-gray-700">Not Sent</span>
+                                {% endif %}
+                            </dd>
+                        </div>
+                        <div>
+                            <dt class="text-xs uppercase tracking-wide text-text-muted">Notes</dt>
+                            <dd class="text-text-main">{{ item.nurse_notes_count }}</dd>
+                        </div>
+                    </dl>
+                    <div class="flex flex-col gap-2">
+                        <a href="{% url 'consultation_detail' item.consultation.visit.pk %}" class="btn btn-secondary">View</a>
+                        <a href="{% url 'consultation' item.consultation.visit.pk %}" class="btn btn-primary">Edit</a>
+                    </div>
+                </article>
+            {% empty %}
+                <div class="rounded-2xl border border-dashed border-gray-300 bg-gray-50 px-4 py-8 text-center text-sm text-text-muted">
+                    No completed consultations yet.
+                </div>
+            {% endfor %}
+        </div>
+
+        <div class="overflow-x-auto hidden md:block">
             <table class="w-full min-w-full">
                 <thead>
                     <tr class="border-b-2 border-gray-200">
