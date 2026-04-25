@@ -75,6 +75,10 @@ class HospitalFormTests(TestCase):
         self.assertFalse(form.is_valid())
         self.assertIn("admin_password", form.errors)
 
+    def test_email_is_optional(self):
+        form = HospitalForm(data=self.form_data(email=""))
+        self.assertTrue(form.is_valid(), form.errors)
+
     def test_missing_logo_uses_fallback_property(self):
         hospital = Hospital.objects.create(name="Fallback", subdomain="fallback")
         self.assertEqual(hospital.logo_url, static("images/default_hospital_logo.png"))

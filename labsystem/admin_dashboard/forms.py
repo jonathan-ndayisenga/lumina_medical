@@ -56,7 +56,7 @@ class HospitalForm(forms.ModelForm):
     def __init__(self, *args, require_admin_credentials=True, **kwargs):
         super().__init__(*args, **kwargs)
         self.require_admin_credentials = require_admin_credentials
-        for field_name in ("location", "box_number", "phone_number", "email"):
+        for field_name in ("location", "box_number", "phone_number"):
             self.fields[field_name].required = True
         if not require_admin_credentials:
             for field_name in ("admin_username", "admin_password", "admin_password_confirm"):
