@@ -161,6 +161,21 @@ class SuperadminHospitalManagementTests(TestCase):
         response = self.client.get(reverse("app_home"))
         self.assertRedirects(response, reverse("developer_dashboard"))
 
+    def test_django_superuser_is_normalized_to_superadmin_role(self):
+        promoted = self.User.objects.create_superuser(
+            username="rootowner",
+            password="StrongPass123!",
+            email="rootowner@example.com",
+        )
+        promoted.refresh_from_db()
+        self.assertEqual(promoted.role, self.User.ROLE_SUPERADMIN)
+        self.assertTrue(promoted.is_superuser)
+        self.assertIsNone(promoted.hospital)
+
+        self.client.force_login(promoted)
+        response = self.client.get(reverse("app_home"))
+        self.assertRedirects(response, reverse("developer_dashboard"))
+
     def test_hospital_admin_cannot_access_superadmin_dashboard(self):
         hospital = Hospital.objects.create(name="City Care", subdomain="city-care")
         admin_user = self.User.objects.create_user(

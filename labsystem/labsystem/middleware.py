@@ -19,7 +19,7 @@ class HospitalMiddleware:
 
         user = getattr(request, "user", None)
         if getattr(user, "is_authenticated", False):
-            if getattr(user, "role", "") == "superadmin":
+            if getattr(user, "is_superuser", False) or getattr(user, "role", "") == "superadmin":
                 return self.get_response(request)
             if getattr(user, "hospital_id", None):
                 request.hospital = user.hospital

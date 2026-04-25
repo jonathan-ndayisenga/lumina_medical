@@ -86,14 +86,17 @@ class User(AbstractUser):
 
     @property
     def is_superadmin(self):
-        return self.role == self.ROLE_SUPERADMIN
+        return self.is_superuser or self.role == self.ROLE_SUPERADMIN
 
     @property
     def is_hospital_admin(self):
         return self.role == self.ROLE_HOSPITAL_ADMIN
 
     def save(self, *args, **kwargs):
-        if self.role == self.ROLE_SUPERADMIN:
+        # Treat Django superusers as platform superadmins even if the role field
+        # was left at its default during createsuperuser or legacy account setup.
+        if self.is_superuser or self.role == self.ROLE_SUPERADMIN:
+            self.role = self.ROLE_SUPERADMIN
             self.hospital = None
             self.is_staff = True
             self.is_superuser = True
