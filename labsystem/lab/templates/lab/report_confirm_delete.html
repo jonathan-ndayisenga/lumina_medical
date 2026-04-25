@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+
+{% block title %}Delete Report{% endblock %}
+{% block page_title %}Delete Lab Report{% endblock %}
+{% block page_subtitle %}Confirm before removing this report from the laboratory records.{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto space-y-6">
+    <div class="card">
+        <h2 class="text-2xl font-bold text-text-main mb-3">Delete Lab Report</h2>
+        <p class="text-text-main mb-5">Are you sure you want to delete the report for <strong>{{ report.patient_name }}</strong> dated {{ report.sample_date }}?</p>
+        <form method="post" class="no-print flex gap-3 flex-wrap">
+            {% csrf_token %}
+            <button type="submit" class="btn bg-red-600 hover:bg-red-700 text-white">Yes, delete</button>
+            <a href="{% url 'report_detail' report.pk %}" class="btn btn-secondary">Cancel</a>
+        </form>
+    </div>
+</div>
+{% endblock %}

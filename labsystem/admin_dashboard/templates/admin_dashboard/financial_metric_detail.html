@@ -1,0 +1,256 @@
+{% extends "base.html" %}
+
+{% block title %}{{ dashboard_title }} - Hospital EMR{% endblock %}
+{% block page_title %}{{ dashboard_title }}{% endblock %}
+{% block page_subtitle %}{{ definition }}{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <div class="flex gap-3 flex-wrap no-print">
+        <a href="{% url 'financial_report' %}?start_date={{ period_start|date:'Y-m-d' }}&end_date={{ period_end|date:'Y-m-d' }}" class="btn btn-secondary">Back to Financial Report</a>
+        <a href="{% url 'receipts_list' %}" class="btn btn-secondary">Receipts List</a>
+        <a href="{% url 'financial_statements' %}" class="btn btn-secondary">Financial Statements</a>
+        <a href="{% url 'manage_expenses' %}" class="btn btn-secondary">Expenses</a>
+        <a href="{% url 'manage_salaries' %}" class="btn btn-secondary">Salaries</a>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="card">
+            <h3 class="text-sm text-text-muted mb-2">Value</h3>
+            <p class="text-4xl font-bold text-text-main">{{ value }}</p>
+            <p class="text-xs text-text-muted mt-2">Period: {{ period_start }} - {{ period_end }}</p>
+        </div>
+        <div class="card">
+            <h3 class="text-sm text-text-muted mb-2">Formula</h3>
+            <p class="text-sm text-text-main">{{ formula }}</p>
+        </div>
+        <div class="card">
+            <h3 class="text-sm text-text-muted mb-2">Data Source</h3>
+            <p class="text-sm text-text-main">{{ source_models }}</p>
+        </div>
+    </div>
+
+    {% if records_kind == "net_profit_breakdown" %}
+        <div class="card">
+            <h3 class="text-lg font-bold text-text-main mb-4">Breakdown</h3>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                    <div class="text-sm text-text-muted">Income (collected)</div>
+                    <div class="text-2xl font-bold text-text-main">{{ income_component }}</div>
+                </div>
+                <div>
+                    <div class="text-sm text-text-muted">Expenses</div>
+                    <div class="text-2xl font-bold text-text-main">{{ expense_component }}</div>
+                </div>
+                <div>
+                    <div class="text-sm text-text-muted">Salaries (paid)</div>
+                    <div class="text-2xl font-bold text-text-main">{{ salary_component }}</div>
+                </div>
+            </div>
+        </div>
+    {% elif records_kind == "variance_breakdown" %}
+        <div class="card">
+            <h3 class="text-lg font-bold text-text-main mb-4">Variance Components</h3>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                    <div class="text-sm text-text-muted">Bank Variance</div>
+                    <div class="text-2xl font-bold text-text-main">{{ bank_variance }}</div>
+                    {% if latest_bank %}
+                        <div class="text-xs text-text-muted mt-1">{{ latest_bank.bank_account }} ({{ latest_bank.period_start }} - {{ latest_bank.period_end }})</div>
+                    {% endif %}
+                </div>
+                <div>
+                    <div class="text-sm text-text-muted">Mobile Variance</div>
+                    <div class="text-2xl font-bold text-text-main">{{ mobile_variance }}</div>
+                    {% if latest_mobile %}
+                        <div class="text-xs text-text-muted mt-1">{{ latest_mobile.mobile_money_account }} ({{ latest_mobile.period_start }} - {{ latest_mobile.period_end }})</div>
+                    {% endif %}
+                </div>
+                <div>
+                    <div class="text-sm text-text-muted">Cash Discrepancy</div>
+                    <div class="text-2xl font-bold text-text-main">{{ drawer_discrepancy }}</div>
+                    {% if open_drawer %}
+                        <div class="text-xs text-text-muted mt-1">Open drawer: {{ open_drawer.date }}</div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    {% endif %}
+
+    {% if records_kind == "payments" %}
+        <div class="card">
+            <h3 class="text-lg font-bold text-text-main mb-4">{{ records_title }}</h3>
+            <div class="overflow-x-auto">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Receipt</th>
+                            <th>Date</th>
+                            <th>Patient</th>
+                            <th>Mode</th>
+                            <th>Paid</th>
+                            <th>Billed</th>
+                            <th>Balance</th>
+                            <th class="no-print">Receipt</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for payment in records %}
+                            <tr>
+                                <td class="font-semibold text-text-main">{{ payment.receipt_number }}</td>
+                                <td class="text-sm text-text-muted">{{ payment.paid_at|date:"Y-m-d H:i"|default:"-" }}</td>
+                                <td class="text-sm text-text-muted">{{ payment.visit.patient.name }}</td>
+                                <td class="text-sm text-text-muted">{{ payment.get_mode_display }}</td>
+                                <td class="font-semibold text-text-main">{{ payment.amount_paid }}</td>
+                                <td class="text-sm text-text-muted">{{ payment.amount }}</td>
+                                <td class="text-sm text-text-muted">{{ payment.balance_due }}</td>
+                                <td class="no-print"><a class="btn btn-secondary btn-sm" href="{% url 'print_receipt' payment.visit_id %}" target="_blank" rel="noopener">View</a></td>
+                            </tr>
+                        {% empty %}
+                            <tr><td colspan="8" class="text-sm text-text-muted italic py-6">No records found.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    {% elif records_kind == "expenses" %}
+        <div class="card">
+            <h3 class="text-lg font-bold text-text-main mb-4">{{ records_title }}</h3>
+            <div class="overflow-x-auto">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Description</th>
+                            <th>Category</th>
+                            <th>Source</th>
+                            <th>Source Account</th>
+                            <th>Amount</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for expense in records %}
+                            <tr>
+                                <td class="text-sm text-text-muted">{{ expense.date }}</td>
+                                <td class="text-sm text-text-main font-semibold">{{ expense.description }}</td>
+                                <td class="text-sm text-text-muted">{{ expense.get_category_display }}</td>
+                                <td class="text-sm text-text-muted">{{ expense.get_source_display }}</td>
+                                <td class="text-sm text-text-muted">{{ expense.source_account_label }}</td>
+                                <td class="font-semibold text-text-main">{{ expense.amount }}</td>
+                            </tr>
+                        {% empty %}
+                            <tr><td colspan="6" class="text-sm text-text-muted italic py-6">No records found.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    {% elif records_kind == "salaries" %}
+        <div class="card">
+            <h3 class="text-lg font-bold text-text-main mb-4">{{ records_title }}</h3>
+            <div class="overflow-x-auto">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Paid At</th>
+                            <th>Employee</th>
+                            <th>Month</th>
+                            <th>Amount</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for salary in records %}
+                            <tr>
+                                <td class="text-sm text-text-muted">{{ salary.paid_at|default:"-" }}</td>
+                                <td class="text-sm text-text-muted">{{ salary.employee.get_full_name|default:salary.employee.username }}</td>
+                                <td class="text-sm text-text-muted">{{ salary.month|date:"Y-m" }}</td>
+                                <td class="font-semibold text-text-main">{{ salary.amount }}</td>
+                            </tr>
+                        {% empty %}
+                            <tr><td colspan="4" class="text-sm text-text-muted italic py-6">No records found.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    {% elif records_kind == "bank_transactions" %}
+        <div class="card">
+            <h3 class="text-lg font-bold text-text-main mb-4">{{ records_title }}</h3>
+            <div class="overflow-x-auto">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Account</th>
+                            <th>Description</th>
+                            <th>Type</th>
+                            <th>Amount</th>
+                            <th>Reference</th>
+                            <th>Reconciled</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for txn in records %}
+                            <tr>
+                                <td class="text-sm text-text-muted">{{ txn.transaction_date }}</td>
+                                <td class="text-sm text-text-muted">{{ txn.bank_account }}</td>
+                                <td class="text-sm text-text-main">{{ txn.description }}</td>
+                                <td class="text-sm text-text-muted">{{ txn.get_transaction_type_display }}</td>
+                                <td class="font-semibold text-text-main">{{ txn.amount }}</td>
+                                <td class="text-sm text-text-muted">{{ txn.reference|default:"-" }}</td>
+                                <td class="text-sm text-text-muted">{% if txn.is_reconciled %}Yes{% else %}No{% endif %}</td>
+                            </tr>
+                        {% empty %}
+                            <tr><td colspan="7" class="text-sm text-text-muted italic py-6">No records found.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    {% elif records_kind == "mobile_transactions" %}
+        <div class="card">
+            <h3 class="text-lg font-bold text-text-main mb-4">{{ records_title }}</h3>
+            <div class="overflow-x-auto">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Account</th>
+                            <th>Description</th>
+                            <th>Type</th>
+                            <th>Amount</th>
+                            <th>Reference</th>
+                            <th>Reconciled</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for txn in records %}
+                            <tr>
+                                <td class="text-sm text-text-muted">{{ txn.transaction_date }}</td>
+                                <td class="text-sm text-text-muted">{{ txn.mobile_money_account }}</td>
+                                <td class="text-sm text-text-main">{{ txn.description }}</td>
+                                <td class="text-sm text-text-muted">{{ txn.get_transaction_type_display }}</td>
+                                <td class="font-semibold text-text-main">{{ txn.amount }}</td>
+                                <td class="text-sm text-text-muted">{{ txn.reference|default:"-" }}</td>
+                                <td class="text-sm text-text-muted">{% if txn.is_reconciled %}Yes{% else %}No{% endif %}</td>
+                            </tr>
+                        {% empty %}
+                            <tr><td colspan="7" class="text-sm text-text-muted italic py-6">No records found.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    {% elif records_kind == "account_balance" %}
+        <div class="card">
+            <h3 class="text-lg font-bold text-text-main mb-2">Interpretation</h3>
+            <p class="text-sm text-text-muted">This value is computed (not manually edited). It updates whenever receipts, expenses, or paid salaries change.</p>
+            <div class="pt-4 border-t border-gray-200 mt-4 flex gap-3 flex-wrap no-print">
+                <a href="{% url 'receipts_list' %}" class="btn btn-secondary btn-sm">Review Receipts</a>
+                <a href="{% url 'manage_expenses' %}" class="btn btn-secondary btn-sm">Review Expenses</a>
+                <a href="{% url 'manage_salaries' %}" class="btn btn-secondary btn-sm">Review Salaries</a>
+            </div>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}

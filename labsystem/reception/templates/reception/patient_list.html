@@ -1,0 +1,104 @@
+{% extends 'base.html' %}
+
+{% block title %}Patients - Hospital EMR{% endblock %}
+{% block page_title %}Patients{% endblock %}
+{% block page_subtitle %}Search returning patients, review whether they have visited before, and manage editable visits from reception.{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <div class="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4">
+        <form method="get" class="card flex-1 max-w-2xl">
+            <label for="patient-search" class="block text-sm font-semibold text-text-main mb-2">Search hospital patient history</label>
+            <div class="flex flex-col sm:flex-row gap-3">
+                <input id="patient-search" type="text" name="q" value="{{ query }}" class="form-control" placeholder="Search by name, contact, or age">
+                <div class="flex gap-3">
+                    <button type="submit" class="btn btn-primary">Search</button>
+                    {% if query %}
+                        <a href="{% url 'patient_list' %}" class="btn btn-secondary">Clear</a>
+                    {% endif %}
+                </div>
+            </div>
+            <p class="mt-2 text-xs text-text-muted">Use this to quickly confirm whether a patient has ever come to the hospital before creating a new visit.</p>
+        </form>
+        <div class="flex justify-end">
+            <a href="{% url 'patient_create' %}" class="btn btn-primary">Register Patient</a>
+        </div>
+    </div>
+
+    <div class="card">
+        <h3 class="text-sm font-semibold text-text-main mb-4">Hospital Patients</h3>
+        <div class="overflow-x-auto">
+            <table class="w-full">
+                <thead class="bg-gray-50 border-b border-gray-200">
+                    <tr>
+                        <th class="text-left px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-widest">Name</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-widest">Registration Date</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-widest">Age</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-widest">Weight</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-widest">Contact</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-widest">Visit History</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-widest">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200">
+                    {% for row in patient_rows %}
+                    <tr class="hover:bg-gray-50 transition-colors align-top">
+                        <td class="px-4 py-3 text-text-main">
+                            <div class="font-medium">{{ row.patient.name }}</div>
+                            <div class="text-xs text-text-muted">{{ row.patient.get_sex_display }}</div>
+                        </td>
+                        <td class="px-4 py-3 text-text-main">
+                            {% if row.patient.registration_date %}
+                                {{ row.patient.registration_date|date:"M d, Y" }}
+                            {% else %}
+                                {{ row.patient.created_at|date:"M d, Y" }}
+                            {% endif %}
+                        </td>
+                        <td class="px-4 py-3 text-text-main">{{ row.patient.age }}</td>
+                        <td class="px-4 py-3 text-text-main">{{ row.patient.weight_kg|default:'-' }}</td>
+                        <td class="px-4 py-3 text-text-main">{{ row.patient.contact|default:"-" }}</td>
+                        <td class="px-4 py-3 text-text-main">
+                            <div class="text-sm">Visits: {{ row.patient.visit_count }}</div>
+                            {% if row.patient.last_visit_date %}
+                                <div class="text-xs text-text-muted">Last seen {{ row.patient.last_visit_date|date:"M d, Y H:i" }}</div>
+                            {% else %}
+                                <div class="text-xs text-text-muted">No prior visits recorded</div>
+                            {% endif %}
+                            {% if row.recent_visits %}
+                                <div class="mt-2 space-y-2 max-w-sm">
+                                    {% for visit in row.recent_visits %}
+                                        <div class="rounded-lg border border-gray-200 bg-gray-50 p-2 text-xs">
+                                            <div class="flex items-center justify-between gap-2">
+                                                <span>{{ visit.visit_date|date:"M d, Y H:i" }}</span>
+                                                <span class="font-semibold">{{ visit.get_status_display }}</span>
+                                            </div>
+                                            <div class="mt-1 text-text-muted">Bill: {{ visit.total_amount }}</div>
+                                        </div>
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+                        </td>
+                        <td class="px-4 py-3">
+                            <div class="flex flex-wrap gap-2">
+                                <a href="{% url 'patient_visits' row.patient.pk %}" class="btn btn-secondary btn-sm" title="View all visits">
+                                    Visits
+                                </a>
+                                <a href="{% url 'visit_create' row.patient.pk %}" class="btn btn-secondary btn-sm">+ New Visit</a>
+                                {% if row.latest_editable_visit %}
+                                    <a href="{% url 'visit_edit' row.latest_editable_visit.pk %}" class="btn btn-secondary btn-sm">Edit Latest</a>
+                                    <a href="{% url 'visit_delete' row.latest_editable_visit.pk %}" class="btn btn-danger btn-sm">Delete Latest</a>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="7" class="px-4 py-8 text-center text-text-muted italic">No patients matched your search yet.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

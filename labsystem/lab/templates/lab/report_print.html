@@ -1,0 +1,172 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Print Report - Lumina Medical Services{% endblock %}
+{% block print_header %}{% endblock %}
+
+{% block extra_css %}
+<style>
+    @page {
+        size: A4 portrait;
+        margin: 8mm;
+    }
+
+    .paper-section .results-table {
+        border: none;
+    }
+
+    .paper-section .results-table th,
+    .paper-section .results-table td {
+        background: transparent;
+        border-bottom: 0;
+        padding-left: 0;
+        padding-right: 0.45rem;
+        color: #111827;
+    }
+
+    .paper-section .results-table th {
+        font-size: 0.76rem;
+        font-weight: 700;
+        text-transform: none;
+        letter-spacing: 0;
+    }
+
+    @media print {
+        body {
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+        }
+
+        .content {
+            padding: 0;
+        }
+
+        .print-header,
+        .patient-grid {
+            break-inside: avoid;
+        }
+
+        .section-block {
+            break-inside: auto;
+        }
+
+        .results-table tr {
+            break-inside: avoid;
+        }
+
+        .report-footer {
+            font-size: 0.64rem;
+        }
+    }
+
+    @media (max-width: 760px) {
+        .print-header {
+            flex-direction: column;
+            align-items: flex-start;
+        }
+
+        .print-meta {
+            width: 100%;
+            text-align: left;
+        }
+
+        .patient-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+        }
+    }
+
+    @media (max-width: 640px) {
+        .print-shell {
+            font-size: 11px;
+        }
+
+        .patient-grid {
+            grid-template-columns: 1fr !important;
+        }
+
+        .results-table {
+            min-width: 640px;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="space-y-3 print-shell" style="background: #fff; color: #111827; font-size: 12px; line-height: 1.2;">
+    {% include "partials/print_header.html" with hospital=report.hospital print_title="LABORATORY REPORT" print_subtitle=report.sample_date %}
+
+    <div class="patient-grid grid grid-cols-3 gap-1 p-2 border border-gray-200 rounded-lg bg-white" style="font-size: 0.75rem;">
+        <div class="flex items-baseline gap-1 flex-wrap min-w-0">
+            <span class="label font-semibold uppercase text-text-muted" style="font-size: 0.66rem;">Name:</span>
+            <span class="value font-semibold text-text-main" style="font-size: 0.79rem;">{{ report.patient_name }}</span>
+        </div>
+        <div class="flex items-baseline gap-1 flex-wrap min-w-0">
+            <span class="label font-semibold uppercase text-text-muted" style="font-size: 0.66rem;">Age:</span>
+            <span class="value font-semibold text-text-main" style="font-size: 0.79rem;">{{ report.patient_age }}</span>
+        </div>
+        <div class="flex items-baseline gap-1 flex-wrap min-w-0">
+            <span class="label font-semibold uppercase text-text-muted" style="font-size: 0.66rem;">Sex:</span>
+            <span class="value font-semibold text-text-main" style="font-size: 0.79rem;">{{ report.get_patient_sex_display }}</span>
+        </div>
+        <div class="flex items-baseline gap-1 flex-wrap min-w-0">
+            <span class="label font-semibold uppercase text-text-muted" style="font-size: 0.66rem;">Referred By:</span>
+            <span class="value font-semibold text-text-main" style="font-size: 0.79rem;">{{ report.referred_by|default:"-" }}</span>
+        </div>
+        <div class="flex items-baseline gap-1 flex-wrap min-w-0">
+            <span class="label font-semibold uppercase text-text-muted" style="font-size: 0.66rem;">Sample Date:</span>
+            <span class="value font-semibold text-text-main" style="font-size: 0.79rem;">{{ report.sample_date|date:"d M Y" }}</span>
+        </div>
+        <div class="flex items-baseline gap-1 flex-wrap min-w-0">
+            <span class="label font-semibold uppercase text-text-muted" style="font-size: 0.66rem;">Specimen:</span>
+            <span class="value font-semibold text-text-main" style="font-size: 0.79rem;">{{ report.specimen_type }}</span>
+        </div>
+    </div>
+
+    {% for group in result_groups %}
+    <section class="section-block border border-gray-200 rounded-lg overflow-hidden{% if report.profile and report.profile.code == 'cbc' %} paper-section{% endif %}">
+        <div class="section-heading px-3 py-2 bg-brand-soft text-text-main font-bold uppercase text-xs" style="letter-spacing: 0.08em;">{{ group.name }}</div>
+        <div class="results-table-wrap overflow-x-auto">
+            <table class="results-table w-full text-right" style="border-collapse: collapse; font-size: 0.75rem; line-height: 1.12;">
+                <thead>
+                    <tr>
+                        <th style="width: 32%; text-align: left; border-bottom: 1px solid #e6ecf3; padding: 0.22rem 0.35rem; vertical-align: top;">Test</th>
+                        <th style="width: 16%; text-align: left; border-bottom: 1px solid #e6ecf3; padding: 0.22rem 0.35rem; vertical-align: top;">Result</th>
+                        <th style="width: 22%; text-align: left; border-bottom: 1px solid #e6ecf3; padding: 0.22rem 0.35rem; vertical-align: top;">Reference Range</th>
+                        <th style="width: 12%; text-align: left; border-bottom: 1px solid #e6ecf3; padding: 0.22rem 0.35rem; vertical-align: top;">Units</th>
+                        <th style="width: 18%; text-align: left; border-bottom: 1px solid #e6ecf3; padding: 0.22rem 0.35rem; vertical-align: top; padding-right: 0;">Comment</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for result in group.results %}
+                    <tr>
+                        <td style="border-bottom: 1px solid #e6ecf3; padding: 0.22rem 0.35rem; vertical-align: top; text-align: left;">{{ result.test.name }}</td>
+                        <td style="border-bottom: 1px solid #e6ecf3; padding: 0.22rem 0.35rem; vertical-align: top; text-align: left;">{{ result.result_value|default:"-" }}</td>
+                        <td style="border-bottom: 1px solid #e6ecf3; padding: 0.22rem 0.35rem; vertical-align: top; text-align: left;">{{ result.reference_range|default:"-" }}</td>
+                        <td style="border-bottom: 1px solid #e6ecf3; padding: 0.22rem 0.35rem; vertical-align: top; text-align: left;">{{ result.unit|default:"-" }}</td>
+                        <td style="border-bottom: 1px solid #e6ecf3; padding: 0.22rem 0.35rem; vertical-align: top; text-align: left; padding-right: 0;">{{ result.comment|default:"-" }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
+    {% endfor %}
+
+    {% if report.comments %}
+    <section class="section-block border border-gray-200 rounded-lg overflow-hidden">
+        <div class="section-heading px-3 py-2 bg-brand-soft text-text-main font-bold uppercase text-xs" style="letter-spacing: 0.08em;">Clinical Remarks</div>
+        <div class="remarks-body px-3 py-2" style="font-size: 0.76rem; line-height: 1.18;">{{ report.comments }}</div>
+    </section>
+    {% endif %}
+
+    {% include "partials/print_footer.html" with hospital=report.hospital %}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+window.addEventListener('load', function () {
+    window.print();
+});
+</script>
+{% endblock %}

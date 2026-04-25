@@ -1,0 +1,253 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Laboratory Report - Lumina Medical Services{% endblock %}
+{% block print_header %}{% endblock %}
+{% block page_title %}Laboratory Report{% endblock %}
+{% block page_subtitle %}Review the finalized report in the same compact format used for printing.{% endblock %}
+
+{% block extra_css %}
+<style>
+    @page {
+        size: A4 portrait;
+        margin: 8mm;
+    }
+
+    .paper-section .results-table {
+        border: none;
+    }
+
+    .paper-section .results-table th,
+    .paper-section .results-table td {
+        background: transparent;
+        border-bottom: none;
+        padding-left: 0;
+        padding-right: 0.6rem;
+        color: #111827;
+    }
+
+    .paper-section .results-table th {
+        font-size: 0.82rem;
+        font-weight: 700;
+        text-transform: none;
+        letter-spacing: 0;
+    }
+
+    @media print {
+        body {
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+        }
+
+        .report-shell {
+            gap: 0.6rem;
+            color: #111827;
+            font-size: 12px;
+            line-height: 1.2;
+        }
+
+        .report-actions {
+            display: none !important;
+        }
+
+        .report-header {
+            padding-bottom: 0.4rem;
+        }
+
+        .report-brand strong {
+            font-size: 0.98rem;
+        }
+
+        .report-brand span,
+        .report-meta {
+            font-size: 0.72rem;
+        }
+
+        .patient-grid {
+            gap: 0.3rem 0.7rem;
+            padding: 0.55rem 0.65rem;
+            border-radius: 10px;
+            background: #fff;
+            break-inside: avoid;
+        }
+
+        .label {
+            font-size: 0.66rem;
+        }
+
+        .value {
+            font-size: 0.79rem;
+        }
+
+        .section-block {
+            border-radius: 10px;
+            break-inside: auto;
+        }
+
+        .section-heading {
+            padding: 0.45rem 0.65rem;
+            font-size: 0.68rem;
+        }
+
+        .paper-section .section-heading {
+            padding: 0 0 0.3rem;
+            font-size: 0.94rem;
+        }
+
+        .results-table {
+            font-size: 0.75rem;
+            line-height: 1.12;
+        }
+
+        .paper-section .results-table th,
+        .paper-section .results-table td {
+            padding-right: 0.45rem;
+        }
+
+        .results-table th,
+        .results-table td {
+            padding: 0.22rem 0.35rem;
+        }
+
+        .results-table tr {
+            break-inside: avoid;
+        }
+
+        .remarks-body {
+            padding: 0.55rem 0.65rem;
+            font-size: 0.76rem;
+            line-height: 1.18;
+        }
+
+        .report-footer {
+            font-size: 0.64rem;
+        }
+    }
+
+    @media (max-width: 640px) {
+        .results-table {
+            min-width: 640px;
+        }
+
+        .patient-grid {
+            grid-template-columns: 1fr !important;
+        }
+
+        .report-actions > * {
+            flex: 1 1 100% !important;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="space-y-4 no-print">
+    <div class="flex gap-3 flex-wrap">
+        <button type="button" class="btn btn-primary" onclick="window.print()">Print Report</button>
+        <a href="{% url 'report_edit' report.pk %}" class="btn btn-secondary">Edit</a>
+        <a href="{% url 'report_list' %}" class="btn btn-secondary">Back to Dashboard</a>
+    </div>
+</div>
+
+<div class="report-shell space-y-4">
+    <div class="flex justify-between items-start gap-3 pb-3 border-b-2 border-text-main">
+        <div class="flex items-start gap-2">
+            <img src="{% static 'images/lumina-logo.jpeg' %}" alt="Lumina Logo" class="h-11 rounded-lg">
+            <div class="text-sm">
+                <strong class="block text-text-main">LUMINA MEDICAL SERVICES</strong>
+                <span class="text-xs text-text-muted">lighting up your health.</span><br>
+                <span class="text-xs text-text-muted">PO BOX: 200132, Kampala · Kisaasi Kyanja road</span><br>
+                <span class="text-xs text-text-muted">Phone: 0750639410 / 0780105909</span>
+            </div>
+        </div>
+        <div class="text-xs text-text-muted text-right">
+            <div><strong>LABORATORY REPORT</strong></div>
+            <div>{{ report.template_label }}</div>
+        </div>
+    </div>
+
+    <div class="patient-grid grid grid-cols-1 md:grid-cols-3 gap-2 p-4 border border-gray-200 rounded-2xl bg-gray-50">
+        <div class="flex items-baseline gap-1 flex-wrap min-w-0">
+            <span class="label text-xs font-semibold uppercase text-text-muted">Name:</span>
+            <span class="value font-semibold text-text-main">{{ report.patient_name }}</span>
+        </div>
+        <div class="flex items-baseline gap-1 flex-wrap min-w-0">
+            <span class="label text-xs font-semibold uppercase text-text-muted">Age:</span>
+            <span class="value font-semibold text-text-main">{{ report.patient_age }}</span>
+        </div>
+        <div class="flex items-baseline gap-1 flex-wrap min-w-0">
+            <span class="label text-xs font-semibold uppercase text-text-muted">Sex:</span>
+            <span class="value font-semibold text-text-main">{{ report.get_patient_sex_display }}</span>
+        </div>
+        <div class="flex items-baseline gap-1 flex-wrap min-w-0">
+            <span class="label text-xs font-semibold uppercase text-text-muted">Referred By:</span>
+            <span class="value font-semibold text-text-main">{{ report.referred_by|default:"-" }}</span>
+        </div>
+        <div class="flex items-baseline gap-1 flex-wrap min-w-0">
+            <span class="label text-xs font-semibold uppercase text-text-muted">Sample Date:</span>
+            <span class="value font-semibold text-text-main">{{ report.sample_date|date:"d M Y" }}</span>
+        </div>
+        <div class="flex items-baseline gap-1 flex-wrap min-w-0">
+            <span class="label text-xs font-semibold uppercase text-text-muted">Specimen:</span>
+            <span class="value font-semibold text-text-main">{{ report.specimen_type }}</span>
+        </div>
+        <div class="flex items-baseline gap-1 flex-wrap min-w-0">
+            <span class="label text-xs font-semibold uppercase text-text-muted">Technician:</span>
+            <span class="value font-semibold text-text-main">
+                {% with att=report.attendant %}
+                    {% if report.attendant_name %}{{ report.attendant_name }}
+                    {% elif att %}{{ att.get_full_name|default:att.username }}
+                    {% else %}-{% endif %}
+                {% endwith %}
+            </span>
+        </div>
+    </div>
+
+    {% for group in result_groups %}
+    <section class="section-block border border-gray-200 rounded-2xl overflow-hidden{% if report.profile and report.profile.code == 'cbc' %} paper-section{% endif %}">
+        <div class="section-heading bg-brand-soft text-text-main px-4 py-2 font-bold uppercase text-xs">{{ group.name }}</div>
+        <div class="overflow-x-auto">
+            <table class="results-table w-full text-sm">
+                <thead>
+                    <tr class="border-b border-gray-200">
+                        <th class="text-left px-3 py-2 text-xs font-semibold uppercase w-32">Test</th>
+                        <th class="text-left px-3 py-2 text-xs font-semibold uppercase w-16">Result</th>
+                        <th class="text-left px-3 py-2 text-xs font-semibold uppercase w-24">Reference Range</th>
+                        <th class="text-left px-3 py-2 text-xs font-semibold uppercase w-16">Units</th>
+                        <th class="text-left px-3 py-2 text-xs font-semibold uppercase">Comment</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y">
+                    {% for result in group.results %}
+                    <tr class="hover:bg-gray-50">
+                        <td class="px-3 py-2"><strong>{{ result.test.name }}</strong></td>
+                        <td class="px-3 py-2">{{ result.result_value|default:"-" }}</td>
+                        <td class="px-3 py-2">{{ result.reference_range|default:"-" }}</td>
+                        <td class="px-3 py-2">{{ result.unit|default:"-" }}</td>
+                        <td class="px-3 py-2">{{ result.comment|default:"-" }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
+    {% empty %}
+    <section class="section-block border border-gray-200 rounded-2xl overflow-hidden">
+        <div class="section-heading bg-brand-soft text-text-main px-4 py-2 font-bold uppercase text-xs">No Results</div>
+        <div class="remarks-body px-4 py-3 text-text-muted">No test results have been saved for this report yet.</div>
+    </section>
+    {% endfor %}
+
+    {% if report.comments %}
+    <section class="section-block border border-gray-200 rounded-2xl overflow-hidden">
+        <div class="section-heading bg-brand-soft text-text-main px-4 py-2 font-bold uppercase text-xs">Clinical Remarks</div>
+        <div class="remarks-body px-4 py-3 leading-relaxed">{{ report.comments }}</div>
+    </section>
+    {% endif %}
+
+    <div class="report-footer border-t border-gray-200 pt-2 text-center text-text-muted text-xs">
+        <div><strong>LUMINA MEDICAL SERVICES</strong> · lighting up your health.</div>
+        <div>PO BOX: 200132, Kampala · Kisaasi Kyanja road · Phone: 0750639410 / 0780105909</div>
+    </div>
+</div>
+{% endblock %}

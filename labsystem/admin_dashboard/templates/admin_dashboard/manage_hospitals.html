@@ -1,0 +1,151 @@
+{% extends 'admin_dashboard/developer_base.html' %}
+
+{% block title %}Hospitals - Hospital EMR{% endblock %}
+{% block page_title %}Manage Hospitals{% endblock %}
+{% block page_subtitle %}Onboard hospitals, provision their admin account, and review platform tenants.{% endblock %}
+
+{% block developer_content %}
+<div class="space-y-6">
+    <div class="card">
+        <div class="flex flex-col gap-2 mb-5">
+            <h3 class="text-lg font-bold text-text-main">Onboard a Hospital</h3>
+            <p class="text-sm text-text-muted">Capture the hospital profile, optional logo, and the first hospital-admin account in one safe flow.</p>
+        </div>
+        <form method="post" enctype="multipart/form-data" class="space-y-6">
+            {% csrf_token %}
+            {% if form.non_field_errors %}
+                <div class="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                    {{ form.non_field_errors }}
+                </div>
+            {% endif %}
+
+            <div class="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
+                <section class="space-y-4">
+                    <div>
+                        <h4 class="text-sm font-semibold text-text-main">Hospital Details</h4>
+                        <p class="text-xs text-text-muted mt-1">These fields describe the tenant and are shown in platform management screens.</p>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {% for field in form %}
+                            {% if field.name != 'admin_username' and field.name != 'admin_password' and field.name != 'admin_password_confirm' %}
+                                <div class="{% if field.name == 'logo' or field.name == 'subscription_plan' %}md:col-span-2{% endif %}">
+                                    <label for="{{ field.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">{{ field.label }}</label>
+                                    {{ field }}
+                                    {% if field.help_text %}
+                                        <div class="mt-1 text-xs text-text-muted">{{ field.help_text }}</div>
+                                    {% endif %}
+                                    {% for error in field.errors %}
+                                        <div class="mt-1 text-xs text-red-600">{{ error }}</div>
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+                        {% endfor %}
+                    </div>
+                </section>
+
+                <section class="rounded-2xl border border-brand-border/80 bg-surface-muted p-5 space-y-4">
+                    <div>
+                        <h4 class="text-sm font-semibold text-text-main">Hospital Admin Credentials</h4>
+                        <p class="text-xs text-text-muted mt-1">We create the first hospital-admin user in the same transaction as the hospital record.</p>
+                    </div>
+                    {% for field in form %}
+                        {% if field.name == 'admin_username' or field.name == 'admin_password' or field.name == 'admin_password_confirm' %}
+                            <div>
+                                <label for="{{ field.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">{{ field.label }}</label>
+                                {{ field }}
+                                {% if field.help_text %}
+                                    <div class="mt-1 text-xs text-text-muted">{{ field.help_text }}</div>
+                                {% endif %}
+                                {% for error in field.errors %}
+                                    <div class="mt-1 text-xs text-red-600">{{ error }}</div>
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                    {% endfor %}
+                </section>
+            </div>
+
+            <div class="flex gap-3 flex-wrap pt-4 border-t border-gray-200">
+                <button type="submit" class="btn btn-primary">Create Hospital</button>
+            </div>
+        </form>
+    </div>
+
+    <div class="card space-y-4">
+        <div class="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+                <h3 class="text-lg font-bold text-text-main">Hospital Directory</h3>
+                <p class="text-sm text-text-muted">Search by hospital name or subdomain to quickly find a tenant.</p>
+            </div>
+            <form method="get" class="flex gap-3 flex-col sm:flex-row sm:items-end w-full lg:w-auto">
+                <div class="min-w-0 sm:min-w-[260px]">
+                    <label for="hospitalSearch" class="block text-sm font-semibold text-text-main mb-1">Search</label>
+                    <input id="hospitalSearch" type="search" name="q" value="{{ query }}" class="form-control" placeholder="Search name or subdomain">
+                </div>
+                <div class="flex gap-2">
+                    <button type="submit" class="btn btn-primary">Filter</button>
+                    {% if query %}
+                        <a href="{% url 'manage_hospitals' %}" class="btn btn-secondary">Clear</a>
+                    {% endif %}
+                </div>
+            </form>
+        </div>
+
+        <div class="overflow-x-auto">
+            <table class="w-full">
+                <thead class="bg-gray-50 border-b">
+                    <tr>
+                        <th class="text-left px-4 py-3 text-xs font-semibold uppercase">Hospital</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold uppercase">Subdomain</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold uppercase">Location</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold uppercase">Contact</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold uppercase">Plan</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold uppercase">Status</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold uppercase">Created</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold uppercase">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y">
+                    {% for hospital in hospitals %}
+                        <tr class="hover:bg-gray-50 align-top">
+                            <td class="px-4 py-3 text-sm text-text-main">
+                                <div class="flex items-start gap-3 min-w-[220px]">
+                                    <img src="{{ hospital.logo_url }}" alt="{{ hospital.name }} logo" class="h-12 w-12 rounded-xl object-cover border border-gray-200 bg-white shrink-0">
+                                    <div>
+                                        <div class="font-semibold">{{ hospital.name }}</div>
+                                        <div class="text-xs text-text-muted">Box {{ hospital.box_number|default:'-' }}</div>
+                                        {% for admin_user in hospital.users.all %}
+                                            {% if admin_user.role == 'hospital_admin' %}
+                                                <div class="text-xs text-text-muted">Admin: {{ admin_user.username }}</div>
+                                            {% endif %}
+                                        {% empty %}
+                                            <div class="text-xs text-red-600">No hospital admin linked</div>
+                                        {% endfor %}
+                                    </div>
+                                </div>
+                            </td>
+                            <td class="px-4 py-3 text-sm font-mono text-text-muted">{{ hospital.subdomain }}</td>
+                            <td class="px-4 py-3 text-sm text-text-muted">{{ hospital.location|default:'-' }}</td>
+                            <td class="px-4 py-3 text-sm text-text-muted">
+                                <div>{{ hospital.phone_number|default:'-' }}</div>
+                                <div>{{ hospital.email|default:'-' }}</div>
+                            </td>
+                            <td class="px-4 py-3 text-sm text-text-muted">{{ hospital.subscription_plan.name|default:'-' }}</td>
+                            <td class="px-4 py-3 text-sm"><span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold {% if hospital.is_active %}bg-green-50 text-green-700{% else %}bg-gray-100 text-gray-600{% endif %}">{% if hospital.is_active %}Active{% else %}Inactive{% endif %}</span></td>
+                            <td class="px-4 py-3 text-sm text-text-muted">{{ hospital.created_at|date:"M d, Y" }}</td>
+                            <td class="px-4 py-3 text-sm">
+                                <div class="flex gap-2 flex-wrap">
+                                    <a href="{% url 'edit_hospital' hospital.pk %}" class="btn btn-secondary btn-sm">Edit</a>
+                                    <a href="{% url 'delete_hospital' hospital.pk %}" class="btn btn-danger btn-sm">Delete</a>
+                                </div>
+                            </td>
+                        </tr>
+                    {% empty %}
+                        <tr><td colspan="8" class="px-4 py-3 text-center text-text-muted">No hospitals matched your current filter.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

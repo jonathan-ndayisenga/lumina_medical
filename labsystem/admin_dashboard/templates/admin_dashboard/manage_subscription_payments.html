@@ -1,0 +1,65 @@
+{% extends 'admin_dashboard/developer_base.html' %}
+
+{% block title %}Subscription Payments - Lumina{% endblock %}
+{% block page_title %}Subscription Payments{% endblock %}
+{% block page_subtitle %}Record hospital subscription payments and review platform income history.{% endblock %}
+
+{% block developer_content %}
+<div class="space-y-5">
+    <div class="card">
+        <h3 class="text-lg font-bold text-text-main mb-4">Record Payment</h3>
+        <form method="post" class="space-y-4">
+            {% csrf_token %}
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {% for field in form %}
+                    <div>
+                        <label for="{{ field.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">{{ field.label }}</label>
+                        {{ field }}
+                        {% for error in field.errors %}<div class="text-xs text-red-600 mt-1">{{ error }}</div>{% endfor %}
+                    </div>
+                {% endfor %}
+            </div>
+            <button type="submit" class="btn btn-primary">Save Payment</button>
+        </form>
+    </div>
+
+    <div class="card">
+        <h3 class="text-lg font-bold text-text-main mb-4">Payment History</h3>
+        <div class="overflow-x-auto">
+            <table class="w-full">
+                <thead class="bg-gray-50 border-b">
+                    <tr>
+                        <th class="text-left px-4 py-3 text-xs font-semibold uppercase">Hospital</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold uppercase">Amount</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold uppercase">Period Start</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold uppercase">Period End</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold uppercase">Paid At</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold uppercase">Notes</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold uppercase">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y">
+                    {% for payment in payments %}
+                        <tr class="hover:bg-gray-50">
+                            <td class="px-4 py-3 text-sm font-semibold text-text-main">{{ payment.hospital.name }}</td>
+                            <td class="px-4 py-3 text-sm font-semibold text-text-main">${{ payment.amount|floatformat:2 }}</td>
+                            <td class="px-4 py-3 text-sm text-text-muted">{{ payment.period_start|date:"M d, Y" }}</td>
+                            <td class="px-4 py-3 text-sm text-text-muted">{{ payment.period_end|date:"M d, Y" }}</td>
+                            <td class="px-4 py-3 text-sm text-text-muted">{{ payment.paid_at|date:"M d, Y H:i" }}</td>
+                            <td class="px-4 py-3 text-sm text-text-muted">{{ payment.notes|truncatewords:10|default:"-" }}</td>
+                            <td class="px-4 py-3 text-sm">
+                                <div class="flex gap-2 flex-wrap">
+                                    <a href="{% url 'edit_subscription_payment' payment.pk %}" class="btn btn-secondary btn-sm">Edit</a>
+                                    <a href="{% url 'delete_subscription_payment' payment.pk %}" class="btn btn-danger btn-sm">Delete</a>
+                                </div>
+                            </td>
+                        </tr>
+                    {% empty %}
+                        <tr><td colspan="7" class="px-4 py-3 text-center text-text-muted">No subscription payments recorded yet.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,130 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Receipt - Hospital EMR{% endblock %}
+{% block print_header %}{% endblock %}
+{% block page_title %}Visit Billing Summary{% endblock %}
+{% block page_subtitle %}Summary of all receipts recorded for this visit.{% endblock %}
+
+{% block extra_css %}
+<style>
+@media print {
+    .no-print {
+        display: none !important;
+    }
+    .receipt-card {
+        box-shadow: none !important;
+        border: none !important;
+    }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto space-y-6">
+    <div class="flex justify-end gap-3 no-print">
+        <a href="{% url 'reception_dashboard' %}" class="btn btn-secondary">Back to Reception</a>
+        <button type="button" class="btn btn-primary" onclick="window.print()">Print Receipt</button>
+    </div>
+
+    <div class="card receipt-card space-y-6">
+        {% include "partials/print_header.html" with hospital=hospital print_title="VISIT BILLING SUMMARY" print_subtitle=visit.id %}
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm">
+            <div>
+                <h3 class="font-semibold text-text-main mb-2">Patient Details</h3>
+                <div class="space-y-1 text-text-muted">
+                    <p><strong class="text-text-main">Name:</strong> {{ visit.patient.name }}</p>
+                    <p><strong class="text-text-main">Age / Sex:</strong> {{ visit.patient.age }} / {{ visit.patient.get_sex_display }}</p>
+                    {% if visit.patient.weight_kg %}<p><strong class="text-text-main">Weight:</strong> {{ visit.patient.weight_kg }} kg</p>{% endif %}
+                    {% if visit.patient.contact %}<p><strong class="text-text-main">Contact:</strong> {{ visit.patient.contact }}</p>{% endif %}
+                </div>
+            </div>
+            <div>
+                <h3 class="font-semibold text-text-main mb-2">Payment Details</h3>
+                <div class="space-y-1 text-text-muted">
+                    <p><strong class="text-text-main">Total Bill:</strong> {{ visit.total_amount }}</p>
+                    <p><strong class="text-text-main">Total Paid:</strong> {{ total_paid|default:"0.00" }}</p>
+                    <p><strong class="text-text-main">Balance:</strong> {{ balance_due|default:visit.total_amount }}</p>
+                    <p><strong class="text-text-main">Latest Receipt:</strong> {% if payment %}{{ payment.receipt_number }}{% else %}-{% endif %}</p>
+                </div>
+            </div>
+        </div>
+
+        <div>
+            <h3 class="font-semibold text-text-main mb-3">Receipts (Payments)</h3>
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead class="border-b border-gray-200">
+                        <tr>
+                            <th class="text-left py-2 pr-4 text-xs font-semibold uppercase text-text-muted">Receipt</th>
+                            <th class="text-left py-2 pr-4 text-xs font-semibold uppercase text-text-muted">Date</th>
+                            <th class="text-left py-2 pr-4 text-xs font-semibold uppercase text-text-muted">Mode</th>
+                            <th class="text-right py-2 text-xs font-semibold uppercase text-text-muted">Amount</th>
+                            <th class="text-left py-2 pr-4 text-xs font-semibold uppercase text-text-muted">Account</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-100">
+                        {% for p in payments %}
+                            <tr>
+                                <td class="py-3 pr-4 text-text-main font-semibold">{{ p.receipt_number }}</td>
+                                <td class="py-3 pr-4 text-text-muted">{% if p.paid_at %}{{ p.paid_at|date:"Y-m-d H:i" }}{% else %}-{% endif %}</td>
+                                <td class="py-3 pr-4 text-text-muted">{{ p.get_mode_display }}</td>
+                                <td class="py-3 text-right text-text-main">{{ p.amount_paid }}</td>
+                                <td class="py-3 pr-4 text-text-muted">
+                                    {% if p.mode == "card" %}{{ p.bank_account|default:"-" }}
+                                    {% elif p.mode == "mobile_money" %}{{ p.mobile_account|default:"-" }}
+                                    {% else %}Cash Drawer{% endif %}
+                                </td>
+                            </tr>
+                        {% empty %}
+                            <tr>
+                                <td colspan="5" class="py-6 text-center text-text-muted">No receipts recorded yet.</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div>
+            <h3 class="font-semibold text-text-main mb-3">Services</h3>
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead class="border-b border-gray-200">
+                        <tr>
+                            <th class="text-left py-2 pr-4 text-xs font-semibold uppercase text-text-muted">Service</th>
+                            <th class="text-left py-2 pr-4 text-xs font-semibold uppercase text-text-muted">Category</th>
+                            <th class="text-right py-2 text-xs font-semibold uppercase text-text-muted">Price</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-100">
+                        {% for item in visit.visit_services.all %}
+                            <tr>
+                                <td class="py-3 pr-4 text-text-main">{{ item.service.name }}</td>
+                                <td class="py-3 pr-4 text-text-muted">{{ item.service.get_category_display }}</td>
+                                <td class="py-3 text-right text-text-main">{{ item.price_at_time }}</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                    <tfoot>
+                        <tr class="border-t border-gray-200">
+                            <td colspan="2" class="pt-3 font-semibold text-text-main">Total</td>
+                            <td class="pt-3 text-right font-semibold text-text-main">{{ visit.total_amount }}</td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        </div>
+
+        {% if payment and payment.notes %}
+            <div class="rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm text-text-muted">
+                <strong class="text-text-main">Payment Notes:</strong>
+                <p class="mt-2 whitespace-pre-wrap">{{ payment.notes }}</p>
+            </div>
+        {% endif %}
+
+        {% include "partials/print_footer.html" with hospital=hospital %}
+    </div>
+</div>
+{% endblock %}

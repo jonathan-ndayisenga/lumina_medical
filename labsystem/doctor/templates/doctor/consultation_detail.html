@@ -1,0 +1,140 @@
+{% extends 'base.html' %}
+
+{% block title %}Consultation Detail - Lumina{% endblock %}
+{% block page_title %}Consultation Detail{% endblock %}
+{% block page_subtitle %}Review the full consultation record, linked lab evidence, and the nurse handoff trail without reopening the edit form.{% endblock %}
+
+{% block content %}
+<div class="space-y-5">
+    <div class="card">
+        <div class="flex justify-between items-start gap-4 flex-wrap">
+            <div>
+                <h3 class="text-lg font-bold text-text-main mb-2">{{ visit.patient.name }}</h3>
+                <p class="text-sm text-text-muted">{{ visit.patient.age }} / {{ visit.patient.get_sex_display }} - {{ visit.hospital.name }}</p>
+                <p class="text-sm text-text-muted">Consultation saved {{ consultation_instance.created_at|date:"Y-m-d H:i" }}
+                    {% if consultation_instance.created_by %}
+                        by {% if consultation_instance.created_by.get_full_name %}{{ consultation_instance.created_by.get_full_name }}{% else %}{{ consultation_instance.created_by.username }}{% endif %}
+                    {% endif %}
+                </p>
+            </div>
+            <div class="flex gap-2 flex-wrap">
+                <a href="{% url 'consultation' visit.pk %}" class="btn btn-primary">Edit Consultation</a>
+                <a href="{% url 'doctor_queue' %}" class="btn btn-secondary">Back to Queue</a>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <h3 class="text-lg font-bold text-text-main mb-4">Clinical Record</h3>
+        <div class="space-y-4">
+            {% if triage %}
+                <div class="rounded-lg border border-gray-200 bg-gray-50 p-4">
+                    <p class="text-sm font-semibold text-text-main mb-2">Vital Signs (Shared Triage)</p>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 text-sm text-text-muted">
+                        <p><strong class="text-text-main">Weight:</strong> {{ triage.weight_kg|default:"-" }} kg</p>
+                        <p><strong class="text-text-main">BP:</strong> {{ triage.bp_systolic|default:"-" }}/{{ triage.bp_diastolic|default:"-" }}</p>
+                        <p><strong class="text-text-main">Pulse:</strong> {{ triage.pulse|default:"-" }}</p>
+                        <p><strong class="text-text-main">RR:</strong> {{ triage.respiratory_rate|default:"-" }}</p>
+                        <p><strong class="text-text-main">Temp:</strong> {{ triage.temperature_celsius|default:"-" }}</p>
+                        <p><strong class="text-text-main">SpO2:</strong> {{ triage.oxygen_saturation|default:"-" }}</p>
+                        <p><strong class="text-text-main">Glucose:</strong> {{ triage.glucose_mg_dl|default:"-" }}</p>
+                    </div>
+                </div>
+            {% else %}
+                <p class="text-sm text-text-muted italic">Triage has not been captured for this visit yet.</p>
+            {% endif %}
+            <p class="text-sm"><strong class="text-text-main">Signs and Symptoms:</strong><br><span class="text-text-muted">{{ consultation_instance.signs_symptoms|linebreaksbr }}</span></p>
+            <p class="text-sm"><strong class="text-text-main">Diagnosis:</strong><br><span class="text-text-muted">{{ consultation_instance.diagnosis|linebreaksbr }}</span></p>
+            <p class="text-sm"><strong class="text-text-main">Treatment:</strong><br><span class="text-text-muted">{{ consultation_instance.treatment|linebreaksbr }}</span></p>
+            <p class="text-sm"><strong class="text-text-main">Follow Up Date:</strong> <span class="text-text-muted">{{ consultation_instance.follow_up_date|date:"Y-m-d"|default:"-" }}</span></p>
+        </div>
+    </div>
+
+    <div class="card">
+        <h3 class="text-lg font-bold text-text-main mb-4">Linked Lab Results</h3>
+        {% for report in lab_reports %}
+            <div class="mb-4 last:mb-0">
+                <div class="flex justify-between items-center gap-4 flex-wrap mb-3">
+                    <strong class="text-text-main">{{ report.profile.name|default:"Manual Lab Report" }}</strong>
+                    <a href="{% url 'report_detail' report.pk %}" class="btn btn-secondary btn-sm">Open Full Report</a>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full">
+                        <thead class="bg-gray-50 border-b">
+                            <tr>
+                                <th class="text-left px-4 py-3 text-xs font-semibold uppercase">Test</th>
+                                <th class="text-left px-4 py-3 text-xs font-semibold uppercase">Result</th>
+                                <th class="text-left px-4 py-3 text-xs font-semibold uppercase">Reference Range</th>
+                                <th class="text-left px-4 py-3 text-xs font-semibold uppercase">Unit</th>
+                                <th class="text-left px-4 py-3 text-xs font-semibold uppercase">Comment</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y">
+                            {% for result in report.results.all %}
+                                <tr class="hover:bg-gray-50">
+                                    <td class="px-4 py-3 text-sm text-text-main">{{ result.test.name }}</td>
+                                    <td class="px-4 py-3 text-sm font-semibold text-text-main">{{ result.result_value|default:"-" }}</td>
+                                    <td class="px-4 py-3 text-sm text-text-muted">{{ result.reference_range|default:"-" }}</td>
+                                    <td class="px-4 py-3 text-sm text-text-muted">{{ result.unit|default:"-" }}</td>
+                                    <td class="px-4 py-3 text-sm text-text-muted">{{ result.comment|default:"-" }}</td>
+                                </tr>
+                            {% empty %}
+                                <tr>
+                                    <td colspan="5" class="px-4 py-3 text-center text-text-muted">No results captured yet.</td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        {% empty %}
+            <p class="text-sm text-text-muted italic">No lab reports are linked to this visit yet.</p>
+        {% endfor %}
+    </div>
+
+    <div class="card">
+        <h3 class="text-lg font-bold text-text-main mb-4">Nurse Handoff Trail</h3>
+        <div class="space-y-3 mb-6">
+            {% if nurse_queue_entries %}
+                {% for entry in nurse_queue_entries %}
+                    <p class="text-sm">
+                        <strong class="text-text-main">Queue entry {{ forloop.counter }}:</strong>
+                        <span class="text-text-muted">
+                            {% if entry.processed %}
+                                Completed {{ entry.processed_at|date:"Y-m-d H:i" }}
+                            {% else %}
+                                Waiting in nurse queue since {{ entry.created_at|date:"Y-m-d H:i" }}
+                            {% endif %}
+                        </span>
+                    </p>
+                {% endfor %}
+            {% else %}
+                <p class="text-sm text-text-muted">No nurse queue entry has been created for this consultation.</p>
+            {% endif %}
+        </div>
+
+        <div class="border-t border-gray-200 pt-4">
+            <h4 class="text-sm font-semibold text-text-main mb-3">Nurse Notes</h4>
+            <div class="space-y-3">
+                {% for note in nurse_notes %}
+                    <div class="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                        <div class="flex justify-between items-start gap-3 flex-wrap mb-2">
+                            <strong class="text-sm text-text-main">
+                                {% if note.created_by %}
+                                    {% if note.created_by.get_full_name %}{{ note.created_by.get_full_name }}{% else %}{{ note.created_by.username }}{% endif %}
+                                {% else %}
+                                    Team Member
+                                {% endif %}
+                            </strong>
+                            <span class="text-xs text-text-muted">{{ note.created_at|date:"Y-m-d H:i" }}</span>
+                        </div>
+                        <p class="text-xs text-text-main whitespace-pre-wrap mt-2">{{ note.notes|linebreaksbr }}</p>
+                    </div>
+                {% empty %}
+                    <p class="text-sm text-text-muted italic">No nurse notes have been recorded yet.</p>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

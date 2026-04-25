@@ -4,260 +4,59 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}Lumina Medical Services{% endblock %}</title>
+    <title>{% block title %}Hospital EMR - Lumina Medical Services{% endblock %}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            dark: '#1d3557',
+                            'dark-2': '#27496d',
+                            soft: '#e8eef5',
+                            border: '#cfd8e3',
+                        },
+                        surface: {
+                            DEFAULT: '#ffffff',
+                            muted: '#f7f9fc',
+                        },
+                        text: {
+                            main: '#1f2a37',
+                            muted: '#5f6b7a',
+                        },
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    borderRadius: {
+                        'lg': '16px',
+                    },
+                },
+            },
+        }
+    </script>
     <style>
         :root {
-            --brand-dark: #1d3557;
-            --brand-dark-2: #27496d;
-            --brand-soft: #e8eef5;
-            --brand-border: #cfd8e3;
-            --surface: #ffffff;
-            --surface-muted: #f7f9fc;
-            --text-main: #1f2a37;
-            --text-muted: #5f6b7a;
-            --danger-soft: #eef2f7;
-            --shadow-sm: 0 1px 2px rgba(17, 24, 39, 0.06);
-            --shadow-md: 0 12px 24px rgba(29, 53, 87, 0.08);
-            --radius: 16px;
-        }
-
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
+            color-scheme: light;
         }
 
         body {
-            font-family: 'Inter', sans-serif;
-            background: var(--surface-muted);
-            color: var(--text-main);
-            line-height: 1.6;
-        }
-
-        a {
-            color: inherit;
-        }
-
-        .app-shell {
-            min-height: 100vh;
-            display: grid;
-            grid-template-columns: 280px 1fr;
-        }
-
-        .sidebar {
-            background: var(--brand-dark);
-            color: #fff;
-            padding: 1.75rem 1.25rem;
-            display: flex;
-            flex-direction: column;
-            gap: 1.5rem;
-            position: sticky;
-            top: 0;
-            height: 100vh;
-        }
-
-        .sidebar-brand {
-            display: flex;
-            align-items: center;
-            gap: 0.85rem;
-            text-decoration: none;
-            color: #fff;
-        }
-
-        .sidebar-brand img {
-            width: 56px;
-            height: 56px;
-            border-radius: 12px;
-            object-fit: cover;
-            background: #fff;
-        }
-
-        .sidebar-brand-text {
-            display: flex;
-            flex-direction: column;
-            gap: 0.15rem;
-        }
-
-        .sidebar-brand-text strong {
-            font-size: 1rem;
-            letter-spacing: 0.04em;
-        }
-
-        .sidebar-brand-text span {
-            font-size: 0.8rem;
-            color: rgba(255, 255, 255, 0.75);
-        }
-
-        .sidebar-section-title {
-            font-size: 0.72rem;
-            letter-spacing: 0.14em;
-            text-transform: uppercase;
-            color: rgba(255, 255, 255, 0.6);
-            margin-bottom: 0.5rem;
-        }
-
-        .sidebar-nav {
-            display: grid;
-            gap: 0.45rem;
-        }
-
-        .sidebar-link {
-            display: flex;
-            align-items: center;
-            gap: 0.75rem;
-            padding: 0.85rem 1rem;
-            border-radius: 12px;
-            text-decoration: none;
-            color: rgba(255, 255, 255, 0.86);
-            font-weight: 500;
-            transition: background-color 0.2s ease, color 0.2s ease, transform 0.15s ease;
-        }
-
-        .sidebar-link:hover,
-        .sidebar-link.active {
-            background: rgba(255, 255, 255, 0.12);
-            color: #fff;
-            transform: translateX(2px);
-        }
-
-        .sidebar-link svg {
-            width: 18px;
-            height: 18px;
-            flex-shrink: 0;
-        }
-
-        .sidebar-footer {
-            margin-top: auto;
-            padding: 1rem;
-            border: 1px solid rgba(255, 255, 255, 0.12);
-            border-radius: 16px;
-            background: rgba(255, 255, 255, 0.06);
-        }
-
-        .sidebar-footer .label {
-            font-size: 0.72rem;
-            text-transform: uppercase;
-            letter-spacing: 0.12em;
-            color: rgba(255, 255, 255, 0.6);
-        }
-
-        .sidebar-footer .value {
-            font-weight: 600;
-            margin-top: 0.35rem;
-        }
-
-        .sidebar-overlay,
-        .mobile-nav-toggle,
-        .sidebar-close {
-            display: none;
-        }
-
-        .sidebar-logout-form,
-        .top-logout-form {
             margin: 0;
+            font-family: 'Inter', sans-serif;
+            background: #f7f9fc;
+            color: #1f2a37;
         }
 
-        .sidebar-logout-button,
-        .top-logout-button {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            gap: 0.5rem;
-            border: 1px solid transparent;
-            cursor: pointer;
-            font: inherit;
-        }
-
-        .sidebar-logout-button {
-            width: auto;
-            padding: 0.7rem 0.9rem;
-            border-radius: 10px;
-            background: rgba(255, 255, 255, 0.08);
-            color: rgba(255, 255, 255, 0.9);
-            justify-content: flex-start;
-        }
-
-        .sidebar-logout-button:hover {
-            background: rgba(255, 255, 255, 0.14);
-            color: #fff;
-        }
-
-        .main-panel {
-            padding: 1.5rem 2rem;
-        }
-
-        .top-strip {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 1rem;
-            margin-bottom: 1.5rem;
-        }
-
-        .top-strip-primary {
-            display: flex;
-            align-items: flex-start;
-            gap: 0.85rem;
-            flex: 1 1 auto;
-            min-width: 0;
-        }
-
-        .top-strip-actions {
-            display: flex;
-            align-items: center;
-            justify-content: flex-end;
-            gap: 0.75rem;
-            flex-wrap: wrap;
-        }
-
-        .top-strip h1 {
-            font-size: 1.6rem;
-            color: var(--brand-dark);
-        }
-
-        .top-strip p {
-            color: var(--text-muted);
-            font-size: 0.95rem;
-        }
-
-        .logout-link {
-            text-decoration: none;
-            color: var(--brand-dark);
-            font-weight: 600;
-            background: var(--surface);
-            border: 1px solid var(--brand-border);
-            border-radius: 12px;
-            padding: 0.75rem 1rem;
-            box-shadow: var(--shadow-sm);
-        }
-
-        .top-logout-button {
-            color: var(--brand-dark);
-            font-weight: 600;
-            background: var(--surface);
-            border-color: var(--brand-border);
-            border-radius: 12px;
-            padding: 0.75rem 1rem;
-            box-shadow: var(--shadow-sm);
-        }
-
-        .top-logout-button:hover {
-            background: var(--brand-soft);
-        }
-
-        .container {
-            max-width: 1320px;
-        }
-
-        .content {
-            background: var(--surface);
-            border: 1px solid var(--brand-border);
-            border-radius: 24px;
-            padding: 1.75rem;
-            box-shadow: var(--shadow-md);
+        .card {
+            background: #fff;
+            border: 1px solid #e5e7eb;
+            border-radius: 1rem;
+            box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+            padding: 1.5rem;
         }
 
         .btn {
@@ -265,46 +64,106 @@
             align-items: center;
             justify-content: center;
             gap: 0.5rem;
-            border: 1px solid transparent;
-            border-radius: 12px;
-            padding: 0.8rem 1.2rem;
+            padding: 0.7rem 1rem;
+            border-radius: 0.75rem;
             font-size: 0.95rem;
             font-weight: 600;
             text-decoration: none;
+            border: 1px solid transparent;
             cursor: pointer;
-            background: var(--brand-dark);
+            transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease, transform 0.15s ease;
+            background: #1d3557;
             color: #fff;
-            transition: transform 0.15s ease, background-color 0.2s ease, border-color 0.2s ease;
         }
 
         .btn:hover {
-            background: var(--brand-dark-2);
+            background: #27496d;
             transform: translateY(-1px);
         }
 
         .btn-secondary {
-            background: var(--surface);
-            color: var(--brand-dark);
-            border-color: var(--brand-border);
+            background: #fff;
+            color: #1d3557;
+            border-color: #cfd8e3;
         }
 
         .btn-secondary:hover {
-            background: var(--brand-soft);
+            background: #e8eef5;
+        }
+
+        .btn-danger {
+            background: #b42318;
+            color: #fff;
+            border-color: #b42318;
+        }
+
+        .btn-danger:hover {
+            background: #912018;
         }
 
         .btn-sm {
-            padding: 0.55rem 0.85rem;
+            padding: 0.5rem 0.75rem;
             font-size: 0.85rem;
-            border-radius: 10px;
         }
 
-        .alert {
-            margin-bottom: 1rem;
-            padding: 1rem 1.2rem;
-            border-radius: 14px;
-            border: 1px solid var(--brand-border);
-            background: var(--surface);
-            color: var(--brand-dark);
+        .form-control {
+            width: 100%;
+            padding: 0.75rem 0.9rem;
+            border: 1px solid #cfd8e3;
+            border-radius: 0.75rem;
+            background: #f9fafb;
+            color: #1f2a37;
+            box-sizing: border-box;
+        }
+
+        .form-control:focus {
+            outline: none;
+            border-color: #1d3557;
+            box-shadow: 0 0 0 4px rgba(29, 53, 87, 0.08);
+            background: #fff;
+        }
+
+        .sidebar-link {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.75rem 1rem;
+            border-radius: 0.75rem;
+            color: rgba(255, 255, 255, 0.92);
+            text-decoration: none;
+            transition: background-color 0.2s ease, color 0.2s ease;
+        }
+
+        .sidebar-link:hover,
+        .sidebar-link.active {
+            background: rgba(255, 255, 255, 0.14);
+            color: #fff;
+        }
+
+        summary.sidebar-link {
+            list-style: none;
+        }
+
+        summary.sidebar-link::-webkit-details-marker {
+            display: none;
+        }
+
+        .sidebar-sublink {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.65rem 1rem 0.65rem 3.25rem;
+            border-radius: 0.75rem;
+            color: rgba(255, 255, 255, 0.86);
+            text-decoration: none;
+            transition: background-color 0.2s ease, color 0.2s ease;
+            font-size: 0.92rem;
+        }
+
+        .sidebar-sublink:hover,
+        .sidebar-sublink.active {
+            background: rgba(255, 255, 255, 0.12);
+            color: #fff;
         }
 
         table {
@@ -315,193 +174,20 @@
         th,
         td {
             padding: 0.95rem 1rem;
-            border-bottom: 1px solid #e6ecf3;
+            border-bottom: 1px solid #e5e7eb;
             text-align: left;
+            vertical-align: top;
         }
 
         th {
-            color: var(--brand-dark);
-            background: var(--brand-soft);
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
+            background: #eef3f8;
+            color: #1d3557;
             font-size: 0.78rem;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
         }
 
-        .print-only {
-            display: none;
-        }
-
-        .auth-shell {
-            min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 2rem 1rem;
-            background: var(--surface-muted);
-        }
-
-        .auth-panel {
-            width: min(100%, 520px);
-        }
-
-        @media print {
-            body {
-                background: #fff;
-            }
-
-            .app-shell {
-                display: block;
-            }
-
-            .sidebar,
-            .top-strip,
-            .alert,
-            .no-print {
-                display: none !important;
-            }
-
-            .main-panel,
-            .container,
-            .content {
-                margin: 0;
-                padding: 0;
-                max-width: 100%;
-                background: #fff;
-                box-shadow: none;
-                border: none;
-            }
-
-            .print-only {
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-                border-bottom: 2px solid var(--brand-dark);
-                padding-bottom: 1rem;
-                margin-bottom: 1.5rem;
-            }
-        }
-
-        @media (max-width: 960px) {
-            body.nav-open {
-                overflow: hidden;
-            }
-
-            .app-shell {
-                display: block;
-            }
-
-            .sidebar {
-                position: fixed;
-                top: 0;
-                left: 0;
-                bottom: 0;
-                width: min(84vw, 320px);
-                height: 100vh;
-                padding: 1.1rem 1rem 1rem;
-                z-index: 30;
-                overflow-y: auto;
-                overscroll-behavior: contain;
-                transform: translateX(-100%);
-                transition: transform 0.25s ease;
-                box-shadow: var(--shadow-md);
-            }
-
-            .app-shell.sidebar-open .sidebar {
-                transform: translateX(0);
-            }
-
-            .sidebar-overlay {
-                display: block;
-                position: fixed;
-                inset: 0;
-                z-index: 20;
-                border: none;
-                background: rgba(17, 24, 39, 0.45);
-                opacity: 0;
-                pointer-events: none;
-                transition: opacity 0.2s ease;
-            }
-
-            .app-shell.sidebar-open .sidebar-overlay {
-                opacity: 1;
-                pointer-events: auto;
-            }
-
-            .sidebar-close {
-                display: inline-flex;
-                align-items: center;
-                justify-content: center;
-                align-self: flex-end;
-                width: 40px;
-                height: 40px;
-                border: 1px solid rgba(255, 255, 255, 0.18);
-                border-radius: 999px;
-                background: rgba(255, 255, 255, 0.08);
-                color: #fff;
-                cursor: pointer;
-            }
-
-            .mobile-nav-toggle {
-                display: inline-flex;
-                align-items: center;
-                justify-content: center;
-                width: 44px;
-                height: 44px;
-                border-radius: 12px;
-                border: 1px solid var(--brand-border);
-                background: var(--surface);
-                color: var(--brand-dark);
-                box-shadow: var(--shadow-sm);
-                flex-shrink: 0;
-            }
-
-            .main-panel {
-                padding: 1rem;
-            }
-
-            .top-strip {
-                position: sticky;
-                top: 0;
-                z-index: 10;
-                align-items: stretch;
-                margin: -0.2rem -0.2rem 1rem;
-                padding: 0.2rem 0.2rem 0.75rem;
-                background: var(--surface-muted);
-            }
-
-            .top-strip-primary {
-                display: grid;
-                grid-template-columns: auto 1fr;
-                align-items: start;
-                width: 100%;
-            }
-
-            .top-strip-primary > div {
-                min-width: 0;
-            }
-
-            .top-strip-actions {
-                display: none;
-            }
-
-            .top-strip-actions .top-logout-form {
-                width: 100%;
-            }
-
-            .content {
-                padding: 1.2rem;
-                border-radius: 18px;
-            }
-
-            .btn,
-            .top-logout-button {
-                width: 100%;
-            }
-
-            .top-logout-button {
-                justify-content: center;
-            }
-
+        @media (max-width: 1024px) {
             table {
                 display: block;
                 overflow-x: auto;
@@ -509,217 +195,348 @@
             }
         }
 
-        @media (max-width: 640px) {
-            .sidebar {
-                padding: 1.25rem 1rem;
-            }
-
-            .sidebar-footer {
-                margin-top: 1rem;
-            }
-
-            .sidebar-brand img {
-                width: 48px;
-                height: 48px;
-            }
-
-            .sidebar-brand-text strong {
-                font-size: 0.92rem;
-            }
-
-            .main-panel {
-                padding: 0.8rem;
-            }
-
-            .content {
+        @media (max-width: 768px) {
+            .card {
                 padding: 1rem;
-                border-radius: 16px;
+                border-radius: 0.9rem;
             }
 
-            .top-strip h1 {
-                font-size: 1.35rem;
+            .btn {
+                width: 100%;
+                min-height: 44px;
             }
 
-            .top-strip p {
-                font-size: 0.9rem;
+            .btn-sm {
+                width: auto;
+            }
+
+            th,
+            td {
+                padding: 0.8rem 0.75rem;
+            }
+        }
+
+        @media print {
+            .no-print,
+            .sidebar-nav,
+            .sidebar-overlay {
+                display: none !important;
             }
         }
     </style>
     {% block extra_css %}{% endblock %}
 </head>
-    <body>
+<body class="bg-surface-muted">
     {% if user.is_authenticated %}
-        <div class="app-shell" id="appShell">
-            <button type="button" class="sidebar-overlay no-print" id="sidebarOverlay" aria-label="Close navigation"></button>
-            <aside class="sidebar no-print" id="appSidebar">
-                <button type="button" class="sidebar-close" id="sidebarClose" aria-label="Close navigation">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+        <!-- App Grid: Sidebar + Main Content -->
+        <div class="min-h-screen lg:grid lg:grid-cols-[280px_1fr]" id="appShell">
+            <!-- Sidebar Overlay (Mobile) -->
+            <div class="fixed inset-0 bg-black/40 z-30 hidden lg:hidden sidebar-overlay no-print" id="sidebarOverlay" aria-label="Close navigation"></div>
+            
+            <!-- Sidebar Navigation -->
+            <aside class="fixed lg:sticky lg:top-0 lg:h-screen left-0 top-0 bottom-0 w-[92vw] max-w-[22rem] lg:w-auto lg:overflow-y-auto overflow-y-auto -translate-x-full lg:translate-x-0 transition-transform duration-300 z-40 lg:z-auto lg:flex lg:flex-col bg-brand-dark no-print sidebar-nav" id="appSidebar">
+                <button type="button" class="lg:hidden absolute right-4 top-4 p-2 rounded-lg hover:bg-white/15 text-white transition-colors" id="sidebarClose" aria-label="Close navigation">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M18 6L6 18M6 6l12 12" />
                     </svg>
                 </button>
-                <a href="{% url 'report_list' %}" class="sidebar-brand">
-                    <img src="{% static 'images/lumina-logo.jpeg' %}" alt="Lumina Logo">
-                    <div class="sidebar-brand-text">
-                        <strong>LUMINA MEDICAL SERVICES</strong>
-                        <span>lighting up your health.</span>
-                    </div>
-                </a>
 
-                <div>
-                    <div class="sidebar-section-title">Navigation</div>
-                    <nav class="sidebar-nav">
-                        <a href="{% url 'report_list' %}" class="sidebar-link {% if active_nav == 'dashboard' %}active{% endif %}">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M3 12l9-9 9 9M5 10v10h14V10" />
-                            </svg>
-                            Dashboard
-                        </a>
-                        <a href="{% url 'report_create' %}" class="sidebar-link {% if active_nav == 'new_report' %}active{% endif %}">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M12 5v14M5 12h14" />
-                            </svg>
-                            New Lab Report
-                        </a>
-                        <a href="{% url 'template_library' %}" class="sidebar-link {% if active_nav == 'templates' %}active{% endif %}">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M4 7h16M4 12h16M4 17h16" />
-                            </svg>
-                            Test Templates
-                        </a>
-                    </nav>
-                </div>
+                <!-- Brand Section -->
+                {% block sidebar_brand %}
+                    <a href="{% url 'app_home' %}" class="flex items-center gap-3 text-white no-underline px-4 py-4 lg:p-0 mb-6">
+                        <img src="{% static 'images/lumina-logo.jpeg' %}" alt="Lumina" class="w-14 h-14 rounded-lg object-cover bg-white">
+                        <div class="flex flex-col gap-0.5">
+                            <strong class="text-sm font-bold tracking-wide">LUMINA</strong>
+                            <span class="text-xs text-white/75">lighting up health</span>
+                        </div>
+                    </a>
+                {% endblock %}
 
-                <div class="sidebar-footer">
-                    <div class="label">Logged In As</div>
-                    <div class="value">{{ user.get_full_name|default:user.username }}</div>
-                    <div style="margin-top: 1rem;">
-                        <form method="post" action="{% url 'logout' %}" class="sidebar-logout-form">
+                <!-- Navigation Menu -->
+                {% block sidebar_navigation %}
+                <nav class="flex-1 flex flex-col gap-6 px-4 lg:px-0 pb-6 lg:pb-0" style="padding-left: 1.25rem; padding-right: 1.25rem; padding-top: 1.5rem;">
+                    {% if user.role == 'hospital_admin' %}
+                        <div>
+                            <div class="text-xs font-bold uppercase tracking-widest text-white/60 mb-2">Hospital Management</div>
+                            <div class="space-y-1">
+                                <a href="{% url 'hospital_dashboard' %}" class="sidebar-link {% if active_nav == 'hospital_admin' %}active{% endif %}">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-5 h-5">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M4 21V7m0 0l8-4 8 4m-8 14V11m-4 10h8" />
+                                    </svg>
+                                    Dashboard
+                                </a>
+                                <a href="{% url 'manage_users' %}" class="sidebar-link {% if active_nav == 'hospital_users' %}active{% endif %}">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-5 h-5">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M17 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2M9 7a4 4 0 1 0 0-8 4 4 0 0 0 0 8m10 14v-2a4 4 0 0 0-3-3.87m1-11.13a4 4 0 0 1 0 8" />
+                                    </svg>
+                                    Users
+                                </a>
+                                <a href="{% url 'manage_services' %}" class="sidebar-link {% if active_nav == 'hospital_services' %}active{% endif %}">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-5 h-5">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M4 7h16M4 12h16M4 17h10" />
+                                    </svg>
+                                    Services
+                                </a>
+
+                                <details class="space-y-1" {% if active_nav == 'hospital_financials' or active_nav == 'hospital_expenses' or active_nav == 'hospital_salaries' or active_nav == 'hospital_financial_statements' or active_nav == 'hospital_receipts' or active_nav == 'hospital_bank_accounts' or active_nav == 'hospital_mobile_money' %}open{% endif %}>
+                                    <summary class="sidebar-link cursor-pointer {% if active_nav == 'hospital_financials' or active_nav == 'hospital_expenses' or active_nav == 'hospital_salaries' or active_nav == 'hospital_financial_statements' or active_nav == 'hospital_receipts' or active_nav == 'hospital_bank_accounts' or active_nav == 'hospital_mobile_money' %}active{% endif %}">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-5 h-5">
+                                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 1v22M17 5H9a4 4 0 0 0 0 8h6a4 4 0 1 1 0 8H6" />
+                                        </svg>
+                                        <span class="flex-1">Financials</span>
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-4 h-4 opacity-80">
+                                            <path stroke-linecap="round" stroke-linejoin="round" d="m6 9 6 6 6-6" />
+                                        </svg>
+                                    </summary>
+                                    <div class="space-y-1 pt-1">
+                                        <a href="{% url 'financial_report' %}" class="sidebar-sublink {% if active_nav == 'hospital_financials' %}active{% endif %}">Financial Report</a>
+                                        <a href="{% url 'manage_expenses' %}" class="sidebar-sublink {% if active_nav == 'hospital_expenses' %}active{% endif %}">Expenses</a>
+                                        <a href="{% url 'manage_salaries' %}" class="sidebar-sublink {% if active_nav == 'hospital_salaries' %}active{% endif %}">Salaries</a>
+                                        <a href="{% url 'financial_statements' %}" class="sidebar-sublink {% if active_nav == 'hospital_financial_statements' %}active{% endif %}">Financial Statements</a>
+                                        <a href="{% url 'receipts_list' %}" class="sidebar-sublink {% if active_nav == 'hospital_receipts' %}active{% endif %}">Receipts List</a>
+                                        <div class="mx-4 my-2 border-t border-white/10"></div>
+                                        <div class="pt-1 pb-1">
+                                            <div class="text-[0.7rem] uppercase tracking-widest text-white/60 px-4">Settings</div>
+                                        </div>
+                                        <a href="{% url 'bank_account_list' %}" class="sidebar-sublink {% if active_nav == 'hospital_bank_accounts' %}active{% endif %}">Bank Accounts</a>
+                                        <a href="{% url 'mobile_money_list' %}" class="sidebar-sublink {% if active_nav == 'hospital_mobile_money' %}active{% endif %}">Mobile Money</a>
+                                    </div>
+                                </details>
+                                <a href="{% url 'manage_inventory' %}" class="sidebar-link {% if active_nav == 'hospital_inventory' %}active{% endif %}">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-5 h-5">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M20 7 12 3 4 7m16 0v10l-8 4-8-4V7m16 0-8 4m-8-4 8 4m0 0v10" />
+                                    </svg>
+                                    Inventory
+                                </a>
+                            </div>
+                        </div>
+                    {% endif %}
+
+                    <!-- Operational Modules -->
+                    {% if user.role == 'receptionist' or user.role == 'hospital_admin' or user.role == 'superadmin' %}
+                        <div>
+                            <div class="text-xs font-bold uppercase tracking-widest text-white/60 mb-2">Operations</div>
+                            <div class="space-y-1">
+                                <a href="{% url 'reception_dashboard' %}" class="sidebar-link {% if active_nav == 'reception' %}active{% endif %}">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-5 h-5">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h10" />
+                                    </svg>
+                                    Reception
+                                </a>
+                                <a href="{% url 'patient_list' %}" class="sidebar-link {% if active_nav == 'reception_patients' %}active{% endif %}">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-5 h-5">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 7a4 4 0 1 0 0-8 4 4 0 0 0 0 8m11 14v-2a4 4 0 0 0-3-3.87m1-11.13a4 4 0 1 1 0 8" />
+                                    </svg>
+                                    Patients
+                                </a>
+                            </div>
+                        </div>
+                    {% endif %}
+                    
+                    {% if user.role == 'doctor' or user.role == 'hospital_admin' or user.role == 'superadmin' %}
+                        <div>
+                            <div class="text-xs font-bold uppercase tracking-widest text-white/60 mb-2">Medical</div>
+                            <div class="space-y-1">
+                                <a href="{% url 'doctor_queue' %}" class="sidebar-link {% if active_nav == 'doctor' %}active{% endif %}">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-5 h-5">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v18M3 12h18" />
+                                    </svg>
+                                    Doctor Queue
+                                </a>
+                            </div>
+                        </div>
+                    {% endif %}
+
+                    {% if user.role == 'nurse' or user.role == 'hospital_admin' or user.role == 'superadmin' %}
+                        <div>
+                            <div class="space-y-1">
+                                <a href="{% url 'nurse_queue' %}" class="sidebar-link {% if active_nav == 'nurse' %}active{% endif %}">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-5 h-5">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Z" />
+                                    </svg>
+                                    Nurse Queue
+                                </a>
+                            </div>
+                        </div>
+                    {% endif %}
+
+                    {% if user.role == 'lab_attendant' or user.role == 'hospital_admin' or user.role == 'superadmin' %}
+                        <div>
+                            <div class="space-y-1">
+                                <a href="{% url 'lab_queue' %}" class="sidebar-link {% if active_nav == 'lab_queue' %}active{% endif %}">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-5 h-5">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" />
+                                    </svg>
+                                    Lab Queue
+                                </a>
+                                <a href="{% url 'report_list' %}" class="sidebar-link {% if active_nav == 'dashboard' %}active{% endif %}">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-5 h-5">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M3 12l9-9 9 9M5 10v10h14V10" />
+                                    </svg>
+                                    Reports
+                                </a>
+                                <a href="{% url 'report_create' %}" class="sidebar-link {% if active_nav == 'new_report' %}active{% endif %}">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-5 h-5">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 5v14M5 12h14" />
+                                    </svg>
+                                    New Report
+                                </a>
+                                <a href="{% url 'template_library' %}" class="sidebar-link {% if active_nav == 'templates' %}active{% endif %}">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-5 h-5">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M4 7h16M4 12h16M4 17h16" />
+                                    </svg>
+                                    Templates
+                                </a>
+                            </div>
+                        </div>
+                    {% endif %}
+                </nav>
+                {% endblock %}
+
+                <!-- User Footer -->
+                {% block sidebar_footer %}
+                    <div class="px-4 lg:px-0 mt-auto pt-4 lg:pt-6 border-t border-white/20 lg:mb-6">
+                        <div class="text-xs font-bold uppercase tracking-widest text-white/60 mb-2">Account</div>
+                        <div class="text-sm font-semibold text-white mb-1">{{ user.get_full_name|default:user.username }}</div>
+                        <div class="text-xs text-white/75 mb-4">
+                            {{ user.get_role_display|default:"Team Member" }}
+                            {% if user.hospital %}<br>{{ user.hospital.name }}{% endif %}
+                        </div>
+                        <form method="post" action="{% url 'logout' %}" class="w-full">
                             {% csrf_token %}
-                            <button type="submit" class="sidebar-logout-button">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <button type="submit" class="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white text-sm font-medium transition-colors">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
                                     <path stroke-linecap="round" stroke-linejoin="round" d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M10 17l5-5-5-5M15 12H3" />
                                 </svg>
                                 Logout
                             </button>
                         </form>
                     </div>
-                </div>
+                {% endblock %}
             </aside>
 
-            <main class="main-panel">
-                <div class="top-strip no-print">
-                    <div class="top-strip-primary">
-                        <button type="button" class="mobile-nav-toggle" id="mobileNavToggle" aria-controls="appSidebar" aria-expanded="false" aria-label="Open navigation">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M4 7h16M4 12h16M4 17h16" />
-                            </svg>
-                        </button>
-                        <div>
-                            <h1>{% block page_title %}Laboratory Dashboard{% endblock %}</h1>
-                            <p>{% block page_subtitle %}Manage patient biodata, templates, and laboratory reports from one place.{% endblock %}</p>
+            <!-- Main Content Area -->
+            <main class="lg:min-h-screen flex flex-col">
+                <!-- Top Header Bar -->
+                <div class="sticky top-0 z-20 bg-surface-muted border-b border-gray-200 px-4 lg:px-8 py-3 lg:py-4 no-print">
+                    <div class="flex items-center justify-between gap-4 flex-wrap sm:flex-nowrap">
+                        <div class="flex items-center gap-4 min-w-0">
+                            <button type="button" class="lg:hidden p-2 hover:bg-gray-100 rounded-lg transition-colors" id="mobileNavToggle" aria-controls="appSidebar" aria-expanded="false">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M4 7h16M4 12h16M4 17h16" />
+                                </svg>
+                            </button>
+                            <div class="min-w-0">
+                                <h1 class="text-xl lg:text-2xl font-bold text-text-main">{% block page_title %}Hospital Management{% endblock %}</h1>
+                                <p class="text-sm text-text-muted mt-0.5">{% block page_subtitle %}Manage hospital operations from a unified platform.{% endblock %}</p>
+                            </div>
                         </div>
-                    </div>
-                    <div class="top-strip-actions">
-                        <form method="post" action="{% url 'logout' %}" class="top-logout-form">
-                            {% csrf_token %}
-                            <button type="submit" class="top-logout-button">Logout</button>
-                        </form>
                     </div>
                 </div>
 
-                <div class="container">
-                    {% block print_header %}
-                    <div class="print-only">
-                        <div style="display:flex; align-items:center; gap:12px;">
-                            <img src="{% static 'images/lumina-logo.jpeg' %}" alt="Lumina Logo" style="height:56px; border-radius:10px;">
-                            <div>
-                                <div style="font-size:1.25rem; font-weight:700; color:var(--brand-dark);">LUMINA MEDICAL SERVICES</div>
-                                <div style="color:var(--text-muted);">lighting up your health.</div>
+                <!-- Main Content -->
+                <div class="flex-1 overflow-auto">
+                    <div class="max-w-7xl mx-auto px-4 lg:px-8 py-6">
+                        {% if messages %}
+                            {% for message in messages %}
+                                <div class="mb-4 p-4 rounded-lg bg-blue-50 border border-blue-200 text-blue-800 no-print">{{ message }}</div>
+                            {% endfor %}
+                        {% endif %}
+
+                        {% block print_header %}
+                            <div class="hidden print:flex justify-between items-start mb-6 pb-6 border-b-2 border-brand-dark">
+                                <div class="flex items-center gap-3">
+                                    <img src="{% static 'images/lumina-logo.jpeg' %}" alt="Lumina" class="h-14 rounded-lg w-auto">
+                                    <div>
+                                        <div class="font-bold text-lg text-brand-dark">LUMINA MEDICAL</div>
+                                        <div class="text-sm text-text-muted">lighting up health.</div>
+                                    </div>
+                                </div>
+                                <div class="text-right text-sm text-text-muted">
+                                    <div>PO BOX: 200132, Kampala</div>
+                                    <div>Kisaasi Kyanja road</div>
+                                    <div>0750639410 / 0780105909</div>
+                                </div>
                             </div>
-                        </div>
-                        <div style="text-align:right; color:var(--text-muted); font-size:0.9rem;">
-                            <div>PO BOX: 200132, Kampala</div>
-                            <div>Kisaasi Kyanja road</div>
-                            <div>0750639410 / 0780105909</div>
-                        </div>
+                        {% endblock %}
+                        
+                        {% block content %}{% endblock %}
                     </div>
-                    {% endblock %}
-        {% if messages %}
-            {% for message in messages %}
-                <div class="alert no-print">{{ message }}</div>
-            {% endfor %}
-        {% endif %}
-                    <div class="content">
-    {% else %}
-        <main class="auth-shell">
-            <div class="auth-panel">
-                {% if messages %}
-                    {% for message in messages %}
-                        <div class="alert">{{ message }}</div>
-                    {% endfor %}
-                {% endif %}
-                <div class="content">
-    {% endif %}
-                    {% block content %}{% endblock %}
-                </div>
-    {% if user.is_authenticated %}
                 </div>
             </main>
         </div>
     {% else %}
-            </div>
-        </main>
+        <!-- Authentication Shell - For Unauthenticated Users -->
+        <div class="min-h-screen flex items-center justify-center bg-gradient-to-br from-brand-dark to-brand-dark-2 px-4">
+            {% block auth_content %}{% endblock %}
+        </div>
     {% endif %}
     <script>
-    document.addEventListener('DOMContentLoaded', function () {
-        const appShell = document.getElementById('appShell');
-        const openButton = document.getElementById('mobileNavToggle');
-        const closeButton = document.getElementById('sidebarClose');
-        const overlay = document.getElementById('sidebarOverlay');
-        const navLinks = document.querySelectorAll('.sidebar-link');
+        document.addEventListener('DOMContentLoaded', function () {
+            const appShell = document.getElementById('appShell');
+            const mobileNavToggle = document.getElementById('mobileNavToggle');
+            const sidebarClose = document.getElementById('sidebarClose');
+            const sidebarOverlay = document.getElementById('sidebarOverlay');
+            const sidebar = document.getElementById('appSidebar');
 
-        if (!appShell || !openButton || !closeButton || !overlay) {
-            return;
-        }
+            if (!mobileNavToggle || !sidebar) return;
 
-        function setSidebarState(isOpen) {
-            appShell.classList.toggle('sidebar-open', isOpen);
-            document.body.classList.toggle('nav-open', isOpen);
-            openButton.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
-        }
+            function setSidebarOpen(isOpen) {
+                if (isOpen) {
+                    sidebar.classList.remove('-translate-x-full');
+                    sidebar.classList.add('translate-x-0');
+                    if (sidebarOverlay) sidebarOverlay.classList.remove('hidden');
+                    if (appShell) appShell.classList.add('lg:overflow-hidden');
+                } else {
+                    sidebar.classList.add('-translate-x-full');
+                    sidebar.classList.remove('translate-x-0');
+                    if (sidebarOverlay) sidebarOverlay.classList.add('hidden');
+                    if (appShell) appShell.classList.remove('lg:overflow-hidden');
+                }
+                mobileNavToggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+            }
 
-        openButton.addEventListener('click', function () {
-            setSidebarState(!appShell.classList.contains('sidebar-open'));
-        });
+            mobileNavToggle.addEventListener('click', function () {
+                const isOpen = sidebar.classList.contains('translate-x-0');
+                setSidebarOpen(!isOpen);
+            });
 
-        closeButton.addEventListener('click', function () {
-            setSidebarState(false);
-        });
+            if (sidebarClose) {
+                sidebarClose.addEventListener('click', function () {
+                    setSidebarOpen(false);
+                });
+            }
 
-        overlay.addEventListener('click', function () {
-            setSidebarState(false);
-        });
+            if (sidebarOverlay) {
+                sidebarOverlay.addEventListener('click', function () {
+                    setSidebarOpen(false);
+                });
+            }
 
-        navLinks.forEach(function (link) {
-            link.addEventListener('click', function () {
-                if (window.innerWidth <= 960) {
-                    setSidebarState(false);
+            // Close sidebar on nav link click (mobile)
+            const navLinks = sidebar.querySelectorAll('a[href]');
+            navLinks.forEach(link => {
+                link.addEventListener('click', function () {
+                    if (window.innerWidth < 1024) {
+                        setSidebarOpen(false);
+                    }
+                });
+            });
+
+            // Close sidebar on escape
+            document.addEventListener('keydown', function (e) {
+                if (e.key === 'Escape' && sidebar.classList.contains('translate-x-0')) {
+                    setSidebarOpen(false);
+                }
+            });
+
+            // Handle window resize
+            window.addEventListener('resize', function () {
+                if (window.innerWidth >= 1024) {
+                    setSidebarOpen(false);
                 }
             });
         });
-
-        document.addEventListener('keydown', function (event) {
-            if (event.key === 'Escape') {
-                setSidebarState(false);
-            }
-        });
-
-        window.addEventListener('resize', function () {
-            if (window.innerWidth > 960) {
-                setSidebarState(false);
-            }
-        });
-    });
     </script>
     {% block extra_js %}{% endblock %}
 </body>

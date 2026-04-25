@@ -1,0 +1,108 @@
+{% extends 'base.html' %}
+
+{% block title %}Create Lab Request - Hospital EMR{% endblock %}
+{% block page_title %}Create Lab Request{% endblock %}
+{% block page_subtitle %}Order laboratory tests for a patient with specific clinical context.{% endblock %}
+
+{% block content %}
+<div class="space-y-6 max-w-2xl">
+    <form method="post" class="card">
+        {% csrf_token %}
+        <input type="hidden" name="visit_id" value="{{ visit.pk }}">
+        
+        <!-- Patient Display Card -->
+        <div class="mb-6 pb-6 border-b">
+            <h3 class="text-lg font-bold text-text-main mb-2">{{ visit.patient.name }}</h3>
+            <div class="grid grid-cols-3 gap-4">
+                <div>
+                    <div class="text-xs text-text-muted">Age</div>
+                    <div class="font-semibold text-text-main">{{ visit.patient.age }}</div>
+                </div>
+                <div>
+                    <div class="text-xs text-text-muted">Sex</div>
+                    <div class="font-semibold text-text-main">{{ visit.patient.get_sex_display }}</div>
+                </div>
+                <div>
+                    <div class="text-xs text-text-muted">Visit Date</div>
+                    <div class="font-semibold text-text-main">{{ visit.visit_date|date:"M d, Y H:i" }}</div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Tests Requested Field -->
+        <div class="mb-6">
+            <label for="{{ form.tests_requested.id_for_label }}" class="block text-sm font-semibold text-text-main mb-2">
+                Tests Requested <span class="text-red-600">*</span>
+            </label>
+            {% if form.tests_requested.help_text %}
+                <p class="text-xs text-text-muted mb-2">{{ form.tests_requested.help_text|safe }}</p>
+            {% endif %}
+            {{ form.tests_requested }}
+            {% if form.tests_requested.errors %}
+                <div class="text-red-600 text-sm mt-1">{{ form.tests_requested.errors.0 }}</div>
+            {% endif %}
+        </div>
+        
+        <!-- Clinical Notes Field -->
+        <div class="mb-6">
+            <label for="{{ form.clinical_notes.id_for_label }}" class="block text-sm font-semibold text-text-main mb-2">
+                Clinical Notes & Reason
+            </label>
+            {% if form.clinical_notes.help_text %}
+                <p class="text-xs text-text-muted mb-2">{{ form.clinical_notes.help_text|safe }}</p>
+            {% endif %}
+            {{ form.clinical_notes }}
+            {% if form.clinical_notes.errors %}
+                <div class="text-red-600 text-sm mt-1">{{ form.clinical_notes.errors.0 }}</div>
+            {% endif %}
+        </div>
+        
+        <!-- Urgency Field -->
+        <div class="mb-6">
+            <label class="block text-sm font-semibold text-text-main mb-3">
+                Urgency <span class="text-red-600">*</span>
+            </label>
+            <div class="space-y-2">
+                {% for value, label in form.urgency.field.choices %}
+                <label class="flex items-center gap-3 cursor-pointer">
+                    <input type="radio" name="urgency" value="{{ value }}" {% if form.urgency.value == value %}checked{% endif %} class="form-radio">
+                    <span class="text-sm">
+                        <strong>{{ label }}</strong>
+                        {% if value == "routine" %}
+                            <span class="text-xs text-text-muted">(standard processing timeline)</span>
+                        {% else %}
+                            <span class="text-xs text-text-muted">(prioritized, faster turnaround)</span>
+                        {% endif %}
+                    </span>
+                </label>
+                {% endfor %}
+            </div>
+            {% if form.urgency.errors %}
+                <div class="text-red-600 text-sm mt-1">{{ form.urgency.errors.0 }}</div>
+            {% endif %}
+        </div>
+        
+        <!-- Submit Buttons -->
+        <div class="flex gap-3 pt-6 border-t">
+            <a href="{% if visit %}{% url 'consultation' visit.pk %}{% else %}{% url 'doctor_lab_requests' %}{% endif %}" class="btn btn-secondary">
+                Cancel
+            </a>
+            <button type="submit" class="btn btn-primary">
+                Create Lab Request
+            </button>
+        </div>
+    </form>
+</div>
+
+<!-- Custom field renderer since render_form_field may not work -->
+<style>
+    {% if not form.tests_requested.errors %}
+    #{{ form.tests_requested.id_for_label }} {
+        min-height: 120px;
+    }
+    #{{ form.clinical_notes.id_for_label }} {
+        min-height: 100px;
+    }
+    {% endif %}
+</style>
+{% endblock %}

@@ -1,0 +1,64 @@
+{% extends 'base.html' %}
+
+{% block title %}Cash Drawer - Lumina{% endblock %}
+{% block page_title %}Cash Drawer{% endblock %}
+{% block page_subtitle %}Open and close the daily cash drawer while keeping a visible discrepancy trail.{% endblock %}
+
+{% block content %}
+<div class="space-y-5">
+    <div class="card flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+            <h3 class="text-lg font-bold text-text-main">Daily Cash Drawer</h3>
+            <p class="text-sm text-text-muted mt-1">Use one live drawer at a time for safer daily reconciliation.</p>
+        </div>
+        {% if open_drawer %}
+            <a href="{% url 'cash_drawer_detail' open_drawer.pk %}" class="btn btn-primary">Resume Open Drawer</a>
+        {% else %}
+            <a href="{% url 'open_cash_drawer' %}" class="btn btn-primary">Open Cash Drawer</a>
+        {% endif %}
+    </div>
+
+    <div class="card">
+        <div class="overflow-x-auto">
+            <table class="w-full">
+                <thead class="bg-gray-50 border-b">
+                    <tr>
+                        <th class="text-left px-4 py-3 text-xs font-semibold uppercase">Date</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold uppercase">Opening</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold uppercase">Expected</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold uppercase">Closing</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold uppercase">Discrepancy</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold uppercase">Status</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold uppercase">Action</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y">
+                    {% for drawer in drawers %}
+                    <tr class="hover:bg-gray-50">
+                        <td class="px-4 py-3 text-sm text-text-main">{{ drawer.date }}</td>
+                        <td class="px-4 py-3 text-sm">{{ drawer.opening_balance }}</td>
+                        <td class="px-4 py-3 text-sm">{{ drawer.expected_closing|default:"-" }}</td>
+                        <td class="px-4 py-3 text-sm">{{ drawer.closing_balance|default:"-" }}</td>
+                        <td class="px-4 py-3 text-sm font-semibold {% if drawer.discrepancy and drawer.discrepancy != 0 %}text-red-600{% else %}text-text-main{% endif %}">{{ drawer.discrepancy|default:"-" }}</td>
+                        <td class="px-4 py-3 text-sm">
+                            {% if drawer.is_closed %}
+                                <span class="inline-flex items-center rounded-full bg-gray-100 px-2 py-1 text-xs font-semibold text-gray-700">Closed</span>
+                            {% else %}
+                                <span class="inline-flex items-center rounded-full bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700">Open</span>
+                            {% endif %}
+                        </td>
+                        <td class="px-4 py-3 text-sm">
+                            <a href="{% url 'cash_drawer_detail' drawer.pk %}" class="btn btn-secondary btn-sm">Open</a>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="7" class="px-4 py-8 text-center text-text-muted">No cash drawers opened yet.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

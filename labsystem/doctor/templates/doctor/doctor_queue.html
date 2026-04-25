@@ -1,0 +1,127 @@
+{% extends 'base.html' %}
+
+{% block title %}Doctor Queue - Hospital EMR{% endblock %}
+{% block page_title %}Doctor Queue{% endblock %}
+{% block page_subtitle %}Manage consultations, follow-up lab work, and handoffs to nurse or billing.{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <div class="card">
+        <h4 class="text-sm font-semibold text-text-main mb-2">Waiting for Consultation</h4>
+        <p class="text-xs text-text-muted mb-4">Live doctor queue, including patients returning with lab results.</p>
+        <div class="overflow-x-auto">
+            <table class="w-full min-w-full">
+                <thead>
+                    <tr class="border-b-2 border-gray-200">
+                        <th class="text-left px-4 py-3 text-xs font-semibold uppercase text-text-muted">Patient</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold uppercase text-text-muted">Age / Sex</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold uppercase text-text-muted">Visit Date</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold uppercase text-text-muted">Hospital</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold uppercase text-text-muted">Reason</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold uppercase text-text-muted">Requested By</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold uppercase text-text-muted">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in queue_entries %}
+                        {% with entry=item.entry %}
+                        <tr class="border-b border-gray-100 transition-colors {% if item.is_results_ready %}bg-emerald-50/50 hover:bg-emerald-50{% else %}hover:bg-gray-50{% endif %}">
+                            <td class="px-4 py-3 text-sm font-medium text-text-main">{{ entry.visit.patient.name }}</td>
+                            <td class="px-4 py-3 text-sm text-text-muted">{{ entry.visit.patient.age }} / {{ entry.visit.patient.get_sex_display }}</td>
+                            <td class="px-4 py-3 text-sm text-text-muted">{{ entry.visit.visit_date|date:"M d, Y H:i" }}</td>
+                            <td class="px-4 py-3 text-sm text-text-muted">{{ entry.hospital.name }}</td>
+                            <td class="px-4 py-3 text-sm text-text-muted">
+                                <div class="space-y-2">
+                                    {% if item.is_results_ready %}
+                                        <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">Lab results ready</span>
+                                    {% endif %}
+                                    <p>{{ entry.reason|default:entry.notes|default:"General consultation" }}</p>
+                                </div>
+                            </td>
+                            <td class="px-4 py-3 text-sm text-text-muted">
+                                {% if entry.requested_by %}
+                                    {% if entry.requested_by.get_full_name %}
+                                        {{ entry.requested_by.get_full_name }}
+                                    {% else %}
+                                        {{ entry.requested_by.username }}
+                                    {% endif %}
+                                {% else %}
+                                    System
+                                {% endif %}
+                            </td>
+                            <td class="px-4 py-3 text-sm">
+                                <a href="{% url 'consultation' entry.visit.pk %}" class="btn btn-primary btn-sm">Consult</a>
+                            </td>
+                        </tr>
+                        {% endwith %}
+                    {% empty %}
+                        <tr>
+                            <td colspan="7" class="px-4 py-8 text-center text-sm text-text-muted">No consultations waiting.</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="card">
+        <h4 class="text-sm font-semibold text-text-main mb-2">Recent Consultation History</h4>
+        <p class="text-xs text-text-muted mb-4">Completed consultations with nurse handoff status and billing readiness.</p>
+        <div class="overflow-x-auto">
+            <table class="w-full min-w-full">
+                <thead>
+                    <tr class="border-b-2 border-gray-200">
+                        <th class="text-left px-4 py-3 text-xs font-semibold uppercase text-text-muted">Patient</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold uppercase text-text-muted">Consulted By</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold uppercase text-text-muted">Date</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold uppercase text-text-muted">Visit Status</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold uppercase text-text-muted">Nurse Status</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold uppercase text-text-muted">Notes</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold uppercase text-text-muted">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in recent_consultations %}
+                        <tr class="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                            <td class="px-4 py-3 text-sm font-medium text-text-main">{{ item.consultation.visit.patient.name }}</td>
+                            <td class="px-4 py-3 text-sm text-text-muted">
+                                {% if item.consultation.created_by %}
+                                    {% if item.consultation.created_by.get_full_name %}
+                                        {{ item.consultation.created_by.get_full_name }}
+                                    {% else %}
+                                        {{ item.consultation.created_by.username }}
+                                    {% endif %}
+                                {% else %}
+                                    Team
+                                {% endif %}
+                            </td>
+                            <td class="px-4 py-3 text-sm text-text-muted">{{ item.consultation.created_at|date:"M d, Y" }}</td>
+                            <td class="px-4 py-3 text-sm text-text-muted">{{ item.consultation.visit.get_status_display }}</td>
+                            <td class="px-4 py-3 text-sm">
+                                {% if item.latest_nurse_entry %}
+                                    {% if item.latest_nurse_entry.processed %}
+                                        <span class="inline-block px-2 py-1 rounded-full text-xs font-medium bg-green-50 text-green-700">Completed</span>
+                                    {% else %}
+                                        <span class="inline-block px-2 py-1 rounded-full text-xs font-medium bg-yellow-50 text-yellow-700">Pending Nurse</span>
+                                    {% endif %}
+                                {% else %}
+                                    <span class="inline-block px-2 py-1 rounded-full text-xs font-medium bg-gray-50 text-gray-700">Not Sent</span>
+                                {% endif %}
+                            </td>
+                            <td class="px-4 py-3 text-sm text-text-muted">{{ item.nurse_notes_count }}</td>
+                            <td class="px-4 py-3 text-sm flex gap-2">
+                                <a href="{% url 'consultation_detail' item.consultation.visit.pk %}" class="btn btn-secondary btn-sm">View</a>
+                                <a href="{% url 'consultation' item.consultation.visit.pk %}" class="btn btn-primary btn-sm">Edit</a>
+                            </td>
+                        </tr>
+                    {% empty %}
+                        <tr>
+                            <td colspan="7" class="px-4 py-8 text-center text-sm text-text-muted">No completed consultations yet.</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

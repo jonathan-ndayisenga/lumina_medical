@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+
+{% block title %}Nurse Queue - Hospital EMR{% endblock %}
+{% block page_title %}Nurse Queue{% endblock %}
+{% block page_subtitle %}Provide nursing care after doctor consultation and complete the next handoff clearly.{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    {% if queue_entries %}
+        <div class="card">
+            <h4 class="text-sm font-semibold text-text-main mb-2">Waiting for Nursing Care</h4>
+            <p class="text-xs text-text-muted mb-4">Patients handed off from doctor queue.</p>
+            <div class="overflow-x-auto">
+                <table class="w-full min-w-full">
+                    <thead>
+                        <tr class="border-b-2 border-gray-200">
+                            <th class="text-left px-4 py-3 text-xs font-semibold uppercase text-text-muted">Patient</th>
+                            <th class="text-left px-4 py-3 text-xs font-semibold uppercase text-text-muted">Age / Sex</th>
+                            <th class="text-left px-4 py-3 text-xs font-semibold uppercase text-text-muted">Visit Date</th>
+                            <th class="text-left px-4 py-3 text-xs font-semibold uppercase text-text-muted">Reason</th>
+                            <th class="text-left px-4 py-3 text-xs font-semibold uppercase text-text-muted">Requested By</th>
+                            <th class="text-left px-4 py-3 text-xs font-semibold uppercase text-text-muted">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for entry in queue_entries %}
+                            <tr class="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                                <td class="px-4 py-3 text-sm font-medium text-text-main">{{ entry.visit.patient.name }}</td>
+                                <td class="px-4 py-3 text-sm text-text-muted">{{ entry.visit.patient.age }} / {{ entry.visit.patient.get_sex_display }}</td>
+                                <td class="px-4 py-3 text-sm text-text-muted">{{ entry.visit.visit_date|date:"M d, Y H:i" }}</td>
+                                <td class="px-4 py-3 text-sm text-text-muted">{{ entry.reason|default:"Nursing review requested" }}</td>
+                                <td class="px-4 py-3 text-sm text-text-muted">{% if entry.requested_by %}{{ entry.requested_by.get_full_name|default:entry.requested_by.username }}{% else %}System{% endif %}</td>
+                                <td class="px-4 py-3 text-sm">
+                                    <a class="btn btn-primary btn-sm" href="{% url 'perform_nursing' entry.id %}">Open Care Form</a>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    {% else %}
+        <div class="card bg-blue-50 border-l-4 border-blue-500 text-center py-12">
+            <p class="text-lg font-semibold text-blue-900 mb-2">All caught up.</p>
+            <p class="text-sm text-blue-700">No patients are waiting for nursing care right now. Once a doctor hands off a patient, it will appear here.</p>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}

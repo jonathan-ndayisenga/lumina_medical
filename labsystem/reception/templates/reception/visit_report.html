@@ -1,0 +1,293 @@
+{% extends 'base.html' %}
+
+{% block title %}Visit Report - {{ visit.patient.name }} - Hospital EMR{% endblock %}
+{% block print_header %}{% endblock %}
+{% block page_title %}Visit Report - {{ visit.patient.name }}{% endblock %}
+{% block page_subtitle %}Complete visit documentation with all clinical sections. Print this for patient records.{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Print & Back Buttons -->
+    <div class="flex justify-between items-center">
+        <a href="{% url 'patient_visits' visit.patient.pk %}" class="btn btn-secondary">← Back</a>
+        <button onclick="window.print()" class="btn btn-primary print-visible">🖨️ Print Visit Report</button>
+    </div>
+
+    {% include "partials/print_header.html" with print_title="VISIT REPORT" print_subtitle=visit.id %}
+
+    <!-- Visit Header -->
+    <div class="card bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200">
+        <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
+            <div>
+                <div class="text-xs font-semibold text-text-muted uppercase tracking-widest">Patient</div>
+                <div class="font-semibold text-text-main mt-1">{{ visit.patient.name }}</div>
+            </div>
+            <div>
+                <div class="text-xs font-semibold text-text-muted uppercase tracking-widest">Age / Sex</div>
+                <div class="font-semibold text-text-main mt-1">{{ visit.patient.age }} / {{ visit.patient.get_sex_display }}</div>
+            </div>
+            <div>
+                <div class="text-xs font-semibold text-text-muted uppercase tracking-widest">Visit Date</div>
+                <div class="font-semibold text-text-main mt-1">{{ visit.visit_date|date:"M d, Y H:i" }}</div>
+            </div>
+            <div>
+                <div class="text-xs font-semibold text-text-muted uppercase tracking-widest">Status</div>
+                <div class="mt-1">
+                    {% if visit.status == "completed" %}
+                        <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">Completed</span>
+                    {% elif visit.status == "ready_for_billing" %}
+                        <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-800">Ready for Billing</span>
+                    {% else %}
+                        <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-800">In Progress</span>
+                    {% endif %}
+                </div>
+            </div>
+            <div>
+                <div class="text-xs font-semibold text-text-muted uppercase tracking-widest">Total Bill</div>
+                <div class="font-semibold text-text-main mt-1">{{ visit.total_amount }}</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Doctor Consultation Section -->
+    {% if consultation %}
+    <div class="card border-l-4 border-blue-500">
+        <div class="flex items-center gap-2 mb-4">
+            <div class="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                <span class="text-blue-600 font-semibold">👨‍⚕️</span>
+            </div>
+            <h2 class="text-lg font-bold text-text-main">Doctor Consultation</h2>
+        </div>
+        
+        <div class="space-y-4">
+            {% if consultation.vitals %}
+            <div>
+                <h3 class="text-sm font-semibold text-text-main mb-2">Vital Signs</h3>
+                <div class="grid grid-cols-2 md:grid-cols-3 gap-3 bg-gray-50 p-3 rounded">
+                    {% for key, value in consultation.vitals.items %}
+                        {% if value %}
+                        <div>
+                            <div class="text-xs text-text-muted capitalize">{{ key }}</div>
+                            <div class="font-semibold text-text-main">{{ value }}</div>
+                        </div>
+                        {% endif %}
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+            
+            {% if consultation.signs_symptoms %}
+            <div>
+                <h3 class="text-sm font-semibold text-text-main mb-2">Signs & Symptoms</h3>
+                <p class="text-sm text-text-main bg-gray-50 p-3 rounded">{{ consultation.signs_symptoms }}</p>
+            </div>
+            {% endif %}
+            
+            {% if consultation.diagnosis %}
+            <div>
+                <h3 class="text-sm font-semibold text-text-main mb-2">Diagnosis</h3>
+                <p class="text-sm text-text-main bg-blue-50 p-3 rounded border border-blue-200">{{ consultation.diagnosis }}</p>
+            </div>
+            {% endif %}
+            
+            {% if consultation.treatment %}
+            <div>
+                <h3 class="text-sm font-semibold text-text-main mb-2">Treatment Plan</h3>
+                <p class="text-sm text-text-main bg-green-50 p-3 rounded border border-green-200">{{ consultation.treatment }}</p>
+            </div>
+            {% endif %}
+            
+            {% if consultation.follow_up_date %}
+            <div>
+                <h3 class="text-sm font-semibold text-text-main mb-2">Follow-up Date</h3>
+                <p class="text-sm text-text-main">{{ consultation.follow_up_date|date:"F d, Y" }}</p>
+            </div>
+            {% endif %}
+            
+            <div class="text-xs text-text-muted pt-2 border-t">
+                By: {{ consultation.created_by.get_full_name|default:consultation.created_by.username }} on {{ consultation.created_at|date:"M d, Y H:i" }}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Nurse Notes Section -->
+    {% if nurse_notes %}
+    <div class="card border-l-4 border-purple-500">
+        <div class="flex items-center gap-2 mb-4">
+            <div class="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center">
+                <span class="text-purple-600 font-semibold">👩‍⚕️</span>
+            </div>
+            <h2 class="text-lg font-bold text-text-main">Nursing Notes</h2>
+        </div>
+        
+        <div class="space-y-3">
+            {% for note in nurse_notes %}
+            <div class="bg-purple-50 p-3 rounded border border-purple-200">
+                <p class="text-sm text-text-main">{{ note.notes }}</p>
+                <div class="text-xs text-text-muted mt-2">
+                    By: {{ note.created_by.get_full_name|default:note.created_by.username }} on {{ note.created_at|date:"M d, Y H:i" }}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% else %}
+    <div class="card bg-gray-50 border border-gray-200">
+        <div class="flex items-center gap-2">
+            <div class="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center">
+                <span class="text-gray-400 font-semibold">👩‍⚕️</span>
+            </div>
+            <p class="text-sm text-text-muted">No nursing notes recorded for this visit.</p>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Lab Reports Section -->
+    {% if lab_reports %}
+    <div class="card border-l-4 border-emerald-500">
+        <div class="flex items-center gap-2 mb-4">
+            <div class="w-8 h-8 bg-emerald-100 rounded-full flex items-center justify-center">
+                <span class="text-emerald-600 font-semibold">🔬</span>
+            </div>
+            <h2 class="text-lg font-bold text-text-main">Laboratory Reports</h2>
+        </div>
+        
+        <div class="space-y-4">
+            {% for report in lab_reports %}
+            <div class="bg-emerald-50 p-4 rounded border border-emerald-200">
+                <div class="flex justify-between items-start gap-4 mb-3">
+                    <div>
+                        <h3 class="font-semibold text-text-main">{{ report.profile.name|default:"Lab Report" }}</h3>
+                        <p class="text-xs text-text-muted">
+                            Specimen: {{ report.specimen_type }} | Sample Date: {{ report.sample_date|date:"M d, Y" }}
+                        </p>
+                    </div>
+                    {% if report.sent_to_doctor %}
+                        <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold bg-green-200 text-green-800">
+                            Sent to Doctor
+                        </span>
+                    {% endif %}
+                </div>
+                
+                {% if report.results.all %}
+                <div class="bg-white p-3 rounded space-y-2">
+                    {% for result in report.results.all %}
+                    <div class="flex justify-between text-sm">
+                        <div>
+                            <span class="font-medium text-text-main">{{ result.test.name }}</span>
+                            {% if result.section_name %}<span class="text-xs text-text-muted">({{ result.section_name }})</span>{% endif %}
+                        </div>
+                        <div class="text-right">
+                            <div class="font-semibold text-text-main">{{ result.result_value }}</div>
+                            {% if result.reference_range %}<div class="text-xs text-text-muted">ref: {{ result.reference_range }}</div>{% endif %}
+                            {% if result.unit %}<div class="text-xs text-text-muted">{{ result.unit }}</div>{% endif %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+                
+                {% if report.comments %}
+                <p class="text-sm text-text-main mt-2"><strong>Comments:</strong> {{ report.comments }}</p>
+                {% endif %}
+                
+                <div class="text-xs text-text-muted mt-2 pt-2 border-t">
+                    By: {{ report.attendant_name|default:"Lab Technician" }} on {{ report.created_at|date:"M d, Y H:i" }}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% else %}
+    <div class="card bg-gray-50 border border-gray-200">
+        <div class="flex items-center gap-2">
+            <div class="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center">
+                <span class="text-gray-400 font-semibold">🔬</span>
+            </div>
+            <p class="text-sm text-text-muted">No laboratory reports recorded for this visit.</p>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Payment Information -->
+    <div class="card bg-amber-50 border border-amber-200">
+        <h2 class="text-lg font-bold text-text-main mb-3">Payment Information</h2>
+        <div class="space-y-2">
+            <div class="flex justify-between">
+                <span class="text-sm font-medium">Total Bill:</span>
+                <span class="text-sm font-semibold">{{ visit.total_amount }}</span>
+            </div>
+            <div class="flex justify-between">
+                <span class="text-sm font-medium">Total Paid:</span>
+                <span class="text-sm font-semibold">{{ visit.total_paid }}</span>
+            </div>
+            <div class="flex justify-between">
+                <span class="text-sm font-medium">Balance Due:</span>
+                <span class="text-sm font-semibold">{{ visit.balance_due }}</span>
+            </div>
+        </div>
+
+        <div class="mt-4">
+            <h3 class="text-sm font-semibold text-text-main mb-2">Receipts</h3>
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead class="border-b border-amber-200">
+                        <tr>
+                            <th class="text-left py-2 pr-4 text-xs font-semibold uppercase text-amber-700">Receipt</th>
+                            <th class="text-left py-2 pr-4 text-xs font-semibold uppercase text-amber-700">Date</th>
+                            <th class="text-left py-2 pr-4 text-xs font-semibold uppercase text-amber-700">Mode</th>
+                            <th class="text-right py-2 text-xs font-semibold uppercase text-amber-700">Amount</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-amber-100">
+                        {% for payment in payments %}
+                            <tr>
+                                <td class="py-2 pr-4 font-semibold text-text-main">{{ payment.receipt_number }}</td>
+                                <td class="py-2 pr-4 text-text-muted">{% if payment.paid_at %}{{ payment.paid_at|date:"Y-m-d H:i" }}{% else %}-{% endif %}</td>
+                                <td class="py-2 pr-4 text-text-muted">{{ payment.get_mode_display }}</td>
+                                <td class="py-2 text-right font-semibold text-text-main">{{ payment.amount_paid }}</td>
+                            </tr>
+                        {% empty %}
+                            <tr>
+                                <td colspan="4" class="py-4 text-sm text-text-muted italic">No receipts recorded yet.</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer & Print Buttons -->
+    <div class="flex justify-between items-center pt-4 border-t print-hidden">
+        <a href="{% url 'patient_visits' visit.patient.pk %}" class="btn btn-secondary">← Back</a>
+        <button onclick="window.print()" class="btn btn-primary">🖨️ Print Visit Report</button>
+    </div>
+
+    {% include "partials/print_footer.html" %}
+</div>
+
+<style media="print">
+    .print-hidden {
+        display: none;
+    }
+    .print-visible {
+        display: none;
+    }
+    @print {
+        .print-visible {
+            display: inline-block;
+        }
+    }
+    body {
+        margin: 0;
+        padding: 20px;
+        font-size: 12px;
+    }
+    .card {
+        break-inside: avoid;
+        page-break-inside: avoid;
+    }
+</style>
+{% endblock %}

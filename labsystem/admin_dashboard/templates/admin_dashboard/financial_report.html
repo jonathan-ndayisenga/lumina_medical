@@ -1,0 +1,241 @@
+{% extends 'base.html' %}
+
+{% block title %}Financial Dashboard - Lumina{% endblock %}
+{% block page_title %}Financial Dashboard{% endblock %}
+{% block page_subtitle %}Use report types and filters to understand collections, costs, and profit across time.{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <div class="flex flex-wrap gap-3 justify-between items-center no-print">
+        <div class="flex gap-3 flex-wrap">
+            <a href="{% url 'receipts_list' %}" class="btn btn-secondary">Receipts List</a>
+            <a href="{% url 'financial_statements' %}" class="btn btn-secondary">Financial Statements</a>
+        </div>
+        <a href="{% url 'hospital_dashboard' %}" class="btn btn-secondary">Back to Hospital Dashboard</a>
+    </div>
+
+    <div class="card no-print">
+        <form method="get" id="financialDashboardFilters" class="grid grid-cols-1 lg:grid-cols-12 gap-4 items-end">
+            <div class="lg:col-span-4">
+                <label class="block text-sm font-semibold text-text-main mb-1" for="report_type">Report Type</label>
+                <select id="report_type" name="report_type" class="form-control">
+                    {% for value, label in report_type_options %}
+                        <option value="{{ value }}" {% if report_type == value %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+                <div class="text-xs text-text-muted mt-1">Choose what you want to visualize, then refine with filters.</div>
+            </div>
+
+            <div class="lg:col-span-2">
+                <label class="block text-sm font-semibold text-text-main mb-1" for="start_date">Start</label>
+                <input id="start_date" type="date" name="start_date" value="{{ period_start|date:'Y-m-d' }}" class="form-control">
+            </div>
+            <div class="lg:col-span-2">
+                <label class="block text-sm font-semibold text-text-main mb-1" for="end_date">End</label>
+                <input id="end_date" type="date" name="end_date" value="{{ period_end|date:'Y-m-d' }}" class="form-control">
+            </div>
+
+            <div class="lg:col-span-2" data-filter="payment_mode">
+                <label class="block text-sm font-semibold text-text-main mb-1" for="payment_mode">Payment Mode</label>
+                <select id="payment_mode" name="payment_mode" class="form-control">
+                    <option value="all" {% if payment_mode == 'all' %}selected{% endif %}>All</option>
+                    <option value="cash" {% if payment_mode == 'cash' %}selected{% endif %}>Cash</option>
+                    <option value="card" {% if payment_mode == 'card' %}selected{% endif %}>Card</option>
+                    <option value="mobile_money" {% if payment_mode == 'mobile_money' %}selected{% endif %}>Mobile Money</option>
+                </select>
+            </div>
+
+            <div class="lg:col-span-2" data-filter="bank_account">
+                <label class="block text-sm font-semibold text-text-main mb-1" for="bank_account">Bank Account</label>
+                <select id="bank_account" name="bank_account" class="form-control">
+                    <option value="">All bank accounts</option>
+                    {% for account in bank_accounts %}
+                        <option value="{{ account.id }}" {% if bank_account_id == account.id|stringformat:"s" %}selected{% endif %}>{{ account }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="lg:col-span-2" data-filter="mobile_account">
+                <label class="block text-sm font-semibold text-text-main mb-1" for="mobile_account">Mobile Money</label>
+                <select id="mobile_account" name="mobile_account" class="form-control">
+                    <option value="">All mobile money accounts</option>
+                    {% for account in mobile_accounts %}
+                        <option value="{{ account.id }}" {% if mobile_account_id == account.id|stringformat:"s" %}selected{% endif %}>{{ account }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="lg:col-span-12 flex gap-3 flex-wrap">
+                <button type="submit" class="btn btn-primary">Apply</button>
+                <a href="{% url 'financial_report' %}" class="btn btn-secondary">Reset</a>
+                <div class="ml-auto text-xs text-text-muted">
+                    Showing: <strong class="text-text-main">{{ period_start }}</strong> to <strong class="text-text-main">{{ period_end }}</strong>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <div class="card">
+        <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+            <div>
+                <h3 class="text-lg font-bold text-text-main">{{ chart_title|default:"Trend" }}</h3>
+                <p class="text-xs text-text-muted">Aggregated totals over time for the selected report.</p>
+            </div>
+        </div>
+        <div class="h-72">
+            <canvas id="financialChart" aria-label="Financial chart" role="img"></canvas>
+        </div>
+        <p class="text-xs text-text-muted mt-3">Tip: Use the filters above to zoom into a specific date range, mode, or account.</p>
+    </div>
+
+    <div class="card overflow-hidden">
+        <div class="flex items-center justify-between gap-3 mb-4">
+            <h3 class="text-lg font-bold text-text-main">Summary Table</h3>
+            <span class="text-xs text-text-muted">Grouped totals (date + mode + account).</span>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full">
+                <thead class="bg-gray-50 border-b border-gray-200">
+                    <tr>
+                        <th class="text-left px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-widest">Date</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-widest">Amount</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-widest">Mode</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-widest">Account</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200">
+                    {% for row in summary_rows %}
+                        <tr class="hover:bg-gray-50 transition-colors">
+                            <td class="px-4 py-3 text-sm text-text-main">{{ row.date }}</td>
+                            <td class="px-4 py-3 text-sm font-semibold text-text-main">{{ row.amount }}</td>
+                            <td class="px-4 py-3 text-sm text-text-muted">
+                                {% if row.mode == 'cash' %}Cash
+                                {% elif row.mode == 'card' %}Card
+                                {% elif row.mode == 'mobile_money' %}Mobile Money
+                                {% elif row.mode == 'expense' %}Expense
+                                {% elif row.mode == 'salary' %}Salary
+                                {% elif row.mode == 'net_profit' %}Net Profit
+                                {% else %}{{ row.mode }}{% endif %}
+                            </td>
+                            <td class="px-4 py-3 text-sm text-text-muted">{{ row.account }}</td>
+                        </tr>
+                    {% empty %}
+                        <tr>
+                            <td colspan="4" class="px-4 py-8 text-center text-sm text-text-muted">No data for the selected filters.</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4">
+        <a href="{% url 'financial_metric_detail' 'income_period' %}?start_date={{ period_start|date:'Y-m-d' }}&end_date={{ period_end|date:'Y-m-d' }}" class="card block hover:bg-surface-muted focus:outline-none focus:ring-2 focus:ring-brand-dark/30">
+            <h3 class="text-sm text-text-muted mb-2">Total Collected (Period)</h3>
+            <p class="text-3xl font-bold text-text-main">{{ income_period }}</p>
+            <p class="text-xs text-text-muted mt-2">{{ period_start }} - {{ period_end }}</p>
+        </a>
+        <a href="{% url 'financial_metric_detail' 'expenses_period' %}?start_date={{ period_start|date:'Y-m-d' }}&end_date={{ period_end|date:'Y-m-d' }}" class="card block hover:bg-surface-muted focus:outline-none focus:ring-2 focus:ring-brand-dark/30">
+            <h3 class="text-sm text-text-muted mb-2">Expenses (Period)</h3>
+            <p class="text-3xl font-bold text-text-main">{{ expenses_period }}</p>
+        </a>
+        <a href="{% url 'financial_metric_detail' 'salaries_period' %}?start_date={{ period_start|date:'Y-m-d' }}&end_date={{ period_end|date:'Y-m-d' }}" class="card block hover:bg-surface-muted focus:outline-none focus:ring-2 focus:ring-brand-dark/30">
+            <h3 class="text-sm text-text-muted mb-2">Salaries (Period)</h3>
+            <p class="text-3xl font-bold text-text-main">{{ salaries_period }}</p>
+        </a>
+        <a href="{% url 'financial_metric_detail' 'net_profit_period' %}?start_date={{ period_start|date:'Y-m-d' }}&end_date={{ period_end|date:'Y-m-d' }}" class="card block hover:bg-surface-muted focus:outline-none focus:ring-2 focus:ring-brand-dark/30">
+            <h3 class="text-sm text-text-muted mb-2">Net Profit (Period)</h3>
+            <p class="text-3xl font-bold text-text-main">{{ net_profit_period }}</p>
+        </a>
+        <a href="{% url 'financial_metric_detail' 'outstanding_balance' %}" class="card block hover:bg-surface-muted focus:outline-none focus:ring-2 focus:ring-brand-dark/30">
+            <h3 class="text-sm text-text-muted mb-2">Outstanding Balances</h3>
+            <p class="text-3xl font-bold text-text-main">{{ outstanding_balance }}</p>
+        </a>
+        <a href="{% url 'financial_metric_detail' 'reconciliation_variance' %}" class="card block hover:bg-surface-muted focus:outline-none focus:ring-2 focus:ring-brand-dark/30">
+            <h3 class="text-sm text-text-muted mb-2">Reconciliation Variance</h3>
+            <p class="text-3xl font-bold text-text-main">{{ reconciliation_discrepancy_total }}</p>
+        </a>
+    </div>
+
+    <div class="card no-print">
+        <h3 class="text-lg font-bold text-text-main mb-3">More Financial Tools</h3>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <a href="{% url 'manage_expenses' %}" class="btn btn-secondary justify-center">Expenses</a>
+            <a href="{% url 'manage_salaries' %}" class="btn btn-secondary justify-center">Salaries</a>
+            <a href="{% url 'bank_account_list' %}" class="btn btn-secondary justify-center">Bank Accounts</a>
+            <a href="{% url 'mobile_money_list' %}" class="btn btn-secondary justify-center">Mobile Money</a>
+            <a href="{% url 'receipts_list' %}" class="btn btn-secondary justify-center">Receipts List</a>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+<script>
+(function () {
+    const reportTypeEl = document.getElementById('report_type');
+    const paymentModeWrap = document.querySelector('[data-filter="payment_mode"]');
+    const bankWrap = document.querySelector('[data-filter="bank_account"]');
+    const mobileWrap = document.querySelector('[data-filter="mobile_account"]');
+
+    function applyFilterVisibility() {
+        const type = reportTypeEl ? reportTypeEl.value : '';
+        if (paymentModeWrap) {
+            paymentModeWrap.style.display = (type === 'income_overview') ? '' : 'none';
+        }
+        if (bankWrap) {
+            bankWrap.style.display = (type === 'card_payments') ? '' : 'none';
+        }
+        if (mobileWrap) {
+            mobileWrap.style.display = (type === 'mobile_money') ? '' : 'none';
+        }
+    }
+
+    if (reportTypeEl) {
+        reportTypeEl.addEventListener('change', function () {
+            // Keep it simple: full refresh is fine for v1.
+            document.getElementById('financialDashboardFilters').submit();
+        });
+    }
+    applyFilterVisibility();
+
+    const labels = {{ chart_labels_json|safe }};
+    const values = {{ chart_values_json|safe }};
+    const ctx = document.getElementById('financialChart');
+    if (!ctx) return;
+
+    const kind = "{{ chart_kind|default:'line' }}";
+    const datasetLabel = "{{ chart_series_label|default:'Total' }}";
+
+    new Chart(ctx, {
+        type: (kind === 'bar' ? 'bar' : 'line'),
+        data: {
+            labels: labels,
+            datasets: [{
+                label: datasetLabel,
+                data: values,
+                borderWidth: 2,
+                borderColor: '#0f3b5f',
+                backgroundColor: 'rgba(15, 59, 95, 0.18)',
+                tension: 0.25,
+                fill: (kind !== 'bar'),
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: true }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: { precision: 0 }
+                }
+            }
+        }
+    });
+})();
+</script>
+{% endblock %}

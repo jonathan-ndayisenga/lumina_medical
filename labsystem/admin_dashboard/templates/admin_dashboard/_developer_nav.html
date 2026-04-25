@@ -1,0 +1,27 @@
+<nav class="flex-1 flex flex-col gap-5 px-4 lg:px-0 pb-6 lg:pb-0" style="padding-left: 1.25rem; padding-right: 1.25rem; padding-top: 1.5rem;">
+    <div>
+        <div class="text-xs font-bold uppercase tracking-widest text-white/60 mb-2">Platform</div>
+        <div class="space-y-1">
+            <a href="{% url 'developer_dashboard' %}" class="sidebar-link {% if active_nav == 'superadmin' %}active{% endif %}">Dashboard</a>
+            <a href="{% url 'manage_hospitals' %}" class="sidebar-link {% if active_nav == 'superadmin_hospitals' %}active{% endif %}">Hospitals</a>
+        </div>
+    </div>
+
+    <details class="group" {% if active_nav == 'superadmin_plans' or active_nav == 'superadmin_payments' %}open{% endif %}>
+        <summary class="list-none cursor-pointer text-xs font-bold uppercase tracking-widest text-white/60 mb-2 flex items-center justify-between">
+            Billing
+            <span class="text-white/70 transition-transform group-open:rotate-180">v</span>
+        </summary>
+        <div class="space-y-1 pt-2">
+            <a href="{% url 'manage_subscription_plans' %}" class="sidebar-link {% if active_nav == 'superadmin_plans' %}active{% endif %}">Subscription Plans</a>
+            <a href="{% url 'manage_subscription_payments' %}" class="sidebar-link {% if active_nav == 'superadmin_payments' %}active{% endif %}">Subscription Payments</a>
+        </div>
+    </details>
+
+    <div>
+        <div class="text-xs font-bold uppercase tracking-widest text-white/60 mb-2">Compliance</div>
+        <div class="space-y-1">
+            <a href="{% url 'view_audit_logs' %}" class="sidebar-link {% if active_nav == 'superadmin_audit' %}active{% endif %}">Audit Logs</a>
+        </div>
+    </div>
+</nav>

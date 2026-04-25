@@ -1,0 +1,62 @@
+{% extends 'base.html' %}
+
+{% block title %}Manage Users - Lumina{% endblock %}
+
+{% block content %}
+<div class="space-y-5">
+    <div class="card">
+        <h3 class="text-lg font-bold text-text-main mb-4">Add Team Member</h3>
+        <form method="post" class="space-y-4">
+            {% csrf_token %}
+            {% if form.non_field_errors %}<div class="p-4 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">{{ form.non_field_errors }}</div>{% endif %}
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {% for field in form %}
+                    <div>
+                        <label for="{{ field.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">{{ field.label }}</label>
+                        {{ field }}
+                        {% for error in field.errors %}<div class="text-xs text-red-600 mt-1">{{ error }}</div>{% endfor %}
+                    </div>
+                {% endfor %}
+            </div>
+            <button type="submit" class="btn btn-primary">Create User</button>
+        </form>
+    </div>
+
+    <div class="card">
+        <h3 class="text-lg font-bold text-text-main mb-4">Hospital Users</h3>
+        <div class="overflow-x-auto">
+            <table class="w-full">
+                <thead class="bg-gray-50 border-b">
+                    <tr>
+                        <th class="text-left px-4 py-3 text-xs font-semibold uppercase">Name</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold uppercase">Username</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold uppercase">Role</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold uppercase">Email</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold uppercase">Status</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold uppercase">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y">
+                    {% for user_item in users %}
+                        <tr class="hover:bg-gray-50">
+                            <td class="px-4 py-3 text-sm">{{ user_item.get_full_name|default:user_item.username }}</td>
+                            <td class="px-4 py-3 text-sm">{{ user_item.username }}</td>
+                            <td class="px-4 py-3 text-sm">{{ user_item.get_role_display }}</td>
+                            <td class="px-4 py-3 text-sm text-text-muted">{{ user_item.email|default:"-" }}</td>
+                            <td class="px-4 py-3 text-sm"><span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold {% if user_item.is_active %}bg-green-50 text-green-700{% else %}bg-gray-100 text-gray-600{% endif %}">{% if user_item.is_active %}Active{% else %}Inactive{% endif %}</span></td>
+                            <td class="px-4 py-3 text-sm">
+                                <div class="flex gap-2 flex-wrap">
+                                    <a href="{% url 'edit_user' user_item.pk %}" class="btn btn-secondary btn-sm">Edit</a>
+                                    {% if user_item.is_active %}<a href="{% url 'deactivate_user' user_item.pk %}" class="btn btn-danger btn-sm">Deactivate</a>{% endif %}
+                                </div>
+                            </td>
+                        </tr>
+                    {% empty %}
+                        <tr><td colspan="6" class="px-4 py-3 text-center text-text-muted">No users added yet.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

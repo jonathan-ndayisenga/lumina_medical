@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+
+{% block title %}Mobile Money Statement - Hospital EMR{% endblock %}
+{% block page_title %}Mobile Money Statement{% endblock %}
+{% block page_subtitle %}Compare internal mobile-money totals against recorded mobile money statement transactions.{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <div class="card max-w-3xl">
+        <h3 class="text-lg font-bold text-text-main mb-1">Generate Statement</h3>
+        <p class="text-sm text-text-muted mb-4">Select a mobile money account and period, then generate a reconciliation snapshot.</p>
+        <form method="post" class="space-y-4">
+            {% csrf_token %}
+            {% if form.non_field_errors %}
+                <div class="p-4 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">
+                    {{ form.non_field_errors }}
+                </div>
+            {% endif %}
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {% for field in form %}
+                    <div>
+                        <label for="{{ field.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">{{ field.label }}</label>
+                        {{ field }}
+                        {% for error in field.errors %}
+                            <div class="text-xs text-red-600 mt-1">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+                {% endfor %}
+            </div>
+            <div class="flex gap-3 flex-wrap pt-4 border-t border-gray-200">
+                <button type="submit" class="btn btn-primary">Generate Statement</button>
+                <a href="{% url 'mobile_money_list' %}" class="btn btn-secondary">Mobile Money Accounts</a>
+            </div>
+        </form>
+    </div>
+
+    <div class="card">
+        <h3 class="text-lg font-bold text-text-main mb-4">Internal Mobile Money Payments (Selected Account)</h3>
+        <div class="overflow-x-auto mb-4">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Receipt</th>
+                        <th>Patient</th>
+                        <th>Mobile Account</th>
+                        <th>Amount</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for payment in internal_payments %}
+                        <tr>
+                            <td class="text-sm text-text-muted">{{ payment.paid_at|date:"Y-m-d H:i" }}</td>
+                            <td class="font-semibold text-text-main">{{ payment.receipt_number }}</td>
+                            <td class="text-sm text-text-muted">{{ payment.visit.patient.name }}</td>
+                            <td class="text-sm text-text-muted">{{ payment.mobile_account }}</td>
+                            <td class="font-semibold text-text-main">{{ payment.amount_paid }}</td>
+                        </tr>
+                    {% empty %}
+                        <tr>
+                            <td colspan="5" class="text-sm text-text-muted italic py-4">Select an account and period to view internal mobile money payments for reconciliation.</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="flex items-center justify-between gap-4 mb-4">
+            <h3 class="text-lg font-bold text-text-main">Recent Statements</h3>
+        </div>
+        <div class="overflow-x-auto">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Generated</th>
+                        <th>Mobile Money</th>
+                        <th>Period</th>
+                        <th>Internal Total</th>
+                        <th>External Credits</th>
+                        <th class="no-print">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for statement in recent_statements %}
+                        <tr>
+                            <td class="text-sm text-text-muted">{{ statement.generated_at|date:"Y-m-d H:i" }}</td>
+                            <td class="text-sm text-text-muted">{{ statement.mobile_money_account }}</td>
+                            <td class="text-sm text-text-muted">{{ statement.period_start }} - {{ statement.period_end }}</td>
+                            <td class="font-semibold text-text-main">{{ statement.reconciled_balance }}</td>
+                            <td class="font-semibold text-text-main">{{ statement.total_deposits }}</td>
+                            <td class="no-print">
+                                <a href="{% url 'reconciliation_detail' statement.pk %}" class="btn btn-secondary btn-sm">View</a>
+                            </td>
+                        </tr>
+                    {% empty %}
+                        <tr>
+                            <td colspan="6" class="text-sm text-text-muted italic py-6">No statements generated yet.</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+

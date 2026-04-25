@@ -64,6 +64,10 @@ def database_config():
         return {
             "ENGINE": "django.db.backends.sqlite3",
             "NAME": BASE_DIR / "db.sqlite3",
+            "OPTIONS": {
+                # Avoid "database is locked" during local dev when requests overlap.
+                "timeout": int(env("SQLITE_TIMEOUT", "30")),
+            },
         }
     # App Platform can leave unresolved bindable placeholders like ${db.DATABASE_URL}
     # during builds or when the backing resource is missing. Fall back to SQLite
@@ -72,6 +76,9 @@ def database_config():
         return {
             "ENGINE": "django.db.backends.sqlite3",
             "NAME": BASE_DIR / "db.sqlite3",
+            "OPTIONS": {
+                "timeout": int(env("SQLITE_TIMEOUT", "30")),
+            },
         }
 
     parsed = urlparse(database_url)
@@ -118,6 +125,9 @@ def database_config():
         return {
             "ENGINE": "django.db.backends.sqlite3",
             "NAME": BASE_DIR / db_name,
+            "OPTIONS": {
+                "timeout": int(env("SQLITE_TIMEOUT", "30")),
+            },
         }
 
     # Some platforms surface PostgreSQL credentials as a libpq-style DSN such as:
@@ -167,7 +177,7 @@ if not DEBUG and SECRET_KEY == default_dev_secret:
 
 ALLOWED_HOSTS = env_list(
     "DJANGO_ALLOWED_HOSTS",
-    "127.0.0.1,localhost",
+    "127.0.0.1,localhost,testserver",
 )
 
 CSRF_TRUSTED_ORIGINS = env_list(
@@ -183,7 +193,12 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    "accounts",
+    "admin_dashboard",
+    "doctor",
     "lab",
+    "nurse",
+    "reception",
 ]
 
 MIDDLEWARE = [
@@ -192,6 +207,7 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "labsystem.middleware.HospitalMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
@@ -225,6 +241,9 @@ DATABASES = {
 }
 
 
+AUTH_USER_MODEL = "accounts.User"
+
+
 AUTH_PASSWORD_VALIDATORS = [
     {
         "NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator",
@@ -256,7 +275,9 @@ STATICFILES_DIRS = [project_static_dir] if project_static_dir.exists() else []
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
-if importlib.util.find_spec("whitenoise") is not None:
+# Use WhiteNoise manifest storage only in production-like environments.
+# In DEBUG/tests we avoid the manifest requirement so templates can render without collectstatic.
+if importlib.util.find_spec("whitenoise") is not None and not DEBUG:
     STORAGES = {
         "default": {
             "BACKEND": "django.core.files.storage.FileSystemStorage",
@@ -268,7 +289,7 @@ if importlib.util.find_spec("whitenoise") is not None:
 
 
 LOGIN_URL = "login"
-LOGIN_REDIRECT_URL = "report_list"
+LOGIN_REDIRECT_URL = "app_home"  # Role-based router that checks user role
 LOGOUT_REDIRECT_URL = "login"
 
 

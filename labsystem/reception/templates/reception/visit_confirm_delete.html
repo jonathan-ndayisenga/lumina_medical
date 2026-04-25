@@ -1,0 +1,29 @@
+{% extends 'base.html' %}
+
+{% block title %}Delete Visit - Hospital EMR{% endblock %}
+{% block page_title %}Delete Visit{% endblock %}
+{% block page_subtitle %}Confirm removal of an unprocessed visit before it enters the care workflow.{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl">
+    <div class="card space-y-4">
+        <div>
+            <h3 class="text-lg font-semibold text-text-main">Remove visit for {{ visit.patient.name }}?</h3>
+            <p class="text-sm text-text-muted mt-2">This only affects visits that have not yet had any processed workflow activity.</p>
+        </div>
+
+        <div class="rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm text-text-main space-y-1">
+            <p><strong>Visit Date:</strong> {{ visit.visit_date|date:"M d, Y H:i" }}</p>
+            <p><strong>Status:</strong> {{ visit.get_status_display }}</p>
+            <p><strong>Total Bill:</strong> {{ visit.total_amount }}</p>
+            {% if visit.notes %}<p><strong>Notes:</strong> {{ visit.notes }}</p>{% endif %}
+        </div>
+
+        <form method="post" class="flex gap-3 flex-wrap">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">Delete Visit</button>
+            <a href="{% url 'patient_list' %}" class="btn btn-secondary">Cancel</a>
+        </form>
+    </div>
+</div>
+{% endblock %}

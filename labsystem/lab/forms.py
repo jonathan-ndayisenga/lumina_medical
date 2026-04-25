@@ -64,6 +64,10 @@ class LabReportForm(forms.ModelForm):
             self.fields['age_value'].initial = age_value
         self.fields['age_unit'].initial = age_unit or 'YRS'
 
+        if self.instance and self.instance.pk and self.instance.visit_id:
+            for field_name in ('patient_name', 'age_value', 'age_unit', 'patient_sex'):
+                self.fields[field_name].disabled = True
+
     @staticmethod
     def _split_age(value):
         raw = (value or '').strip().upper()
@@ -106,8 +110,9 @@ class TestResultForm(forms.ModelForm):
 
     class Meta:
         model = TestResult
-        fields = ['section_name', 'display_order', 'result_value', 'reference_range', 'unit', 'comment']
+        fields = ['source_profile', 'section_name', 'display_order', 'result_value', 'reference_range', 'unit', 'comment']
         widgets = {
+            'source_profile': forms.HiddenInput(),
             'section_name': forms.HiddenInput(),
             'display_order': forms.HiddenInput(),
             'result_value': forms.TextInput(attrs={'placeholder': 'Result', 'class': 'result-field'}),

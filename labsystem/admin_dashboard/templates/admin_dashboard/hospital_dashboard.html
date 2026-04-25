@@ -1,0 +1,211 @@
+{% extends 'base.html' %}
+
+{% block title %}Hospital Admin Dashboard - Hospital EMR{% endblock %}
+
+{% block page_title %}Hospital Dashboard{% endblock %}
+{% block page_subtitle %}Monitor hospital operations and key metrics in real-time.{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Current Hospital Card -->
+    <div class="card">
+        <div class="flex items-start justify-between">
+            <div>
+                <h3 class="text-lg font-semibold text-text-main mb-1">{{ hospital.name|default:"No Hospital Assigned" }}</h3>
+                {% if hospital %}
+                    <p class="text-sm text-text-muted">Subdomain: <code class="bg-gray-100 px-2 py-1 rounded text-xs font-mono">{{ hospital.subdomain }}</code></p>
+                {% else %}
+                    <p class="text-sm text-red-600">No hospital has been linked to this account yet.</p>
+                {% endif %}
+            </div>
+            <div class="inline-block px-3 py-1 rounded-full bg-green-50 text-green-700 text-xs font-medium">Active</div>
+        </div>
+    </div>
+
+    <!-- KPI Cards Grid -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div class="card">
+            <p class="text-text-muted text-sm font-medium mb-2">Total Users</p>
+            <p class="text-3xl font-bold text-brand-dark">{{ user_count }}</p>
+            <p class="text-xs text-text-muted mt-2">Across all roles</p>
+        </div>
+        
+        <div class="card">
+            <p class="text-text-muted text-sm font-medium mb-2">Registered Patients</p>
+            <p class="text-3xl font-bold text-brand-dark">{{ patient_count }}</p>
+            <p class="text-xs text-text-muted mt-2">In system</p>
+        </div>
+        
+        <div class="card">
+            <p class="text-text-muted text-sm font-medium mb-2">Total Visits</p>
+            <p class="text-3xl font-bold text-brand-dark">{{ visit_count }}</p>
+            <p class="text-xs text-text-muted mt-2">{{ completed_visit_count }} completed</p>
+        </div>
+        
+        <div class="card">
+            <p class="text-text-muted text-sm font-medium mb-2">Open Queue Items</p>
+            <p class="text-3xl font-bold text-brand-dark">{{ open_queue_count }}</p>
+            <p class="text-xs text-text-muted mt-2">Pending service</p>
+        </div>
+    </div>
+
+    <!-- Financial Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="card">
+            <p class="text-text-muted text-sm font-medium mb-2">Total Billed</p>
+            <p class="text-2xl font-bold text-brand-dark">{{ total_billed }}</p>
+            <a href="{% url 'financial_report' %}" class="text-xs text-brand-dark hover:underline mt-3 inline-block font-medium">View details →</a>
+        </div>
+        
+        <div class="card">
+            <p class="text-text-muted text-sm font-medium mb-2">Realized Income</p>
+            <p class="text-2xl font-bold text-green-600">{{ realized_income }}</p>
+            <p class="text-xs text-text-muted mt-2">Amount paid</p>
+        </div>
+        
+        <div class="card">
+            <p class="text-text-muted text-sm font-medium mb-2">Account Balance</p>
+            <p class="text-2xl font-bold text-brand-dark">{{ account_balance }}</p>
+            <p class="text-xs text-text-muted mt-2">Current</p>
+        </div>
+    </div>
+
+    <!-- Management Grid -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <!-- Team Coverage -->
+        <div class="card">
+            <h4 class="text-sm font-semibold text-text-main mb-4">Team Coverage</h4>
+            <div class="space-y-2">
+                <div class="flex justify-between items-center text-sm">
+                    <span class="text-text-muted">Receptionists</span>
+                    <span class="font-semibold text-text-main">{{ receptionist_count }}</span>
+                </div>
+                <div class="flex justify-between items-center text-sm">
+                    <span class="text-text-muted">Lab Attendants</span>
+                    <span class="font-semibold text-text-main">{{ lab_attendant_count }}</span>
+                </div>
+                <div class="flex justify-between items-center text-sm">
+                    <span class="text-text-muted">Doctors</span>
+                    <span class="font-semibold text-text-main">{{ doctor_count }}</span>
+                </div>
+                <div class="flex justify-between items-center text-sm">
+                    <span class="text-text-muted">Nurses</span>
+                    <span class="font-semibold text-text-main">{{ nurse_count }}</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Operational Queues -->
+        <div class="card">
+            <h4 class="text-sm font-semibold text-text-main mb-4">Active Queues</h4>
+            <div class="space-y-2">
+                <div class="flex justify-between items-center text-sm">
+                    <span class="text-text-muted">Lab Queue</span>
+                    <span class="inline-block px-2 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-medium">{{ lab_queue_count }}</span>
+                </div>
+                <div class="flex justify-between items-center text-sm">
+                    <span class="text-text-muted">Doctor Queue</span>
+                    <span class="inline-block px-2 py-1 rounded-full bg-purple-50 text-purple-700 text-xs font-medium">{{ doctor_queue_count }}</span>
+                </div>
+                <div class="flex justify-between items-center text-sm">
+                    <span class="text-text-muted">Nurse Queue</span>
+                    <span class="inline-block px-2 py-1 rounded-full bg-indigo-50 text-indigo-700 text-xs font-medium">{{ nurse_queue_count }}</span>
+                </div>
+                <div class="flex justify-between items-center text-sm">
+                    <span class="text-text-muted">Draft Reports</span>
+                    <span class="inline-block px-2 py-1 rounded-full bg-orange-50 text-orange-700 text-xs font-medium">{{ draft_reports }}</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Billing Snapshot -->
+        <div class="card">
+            <h4 class="text-sm font-semibold text-text-main mb-4">Billing Overview</h4>
+            <div class="space-y-2">
+                <div class="flex justify-between items-center text-sm">
+                    <span class="text-text-muted">Paid Visits</span>
+                    <span class="font-semibold text-text-main">{{ paid_visits }}</span>
+                </div>
+                <div class="flex justify-between items-center text-sm">
+                    <span class="text-text-muted">Pending Payments</span>
+                    <span class="font-semibold text-red-600">{{ pending_payments }}</span>
+                </div>
+                <div class="flex justify-between items-center text-sm">
+                    <span class="text-text-muted">Active Services</span>
+                    <span class="font-semibold text-text-main">{{ service_count }}</span>
+                </div>
+                <div class="flex justify-between items-center text-sm">
+                    <span class="text-text-muted">Lab Reports</span>
+                    <span class="font-semibold text-text-main">{{ report_count }}</span>
+                </div>
+            </div>
+            <a href="{% url 'financial_report' %}" class="btn btn-secondary btn-sm mt-4 w-full text-center">View Full Report</a>
+        </div>
+    </div>
+
+    <!-- Inventory Watch -->
+    <div class="card">
+        <h4 class="text-sm font-semibold text-text-main mb-4">⚠️ Inventory Watch</h4>
+        {% if low_stock_items %}
+            <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4 space-y-2">
+                {% for item in low_stock_items %}
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <p class="text-sm font-medium text-text-main">{{ item.name }}</p>
+                            <p class="text-xs text-text-muted">{{ item.quantity }} remaining</p>
+                        </div>
+                        <span class="inline-block px-2 py-1 rounded-full bg-red-100 text-red-700 text-xs font-medium">Low (&lt; {{ item.low_stock_threshold }})</span>
+                    </div>
+                {% endfor %}
+            </div>
+        {% else %}
+            <p class="text-sm text-text-muted text-center py-4">✓ All inventory levels are healthy</p>
+        {% endif %}
+    </div>
+
+    <!-- Recent Activity -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div class="card">
+            <h4 class="text-sm font-semibold text-text-main mb-4">Recent Visits</h4>
+            <div class="space-y-2 max-h-64 overflow-y-auto">
+                {% for visit in recent_visits %}
+                    <div class="text-sm border-b border-gray-100 pb-2 last:border-0">
+                        <p class="font-medium text-text-main">{{ visit.patient.name }}</p>
+                        <p class="text-xs text-text-muted">{{ visit.visit_date|date:"M d, Y H:i" }}</p>
+                        <span class="inline-block mt-1 px-2 py-0.5 rounded text-xs font-medium {% if visit.status == 'completed' %}bg-green-50 text-green-700{% elif visit.status == 'in_progress' %}bg-blue-50 text-blue-700{% else %}bg-gray-50 text-gray-700{% endif %}">
+                            {{ visit.get_status_display }}
+                        </span>
+                    </div>
+                {% empty %}
+                    <p class="text-sm text-text-muted text-center py-8">No visits recorded yet</p>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="card">
+            <h4 class="text-sm font-semibold text-text-main mb-4">Recent Lab Reports</h4>
+            <div class="space-y-2 max-h-64 overflow-y-auto">
+                {% for report in recent_reports %}
+                    <div class="text-sm border-b border-gray-100 pb-2 last:border-0">
+                        <p class="font-medium text-text-main">{{ report.patient_name }}</p>
+                        <p class="text-xs text-text-muted">{{ report.sample_date|date:"M d, Y" }}</p>
+                        <span class="inline-block mt-1 px-2 py-0.5 rounded text-xs font-medium {% if report.printed %}bg-green-50 text-green-700{% else %}bg-orange-50 text-orange-700{% endif %}">
+                            {% if report.printed %}Printed{% else %}Draft{% endif %}
+                        </span>
+                    </div>
+                {% empty %}
+                    <p class="text-sm text-text-muted text-center py-8">No reports yet</p>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Info Box -->
+    <div class="card bg-brand-soft border-l-4 border-brand-dark">
+        <h4 class="text-sm font-semibold text-brand-dark mb-2">Dashboard Overview</h4>
+        <p class="text-sm text-text-muted">
+            This dashboard provides a comprehensive view of your hospital's operations across all departments. Monitor staffing levels, patient queues, billing, inventory, and recent activity in real-time.
+        </p>
+    </div>
+</div>
+{% endblock %}

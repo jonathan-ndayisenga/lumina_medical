@@ -1,0 +1,61 @@
+{% extends 'base.html' %}
+
+{% block title %}Inventory - Lumina{% endblock %}
+
+{% block content %}
+<div class="space-y-5">
+    <div class="card">
+        <h3 class="text-lg font-bold text-text-main mb-4">Add Inventory Item</h3>
+        <form method="post" class="space-y-4">
+            {% csrf_token %}
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {% for field in form %}
+                    <div>
+                        <label for="{{ field.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">{{ field.label }}</label>
+                        {{ field }}
+                        {% for error in field.errors %}<div class="text-xs text-red-600 mt-1">{{ error }}</div>{% endfor %}
+                    </div>
+                {% endfor %}
+            </div>
+            <button type="submit" class="btn btn-primary">Save Inventory Item</button>
+        </form>
+    </div>
+
+    <div class="card">
+        <h3 class="text-lg font-bold text-text-main mb-4">Inventory Items</h3>
+        <div class="overflow-x-auto">
+            <table class="w-full">
+                <thead class="bg-gray-50 border-b">
+                    <tr>
+                        <th class="text-left px-4 py-3 text-xs font-semibold uppercase">Name</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold uppercase">Quantity</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold uppercase">Threshold</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold uppercase">Unit Price</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold uppercase">Alert</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold uppercase">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y">
+                    {% for item in inventory_items %}
+                        <tr class="hover:bg-gray-50">
+                            <td class="px-4 py-3 text-sm text-text-main">{{ item.name }}</td>
+                            <td class="px-4 py-3 text-sm font-semibold text-text-main">{{ item.quantity }}</td>
+                            <td class="px-4 py-3 text-sm text-text-muted">{{ item.low_stock_threshold }}</td>
+                            <td class="px-4 py-3 text-sm text-text-main">{{ item.unit_price }}</td>
+                            <td class="px-4 py-3 text-sm"><span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold {% if item.is_low_stock %}bg-red-50 text-red-700{% else %}bg-green-50 text-green-700{% endif %}">{% if item.is_low_stock %}Low Stock{% else %}OK{% endif %}</span></td>
+                            <td class="px-4 py-3 text-sm">
+                                <div class="flex gap-2 flex-wrap">
+                                    <a href="{% url 'edit_inventory_item' item.pk %}" class="btn btn-secondary btn-sm">Edit</a>
+                                    <a href="{% url 'delete_inventory_item' item.pk %}" class="btn btn-danger btn-sm">Delete</a>
+                                </div>
+                            </td>
+                        </tr>
+                    {% empty %}
+                        <tr><td colspan="6" class="px-4 py-3 text-center text-text-muted">No inventory items recorded yet.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

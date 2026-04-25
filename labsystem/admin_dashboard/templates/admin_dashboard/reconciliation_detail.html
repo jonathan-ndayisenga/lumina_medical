@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+
+{% block title %}Reconciliation Detail - Hospital EMR{% endblock %}
+{% block page_title %}Reconciliation Detail{% endblock %}
+{% block page_subtitle %}Review statement balances and totals for the selected period.{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <div class="flex gap-3 flex-wrap no-print">
+        <a href="{% url 'financial_report' %}" class="btn btn-secondary">Back to Financial Report</a>
+        {% if statement.statement_type == 'bank' %}
+            <a href="{% url 'bank_reconciliation' %}" class="btn btn-secondary">Back to Bank Statements</a>
+        {% elif statement.statement_type == 'mobile_money' %}
+            <a href="{% url 'mobile_money_statement' %}" class="btn btn-secondary">Back to Mobile Money Statement</a>
+        {% else %}
+            <a href="{% url 'three_way_reconciliation' %}" class="btn btn-secondary">Back to Three-Way Reconciliation</a>
+        {% endif %}
+    </div>
+
+    <div class="card">
+        <div class="flex items-start justify-between gap-6 flex-wrap">
+            <div>
+                <h3 class="text-lg font-bold text-text-main">{{ statement.get_statement_type_display }}</h3>
+                <p class="text-sm text-text-muted mt-1">Period: {{ statement.period_start }} - {{ statement.period_end }}</p>
+                {% if statement.bank_account %}
+                    <p class="text-sm text-text-muted mt-1">Bank account: {{ statement.bank_account }}</p>
+                {% endif %}
+                {% if statement.mobile_money_account %}
+                    <p class="text-sm text-text-muted mt-1">Mobile money: {{ statement.mobile_money_account }}</p>
+                {% endif %}
+                <p class="text-xs text-text-muted mt-2">Generated {{ statement.generated_at|date:"Y-m-d H:i" }} by {{ statement.generated_by.get_full_name|default:statement.generated_by.username|default:"-" }}</p>
+            </div>
+            <div class="flex gap-3 flex-wrap no-print">
+                <button type="button" class="btn btn-primary" onclick="window.print()">Print</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div class="card">
+            <h4 class="text-sm text-text-muted mb-2">Opening Balance</h4>
+            <div class="text-3xl font-bold text-text-main">{{ statement.opening_balance }}</div>
+        </div>
+        <div class="card">
+            <h4 class="text-sm text-text-muted mb-2">Total Deposits</h4>
+            <div class="text-3xl font-bold text-text-main">{{ statement.total_deposits }}</div>
+        </div>
+        <div class="card">
+            <h4 class="text-sm text-text-muted mb-2">Total Withdrawals</h4>
+            <div class="text-3xl font-bold text-text-main">{{ statement.total_withdrawals }}</div>
+        </div>
+        <div class="card">
+            <h4 class="text-sm text-text-muted mb-2">Closing Balance</h4>
+            <div class="text-3xl font-bold text-text-main">{{ statement.closing_balance }}</div>
+        </div>
+        <div class="card">
+            <h4 class="text-sm text-text-muted mb-2">Outstanding Checks</h4>
+            <div class="text-3xl font-bold text-text-main">{{ statement.outstanding_checks }}</div>
+        </div>
+        <div class="card">
+            <h4 class="text-sm text-text-muted mb-2">Internal / Reconciled Total</h4>
+            <div class="text-3xl font-bold text-text-main">{{ statement.reconciled_balance }}</div>
+        </div>
+    </div>
+</div>
+{% endblock %}

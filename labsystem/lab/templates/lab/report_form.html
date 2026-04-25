@@ -1,0 +1,926 @@
+{% extends 'base.html' %}
+
+{% block title %}{% if edit_mode %}Edit{% else %}New{% endif %} Lab Report - Lumina Medical Services{% endblock %}
+{% block page_title %}{% if edit_mode %}Edit Lab Report{% else %}Create Lab Report{% endif %}{% endblock %}
+{% block page_subtitle %}Capture one requested test at a time, save it, then return for the next until the report is ready for handoff.{% endblock %}
+
+{% block extra_css %}
+<style>
+    @media (max-width: 768px) {
+        .template-toolbar,
+        .lab-report-actions,
+        .lab-report-actions > div:last-child {
+            display: flex;
+            flex-direction: column;
+            align-items: stretch;
+        }
+
+        .template-toolbar .btn,
+        .lab-report-actions .btn {
+            width: 100%;
+        }
+
+        .lab-results-table {
+            min-width: 760px !important;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<form method="post" id="labReportForm" class="space-y-6">
+    {% csrf_token %}
+
+    <div class="card">
+        <h3 class="text-lg font-bold text-text-main mb-4">Template Selection</h3>
+        <p class="text-sm text-text-muted mb-4">Choose the requested lab test you are working on, then load only that template into the report.</p>
+
+        {% if pending_requested_services or completed_requested_services %}
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+            <div class="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <strong class="block text-blue-900 mb-2">Still Waiting in the Queue</strong>
+                {% if pending_requested_services %}
+                    <div class="flex flex-wrap gap-2">
+                        {% for item in pending_requested_services %}
+                            <span class="inline-flex items-center px-3 py-1 rounded-full bg-white text-blue-900 text-sm font-semibold border border-blue-200">{{ item.service_name }}</span>
+                        {% endfor %}
+                    </div>
+                    <p class="text-xs text-blue-700 mt-3">Select one of these tests below, load its template, save it, and come back for the next one.</p>
+                {% else %}
+                    <p class="text-sm text-blue-800">No requested lab tests are waiting anymore.</p>
+                {% endif %}
+            </div>
+            <div class="p-4 bg-emerald-50 border border-emerald-200 rounded-lg">
+                <strong class="block text-emerald-900 mb-2">Already Captured in This Visit</strong>
+                {% if completed_requested_services %}
+                    <div class="flex flex-wrap gap-2">
+                        {% for item in completed_requested_services %}
+                            <span class="inline-flex items-center px-3 py-1 rounded-full bg-white text-emerald-900 text-sm font-semibold border border-emerald-200">{{ item.service_name }}</span>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <p class="text-sm text-emerald-800">No requested services have been completed yet.</p>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+
+        {% if pending_requested_services %}
+        <div class="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-4 items-end mb-4">
+            <div>
+                <label for="requested-service-select" class="block text-sm font-semibold text-text-main mb-1">Requested Test to Work On</label>
+                <select id="requested-service-select" name="requested_service_id" class="form-control">
+                    <option value="">Select the requested test</option>
+                    {% for item in pending_requested_services %}
+                        <option value="{{ item.visit_service_id }}" {% if selected_requested_service_id == item.visit_service_id|stringformat:"s" %}selected{% endif %}>
+                            {{ item.service_name }}{% if item.test_profile_name %} - {{ item.test_profile_name }}{% else %} - Manual Entry{% endif %}
+                        </option>
+                    {% endfor %}
+                </select>
+                <p class="mt-2 text-xs text-text-muted">The template dropdown below will switch to the matching profile for the test you select here.</p>
+            </div>
+            <div class="p-3 rounded-lg bg-gray-50 border border-gray-200 text-sm text-text-muted">{{ pending_requested_services|length }} test{{ pending_requested_services|length|pluralize }} waiting</div>
+        </div>
+        {% endif %}
+
+        <div class="template-toolbar flex gap-4 items-end flex-wrap mb-4">
+            <div class="flex-1 min-w-[16rem]">
+                <label for="{{ form.profile.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">Additional Template</label>
+                {{ form.profile }}
+                {% if form.profile.errors %}
+                    <div class="text-xs text-red-600 mt-1">{{ form.profile.errors }}</div>
+                {% endif %}
+                <p class="mt-2 text-xs text-text-muted">Tip: choose “Manual Entry (Simple)” to capture test + result only.</p>
+            </div>
+            <button type="button" id="load-template-btn" class="btn btn-secondary">Load Additional Template</button>
+        </div>
+
+        <div id="template-preview" class="p-3 bg-brand-soft border border-gray-200 rounded-lg text-text-main hidden" style="display:none;"></div>
+
+        <div id="loaded-templates" class="mt-4 hidden" style="display:none;">
+            <div class="text-xs font-semibold uppercase tracking-wide text-text-muted mb-2">Loaded Templates</div>
+            <div id="loaded-templates-list" class="flex flex-wrap gap-2"></div>
+            <p class="mt-2 text-xs text-text-muted">Remove a whole template from this report if you loaded it by mistake.</p>
+        </div>
+    </div>
+
+    <div class="card">
+        <h3 class="text-lg font-bold text-text-main mb-4">Patient Information</h3>
+        <p class="text-sm text-text-muted mb-4">This is the patient biodata block used on-screen and on the printed report.</p>
+
+        {% if linked_visit %}
+        <div class="p-3 bg-brand-soft border border-gray-200 rounded-lg text-text-main mb-4">
+            Linked to visit #{{ linked_visit.pk }} for {{ linked_visit.patient.name }}.
+            Patient biodata is being pulled from reception and preserved here as the report snapshot.
+        </div>
+        {% endif %}
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+            <div>
+                <label for="{{ form.patient_name.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">Name</label>
+                {{ form.patient_name }}
+                {% if form.patient_name.errors %}<div class="text-xs text-red-600 mt-1">{{ form.patient_name.errors }}</div>{% endif %}
+            </div>
+            <div>
+                <label for="{{ form.age_value.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">Age</label>
+                <div class="space-y-1">
+                    {{ form.patient_age }}
+                    <div class="flex gap-3 items-end">
+                        <div class="flex-1">
+                            {{ form.age_value }}
+                        </div>
+                        <div class="w-40">
+                            {{ form.age_unit }}
+                        </div>
+                    </div>
+                    <div class="text-xs text-text-muted">Choose whether the age is in years or months.</div>
+                </div>
+                {% if form.age_value.errors %}<div class="text-xs text-red-600 mt-1">{{ form.age_value.errors }}</div>{% endif %}
+                {% if form.age_unit.errors %}<div class="text-xs text-red-600 mt-1">{{ form.age_unit.errors }}</div>{% endif %}
+                {% if form.patient_age.errors %}<div class="text-xs text-red-600 mt-1">{{ form.patient_age.errors }}</div>{% endif %}
+            </div>
+            <div>
+                <label for="{{ form.patient_sex.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">Sex</label>
+                {{ form.patient_sex }}
+                {% if form.patient_sex.errors %}<div class="text-xs text-red-600 mt-1">{{ form.patient_sex.errors }}</div>{% endif %}
+            </div>
+            <div>
+                <label for="{{ form.referred_by.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">Referred By</label>
+                {{ form.referred_by }}
+                {% if form.referred_by.errors %}<div class="text-xs text-red-600 mt-1">{{ form.referred_by.errors }}</div>{% endif %}
+            </div>
+            <div>
+                <label for="{{ form.sample_date.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">Sample Date</label>
+                {{ form.sample_date }}
+                {% if form.sample_date.errors %}<div class="text-xs text-red-600 mt-1">{{ form.sample_date.errors }}</div>{% endif %}
+            </div>
+            <div>
+                <label for="{{ form.specimen_type.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">Specimen</label>
+                {{ form.specimen_type }}
+                {% if form.specimen_type.errors %}<div class="text-xs text-red-600 mt-1">{{ form.specimen_type.errors }}</div>{% endif %}
+            </div>
+            <div>
+                <label for="{{ form.attendant_name.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">Technician</label>
+                {{ form.attendant_name }}
+                {% if form.attendant_name.errors %}<div class="text-xs text-red-600 mt-1">{{ form.attendant_name.errors }}</div>{% endif %}
+            </div>
+        </div>
+
+        <div>
+            <label for="{{ form.comments.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">Report Comments</label>
+            {{ form.comments }}
+            {% if form.comments.errors %}<div class="text-xs text-red-600 mt-1">{{ form.comments.errors }}</div>{% endif %}
+        </div>
+    </div>
+
+    <div class="card">
+        <h3 class="text-lg font-bold text-text-main mb-4">Laboratory Results</h3>
+        <p class="text-sm text-text-muted mb-4">Load templates as needed, fill result values, and remove any rows or templates you don’t need.</p>
+
+        <div class="overflow-x-auto mb-4">
+            <table class="w-full lab-results-table" style="min-width:980px; border-collapse:separate; border-spacing:0; border:1px solid var(--brand-border); border-radius:12px; overflow:hidden;">
+                <thead style="background:var(--brand-soft);">
+                    <tr>
+                        <th class="header-test text-left px-4 py-3 text-xs font-semibold uppercase" style="width: 26%;">Investigation Parameter</th>
+                        <th class="header-result text-left px-4 py-3 text-xs font-semibold uppercase" style="width: 18%;">Result</th>
+                        <th class="header-range text-left px-4 py-3 text-xs font-semibold uppercase" style="width: 20%;">Reference Range</th>
+                        <th class="header-unit text-left px-4 py-3 text-xs font-semibold uppercase" style="width: 12%;">Units</th>
+                        <th class="header-comment text-left px-4 py-3 text-xs font-semibold uppercase" style="width: 18%;">Comment</th>
+                        <th style="width: 6%; text-align:center;">Remove</th>
+                    </tr>
+                </thead>
+                <tbody id="results-body" class="divide-y">
+                    {{ formset.management_form }}
+                    {% for result_form in formset %}
+                    <tr class="result-row hover:bg-gray-50">
+                        <td class="px-4 py-2">
+                            {{ result_form.id }}
+                            {{ result_form.source_profile }}
+                            {{ result_form.section_name }}
+                            {{ result_form.display_order }}
+                            <div class="section-pill inline-flex items-center px-2 py-1 rounded-full bg-brand-soft text-text-main text-xs font-semibold mb-1" {% if not result_form.section_name.value %}style="display:none;"{% endif %}>
+                                {{ result_form.section_name.value|default:'' }}
+                            </div>
+                            {{ result_form.test_name }}
+                            {% if result_form.test_name.errors %}<div class="text-xs text-red-600 mt-1">{{ result_form.test_name.errors|striptags }}</div>{% endif %}
+                        </td>
+                        <td class="px-4 py-2">
+                            {{ result_form.result_value }}
+                            {% if result_form.result_value.errors %}<div class="text-xs text-red-600 mt-1">{{ result_form.result_value.errors|striptags }}</div>{% endif %}
+                        </td>
+                        <td class="px-4 py-2">
+                            {{ result_form.reference_range }}
+                            {% if result_form.reference_range.errors %}<div class="text-xs text-red-600 mt-1">{{ result_form.reference_range.errors|striptags }}</div>{% endif %}
+                        </td>
+                        <td class="px-4 py-2">
+                            {{ result_form.unit }}
+                            {% if result_form.unit.errors %}<div class="text-xs text-red-600 mt-1">{{ result_form.unit.errors|striptags }}</div>{% endif %}
+                        </td>
+                        <td class="px-4 py-2">
+                            {{ result_form.comment }}
+                            {% if result_form.comment.errors %}<div class="text-xs text-red-600 mt-1">{{ result_form.comment.errors|striptags }}</div>{% endif %}
+                        </td>
+                        <td style="text-align:center; padding:0.5rem;">
+                            <span style="display:none;">{{ result_form.DELETE }}</span>
+                            <button type="button" class="delete-row inline-flex items-center justify-center w-9 h-9 rounded-full border border-gray-200 bg-white text-text-main hover:bg-gray-50" title="Remove row" style="cursor:pointer;">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M3 6h18M8 6V4h8v2m-7 0v14m6-14v14M5 6l1 14h12l1-14" />
+                                </svg>
+                            </button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="lab-report-actions flex gap-4 justify-between flex-wrap pt-4 border-t border-gray-200">
+            <div class="flex gap-2">
+                <button type="button" id="add-row-btn" class="btn btn-secondary">Add Test Row</button>
+            </div>
+            <div class="flex gap-2 flex-wrap">
+                <a href="{% url 'report_list' %}" class="btn btn-secondary">Cancel</a>
+                <button type="submit" name="action" value="save_report" class="btn btn-primary">{% if edit_mode %}Update Report{% else %}Save Report{% endif %}</button>
+                {% if can_send_to_doctor %}
+                    <button type="submit" name="action" value="send_to_doctor" class="btn btn-secondary">Send to Doctor</button>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <script type="text/template" id="empty-row-template">
+        <tr class="result-row hover:bg-gray-50">
+            <td class="px-4 py-2">
+                {{ formset.empty_form.id }}
+                {{ formset.empty_form.source_profile }}
+                {{ formset.empty_form.section_name }}
+                {{ formset.empty_form.display_order }}
+                <div class="section-pill inline-flex items-center px-2 py-1 rounded-full bg-brand-soft text-text-main text-xs font-semibold mb-1" style="display:none;"></div>
+                {{ formset.empty_form.test_name }}
+            </td>
+            <td class="px-4 py-2">{{ formset.empty_form.result_value }}</td>
+            <td class="px-4 py-2">{{ formset.empty_form.reference_range }}</td>
+            <td class="px-4 py-2">{{ formset.empty_form.unit }}</td>
+            <td class="px-4 py-2">{{ formset.empty_form.comment }}</td>
+            <td style="text-align:center; padding:0.5rem;">
+                <span style="display:none;">{{ formset.empty_form.DELETE }}</span>
+                <button type="button" class="delete-row inline-flex items-center justify-center w-9 h-9 rounded-full border border-gray-200 bg-white text-text-main hover:bg-gray-50" title="Remove row" style="cursor:pointer;">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M3 6h18M8 6V4h8v2m-7 0v14m6-14v14M5 6l1 14h12l1-14" />
+                    </svg>
+                </button>
+            </td>
+        </tr>
+    </script>
+
+    <datalist id="test-name-suggestions">
+        {% for test_name in existing_tests %}
+        <option value="{{ test_name }}"></option>
+        {% endfor %}
+    </datalist>
+
+    {{ test_profile_payload|json_script:"test-profile-data" }}
+    {{ pending_requested_services|json_script:"pending-requested-services-data" }}
+</form>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const form = document.getElementById('labReportForm');
+    const tbody = document.getElementById('results-body');
+    const templateNode = document.getElementById('empty-row-template');
+    const totalFormsInput = document.getElementById('id_results-TOTAL_FORMS');
+    const templateSelect = document.getElementById('{{ form.profile.id_for_label }}');
+    const templatePreview = document.getElementById('template-preview');
+    const loadTemplateBtn = document.getElementById('load-template-btn');
+    const addRowBtn = document.getElementById('add-row-btn');
+    const patientNameInput = document.getElementById('{{ form.patient_name.id_for_label }}');
+    const patientAgeInput = document.getElementById('{{ form.patient_age.id_for_label }}');
+    const ageValueInput = document.getElementById('{{ form.age_value.id_for_label }}');
+    const ageUnitInput = document.getElementById('{{ form.age_unit.id_for_label }}');
+    const specimenInput = document.getElementById('{{ form.specimen_type.id_for_label }}');
+    const resultsTable = tbody ? tbody.closest('table') : null;
+    const profilePayload = JSON.parse(document.getElementById('test-profile-data')?.textContent || '{}');
+    const pendingRequestedServices = JSON.parse(document.getElementById('pending-requested-services-data')?.textContent || '[]');
+    const templateHtml = templateNode ? templateNode.innerHTML.trim() : '';
+    const requestedServiceSelect = document.getElementById('requested-service-select');
+    const manualSimpleProfileId = Object.keys(profilePayload).find(key => profilePayload[key]?.code === 'manual_simple') || '';
+
+    const loadedTemplatesWrap = document.getElementById('loaded-templates');
+    const loadedTemplatesList = document.getElementById('loaded-templates-list');
+
+    if (!form || !tbody || !totalFormsInput || !templateHtml) {
+        return;
+    }
+
+    const testHeaderCell = resultsTable?.querySelector('.header-test');
+    const resultHeaderCell = resultsTable?.querySelector('.header-result');
+    const rangeHeaderCell = resultsTable?.querySelector('.header-range');
+    const unitHeaderCell = resultsTable?.querySelector('.header-unit');
+    const commentHeaderCell = resultsTable?.querySelector('.header-comment');
+
+    function currentProfileConfig() {
+        if (!templateSelect || !templateSelect.value) {
+            return null;
+        }
+        return profilePayload[String(templateSelect.value)] || null;
+    }
+
+    function currentRequestedService() {
+        if (!requestedServiceSelect || !requestedServiceSelect.value) {
+            return null;
+        }
+        return pendingRequestedServices.find(item => String(item.visit_service_id) === String(requestedServiceSelect.value)) || null;
+    }
+
+    function syncTemplateToRequestedService() {
+        const requestedService = currentRequestedService();
+        if (!templateSelect || !requestedService) {
+            return;
+        }
+        if (requestedService.test_profile_id) {
+            templateSelect.value = String(requestedService.test_profile_id);
+        } else if (manualSimpleProfileId) {
+            templateSelect.value = String(manualSimpleProfileId);
+        }
+        updateTemplatePreview();
+        refreshResultsLayout();
+    }
+
+    function isUrinalysisProfile(config) {
+        return Boolean(config && config.code === 'urinalysis');
+    }
+
+    function isCbcProfile(config) {
+        return Boolean(config && config.code === 'cbc');
+    }
+
+    function isSimpleManualProfile(config) {
+        return Boolean(config && config.code === 'manual_simple');
+    }
+
+    function getRowProfileConfig(row) {
+        const sourceProfile = row.querySelector('input[type="hidden"][name$="source_profile"]')?.value || '';
+        return profilePayload[String(sourceProfile)] || null;
+    }
+
+    function visibleRows() {
+        return Array.from(tbody.querySelectorAll('tr.result-row')).filter(row => !row.classList.contains('is-hidden-row'));
+    }
+
+    function syncAgeValue() {
+        if (!patientAgeInput || !ageValueInput || !ageUnitInput) {
+            return;
+        }
+        const rawValue = String(ageValueInput.value || '').trim();
+        const normalizedValue = rawValue ? parseInt(rawValue, 10) : '';
+        patientAgeInput.value = normalizedValue === '' || Number.isNaN(normalizedValue) ? '' : `${normalizedValue}${ageUnitInput.value || 'YRS'}`;
+    }
+
+    function markUserEdited(field) {
+        if (field) {
+            field.dataset.userEdited = 'true';
+        }
+    }
+
+    function updateSectionPill(row, sectionName) {
+        const pill = row.querySelector('.section-pill');
+        if (!pill) {
+            return;
+        }
+        pill.textContent = sectionName || '';
+        pill.style.display = sectionName ? '' : 'none';
+    }
+
+    function createChoiceField(row, inputField, options) {
+        const select = document.createElement('select');
+        select.name = inputField.name;
+        select.id = inputField.id;
+        select.className = inputField.className;
+
+        const emptyOption = document.createElement('option');
+        emptyOption.value = '';
+        emptyOption.textContent = 'Choose result';
+        select.appendChild(emptyOption);
+
+        options.forEach(optionValue => {
+            const option = document.createElement('option');
+            option.value = optionValue;
+            option.textContent = optionValue;
+            select.appendChild(option);
+        });
+
+        select.value = inputField.value || '';
+        return select;
+    }
+
+    function createTextField(inputField, currentValue, inputType) {
+        const textInput = document.createElement('input');
+        textInput.type = 'text';
+        textInput.name = inputField.name;
+        textInput.id = inputField.id;
+        textInput.className = inputField.className;
+        textInput.value = currentValue || '';
+        textInput.placeholder = inputField.placeholder || 'Result';
+        if (inputType === 'numeric') {
+            textInput.inputMode = 'decimal';
+        }
+        return textInput;
+    }
+
+    function applyChoiceField(row, rowConfig) {
+        const existingField = row.querySelector('.result-field');
+        const resultCell = existingField?.parentElement;
+        if (!existingField || !resultCell) {
+            return;
+        }
+
+        const currentValue = existingField.value || '';
+        const inputType = rowConfig?.input_type || 'text';
+        const options = Array.isArray(rowConfig?.choice_options) ? rowConfig.choice_options : [];
+
+        let replacementField;
+        if (inputType === 'choice' && options.length) {
+            replacementField = createChoiceField(row, existingField, options);
+        } else {
+            replacementField = createTextField(existingField, currentValue, inputType);
+        }
+
+        replacementField.classList.add('result-field');
+        existingField.replaceWith(replacementField);
+    }
+
+    async function fetchDefault(row) {
+        const testField = row.querySelector('.test-name-field');
+        const rangeField = row.querySelector('.range-field');
+        const unitField = row.querySelector('.unit-field');
+        if (!testField || !rangeField || !unitField) {
+            return;
+        }
+
+        const testName = (testField.value || '').trim();
+        const age = patientAgeInput?.value || '';
+        if (!testName || !age) {
+            return;
+        }
+
+        try {
+            const params = new URLSearchParams({ test: testName, age });
+            const response = await fetch("{% url 'default_range' %}?" + params.toString(), { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+            if (!response.ok) {
+                return;
+            }
+            const data = await response.json();
+            if (!rangeField.dataset.userEdited && data.reference_range) {
+                rangeField.value = data.reference_range;
+            }
+            if (!unitField.dataset.userEdited && data.unit) {
+                unitField.value = data.unit;
+            }
+        } catch (error) {
+            console.warn('Could not fetch reference range defaults.', error);
+        }
+    }
+
+    function updateFormIndices() {
+        const rows = Array.from(tbody.querySelectorAll('tr.result-row'));
+        rows.forEach((row, index) => {
+            row.querySelectorAll('input, select, textarea, label').forEach(node => {
+                ['name', 'id', 'for'].forEach(attribute => {
+                    const value = node.getAttribute(attribute);
+                    if (value) {
+                        node.setAttribute(attribute, value.replace(/results-(\d+|__prefix__)-/g, `results-${index}-`));
+                    }
+                });
+            });
+            const orderField = row.querySelector('[name$="display_order"]');
+            if (orderField) {
+                orderField.value = index + 1;
+            }
+        });
+        totalFormsInput.value = rows.length;
+    }
+
+    function findRowConfig(profileConfig, row) {
+        if (!profileConfig?.parameters?.length) {
+            return null;
+        }
+        const testName = (row.querySelector('.test-name-field')?.value || '').trim().toLowerCase();
+        const displayOrder = row.querySelector('[name$="display_order"]')?.value || '';
+        const sectionName = row.querySelector('[name$="section_name"]')?.value || '';
+        return profileConfig.parameters.find(param =>
+            (param.test_name || '').trim().toLowerCase() === testName &&
+            String(param.display_order) === String(displayOrder) &&
+            (param.section_name || '') === sectionName
+        ) || null;
+    }
+
+    function removeSectionDividers() {
+        tbody.querySelectorAll('.section-divider').forEach(row => row.remove());
+    }
+
+    function updateRowAppearance(row) {
+        const testInput = row.querySelector('.test-name-field');
+        const sectionField = row.querySelector('[name$="section_name"]');
+        const profileConfig = currentProfileConfig();
+        const rowConfig = findRowConfig(profileConfig, row);
+        const sectionName = sectionField ? (sectionField.value || '') : '';
+
+        if (!testInput) {
+            return;
+        }
+
+        if (isUrinalysisProfile(profileConfig)) {
+            const readonly = Boolean(sectionName && sectionName !== 'Others');
+            testInput.readOnly = readonly;
+            testInput.placeholder = readonly ? 'Fixed urinalysis parameter' : 'Other finding';
+        } else if (isCbcProfile(profileConfig)) {
+            const readonly = Boolean(rowConfig);
+            testInput.readOnly = readonly;
+            testInput.placeholder = readonly ? 'Fixed CBC parameter' : 'Additional CBC test';
+        } else {
+            testInput.readOnly = false;
+            testInput.placeholder = 'Type or choose a test';
+        }
+
+        testInput.classList.toggle('bg-gray-50', testInput.readOnly);
+        testInput.classList.toggle('cursor-not-allowed', testInput.readOnly);
+    }
+
+    function setCellVisible(cell, isVisible) {
+        if (!cell) return;
+        cell.style.display = isVisible ? '' : 'none';
+    }
+
+    function refreshResultsLayout() {
+        const profileConfig = currentProfileConfig();
+        const urinalysisMode = isUrinalysisProfile(profileConfig);
+        const cbcMode = isCbcProfile(profileConfig);
+        const showSectionDividers = urinalysisMode || cbcMode;
+
+        if (addRowBtn) {
+            addRowBtn.textContent = urinalysisMode ? 'Add Other Finding' : (cbcMode ? 'Add CBC Row' : 'Add Test Row');
+        }
+        if (testHeaderCell) {
+            testHeaderCell.textContent = cbcMode ? 'Test' : 'Investigation Parameter';
+        }
+
+        // Keep shared headers visible; manual-simple rows hide their own optional inputs.
+        setCellVisible(rangeHeaderCell, true);
+        setCellVisible(unitHeaderCell, true);
+        setCellVisible(commentHeaderCell, true);
+
+        removeSectionDividers();
+
+        let previousSection = null;
+        visibleRows().forEach(row => {
+            updateRowAppearance(row);
+
+            const rangeCell = row.querySelector('.range-field')?.closest('td');
+            const unitCell = row.querySelector('.unit-field')?.closest('td');
+            const commentCell = row.querySelector('.comment-field')?.closest('td');
+
+            const rowConfig = getRowProfileConfig(row);
+            const manualRow = isSimpleManualProfile(rowConfig);
+            row.classList.toggle('manual-simple-row', manualRow);
+
+            // Keep cells for alignment, but hide optional inputs on manual rows.
+            setCellVisible(rangeCell, true);
+            setCellVisible(unitCell, true);
+            setCellVisible(commentCell, true);
+            [row.querySelector('.range-field'), row.querySelector('.unit-field'), row.querySelector('.comment-field')].forEach(field => {
+                if (!field) return;
+                field.classList.toggle('hidden', manualRow);
+            });
+
+            const sectionName = row.querySelector('[name$="section_name"]')?.value || '';
+            if (showSectionDividers && sectionName && sectionName !== previousSection) {
+                const divider = document.createElement('tr');
+                divider.className = 'section-divider';
+                divider.innerHTML = '<td colspan="6" class="px-4 py-2 text-xs font-semibold uppercase tracking-wide bg-brand-soft text-text-main"></td>';
+                divider.querySelector('td').textContent = sectionName;
+                tbody.insertBefore(divider, row);
+                previousSection = sectionName;
+            } else if (!showSectionDividers) {
+                previousSection = null;
+            }
+        });
+
+        renderLoadedTemplates();
+    }
+
+    function bindRow(row) {
+        const testInput = row.querySelector('.test-name-field');
+        const rangeField = row.querySelector('.range-field');
+        const unitField = row.querySelector('.unit-field');
+        const commentField = row.querySelector('.comment-field');
+        const sectionField = row.querySelector('[name$="section_name"]');
+        const deleteCheckbox = row.querySelector('input[type="checkbox"][name$="DELETE"]');
+        const deleteButton = row.querySelector('.delete-row');
+        const rowIdInput = row.querySelector('input[type="hidden"][name$="-id"]');
+
+        if (rangeField) rangeField.addEventListener('input', () => markUserEdited(rangeField));
+        if (unitField) unitField.addEventListener('input', () => markUserEdited(unitField));
+        if (commentField) commentField.addEventListener('input', () => markUserEdited(commentField));
+
+        if (testInput) {
+            testInput.addEventListener('change', () => {
+                const rowConfig = findRowConfig(currentProfileConfig(), row);
+                if (rangeField) {
+                    delete rangeField.dataset.userEdited;
+                    rangeField.value = rowConfig ? (rowConfig.reference_range || '') : '';
+                }
+                if (unitField) {
+                    delete unitField.dataset.userEdited;
+                    unitField.value = rowConfig ? (rowConfig.unit || '') : '';
+                }
+                if (commentField && rowConfig && !commentField.value) {
+                    commentField.value = rowConfig.comment || '';
+                }
+                applyChoiceField(row, rowConfig);
+                fetchDefault(row);
+                refreshResultsLayout();
+            });
+            testInput.addEventListener('blur', () => fetchDefault(row));
+        }
+
+        if (sectionField) {
+            updateSectionPill(row, sectionField.value);
+        }
+
+        updateRowAppearance(row);
+
+        if (deleteButton) {
+            deleteButton.addEventListener('click', () => {
+                if (rowIdInput && rowIdInput.value && deleteCheckbox) {
+                    deleteCheckbox.checked = true;
+                    row.classList.add('is-hidden-row');
+                    row.style.display = 'none';
+                } else {
+                    row.remove();
+                }
+                updateFormIndices();
+                refreshResultsLayout();
+            });
+        }
+    }
+
+    function buildRow(index, rowData) {
+        const html = templateHtml.replace(/__prefix__/g, index);
+        const temp = document.createElement('tbody');
+        temp.innerHTML = html;
+        const row = temp.querySelector('tr');
+
+        const templateId = rowData && rowData._template_id ? String(rowData._template_id) : '';
+        row.dataset.templateId = templateId;
+        const sourceProfileField = row.querySelector('input[type=\"hidden\"][name$=\"source_profile\"]');
+        if (sourceProfileField) {
+            sourceProfileField.value = templateId;
+        }
+
+        row.querySelector('.test-name-field').value = rowData.test_name || '';
+        row.querySelector('.range-field').value = rowData.reference_range || '';
+        row.querySelector('.unit-field').value = rowData.unit || '';
+        row.querySelector('.comment-field').value = rowData.comment || '';
+        row.querySelector('[name$="section_name"]').value = rowData.section_name || '';
+        row.querySelector('[name$="display_order"]').value = rowData.display_order || index + 1;
+        updateSectionPill(row, rowData.section_name || '');
+        applyChoiceField(row, rowData);
+        return row;
+    }
+
+    function hasMeaningfulData(row) {
+        const values = Array.from(row.querySelectorAll('input[type="text"], textarea, select'))
+            .filter(field => !field.name.endsWith('DELETE'))
+            .map(field => (field.value || '').trim());
+        return values.some(Boolean);
+    }
+
+    function updateTemplatePreview() {
+        const config = currentProfileConfig();
+        if (!config) {
+            templatePreview.style.display = 'none';
+            templatePreview.innerHTML = '';
+            return;
+        }
+        templatePreview.style.display = 'block';
+        templatePreview.innerHTML = `
+            <strong>${config.name}</strong>
+            <div class="mt-1">${config.description || 'No description set.'}</div>
+            <div class="mt-2 text-sm text-text-muted">${(config.parameters || []).length} parameters will load. Default specimen: ${config.default_specimen_type || 'Not set'}.</div>
+        `;
+    }
+
+    function clearRowsForTemplateLoad() {
+        removeSectionDividers();
+        Array.from(tbody.querySelectorAll('tr.result-row')).forEach(row => {
+            const rowIdInput = row.querySelector('input[type="hidden"][name$="-id"]');
+            const deleteCheckbox = row.querySelector('input[type="checkbox"][name$="DELETE"]');
+            if (rowIdInput && rowIdInput.value && deleteCheckbox) {
+                deleteCheckbox.checked = true;
+                row.classList.add('is-hidden-row');
+                row.style.display = 'none';
+                return;
+            }
+            row.remove();
+        });
+        updateFormIndices();
+    }
+
+    function loadTemplate(options = {}) {
+        const config = currentProfileConfig();
+        if (!config) {
+            if (!options.silent) {
+                window.alert('Choose a test template first.');
+            }
+            return false;
+        }
+
+        const populatedRows = visibleRows().filter(hasMeaningfulData);
+        const replaceExisting = options.replaceExisting === true;
+
+        if (populatedRows.length && replaceExisting && !options.silent) {
+            const confirmed = window.confirm('This will replace the current visible result rows with the selected template. Continue?');
+            if (!confirmed) {
+                return false;
+            }
+        }
+
+        if (replaceExisting) {
+            clearRowsForTemplateLoad();
+        }
+
+        const startIndex = tbody.querySelectorAll('tr.result-row').length;
+        const templateId = templateSelect?.value ? String(templateSelect.value) : '';
+        (config.parameters || []).forEach((parameter, offset) => {
+            const row = buildRow(startIndex + offset, Object.assign({}, parameter, { _template_id: templateId }));
+            tbody.appendChild(row);
+            bindRow(row);
+        });
+
+        if (specimenInput && config.default_specimen_type) {
+            specimenInput.value = config.default_specimen_type;
+        }
+
+        updateFormIndices();
+        refreshResultsLayout();
+        return true;
+    }
+
+    function renderLoadedTemplates() {
+        if (!loadedTemplatesWrap || !loadedTemplatesList) return;
+
+        const templateIds = Array.from(new Set(
+            visibleRows()
+                .map(row => row.querySelector('input[type=\"hidden\"][name$=\"source_profile\"]')?.value || '')
+                .filter(Boolean)
+        ));
+
+        loadedTemplatesList.innerHTML = '';
+        if (templateIds.length === 0) {
+            loadedTemplatesWrap.style.display = 'none';
+            loadedTemplatesWrap.classList.add('hidden');
+            return;
+        }
+
+        loadedTemplatesWrap.style.display = 'block';
+        loadedTemplatesWrap.classList.remove('hidden');
+
+        templateIds.forEach(templateId => {
+            const config = profilePayload[String(templateId)];
+            const label = config ? config.name : `Template ${templateId}`;
+
+            const chip = document.createElement('button');
+            chip.type = 'button';
+            chip.className = 'btn btn-secondary btn-sm';
+            chip.textContent = `Remove: ${label}`;
+            chip.addEventListener('click', () => removeTemplate(templateId));
+            loadedTemplatesList.appendChild(chip);
+        });
+    }
+
+    function removeTemplate(templateId) {
+        const rows = visibleRows().filter(row => (row.querySelector('input[type=\"hidden\"][name$=\"source_profile\"]')?.value || '') === String(templateId));
+        if (!rows.length) return;
+        const confirmed = window.confirm('Remove all rows loaded from this template?');
+        if (!confirmed) return;
+
+        rows.forEach(row => {
+            const rowIdInput = row.querySelector('input[type="hidden"][name$="-id"]');
+            const deleteCheckbox = row.querySelector('input[type="checkbox"][name$="DELETE"]');
+            if (rowIdInput && rowIdInput.value && deleteCheckbox) {
+                deleteCheckbox.checked = true;
+                row.classList.add('is-hidden-row');
+                row.style.display = 'none';
+            } else {
+                row.remove();
+            }
+        });
+        updateFormIndices();
+        refreshResultsLayout();
+    }
+
+    if (patientNameInput) {
+        patientNameInput.addEventListener('blur', () => {
+            const words = patientNameInput.value.toLowerCase().split(' ').filter(Boolean);
+            patientNameInput.value = words.map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+        });
+    }
+
+    if (ageValueInput) {
+        ageValueInput.addEventListener('blur', () => {
+            syncAgeValue();
+            visibleRows().forEach(row => fetchDefault(row));
+        });
+    }
+
+    if (ageUnitInput) {
+        ageUnitInput.addEventListener('change', () => {
+            syncAgeValue();
+            visibleRows().forEach(row => fetchDefault(row));
+        });
+    }
+
+    if (templateSelect) {
+        templateSelect.addEventListener('change', () => {
+            updateTemplatePreview();
+            refreshResultsLayout();
+        });
+    }
+
+    if (requestedServiceSelect) {
+        requestedServiceSelect.addEventListener('change', () => {
+            syncTemplateToRequestedService();
+        });
+    }
+
+    if (loadTemplateBtn) {
+        loadTemplateBtn.addEventListener('click', () => {
+            if (pendingRequestedServices.length && requestedServiceSelect && !requestedServiceSelect.value) {
+                window.alert('Choose the requested test you are working on first.');
+                return;
+            }
+            const config = currentProfileConfig();
+            if (!config) {
+                window.alert('Manual Entry Mode: Choose a test template to append into this report, or manually add test rows using the "Add Test Row" button.');
+                return;
+            }
+            loadTemplate({ replaceExisting: false });
+        });
+    }
+
+    if (addRowBtn) {
+        addRowBtn.addEventListener('click', () => {
+            const index = tbody.querySelectorAll('tr.result-row').length;
+            const profileConfig = currentProfileConfig();
+            const templateId = templateSelect?.value ? String(templateSelect.value) : '';
+            const manualMode = Boolean(profileConfig && profileConfig.code === 'manual_simple');
+            const row = buildRow(index, {
+                test_name: '',
+                section_name: manualMode ? 'Manual Tests' : '',
+                display_order: index + 1,
+                reference_range: '',
+                unit: '',
+                comment: '',
+                _template_id: templateId,
+                input_type: 'text',
+                choice_options: [],
+            });
+            tbody.appendChild(row);
+            bindRow(row);
+            updateFormIndices();
+            refreshResultsLayout();
+            tbody.querySelector('tr.result-row:last-child')?.querySelector('.test-name-field')?.focus();
+        });
+    }
+
+    tbody.querySelectorAll('tr.result-row').forEach(row => {
+        bindRow(row);
+        applyChoiceField(row, findRowConfig(currentProfileConfig(), row));
+    });
+
+    syncAgeValue();
+    syncTemplateToRequestedService();
+    updateTemplatePreview();
+    refreshResultsLayout();
+
+    form.addEventListener('submit', () => {
+        syncAgeValue();
+        // Ensure manual-simple rows stay clean (test+result only).
+        visibleRows().forEach(row => {
+            const sourceProfile = row.querySelector('input[type="hidden"][name$="source_profile"]')?.value || '';
+            const config = profilePayload[String(sourceProfile)];
+            if (!config || config.code !== 'manual_simple') return;
+            const rangeField = row.querySelector('.range-field');
+            const unitField = row.querySelector('.unit-field');
+            const commentField = row.querySelector('.comment-field');
+            if (rangeField) rangeField.value = '';
+            if (unitField) unitField.value = '';
+            if (commentField) commentField.value = '';
+        });
+        updateFormIndices();
+    });
+});
+</script>
+{% endblock %}

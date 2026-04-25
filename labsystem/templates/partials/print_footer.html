@@ -1,0 +1,12 @@
+<div class="report-footer border-t border-gray-200 pt-2 text-center text-text-muted text-xs">
+    <div>
+        <strong>{% if hospital %}{{ hospital.name }}{% else %}LUMINA MEDICAL SERVICES{% endif %}</strong>
+        {% if hospital %} · Hospital EMR{% else %} · lighting up your health.{% endif %}
+    </div>
+    <div>
+        {% if hospital and hospital.box_number %}PO BOX: {{ hospital.box_number }}{% else %}PO BOX: 200132{% endif %}
+        {% if hospital and hospital.location %} · {{ hospital.location }}{% else %} · Kampala{% endif %}
+        {% if hospital and hospital.phone_number %} · Phone: {{ hospital.phone_number }}{% else %} · Phone: 0750639410 / 0780105909{% endif %}
+    </div>
+</div>
+

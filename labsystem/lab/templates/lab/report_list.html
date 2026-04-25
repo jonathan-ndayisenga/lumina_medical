@@ -1,0 +1,167 @@
+{% extends 'base.html' %}
+
+{% block title %}Laboratory Dashboard - Lumina Medical Services{% endblock %}
+{% block page_title %}Laboratory Dashboard{% endblock %}
+{% block page_subtitle %}Review reports, track printing, and jump into new CBC or urinalysis entries from one screen.{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="card">
+            <div class="text-4xl font-bold text-text-main">{{ total_reports }}</div>
+            <div class="text-xs text-text-muted uppercase tracking-widest mt-2">Total Reports</div>
+        </div>
+        <div class="card">
+            <div class="text-4xl font-bold text-text-main">{{ printed_count }}</div>
+            <div class="text-xs text-text-muted uppercase tracking-widest mt-2">Printed Reports</div>
+        </div>
+        <div class="card">
+            <div class="text-4xl font-bold text-text-main">{{ draft_count }}</div>
+            <div class="text-xs text-text-muted uppercase tracking-widest mt-2">Draft Reports</div>
+        </div>
+    </div>
+
+    <div class="card space-y-4">
+        <div class="flex flex-col md:flex-row gap-3">
+            <input type="text" id="searchInput"
+                   class="flex-1 min-w-0 px-4 py-2 border border-gray-300 rounded-lg bg-white text-text-main placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-brand-dark focus:border-transparent"
+                   placeholder="Search patient name, referred by, specimen, or report ID"
+                   value="{{ request.GET.search }}">
+            <button type="button" class="btn btn-primary whitespace-nowrap" onclick="searchReports()">Search</button>
+        </div>
+
+        <div class="flex flex-wrap gap-2">
+            <button type="button"
+                    class="btn {% if not request.GET.filter %}bg-brand-dark text-white{% else %}btn-secondary{% endif %}"
+                    onclick="filterReports('all')">All</button>
+            <button type="button"
+                    class="btn {% if request.GET.filter == 'printed' %}bg-brand-dark text-white{% else %}btn-secondary{% endif %}"
+                    onclick="filterReports('printed')">Printed</button>
+            <button type="button"
+                    class="btn {% if request.GET.filter == 'draft' %}bg-brand-dark text-white{% else %}btn-secondary{% endif %}"
+                    onclick="filterReports('draft')">Draft</button>
+            <a href="{% url 'report_create' %}" class="btn btn-primary ml-auto">New Lab Report</a>
+        </div>
+    </div>
+
+    {% if reports.object_list %}
+    <div class="card overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="w-full">
+                <thead class="bg-gray-50 border-b border-gray-200">
+                    <tr>
+                        <th class="text-left px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-widest">Patient</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-widest">Template / Specimen</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-widest">Sample Date</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-widest">Technician / Referral</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-widest">Status</th>
+                        <th class="text-right px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-widest">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200">
+                    {% for report in reports %}
+                    <tr class="hover:bg-gray-50 transition-colors">
+                        <td class="px-4 py-3">
+                            <strong class="block text-text-main">{{ report.patient_name }}</strong>
+                            <div class="text-sm text-text-muted">{{ report.patient_age }} | {{ report.get_patient_sex_display }}</div>
+                            <div class="text-sm text-text-muted">REF: LUM-{{ report.id|stringformat:"05d" }}</div>
+                        </td>
+                        <td class="px-4 py-3">
+                            <strong class="block text-text-main">{{ report.template_label }}</strong>
+                            <div class="text-sm text-text-muted">{{ report.specimen_type }}</div>
+                        </td>
+                        <td class="px-4 py-3">
+                            <strong class="block text-text-main">{{ report.sample_date|date:"d M Y" }}</strong>
+                            <div class="text-sm text-text-muted">Created {{ report.created_at|date:"d M Y" }}</div>
+                        </td>
+                        <td class="px-4 py-3">
+                            <strong class="block text-text-main">
+                                {% with att=report.attendant %}
+                                    {% if report.attendant_name %}{{ report.attendant_name }}
+                                    {% elif att %}{{ att.get_full_name|default:att.username }}
+                                    {% else %}N/A{% endif %}
+                                {% endwith %}
+                            </strong>
+                            <div class="text-sm text-text-muted">Referred by: {{ report.referred_by|default:"Not captured" }}</div>
+                        </td>
+                        <td class="px-4 py-3">
+                            <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-bold uppercase tracking-wide bg-brand-soft text-brand-dark">{% if report.printed %}Printed{% else %}Draft{% endif %}</span>
+                            {% if report.printed_at %}
+                                <div class="text-sm text-text-muted mt-1">{{ report.printed_at|date:"d M Y H:i" }}</div>
+                            {% endif %}
+                        </td>
+                        <td class="px-4 py-3">
+                            <div class="flex flex-wrap gap-2 justify-end">
+                                <a href="{% url 'report_detail' report.pk %}" class="btn btn-secondary btn-sm">View</a>
+                                <a href="{% url 'report_edit' report.pk %}" class="btn btn-secondary btn-sm">Edit</a>
+                                <a href="{% url 'report_print' report.pk %}" class="btn btn-secondary btn-sm" target="_blank">Print</a>
+                                {% if request.user.role == 'superadmin' or request.user.role == 'hospital_admin' %}
+                                <form method="post" action="{% url 'report_delete' report.pk %}" onsubmit="return confirm('Delete this report permanently?');" class="inline">
+                                    {% csrf_token %}
+                                    <button type="submit" class="btn btn-secondary btn-sm">Delete</button>
+                                </form>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% else %}
+    <div class="card text-center py-12 border-2 border-dashed border-gray-300">
+        <h3 class="text-lg font-semibold text-text-main mb-2">No reports found</h3>
+        <p class="text-text-muted mb-4">Start by creating a new CBC, urinalysis, or manual laboratory report.</p>
+        <a href="{% url 'report_create' %}" class="btn btn-primary inline-block">Create New Lab Report</a>
+    </div>
+    {% endif %}
+
+    {% if reports.has_other_pages %}
+    <div class="flex flex-wrap gap-2 justify-center mt-6">
+        {% if reports.has_previous %}
+            <a href="?page={{ reports.previous_page_number }}{% if request.GET.search %}&search={{ request.GET.search }}{% endif %}{% if request.GET.filter %}&filter={{ request.GET.filter }}{% endif %}" class="btn btn-secondary btn-sm">Previous</a>
+        {% endif %}
+        {% for i in reports.paginator.page_range %}
+            {% if reports.number == i %}
+                <span class="btn btn-sm bg-gray-100 text-gray-600 cursor-default">{{ i }}</span>
+            {% else %}
+                <a href="?page={{ i }}{% if request.GET.search %}&search={{ request.GET.search }}{% endif %}{% if request.GET.filter %}&filter={{ request.GET.filter }}{% endif %}" class="btn btn-secondary btn-sm">{{ i }}</a>
+            {% endif %}
+        {% endfor %}
+        {% if reports.has_next %}
+            <a href="?page={{ reports.next_page_number }}{% if request.GET.search %}&search={{ request.GET.search }}{% endif %}{% if request.GET.filter %}&filter={{ request.GET.filter }}{% endif %}" class="btn btn-secondary btn-sm">Next</a>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function searchReports() {
+    const searchTerm = document.getElementById('searchInput').value;
+    const currentFilter = new URLSearchParams(window.location.search).get('filter') || '';
+    window.location.href = `?search=${encodeURIComponent(searchTerm)}${currentFilter ? '&filter=' + currentFilter : ''}`;
+}
+
+function filterReports(filter) {
+    const searchTerm = document.getElementById('searchInput').value;
+    if (filter === 'all') {
+        window.location.href = searchTerm ? `?search=${encodeURIComponent(searchTerm)}` : window.location.pathname;
+        return;
+    }
+    window.location.href = `?filter=${filter}${searchTerm ? '&search=' + encodeURIComponent(searchTerm) : ''}`;
+}
+
+const searchInput = document.getElementById('searchInput');
+if (searchInput) {
+    searchInput.addEventListener('keypress', function (event) {
+        if (event.key === 'Enter') {
+            event.preventDefault();
+            searchReports();
+        }
+    });
+}
+</script>
+{% endblock %}

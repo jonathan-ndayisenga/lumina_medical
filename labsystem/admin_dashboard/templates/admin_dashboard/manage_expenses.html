@@ -1,0 +1,78 @@
+{% extends 'base.html' %}
+
+{% block title %}Expenses - Lumina{% endblock %}
+
+{% block content %}
+<div class="space-y-5">
+    <div class="card">
+        <h3 class="text-lg font-bold text-text-main mb-4">Record Expense</h3>
+        <p class="text-sm text-text-muted mb-4">Capture the channel and exact account used for every expense payout.</p>
+        <form method="post" class="space-y-4">
+            {% csrf_token %}
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {% for field in form %}
+                    {% if field.name == 'notes' %}
+                        <div class="md:col-span-2">
+                    {% else %}
+                        <div>
+                    {% endif %}
+                        <label for="{{ field.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">{{ field.label }}</label>
+                        {{ field }}
+                        {% for error in field.errors %}<div class="text-xs text-red-600 mt-1">{{ error }}</div>{% endfor %}
+                    </div>
+                {% endfor %}
+            </div>
+            <button type="submit" class="btn btn-primary">Save Expense</button>
+        </form>
+    </div>
+
+    <div class="card">
+        <h3 class="text-lg font-bold text-text-main mb-4">Recent Expenses</h3>
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead class="bg-gray-50 border-b">
+                    <tr>
+                        <th class="text-left px-3 py-3 text-xs font-semibold uppercase">Date</th>
+                        <th class="text-left px-3 py-3 text-xs font-semibold uppercase">Description</th>
+                        <th class="text-left px-3 py-3 text-xs font-semibold uppercase">Category</th>
+                        <th class="text-left px-3 py-3 text-xs font-semibold uppercase">Source Channel</th>
+                        <th class="text-left px-3 py-3 text-xs font-semibold uppercase">Source Account</th>
+                        <th class="text-right px-3 py-3 text-xs font-semibold uppercase">Amount</th>
+                        <th class="text-left px-3 py-3 text-xs font-semibold uppercase">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y">
+                    {% for expense in expenses %}
+                        <tr class="hover:bg-gray-50">
+                            <td class="px-3 py-3 text-text-muted">{{ expense.date }} </td>
+                            <td class="px-3 py-3 text-text-main font-semibold">{{ expense.description }}</td>
+                            <td class="px-3 py-3">
+                                <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-800">
+                                    {{ expense.get_category_display }}
+                                </span>
+                            </td>
+                            <td class="px-3 py-3">
+                                {% with source_info=expense.get_source_display_with_badge %}
+                                    <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold {{ source_info.badge_class }}">
+                                        {{ source_info.name }}
+                                    </span>
+                                {% endwith %}
+                            </td>
+                            <td class="px-3 py-3 text-text-main">{{ expense.source_account_label }}</td>
+                            <td class="px-3 py-3 text-right font-semibold text-text-main">{{ expense.amount }}</td>
+                            <td class="px-3 py-3">
+                                <div class="flex gap-2 flex-wrap">
+                                    <a href="{% url 'edit_expense' expense.pk %}" class="btn btn-secondary btn-sm">Edit</a>
+                                    <a href="{% url 'delete_expense' expense.pk %}" class="btn btn-danger btn-sm">Delete</a>
+                                </div>
+                            </td>
+                        </tr>
+                    {% empty %}
+                        <tr><td colspan="7" class="px-3 py-3 text-center text-text-muted">No expenses recorded yet.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

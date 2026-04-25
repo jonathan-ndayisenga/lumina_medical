@@ -1,0 +1,52 @@
+{% extends 'base.html' %}
+
+{% block title %}{% if edit_mode %}Edit Visit{% else %}Create Visit{% endif %} - Hospital EMR{% endblock %}
+{% block page_title %}{% if edit_mode %}Edit Visit{% else %}Create Visit{% endif %}{% endblock %}
+{% block page_subtitle %}{% if edit_mode %}Adjust services and notes before the workflow has been processed.{% else %}Select services, accumulate the patient bill, and route work into the live queue without taking payment yet.{% endif %}{% endblock %}
+
+{% block content %}
+<div class="space-y-6 max-w-4xl">
+    <div class="card">
+        <h3 class="text-sm font-semibold text-text-main mb-1">Patient</h3>
+        <p><strong class="text-text-main">{{ patient.name }}</strong> | {{ patient.age }} | {{ patient.get_sex_display }}</p>
+        <div class="mt-2 flex flex-wrap gap-4 text-sm text-text-muted">
+            {% if patient.weight_kg %}<span>Weight: {{ patient.weight_kg }} kg</span>{% endif %}
+            {% if patient.contact %}<span>Contact: {{ patient.contact }}</span>{% endif %}
+        </div>
+    </div>
+
+    <form method="post" class="space-y-6">
+        {% csrf_token %}
+
+        <fieldset class="card border-2 border-gray-200">
+            <legend class="text-sm font-semibold text-text-main mb-3 px-2">Select Services</legend>
+            <p class="text-sm text-text-muted mb-4">Each selected service is added to the visit bill now. Payment will be collected later when the visit is completed.</p>
+            <div class="space-y-3">
+                {% for checkbox in form.services %}
+                    <label class="flex items-start gap-3 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 hover:border-brand-dark/30 hover:bg-white transition-colors">
+                        <span class="pt-1">{{ checkbox.tag }}</span>
+                        <span class="min-w-0">
+                            <span class="block text-sm font-semibold text-text-main">{{ checkbox.choice_label }}</span>
+                        </span>
+                    </label>
+                {% empty %}
+                    <p class="text-sm text-text-muted">No active services are available yet.</p>
+                {% endfor %}
+            </div>
+            {% for error in form.services.errors %}<div class="text-xs text-red-600 mt-3">{{ error }}</div>{% endfor %}
+        </fieldset>
+
+        <div class="card">
+            <label for="{{ form.notes.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">Visit Notes</label>
+            {{ form.notes }}
+            <p class="mt-1 text-xs text-text-muted">Use this for triage context, complaints, or anything the next module should know.</p>
+            {% for error in form.notes.errors %}<div class="text-xs text-red-600 mt-1">{{ error }}</div>{% endfor %}
+        </div>
+
+        <div class="flex gap-3 flex-wrap pt-4">
+            <button type="submit" class="btn btn-primary">{% if edit_mode %}Save Visit Changes{% else %}Create Visit and Queue{% endif %}</button>
+            <a href="{% url 'patient_list' %}" class="btn btn-secondary">Back to Patients</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

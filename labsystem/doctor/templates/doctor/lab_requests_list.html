@@ -1,0 +1,122 @@
+{% extends 'base.html' %}
+
+{% block title %}My Lab Requests - Hospital EMR{% endblock %}
+{% block page_title %}Lab Requests{% endblock %}
+{% block page_subtitle %}View all lab requests you have created, their status, and received results.{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Header with Create Button -->
+    <div class="flex justify-between items-center">
+        <div>
+            <h1 class="text-2xl font-bold text-text-main">Lab Requests Management</h1>
+            {% if unread_notifications %}
+            <div class="mt-2 inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold bg-red-100 text-red-800">
+                🔔 {{ unread_notifications }} new result{{ unread_notifications|pluralize }}
+            </div>
+            {% endif %}
+        </div>
+        <a href="{% url 'create_lab_request' %}" class="btn btn-primary">+ Create Lab Request</a>
+    </div>
+
+    <!-- Lab Requests Table -->
+    <div class="card">
+        <div class="overflow-x-auto">
+            <table class="w-full">
+                <thead class="bg-gray-50 border-b border-gray-200">
+                    <tr>
+                        <th class="text-left px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-widest">Patient</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-widest">Tests Requested</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-widest">Urgency</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-widest">Status</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-widest">Results</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-widest">Requested</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-widest">Action</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200">
+                    {% for req in requests_with_status %}
+                    <tr class="hover:bg-gray-50 transition-colors">
+                        <!-- Patient -->
+                        <td class="px-4 py-3">
+                            <div class="font-medium text-text-main">{{ req.lab_request.visit.patient.name }}</div>
+                            <div class="text-xs text-text-muted">{{ req.lab_request.visit.patient.age }} / {{ req.lab_request.visit.patient.get_sex_display }}</div>
+                        </td>
+                        
+                        <!-- Tests -->
+                        <td class="px-4 py-3">
+                            <div class="text-sm text-text-main max-w-xs">
+                                {{ req.lab_request.tests_requested|truncatewords:5 }}
+                            </div>
+                        </td>
+                        
+                        <!-- Urgency Badge -->
+                        <td class="px-4 py-3">
+                            {% if req.lab_request.urgency == "urgent" %}
+                                <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold bg-red-100 text-red-800">
+                                    🚨 Urgent
+                                </span>
+                            {% else %}
+                                <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-800">
+                                    Routine
+                                </span>
+                            {% endif %}
+                        </td>
+                        
+                        <!-- Status Badge -->
+                        <td class="px-4 py-3">
+                            {% if req.lab_request.status == "completed" %}
+                                <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">
+                                    ✓ Completed
+                                </span>
+                            {% elif req.lab_request.status == "in_progress" %}
+                                <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-800">
+                                    ⏳ In Progress
+                                </span>
+                            {% else %}
+                                <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-800">
+                                    ⏱ Pending
+                                </span>
+                            {% endif %}
+                        </td>
+                        
+                        <!-- Results -->
+                        <td class="px-4 py-3">
+                            {% if req.sent_to_doctor %}
+                                <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-800">
+                                    ✓ Received
+                                </span>
+                            {% elif req.has_report %}
+                                <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-800">
+                                    📄 {{ req.report_count }} report{{ req.report_count|pluralize }}
+                                </span>
+                            {% else %}
+                                <span class="text-xs text-text-muted">No results yet</span>
+                            {% endif %}
+                        </td>
+                        
+                        <!-- Requested Date -->
+                        <td class="px-4 py-3 text-xs text-text-muted">
+                            {{ req.lab_request.created_at|date:"M d, Y" }}
+                        </td>
+                        
+                        <!-- Action -->
+                        <td class="px-4 py-3">
+                            <a href="{% url 'view_lab_request' req.lab_request.pk %}" class="btn btn-secondary btn-sm">
+                                View
+                            </a>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="7" class="px-4 py-8 text-center text-text-muted italic">
+                            No lab requests created yet. <a href="{% url 'create_lab_request' %}" class="text-blue-600 hover:underline">Create one now</a>.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

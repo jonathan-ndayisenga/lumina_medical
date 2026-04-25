@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+
+{% block title %}Nursing Care - Hospital EMR{% endblock %}
+{% block page_title %}Nursing Care{% endblock %}
+{% block page_subtitle %}Record nursing notes, then decide whether the patient goes back to doctor review or reception billing.{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <div class="flex justify-between items-start gap-4">
+        <div>
+            <h2 class="text-2xl font-bold text-text-main">{{ visit.patient.name }}</h2>
+            <p class="text-text-muted">{{ visit.patient.age }} / {{ visit.patient.get_sex_display }} | Visit {{ visit.visit_date|date:"M d, Y H:i" }}</p>
+            {% if queue_entry.reason %}<p class="mt-2 text-sm text-text-muted">Queue reason: {{ queue_entry.reason }}</p>{% endif %}
+        </div>
+        <a class="btn btn-secondary whitespace-nowrap" href="{% url 'nurse_queue' %}">Back to Queue</a>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="card">
+            <h3 class="text-sm font-semibold text-text-main mb-3">Patient Context</h3>
+            <div class="space-y-2 text-sm">
+                <p><strong class="text-text-main">Hospital:</strong> <span class="text-text-muted">{{ visit.hospital.name }}</span></p>
+                {% if consultation %}
+                    <p><strong class="text-text-main">Doctor Note:</strong> <span class="text-text-muted">{{ consultation.diagnosis|default:"-" }}</span></p>
+                    <p><strong class="text-text-main">Treatment:</strong> <span class="text-text-muted">{{ consultation.treatment|default:"-" }}</span></p>
+                {% else %}
+                    <p class="text-text-muted italic">No consultation note is linked yet.</p>
+                {% endif %}
+                {% if triage %}
+                    <p><strong class="text-text-main">Triage:</strong>
+                        <span class="text-text-muted">
+                            Wt {{ triage.weight_kg|default:"-" }} kg,
+                            BP {{ triage.bp_systolic|default:"-" }}/{{ triage.bp_diastolic|default:"-" }},
+                            PR {{ triage.pulse|default:"-" }}
+                        </span>
+                    </p>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card">
+            <h3 class="text-sm font-semibold text-text-main mb-3">Lab Snapshot</h3>
+            {% if lab_reports %}
+                <div class="space-y-3">
+                    {% for report in lab_reports %}
+                        <div>
+                            <strong class="block text-text-main text-sm">{{ report.profile.name|default:"Manual Lab Report" }}</strong>
+                            <ul class="mt-1 ml-4 space-y-1 text-text-muted text-xs">
+                                {% for result in report.results.all|slice:":5" %}
+                                    <li>{{ result.test.name }}: {{ result.result_value|default:"-" }}</li>
+                                {% endfor %}
+                            </ul>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <p class="text-text-muted italic text-sm">No lab reports are linked to this visit yet.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div class="card">
+            <h3 class="text-sm font-semibold text-text-main mb-4">New Nursing Note</h3>
+            <form method="post" class="space-y-4">
+                {% csrf_token %}
+                {{ form.non_field_errors }}
+
+                <div class="rounded-lg border border-gray-200 bg-gray-50 p-4">
+                    <div class="flex items-start justify-between gap-3 flex-wrap mb-3">
+                        <h4 class="text-sm font-semibold text-text-main">Vital Signs (Triage)</h4>
+                        <p class="text-xs text-text-muted">Weight and blood pressure are required before saving the nursing note.</p>
+                    </div>
+                    {{ triage_form.non_field_errors }}
+                    {% include "partials/triage_form.html" with triage_form=triage_form %}
+                </div>
+
+                <div>
+                    {% if queue_entry.reason and "triage" in queue_entry.reason|lower %}
+                        <label for="{{ form.notes.id_for_label }}" class="block text-sm font-semibold text-text-main mb-2">Optional Notes</label>
+                        <p class="text-xs text-text-muted mb-2">This queue item is triage-focused. Notes are optional unless you provided nursing care.</p>
+                    {% else %}
+                        <label for="{{ form.notes.id_for_label }}" class="block text-sm font-semibold text-text-main mb-2">Care Notes</label>
+                    {% endif %}
+                    {{ form.notes }}
+                    {% if form.notes.errors %}<div class="text-xs text-red-600 mt-1">{{ form.notes.errors }}</div>{% endif %}
+                </div>
+                <div class="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                    {% if queue_entry.reason and "triage" in queue_entry.reason|lower %}
+                        Choose the next stop after triage: send to doctor for consultation or back to reception.
+                    {% else %}
+                        Choose the next stop after nursing care: return to doctor review or hand off to reception for billing.
+                    {% endif %}
+                </div>
+                <div class="flex gap-3 flex-wrap pt-4">
+                    {% if queue_entry.reason and "triage" in queue_entry.reason|lower %}
+                        <button type="submit" name="action" value="triage_to_doctor" class="btn btn-primary">Save Triage and Send to Doctor</button>
+                        <button type="submit" name="action" value="triage_to_reception" class="btn btn-secondary">Save Triage and Send to Reception</button>
+                    {% else %}
+                        <button type="submit" name="action" value="back_to_doctor" class="btn btn-primary">Save and Send Back to Doctor</button>
+                        <button type="submit" name="action" value="to_billing" class="btn btn-secondary">Save and Send to Reception for Billing</button>
+                    {% endif %}
+                </div>
+            </form>
+        </div>
+
+        <div class="card">
+            <h3 class="text-sm font-semibold text-text-main mb-4">Previous Nursing Notes</h3>
+            {% if existing_notes %}
+                <div class="space-y-4 max-h-96 overflow-y-auto">
+                    {% for note in existing_notes %}
+                        <div class="pb-4 border-b border-gray-200 last:border-b-0">
+                            <div class="flex justify-between items-start gap-2 mb-2">
+                                <strong class="text-sm text-text-main">
+                                    {% if note.created_by %}
+                                        {% if note.created_by.get_full_name %}{{ note.created_by.get_full_name }}{% else %}{{ note.created_by.username }}{% endif %}
+                                    {% else %}
+                                        Team Member
+                                    {% endif %}
+                                </strong>
+                                <span class="text-xs text-text-muted">{{ note.created_at|date:"M d, Y H:i" }}</span>
+                            </div>
+                            <p class="text-sm text-text-muted whitespace-pre-wrap">{{ note.notes|linebreaksbr }}</p>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <p class="text-text-muted italic text-sm">No nursing notes have been recorded for this visit yet.</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

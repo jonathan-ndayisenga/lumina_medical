@@ -1,0 +1,563 @@
+from decimal import Decimal
+
+from django.contrib import messages
+from django.contrib.auth.decorators import login_required
+from django.db import transaction
+from django.db.models import Count, Max, Q
+from django.shortcuts import get_object_or_404, redirect, render
+from django.utils import timezone
+
+from accounts.models import User
+from .forms import CompleteVisitForm, PatientForm, VisitCreateForm
+from .models import Patient, Payment, QueueEntry, Visit, VisitService
+from .workflow import sync_visit_status
+
+
+def reception_role_required(view_func):
+    @login_required
+    def wrapped(request, *args, **kwargs):
+        user = request.user
+        allowed = getattr(user, "role", "") in {
+            User.ROLE_SUPERADMIN,
+            User.ROLE_HOSPITAL_ADMIN,
+            User.ROLE_RECEPTIONIST,
+        } or user.groups.filter(name="Reception").exists()
+        if not allowed:
+            return redirect("app_home")
+        return view_func(request, *args, **kwargs)
+
+    return wrapped
+
+
+def get_active_hospital(request):
+    return getattr(request, "hospital", None) or getattr(request.user, "hospital", None)
+
+
+def queue_types_for_service(service):
+    mapping = {
+        service.CATEGORY_LAB: [QueueEntry.TYPE_LAB_RECEPTION],
+        service.CATEGORY_CONSULTATION: [QueueEntry.TYPE_DOCTOR],
+        service.CATEGORY_TRIAGE: [QueueEntry.TYPE_NURSE],
+    }
+    return mapping.get(service.category, [])
+
+
+def queue_reason_for_service(service):
+    if service.category == service.CATEGORY_LAB:
+        return f"Initial lab tests: {service.name}"
+    if service.category == service.CATEGORY_CONSULTATION:
+        return f"Initial consultation: {service.name}"
+    if service.category == service.CATEGORY_TRIAGE:
+        return f"Triage required: {service.name}"
+    return f"Initial {service.category}: {service.name}"
+
+
+@reception_role_required
+def reception_dashboard(request):
+    hospital = get_active_hospital(request)
+    patients = Patient.objects.filter(hospital=hospital).order_by("-created_at")[:5] if hospital else Patient.objects.none()
+    visits = Visit.objects.filter(hospital=hospital).select_related("patient").order_by("-visit_date")[:5] if hospital else Visit.objects.none()
+    ready_for_billing = (
+        Visit.objects.filter(hospital=hospital, status=Visit.STATUS_READY_FOR_BILLING)
+        .select_related("patient")
+        .order_by("-visit_date")[:6]
+        if hospital else Visit.objects.none()
+    )
+    context = {
+        "active_nav": "reception",
+        "dashboard_title": "Reception Dashboard",
+        "dashboard_intro": "Patient registration, visit creation, billing completion, and care queue routing all start here.",
+        "hospital": hospital,
+        "patient_count": Patient.objects.filter(hospital=hospital).count() if hospital else 0,
+        "visit_count": Visit.objects.filter(hospital=hospital).count() if hospital else 0,
+        "queue_count": QueueEntry.objects.filter(hospital=hospital, processed=False).count() if hospital else 0,
+        "completed_visit_count": Visit.objects.filter(hospital=hospital, status=Visit.STATUS_COMPLETED).count() if hospital else 0,
+        "ready_for_billing_count": Visit.objects.filter(hospital=hospital, status=Visit.STATUS_READY_FOR_BILLING).count() if hospital else 0,
+        "recent_patients": patients,
+        "recent_visits": visits,
+        "ready_for_billing_visits": ready_for_billing,
+    }
+    return render(request, "reception/dashboard.html", context)
+
+
+@reception_role_required
+def patient_list(request):
+    hospital = get_active_hospital(request)
+    patients = (
+        Patient.objects.filter(hospital=hospital)
+        .annotate(visit_count=Count("visits"), last_visit_date=Max("visits__visit_date"))
+        .prefetch_related("visits__queue_entries", "visits__visit_services__service")
+        .order_by("name")
+        if hospital
+        else Patient.objects.none()
+    )
+    query = (request.GET.get("q") or "").strip()
+    if query:
+        patients = patients.filter(
+            Q(name__icontains=query)
+            | Q(contact__icontains=query)
+            | Q(age__icontains=query)
+        )
+    patient_rows = []
+    for patient in patients:
+        visits = list(patient.visits.all())
+        latest_editable_visit = next(
+            (
+                visit
+                for visit in visits
+                if visit.status != Visit.STATUS_COMPLETED and not visit.queue_entries.filter(processed=True).exists()
+            ),
+            None,
+        )
+        patient_rows.append(
+            {
+                "patient": patient,
+                "recent_visits": visits[:3],
+                "latest_editable_visit": latest_editable_visit,
+            }
+        )
+    return render(
+        request,
+        "reception/patient_list.html",
+        {
+            "active_nav": "reception_patients",
+            "dashboard_title": "Patients",
+            "dashboard_intro": "Search returning patients, review prior visits, and start a new visit when they arrive.",
+            "hospital": hospital,
+            "patient_rows": patient_rows,
+            "query": query,
+        },
+    )
+
+
+@reception_role_required
+def patient_create(request):
+    hospital = get_active_hospital(request)
+    if hospital is None:
+        messages.error(request, "A hospital context is required before you can register patients.")
+        return redirect("reception_dashboard")
+
+    if request.method == "POST":
+        form = PatientForm(request.POST)
+        if form.is_valid():
+            patient = form.save(commit=False)
+            patient.hospital = hospital
+            patient.save()
+            messages.success(request, f"{patient.name} registered successfully.")
+            return redirect("visit_create", patient_id=patient.pk)
+        messages.error(request, "Please fix the patient details below.")
+    else:
+        form = PatientForm()
+
+    return render(
+        request,
+        "reception/patient_form.html",
+        {
+            "active_nav": "reception_patients",
+            "dashboard_title": "Register Patient",
+            "dashboard_intro": "Create a patient record and continue into visit creation.",
+            "hospital": hospital,
+            "form": form,
+        },
+    )
+
+
+@reception_role_required
+@transaction.atomic
+def visit_create(request, patient_id):
+    hospital = get_active_hospital(request)
+    patient = get_object_or_404(Patient, pk=patient_id, hospital=hospital)
+
+    if request.method == "POST":
+        form = VisitCreateForm(request.POST, hospital=hospital)
+        if form.is_valid():
+            visit = form.save(commit=False)
+            visit.patient = patient
+            visit.hospital = hospital
+            visit.created_by = request.user
+            visit.total_amount = form.calculate_total()
+            visit.save()
+
+            services = list(form.cleaned_data["services"])
+            for service in services:
+                VisitService.objects.create(
+                    visit=visit,
+                    service=service,
+                    price_at_time=service.price,
+                )
+                for queue_type in queue_types_for_service(service):
+                    QueueEntry.objects.create(
+                        hospital=hospital,
+                        visit=visit,
+                        queue_type=queue_type,
+                        reason=queue_reason_for_service(service),
+                        requested_by=request.user,
+                    )
+
+            sync_visit_status(visit)
+            messages.success(
+                request,
+                f"Visit created. Total bill: {visit.total_amount}. No payment collected yet.",
+            )
+            return redirect("reception_dashboard")
+        messages.error(request, "Please fix the visit details below.")
+    else:
+        form = VisitCreateForm(hospital=hospital)
+
+    return render(
+        request,
+        "reception/visit_form.html",
+        {
+            "active_nav": "reception_patients",
+            "dashboard_title": "Create Visit",
+            "dashboard_intro": "Select services, build the visit bill, and route work into the live queue.",
+            "hospital": hospital,
+            "patient": patient,
+            "form": form,
+            "edit_mode": False,
+        },
+    )
+
+
+@reception_role_required
+@transaction.atomic
+def visit_edit(request, visit_id):
+    hospital = get_active_hospital(request)
+    visit = get_object_or_404(
+        Visit.objects.select_related("patient", "hospital").prefetch_related("visit_services__service", "queue_entries"),
+        pk=visit_id,
+        hospital=hospital,
+    )
+
+    if visit.status == Visit.STATUS_COMPLETED:
+        messages.error(request, "Completed visits cannot be edited from reception.")
+        return redirect("reception_dashboard")
+    if visit.queue_entries.filter(processed=True).exists():
+        messages.error(request, "This visit already has processed workflow activity and can no longer be edited safely.")
+        return redirect("patient_list")
+
+    if request.method == "POST":
+        form = VisitCreateForm(request.POST, instance=visit, hospital=hospital)
+        if form.is_valid():
+            visit = form.save(commit=False)
+            visit.total_amount = form.calculate_total()
+            visit.save()
+
+            visit.visit_services.all().delete()
+            visit.queue_entries.filter(processed=False).delete()
+
+            services = list(form.cleaned_data["services"])
+            for service in services:
+                VisitService.objects.create(
+                    visit=visit,
+                    service=service,
+                    price_at_time=service.price,
+                )
+                for queue_type in queue_types_for_service(service):
+                    QueueEntry.objects.create(
+                        hospital=hospital,
+                        visit=visit,
+                        queue_type=queue_type,
+                        reason=queue_reason_for_service(service),
+                        requested_by=request.user,
+                    )
+
+            sync_visit_status(visit)
+            messages.success(request, f"Visit for {visit.patient.name} updated successfully.")
+            return redirect("patient_list")
+        messages.error(request, "Please fix the visit details below.")
+    else:
+        form = VisitCreateForm(instance=visit, hospital=hospital)
+
+    return render(
+        request,
+        "reception/visit_form.html",
+        {
+            "active_nav": "reception_patients",
+            "dashboard_title": "Edit Visit",
+            "dashboard_intro": "Adjust services and notes before the care workflow has been processed.",
+            "hospital": hospital,
+            "patient": visit.patient,
+            "visit": visit,
+            "form": form,
+            "edit_mode": True,
+        },
+    )
+
+
+@reception_role_required
+@transaction.atomic
+def visit_delete(request, visit_id):
+    hospital = get_active_hospital(request)
+    visit = get_object_or_404(
+        Visit.objects.select_related("patient", "hospital").prefetch_related("visit_services__service", "queue_entries"),
+        pk=visit_id,
+        hospital=hospital,
+    )
+
+    if visit.status == Visit.STATUS_COMPLETED:
+        messages.error(request, "Completed visits cannot be deleted from reception.")
+        return redirect("reception_dashboard")
+    if visit.queue_entries.filter(processed=True).exists():
+        messages.error(request, "This visit already has processed workflow activity and can no longer be deleted safely.")
+        return redirect("patient_list")
+
+    if request.method == "POST":
+        patient_name = visit.patient.name
+        visit.delete()
+        messages.success(request, f"Visit for {patient_name} deleted.")
+        return redirect("patient_list")
+
+    return render(
+        request,
+        "reception/visit_confirm_delete.html",
+        {
+            "active_nav": "reception_patients",
+            "dashboard_title": "Delete Visit",
+            "dashboard_intro": "Confirm whether this unprocessed visit should be removed.",
+            "hospital": hospital,
+            "visit": visit,
+        },
+    )
+
+
+@reception_role_required
+@transaction.atomic
+def complete_visit(request, visit_id):
+    hospital = get_active_hospital(request)
+    visit = get_object_or_404(
+        Visit.objects.select_related("patient", "hospital").prefetch_related("visit_services__service"),
+        pk=visit_id,
+        hospital=hospital,
+    )
+    # With partial payments, a visit is only "completed" when fully settled.
+    if visit.status == Visit.STATUS_COMPLETED and visit.is_fully_paid:
+        messages.error(request, "This visit has already been fully paid and completed.")
+        latest_payment = visit.payments.order_by("-paid_at", "-id").first()
+        if latest_payment:
+            return redirect("print_payment_receipt", payment_id=latest_payment.pk)
+        return redirect("print_receipt", visit_id=visit.pk)
+
+    if request.method == "POST":
+        form = CompleteVisitForm(request.POST, remaining_balance=visit.balance_due, hospital=hospital)
+        if form.is_valid():
+            amount_paid = form.cleaned_data["amount_paid"]
+            payment_mode = form.cleaned_data["payment_mode"]
+
+            # Cash receipts are mirrored to the daily cash statement automatically in Payment.save().
+
+            payment = Payment(
+                visit=visit,
+                amount=visit.total_amount,
+                amount_paid=amount_paid,
+                mode=payment_mode,
+                bank_account=form.cleaned_data["bank_account"],
+                mobile_account=form.cleaned_data["mobile_account"],
+                recorded_by=request.user,
+                notes=form.cleaned_data["payment_notes"] or "",
+            )
+            payment.save()
+
+            # Update visit status based on remaining balance.
+            visit.refresh_from_db()
+            if visit.is_fully_paid:
+                visit.status = Visit.STATUS_COMPLETED
+                visit.save(update_fields=["status"])
+                messages.success(request, "Payment recorded. Visit is now fully paid and completed.")
+            else:
+                visit.status = Visit.STATUS_READY_FOR_BILLING
+                visit.save(update_fields=["status"])
+                messages.success(request, f"Partial payment recorded. Balance due: {visit.balance_due}.")
+
+            return redirect("print_payment_receipt", payment_id=payment.pk)
+        messages.error(request, "Please correct the billing details below.")
+    else:
+        remaining = visit.balance_due
+        form = CompleteVisitForm(
+            remaining_balance=remaining,
+            hospital=hospital,
+            initial={
+                "amount_paid": remaining,
+                "payment_mode": Payment.MODE_CASH,
+                "bank_account": None,
+                "mobile_account": None,
+                "payment_notes": "",
+            },
+        )
+
+    bank_qs = form.fields["bank_account"].queryset
+    mobile_qs = form.fields["mobile_account"].queryset
+    bank_count = bank_qs.count() if bank_qs is not None else 0
+    mobile_count = mobile_qs.count() if mobile_qs is not None else 0
+
+    return render(
+        request,
+        "reception/complete_visit.html",
+        {
+            "active_nav": "reception",
+            "dashboard_title": "Record Payment",
+            "dashboard_intro": "Record a payment for this visit. Partial payments are supported until the bill is fully settled.",
+            "hospital": hospital,
+            "visit": visit,
+            "form": form,
+            "total_paid": visit.total_paid,
+            "balance_due": visit.balance_due,
+            "bank_accounts_count": bank_count,
+            "mobile_accounts_count": mobile_count,
+            "single_bank_account": bank_qs.first() if bank_count == 1 else None,
+            "single_mobile_account": mobile_qs.first() if mobile_count == 1 else None,
+        },
+    )
+
+
+@reception_role_required
+def print_receipt(request, visit_id):
+    hospital = get_active_hospital(request)
+    visit = get_object_or_404(
+        Visit.objects.select_related("patient", "hospital").prefetch_related("visit_services__service"),
+        pk=visit_id,
+        hospital=hospital,
+    )
+    payments = visit.payments.select_related("bank_account", "mobile_account", "recorded_by").order_by("-paid_at", "-id")
+    latest_payment = payments.first()
+    return render(
+        request,
+        "reception/receipt.html",
+        {
+            "visit": visit,
+            "payment": latest_payment,
+            "payments": payments,
+            "hospital": visit.hospital,
+            "total_paid": visit.total_paid,
+            "balance_due": visit.balance_due,
+        },
+    )
+
+
+@reception_role_required
+def print_payment_receipt(request, payment_id):
+    """Print a receipt for a specific payment (supports partial payments)."""
+    hospital = get_active_hospital(request)
+    payment = get_object_or_404(
+        Payment.objects.select_related("visit__patient", "visit__hospital", "bank_account", "mobile_account", "recorded_by"),
+        pk=payment_id,
+        visit__hospital=hospital,
+    )
+    visit = payment.visit
+    payments = visit.payments.select_related("bank_account", "mobile_account", "recorded_by").order_by("-paid_at", "-id")
+    return render(
+        request,
+        "reception/payment_receipt.html",
+        {
+            "hospital": visit.hospital,
+            "visit": visit,
+            "payment": payment,
+            "payments": payments,
+            "total_paid": visit.total_paid,
+            "balance_due": visit.balance_due,
+        },
+    )
+
+
+@reception_role_required
+def patient_visits(request, patient_id):
+    """Display all visits for a specific patient with edit/delete/view options."""
+    hospital = get_active_hospital(request)
+    patient = get_object_or_404(Patient, pk=patient_id, hospital=hospital)
+    
+    # Get all visits for the patient with related data
+    visits = (
+        Visit.objects.filter(patient=patient)
+        .select_related("hospital")
+        .prefetch_related("visit_services__service", "queue_entries", "payments")
+        .order_by("-visit_date")
+    )
+    
+    # Prepare visit rows with editability and deletability flags
+    visit_rows = []
+    for visit in visits:
+        can_edit = (
+            visit.status != Visit.STATUS_COMPLETED 
+            and not visit.queue_entries.filter(processed=True).exists()
+        )
+        can_delete = can_edit  # Same conditions as edit
+        
+        payments = list(visit.payments.all())
+        # Prefer the most recent receipt for labels/badges.
+        latest_payment = max(
+            payments,
+            key=lambda p: ((p.paid_at.timestamp() if p.paid_at else 0), p.pk or 0),
+            default=None,
+        )
+
+        total_paid = sum((p.amount_paid for p in payments if p.status != Payment.STATUS_WAIVED), Decimal("0"))
+        balance_due = max((visit.total_amount or Decimal("0")) - total_paid, Decimal("0"))
+        
+        visit_rows.append({
+            "visit": visit,
+            "can_edit": can_edit,
+            "can_delete": can_delete,
+            "payments": payments,
+            "latest_payment": latest_payment,
+            "total_paid": total_paid,
+            "balance_due": balance_due,
+            "service_count": visit.visit_services.count(),
+        })
+    
+    return render(
+        request,
+        "reception/patient_visits.html",
+        {
+            "active_nav": "reception_patients",
+            "dashboard_title": f"{patient.name} - Visit History",
+            "dashboard_intro": "View, edit, or delete all visits from this patient's medical history.",
+            "hospital": hospital,
+            "patient": patient,
+            "visit_rows": visit_rows,
+        },
+    )
+
+
+def requested_by_label(user, fallback="System"):
+    if not user:
+        return fallback
+    return user.get_full_name() or user.username
+
+
+@reception_role_required
+def view_visit_report(request, visit_id):
+    """View complete visit report with doctor,nurse, and lab sections for printing"""
+    hospital = get_active_hospital(request)
+    visits = Visit.objects.select_related("patient", "hospital")
+    if hospital and getattr(request.user, "role", "") != User.ROLE_SUPERADMIN:
+        visits = visits.filter(hospital=hospital)
+    
+    visit = get_object_or_404(visits, pk=visit_id)
+    
+    # Import here to avoid circular imports
+    from doctor.models import Consultation
+    from nurse.models import NurseNote
+    from lab.models import LabReport
+    
+    # Get doctor consultation
+    consultation = getattr(visit, "consultation", None)
+    
+    # Get nurse notes
+    nurse_notes = NurseNote.objects.filter(visit=visit).select_related("created_by").order_by("-created_at")
+    
+    # Get lab reports
+    lab_reports = LabReport.objects.filter(visit=visit).prefetch_related("results__test").order_by("-created_at")
+    
+    context = {
+        "active_nav": "reception_patients",
+        "dashboard_title": f"Visit Report - {visit.patient.name}",
+        "dashboard_intro": "Complete visit documentation with all sections. Print this for patient records.",
+        "hospital": hospital,
+        "visit": visit,
+        "consultation": consultation,
+        "nurse_notes": nurse_notes,
+        "lab_reports": lab_reports,
+        "payments": visit.payments.select_related("bank_account", "mobile_account", "recorded_by").order_by("-paid_at", "-id"),
+    }
+    
+    return render(request, "reception/visit_report.html", context)

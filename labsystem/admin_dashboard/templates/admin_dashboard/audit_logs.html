@@ -1,0 +1,83 @@
+{% extends 'admin_dashboard/developer_base.html' %}
+
+{% block title %}Audit Logs - Lumina{% endblock %}
+{% block page_title %}Audit Logs{% endblock %}
+{% block page_subtitle %}Inspect platform activity across hospitals, users, and operational changes.{% endblock %}
+
+{% block developer_content %}
+<div class="space-y-6">
+    <div class="card">
+        <h3 class="text-sm font-semibold text-text-main mb-4">Filter Logs</h3>
+        <form method="get" class="space-y-4">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                    <label class="block text-sm font-semibold text-text-main mb-2">Hospital</label>
+                    <select name="hospital" class="w-full px-4 py-2 border border-gray-300 rounded-lg bg-white text-text-main focus:outline-none focus:ring-2 focus:ring-brand-dark focus:border-transparent">
+                        <option value="">All Hospitals</option>
+                        {% for hospital in hospitals %}
+                            <option value="{{ hospital.id }}" {% if hospital.id|stringformat:"s" == hospital_filter %}selected{% endif %}>{{ hospital.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-text-main mb-2">Action</label>
+                    <select name="action" class="w-full px-4 py-2 border border-gray-300 rounded-lg bg-white text-text-main focus:outline-none focus:ring-2 focus:ring-brand-dark focus:border-transparent">
+                        <option value="">All Actions</option>
+                        {% for action in actions %}
+                            <option value="{{ action }}" {% if action == action_filter %}selected{% endif %}>{{ action }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="flex items-end">
+                    <button type="submit" class="btn btn-primary w-full">Filter</button>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <div class="card">
+        <h3 class="text-sm font-semibold text-text-main mb-4">Activity Log</h3>
+        <div class="overflow-x-auto">
+            <table class="w-full">
+                <thead class="bg-gray-50 border-b border-gray-200">
+                    <tr>
+                        <th class="text-left px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-widest">Timestamp</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-widest">User</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-widest">Hospital</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-widest">Action</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-widest">Model</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-widest">Object ID</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-widest">Details</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200">
+                    {% for log in audit_logs %}
+                        <tr class="hover:bg-gray-50 transition-colors">
+                            <td class="px-4 py-3 text-sm text-text-main">{{ log.timestamp|date:"M d, Y H:i:s" }}</td>
+                            <td class="px-4 py-3 text-sm text-text-main">{{ log.user.username|default:"-" }}</td>
+                            <td class="px-4 py-3 text-sm text-text-main">{{ log.hospital.name|default:"-" }}</td>
+                            <td class="px-4 py-3 text-sm text-text-main">{{ log.action }}</td>
+                            <td class="px-4 py-3 text-sm text-text-main">{{ log.model_name }}</td>
+                            <td class="px-4 py-3 text-sm"><code class="bg-gray-100 rounded px-2 py-1 text-xs">{{ log.object_id }}</code></td>
+                            <td class="px-4 py-3 text-sm">
+                                {% if log.details %}
+                                    <details class="cursor-pointer">
+                                        <summary class="text-text-main font-medium">{{ log.details|length }} fields</summary>
+                                        <pre class="text-xs overflow-auto max-h-52 bg-gray-50 mt-2 p-2 rounded border border-gray-200">{{ log.details|safe }}</pre>
+                                    </details>
+                                {% else %}
+                                    <span class="text-text-muted">-</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                    {% empty %}
+                        <tr>
+                            <td colspan="7" class="px-4 py-8 text-center text-text-muted italic">No audit log entries found.</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

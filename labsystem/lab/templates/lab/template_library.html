@@ -1,0 +1,42 @@
+{% extends 'base.html' %}
+
+{% block title %}Test Templates - Lumina Medical Services{% endblock %}
+{% block page_title %}Test Templates{% endblock %}
+{% block page_subtitle %}Review the standard CBC and urinalysis parameter sets currently integrated into the lab module.{% endblock %}
+
+{% block content %}
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+    {% for profile in profiles %}
+    <div class="card overflow-hidden">
+        <div class="bg-brand-soft border-b border-gray-200 px-4 py-3">
+            <h2 class="text-lg font-bold text-text-main mb-1">{{ profile.name }}</h2>
+            <p class="text-sm text-text-muted">{{ profile.description|default:"No description set." }}</p>
+        </div>
+        <div class="p-4 space-y-4">
+            <div class="flex gap-2 flex-wrap">
+                <span class="inline-flex items-center px-2 py-1 rounded-full bg-brand-soft text-text-main text-xs font-semibold">Code: {{ profile.code }}</span>
+                <span class="inline-flex items-center px-2 py-1 rounded-full bg-brand-soft text-text-main text-xs font-semibold">Specimen: {{ profile.default_specimen_type|default:"-" }}</span>
+                <span class="inline-flex items-center px-2 py-1 rounded-full bg-brand-soft text-text-main text-xs font-semibold">{{ profile.parameters.count }} parameters</span>
+            </div>
+
+            <div class="space-y-2">
+                {% for parameter in profile.parameters.all %}
+                <div class="p-3 border border-gray-200 rounded-lg bg-white">
+                    <strong class="block text-sm text-text-main">{{ parameter.test.name }}</strong>
+                    <div class="text-xs text-text-muted mt-1">{{ parameter.section_name|default:"General" }}</div>
+                    <div class="text-xs text-text-muted">
+                        {% if parameter.default_reference_range %}Range: {{ parameter.default_reference_range }}{% else %}Range: -{% endif %}
+                        {% if parameter.default_unit %} · Unit: {{ parameter.default_unit }}{% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    {% empty %}
+    <div class="card col-span-full">
+        <p class="text-center text-text-muted">No active templates are configured yet.</p>
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}

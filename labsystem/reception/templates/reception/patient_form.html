@@ -1,0 +1,181 @@
+{% extends 'base.html' %}
+
+{% block title %}Register Patient - Hospital EMR{% endblock %}
+{% block page_title %}Register Patient{% endblock %}
+{% block page_subtitle %}Capture patient biodata, including weight, before creating a visit and routing care.{% endblock %}
+
+{% block content %}
+<div class="space-y-6 max-w-3xl">
+    <form method="post" class="card space-y-6">
+        {% csrf_token %}
+        {{ form.age }}
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+                <label for="{{ form.name.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">Patient Name</label>
+                {{ form.name }}
+                {% for error in form.name.errors %}<div class="text-xs text-red-600 mt-1">{{ error }}</div>{% endfor %}
+            </div>
+
+            <div>
+                <label class="block text-sm font-semibold text-text-main mb-1">Sex</label>
+                {{ form.sex }}
+                {% for error in form.sex.errors %}<div class="text-xs text-red-600 mt-1">{{ error }}</div>{% endfor %}
+            </div>
+
+            <div>
+                <label for="{{ form.registration_date.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">Registration Date</label>
+                {{ form.registration_date }}
+                <p class="mt-1 text-xs text-text-muted">Required so the patient timeline starts with a clear registration date.</p>
+                {% for error in form.registration_date.errors %}<div class="text-xs text-red-600 mt-1">{{ error }}</div>{% endfor %}
+            </div>
+
+            <div>
+                <label for="{{ form.date_of_birth.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">Date of Birth (optional)</label>
+                {{ form.date_of_birth }}
+                <p class="mt-1 text-xs text-text-muted">You can enter DOB or enter age below (DOB will be approximated).</p>
+                {% for error in form.date_of_birth.errors %}<div class="text-xs text-red-600 mt-1">{{ error }}</div>{% endfor %}
+            </div>
+
+            <div>
+                <label class="block text-sm font-semibold text-text-main mb-1">Age (optional)</label>
+                <div class="grid grid-cols-3 gap-2">
+                    <div>
+                        {{ form.age_value }}
+                        {% for error in form.age_value.errors %}<div class="text-xs text-red-600 mt-1">{{ error }}</div>{% endfor %}
+                    </div>
+                    <div class="col-span-2">
+                        {{ form.age_unit }}
+                        {% for error in form.age_unit.errors %}<div class="text-xs text-red-600 mt-1">{{ error }}</div>{% endfor %}
+                    </div>
+                </div>
+            </div>
+
+            <div>
+                <label for="{{ form.weight_kg.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">Weight (kg)</label>
+                {{ form.weight_kg }}
+                <p class="mt-1 text-xs text-text-muted">Optional, but helpful for treatment and lab interpretation.</p>
+                {% for error in form.weight_kg.errors %}<div class="text-xs text-red-600 mt-1">{{ error }}</div>{% endfor %}
+            </div>
+
+            <div class="md:col-span-2">
+                <label for="{{ form.contact.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">Contact</label>
+                {{ form.contact }}
+                {% for error in form.contact.errors %}<div class="text-xs text-red-600 mt-1">{{ error }}</div>{% endfor %}
+            </div>
+
+            <div class="md:col-span-2">
+                <label for="{{ form.email.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">Email (optional)</label>
+                {{ form.email }}
+                {% for error in form.email.errors %}<div class="text-xs text-red-600 mt-1">{{ error }}</div>{% endfor %}
+            </div>
+        </div>
+
+        <details class="rounded-lg border border-gray-200 bg-gray-50 p-4">
+            <summary class="cursor-pointer text-sm font-semibold text-text-main">Address & Emergency Contact</summary>
+            <div class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="md:col-span-2">
+                    <label for="{{ form.address.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">Address</label>
+                    {{ form.address }}
+                    {% for error in form.address.errors %}<div class="text-xs text-red-600 mt-1">{{ error }}</div>{% endfor %}
+                </div>
+                <div>
+                    <label for="{{ form.next_of_kin.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">Next of Kin</label>
+                    {{ form.next_of_kin }}
+                    {% for error in form.next_of_kin.errors %}<div class="text-xs text-red-600 mt-1">{{ error }}</div>{% endfor %}
+                </div>
+                <div>
+                    <label for="{{ form.next_of_kin_contact.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">Next of Kin Contact</label>
+                    {{ form.next_of_kin_contact }}
+                    {% for error in form.next_of_kin_contact.errors %}<div class="text-xs text-red-600 mt-1">{{ error }}</div>{% endfor %}
+                </div>
+            </div>
+        </details>
+
+        <details class="rounded-lg border border-gray-200 bg-gray-50 p-4">
+            <summary class="cursor-pointer text-sm font-semibold text-text-main">Identification & Insurance</summary>
+            <div class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label for="{{ form.nin.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">NIN (optional)</label>
+                    {{ form.nin }}
+                    {% for error in form.nin.errors %}<div class="text-xs text-red-600 mt-1">{{ error }}</div>{% endfor %}
+                </div>
+                <div class="flex items-center gap-2 pt-7">
+                    {{ form.id_verified }}
+                    <label for="{{ form.id_verified.id_for_label }}" class="text-sm font-semibold text-text-main">ID Verified</label>
+                    {% for error in form.id_verified.errors %}<div class="text-xs text-red-600 mt-1">{{ error }}</div>{% endfor %}
+                </div>
+                <div>
+                    <label for="{{ form.insurance_provider.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">Insurance Provider</label>
+                    {{ form.insurance_provider }}
+                    {% for error in form.insurance_provider.errors %}<div class="text-xs text-red-600 mt-1">{{ error }}</div>{% endfor %}
+                </div>
+                <div>
+                    <label for="{{ form.insurance_policy_number.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">Policy Number</label>
+                    {{ form.insurance_policy_number }}
+                    {% for error in form.insurance_policy_number.errors %}<div class="text-xs text-red-600 mt-1">{{ error }}</div>{% endfor %}
+                </div>
+            </div>
+        </details>
+
+        <div class="flex gap-3 flex-wrap pt-4">
+            <button type="submit" class="btn btn-primary">Save and Continue to Visit</button>
+            <a href="{% url 'patient_list' %}" class="btn btn-secondary">Back to Patients</a>
+        </div>
+    </form>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    const ageValue = document.getElementById("id_age_value");
+    const ageUnit = document.getElementById("id_age_unit");
+    const dob = document.getElementById("id_date_of_birth");
+
+    function pad2(n) { return String(n).padStart(2, "0"); }
+    function fmtDate(d) { return d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate()); }
+
+    function updateDobFromAge() {
+        if (!dob || !ageValue) return;
+        const val = parseInt(ageValue.value || "", 10);
+        if (Number.isNaN(val)) return;
+        const unit = (ageUnit && ageUnit.value) ? ageUnit.value : "YRS";
+        const today = new Date();
+        if (unit === "MTH") {
+            const d = new Date(today.getFullYear(), today.getMonth() - val, 1);
+            dob.value = fmtDate(d);
+        } else {
+            const d = new Date(today.getFullYear() - val, 0, 1);
+            dob.value = fmtDate(d);
+        }
+    }
+
+    function updateAgeFromDob() {
+        if (!dob || !ageValue || !ageUnit) return;
+        if (!dob.value) return;
+        const parts = dob.value.split("-");
+        if (parts.length !== 3) return;
+        const d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+        const today = new Date();
+        let years = today.getFullYear() - d.getFullYear();
+        const m = today.getMonth() - d.getMonth();
+        if (m < 0 || (m === 0 && today.getDate() < d.getDate())) years--;
+        if (years >= 1) {
+            ageValue.value = String(years);
+            ageUnit.value = "YRS";
+        } else {
+            let months = (today.getFullYear() - d.getFullYear()) * 12 + (today.getMonth() - d.getMonth());
+            if (today.getDate() < d.getDate()) months--;
+            months = Math.max(months, 0);
+            ageValue.value = String(months);
+            ageUnit.value = "MTH";
+        }
+    }
+
+    if (ageValue) ageValue.addEventListener("change", updateDobFromAge);
+    if (ageUnit) ageUnit.addEventListener("change", updateDobFromAge);
+    if (dob) dob.addEventListener("change", updateAgeFromDob);
+})();
+</script>
+{% endblock %}

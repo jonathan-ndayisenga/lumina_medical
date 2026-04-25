@@ -1,0 +1,44 @@
+{# Shared triage fields (doctor + nurse). Expect `triage_form` in context. #}
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+    <div>
+        <label for="{{ triage_form.weight_kg.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">Weight (kg)</label>
+        {{ triage_form.weight_kg }}
+        {% if triage_form.weight_kg.errors %}<div class="text-xs text-red-600 mt-1">{{ triage_form.weight_kg.errors }}</div>{% endif %}
+    </div>
+    <div>
+        <label for="{{ triage_form.bp_systolic.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">BP Systolic</label>
+        {{ triage_form.bp_systolic }}
+        {% if triage_form.bp_systolic.errors %}<div class="text-xs text-red-600 mt-1">{{ triage_form.bp_systolic.errors }}</div>{% endif %}
+    </div>
+    <div>
+        <label for="{{ triage_form.bp_diastolic.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">BP Diastolic</label>
+        {{ triage_form.bp_diastolic }}
+        {% if triage_form.bp_diastolic.errors %}<div class="text-xs text-red-600 mt-1">{{ triage_form.bp_diastolic.errors }}</div>{% endif %}
+    </div>
+    <div>
+        <label for="{{ triage_form.pulse.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">Pulse (bpm)</label>
+        {{ triage_form.pulse }}
+        {% if triage_form.pulse.errors %}<div class="text-xs text-red-600 mt-1">{{ triage_form.pulse.errors }}</div>{% endif %}
+    </div>
+    <div>
+        <label for="{{ triage_form.respiratory_rate.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">Respiratory Rate</label>
+        {{ triage_form.respiratory_rate }}
+        {% if triage_form.respiratory_rate.errors %}<div class="text-xs text-red-600 mt-1">{{ triage_form.respiratory_rate.errors }}</div>{% endif %}
+    </div>
+    <div>
+        <label for="{{ triage_form.temperature_celsius.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">Temperature (C)</label>
+        {{ triage_form.temperature_celsius }}
+        {% if triage_form.temperature_celsius.errors %}<div class="text-xs text-red-600 mt-1">{{ triage_form.temperature_celsius.errors }}</div>{% endif %}
+    </div>
+    <div>
+        <label for="{{ triage_form.oxygen_saturation.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">SpO2 (%)</label>
+        {{ triage_form.oxygen_saturation }}
+        {% if triage_form.oxygen_saturation.errors %}<div class="text-xs text-red-600 mt-1">{{ triage_form.oxygen_saturation.errors }}</div>{% endif %}
+    </div>
+    <div>
+        <label for="{{ triage_form.glucose_mg_dl.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">Glucose (mg/dL)</label>
+        {{ triage_form.glucose_mg_dl }}
+        {% if triage_form.glucose_mg_dl.errors %}<div class="text-xs text-red-600 mt-1">{{ triage_form.glucose_mg_dl.errors }}</div>{% endif %}
+    </div>
+</div>
+

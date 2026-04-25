@@ -1,0 +1,143 @@
+{% extends 'base.html' %}
+
+{% block title %}Record Payment - Hospital EMR{% endblock %}
+{% block page_title %}Record Payment{% endblock %}
+{% block page_subtitle %}Capture a receipt for this visit. Partial payments are supported until the balance reaches zero.{% endblock %}
+
+{% block content %}
+<div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
+    <div class="xl:col-span-2 space-y-6">
+        <div class="card">
+            <h3 class="text-sm font-semibold text-text-main mb-4">Visit Summary</h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                <div class="space-y-2">
+                    <p><strong class="text-text-main">Patient:</strong> <span class="text-text-muted">{{ visit.patient.name }}</span></p>
+                    <p><strong class="text-text-main">Age / Sex:</strong> <span class="text-text-muted">{{ visit.patient.age }} / {{ visit.patient.get_sex_display }}</span></p>
+                    <p><strong class="text-text-main">Visit Date:</strong> <span class="text-text-muted">{{ visit.visit_date|date:"Y-m-d H:i" }}</span></p>
+                </div>
+                <div class="space-y-2">
+                    <p><strong class="text-text-main">Current Status:</strong> <span class="text-text-muted">{{ visit.get_status_display }}</span></p>
+                    <p><strong class="text-text-main">Total Bill:</strong> <span class="text-text-muted">{{ visit.total_amount }}</span></p>
+                    <p><strong class="text-text-main">Total Paid:</strong> <span class="text-text-muted">{{ total_paid }}</span></p>
+                    <p><strong class="text-text-main">Balance Due:</strong> <span class="text-text-muted">{{ balance_due }}</span></p>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h3 class="text-sm font-semibold text-text-main mb-4">Services on This Visit</h3>
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead class="border-b border-gray-200">
+                        <tr>
+                            <th class="text-left py-2 pr-4 text-xs font-semibold uppercase text-text-muted">Service</th>
+                            <th class="text-left py-2 pr-4 text-xs font-semibold uppercase text-text-muted">Category</th>
+                            <th class="text-right py-2 text-xs font-semibold uppercase text-text-muted">Price</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-100">
+                        {% for item in visit.visit_services.all %}
+                            <tr>
+                                <td class="py-3 pr-4 text-text-main">{{ item.service.name }}</td>
+                                <td class="py-3 pr-4 text-text-muted">{{ item.service.get_category_display }}</td>
+                                <td class="py-3 text-right text-text-main">{{ item.price_at_time }}</td>
+                            </tr>
+                        {% empty %}
+                            <tr>
+                                <td colspan="3" class="py-6 text-center text-text-muted">No services are attached to this visit.</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                    <tfoot>
+                        <tr class="border-t border-gray-200">
+                            <td colspan="2" class="pt-3 font-semibold text-text-main">Total</td>
+                            <td class="pt-3 text-right font-semibold text-text-main">{{ visit.total_amount }}</td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="card h-fit">
+        <h3 class="text-sm font-semibold text-text-main mb-4">Payment Details</h3>
+        <form method="post" class="space-y-4">
+            {% csrf_token %}
+            {% if form.non_field_errors %}
+                <div class="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{{ form.non_field_errors }}</div>
+            {% endif %}
+            <div>
+                <label for="{{ form.amount_paid.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">Amount Paid</label>
+                {{ form.amount_paid }}
+                {% for error in form.amount_paid.errors %}<div class="text-xs text-red-600 mt-1">{{ error }}</div>{% endfor %}
+            </div>
+            <div>
+                <label for="{{ form.payment_mode.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">Payment Mode</label>
+                {{ form.payment_mode }}
+                {% for error in form.payment_mode.errors %}<div class="text-xs text-red-600 mt-1">{{ error }}</div>{% endfor %}
+            </div>
+            <div id="bank-account-wrapper" class="hidden">
+                <label for="{{ form.bank_account.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">Bank Account (Card)</label>
+                {% if bank_accounts_count == 1 and single_bank_account %}
+                    <div class="rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm text-text-main">
+                        Deposits to: <strong>{{ single_bank_account }}</strong>
+                    </div>
+                    {{ form.bank_account.as_hidden }}
+                {% else %}
+                    {{ form.bank_account }}
+                {% endif %}
+                {% for error in form.bank_account.errors %}<div class="text-xs text-red-600 mt-1">{{ error }}</div>{% endfor %}
+            </div>
+            <div id="mobile-account-wrapper" class="hidden">
+                <label for="{{ form.mobile_account.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">Mobile Money Account</label>
+                {% if mobile_accounts_count == 1 and single_mobile_account %}
+                    <div class="rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm text-text-main">
+                        Deposits to: <strong>{{ single_mobile_account }}</strong>
+                    </div>
+                    {{ form.mobile_account.as_hidden }}
+                {% else %}
+                    {{ form.mobile_account }}
+                {% endif %}
+                {% for error in form.mobile_account.errors %}<div class="text-xs text-red-600 mt-1">{{ error }}</div>{% endfor %}
+            </div>
+            <div>
+                <label for="{{ form.payment_notes.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">Payment Notes</label>
+                {{ form.payment_notes }}
+                {% for error in form.payment_notes.errors %}<div class="text-xs text-red-600 mt-1">{{ error }}</div>{% endfor %}
+            </div>
+            <div class="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-text-main">
+                Current balance due before this receipt: {{ balance_due }}
+            </div>
+            <div class="flex gap-3 flex-wrap pt-2">
+                <button type="submit" class="btn btn-primary">Record Payment and Print Receipt</button>
+                <a href="{% url 'reception_dashboard' %}" class="btn btn-secondary">Back to Reception</a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    const modeEl = document.getElementById("{{ form.payment_mode.id_for_label }}") || document.getElementById("id_payment_mode");
+    const bankWrap = document.getElementById("bank-account-wrapper");
+    const mobileWrap = document.getElementById("mobile-account-wrapper");
+    const bankSelect = document.getElementById("{{ form.bank_account.id_for_label }}") || document.getElementById("id_bank_account");
+    const mobileSelect = document.getElementById("{{ form.mobile_account.id_for_label }}") || document.getElementById("id_mobile_account");
+
+    function updateVisibility() {
+        const mode = modeEl ? modeEl.value : "";
+        if (bankWrap) bankWrap.classList.toggle("hidden", mode !== "card");
+        if (mobileWrap) mobileWrap.classList.toggle("hidden", mode !== "mobile_money");
+        if (mode !== "card" && bankSelect && bankSelect.tagName === "SELECT") bankSelect.value = "";
+        if (mode !== "mobile_money" && mobileSelect && mobileSelect.tagName === "SELECT") mobileSelect.value = "";
+    }
+
+    if (modeEl) {
+        modeEl.addEventListener("change", updateVisibility);
+        updateVisibility();
+    }
+})();
+</script>
+{% endblock %}

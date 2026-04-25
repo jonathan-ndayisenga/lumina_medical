@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+
+{% block title %}Three-Way Reconciliation - Hospital EMR{% endblock %}
+{% block page_title %}Three-Way Reconciliation{% endblock %}
+{% block page_subtitle %}Compare bank deposits, internal payments, and patient bill totals.{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <div class="card max-w-3xl">
+        <h3 class="text-lg font-bold text-text-main mb-1">Generate Statement</h3>
+        <p class="text-sm text-text-muted mb-4">This compares totals for the selected period across three sources.</p>
+        <form method="post" class="space-y-4">
+            {% csrf_token %}
+            {% if form.non_field_errors %}
+                <div class="p-4 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">
+                    {{ form.non_field_errors }}
+                </div>
+            {% endif %}
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {% for field in form %}
+                    <div>
+                        <label for="{{ field.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">{{ field.label }}</label>
+                        {{ field }}
+                        {% for error in field.errors %}
+                            <div class="text-xs text-red-600 mt-1">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+                {% endfor %}
+            </div>
+            <div class="flex gap-3 flex-wrap pt-4 border-t border-gray-200">
+                <button type="submit" class="btn btn-primary">Generate Statement</button>
+                <a href="{% url 'financial_report' %}" class="btn btn-secondary">Back to Financial Report</a>
+            </div>
+        </form>
+    </div>
+
+    <div class="card">
+        <div class="flex items-center justify-between gap-4 mb-4">
+            <h3 class="text-lg font-bold text-text-main">Recent Statements</h3>
+        </div>
+        <div class="overflow-x-auto">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Generated</th>
+                        <th>Period</th>
+                        <th>Bank Deposits</th>
+                        <th>Internal Paid</th>
+                        <th>Patient Billed</th>
+                        <th class="no-print">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for statement in recent_statements %}
+                        <tr>
+                            <td class="text-sm text-text-muted">{{ statement.generated_at|date:"Y-m-d H:i" }}</td>
+                            <td class="text-sm text-text-muted">{{ statement.period_start }} - {{ statement.period_end }}</td>
+                            <td class="font-semibold text-text-main">{{ statement.total_deposits }}</td>
+                            <td class="font-semibold text-text-main">{{ statement.closing_balance }}</td>
+                            <td class="font-semibold text-text-main">{{ statement.total_withdrawals }}</td>
+                            <td class="no-print">
+                                <a href="{% url 'reconciliation_detail' statement.pk %}" class="btn btn-secondary btn-sm">View</a>
+                            </td>
+                        </tr>
+                    {% empty %}
+                        <tr>
+                            <td colspan="6" class="text-sm text-text-muted italic py-6">No statements generated yet.</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+

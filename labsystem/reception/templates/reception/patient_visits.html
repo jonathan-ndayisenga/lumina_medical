@@ -1,0 +1,142 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ patient.name }} - Visits - Hospital EMR{% endblock %}
+{% block page_title %}{{ patient.name }} - Visit History{% endblock %}
+{% block page_subtitle %}Review every dated visit for this patient, then view, edit, complete, or delete where appropriate.{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <div class="card bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200">
+        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-6">
+            <div class="space-y-4">
+                <h2 class="text-2xl font-bold text-text-main">{{ patient.name }}</h2>
+                <div class="grid grid-cols-2 md:grid-cols-5 gap-6">
+                    <div>
+                        <div class="text-xs font-semibold text-text-muted uppercase tracking-widest">Registered</div>
+                        <div class="text-lg font-semibold text-text-main mt-1">
+                            {% if patient.registration_date %}
+                                {{ patient.registration_date|date:"M d, Y" }}
+                            {% else %}
+                                {{ patient.created_at|date:"M d, Y" }}
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div>
+                        <div class="text-xs font-semibold text-text-muted uppercase tracking-widest">Age</div>
+                        <div class="text-lg font-semibold text-text-main mt-1">{{ patient.age }}</div>
+                    </div>
+                    <div>
+                        <div class="text-xs font-semibold text-text-muted uppercase tracking-widest">Sex</div>
+                        <div class="text-lg font-semibold text-text-main mt-1">{{ patient.get_sex_display }}</div>
+                    </div>
+                    <div>
+                        <div class="text-xs font-semibold text-text-muted uppercase tracking-widest">Weight</div>
+                        <div class="text-lg font-semibold text-text-main mt-1">{{ patient.weight_kg|default:"-" }}{% if patient.weight_kg %} kg{% endif %}</div>
+                    </div>
+                    <div>
+                        <div class="text-xs font-semibold text-text-muted uppercase tracking-widest">Contact</div>
+                        <div class="text-lg font-semibold text-text-main mt-1">{{ patient.contact|default:"-" }}</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex gap-6 md:border-l md:border-blue-200 md:pl-6">
+                <div class="text-center">
+                    <div class="text-3xl font-bold text-blue-600">{{ visit_rows|length }}</div>
+                    <div class="text-xs font-semibold text-text-muted uppercase tracking-widest mt-1">Total Visits</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <h3 class="text-sm font-semibold text-text-main mb-4">All Visits</h3>
+        <div class="overflow-x-auto">
+            <table class="w-full">
+                <thead class="bg-gray-50 border-b border-gray-200">
+                    <tr>
+                        <th class="text-left px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-widest">Date & Time</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-widest">Status</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-widest">Services</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-widest">Total Bill</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-widest">Payment Status</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-widest">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200">
+                    {% for row in visit_rows %}
+                    <tr class="hover:bg-gray-50 transition-colors">
+                        <td class="px-4 py-3 text-text-main">
+                            <div class="font-medium">{{ row.visit.visit_date|date:"M d, Y" }}</div>
+                            <div class="text-xs text-text-muted">{{ row.visit.visit_date|date:"H:i" }}</div>
+                        </td>
+                        <td class="px-4 py-3">
+                            {% with status=row.visit.status %}
+                                {% if status == "completed" %}
+                                    <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">Completed</span>
+                                {% elif status == "ready_for_billing" %}
+                                    <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-800">Ready for Billing</span>
+                                {% elif status == "in_progress" %}
+                                    <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-800">In Progress</span>
+                                {% else %}
+                                    <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-800">{{ row.visit.get_status_display }}</span>
+                                {% endif %}
+                            {% endwith %}
+                        </td>
+                        <td class="px-4 py-3 text-text-main">
+                            <div class="text-sm font-medium">{{ row.service_count }} service{{ row.service_count|pluralize }}</div>
+                            {% if row.visit.visit_services.all %}
+                                <div class="mt-1 space-y-1 max-w-xs">
+                                    {% for vs in row.visit.visit_services.all %}
+                                        <div class="text-xs text-text-muted">- {{ vs.service.name }}</div>
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+                        </td>
+                        <td class="px-4 py-3 text-text-main font-semibold">{{ row.visit.total_amount }}</td>
+                        <td class="px-4 py-3">
+                            {% if row.total_paid and row.balance_due == 0 %}
+                                <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">Paid</span>
+                                {% if row.latest_payment %}
+                                    <div class="text-xs text-text-muted mt-1">{{ row.latest_payment.get_mode_display }}</div>
+                                {% endif %}
+                            {% elif row.total_paid and row.balance_due > 0 %}
+                                <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-800">
+                                    Partial ({{ row.total_paid }}/{{ row.visit.total_amount }})
+                                </span>
+                                {% if row.latest_payment %}
+                                    <div class="text-xs text-text-muted mt-1">Balance: {{ row.balance_due }}</div>
+                                {% endif %}
+                            {% else %}
+                                <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-800">Not Paid</span>
+                            {% endif %}
+                        </td>
+                        <td class="px-4 py-3">
+                            <div class="flex flex-wrap gap-2">
+                                <a href="{% url 'view_visit_report' row.visit.pk %}" class="btn btn-secondary btn-sm" title="View complete visit report">View</a>
+                                {% if row.can_edit %}
+                                    <a href="{% url 'visit_edit' row.visit.pk %}" class="btn btn-primary btn-sm" title="Edit visit">Edit</a>
+                                {% endif %}
+                                {% if row.can_delete %}
+                                    <a href="{% url 'visit_delete' row.visit.pk %}" class="btn btn-danger btn-sm" title="Delete visit">Delete</a>
+                                {% endif %}
+                                <a href="{% url 'complete_visit' row.visit.pk %}" class="btn btn-secondary btn-sm" title="Record payment">Record Payment</a>
+                            </div>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="6" class="px-4 py-8 text-center text-text-muted italic">No visits recorded for this patient yet.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="flex gap-2">
+        <a href="{% url 'patient_list' %}" class="btn btn-secondary">Back to Patients</a>
+        <a href="{% url 'visit_create' patient.pk %}" class="btn btn-primary">Create New Visit</a>
+    </div>
+</div>
+{% endblock %}

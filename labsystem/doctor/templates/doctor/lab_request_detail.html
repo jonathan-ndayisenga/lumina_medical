@@ -1,0 +1,173 @@
+{% extends 'base.html' %}
+
+{% block title %}Lab Request Detail - Hospital EMR{% endblock %}
+{% block page_title %}Lab Request Details{% endblock %}
+{% block page_subtitle %}View request details and all associated lab results.{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Back Button -->
+    <a href="{% url 'doctor_lab_requests' %}" class="btn btn-secondary">← Back to Lab Requests</a>
+
+    <!-- Lab Request Header Card -->
+    <div class="card bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <!-- Left Column -->
+            <div>
+                <h2 class="text-2xl font-bold text-text-main mb-4">{{ lab_request.visit.patient.name }}</h2>
+                <div class="space-y-3">
+                    <div>
+                        <div class="text-xs font-semibold text-text-muted uppercase">Age / Sex</div>
+                        <div class="text-sm font-medium text-text-main">{{ lab_request.visit.patient.age }} / {{ lab_request.visit.patient.get_sex_display }}</div>
+                    </div>
+                    <div>
+                        <div class="text-xs font-semibold text-text-muted uppercase">Requested Date</div>
+                        <div class="text-sm font-medium text-text-main">{{ lab_request.created_at|date:"M d, Y H:i" }}</div>
+                    </div>
+                    <div>
+                        <div class="text-xs font-semibold text-text-muted uppercase">Requested By</div>
+                        <div class="text-sm font-medium text-text-main">
+                            {% if lab_request.requested_by %}
+                                {% if lab_request.requested_by.get_full_name %}
+                                    {{ lab_request.requested_by.get_full_name }}
+                                {% else %}
+                                    {{ lab_request.requested_by.username }}
+                                {% endif %}
+                            {% else %}
+                                Team
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Right Column - Status Info -->
+            <div>
+                <div class="space-y-3">
+                    <div>
+                        <div class="text-xs font-semibold text-text-muted uppercase mb-1">Status</div>
+                        {% if lab_request.status == "completed" %}
+                            <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold bg-emerald-100 text-emerald-800">
+                                ✓ Completed
+                            </span>
+                        {% elif lab_request.status == "in_progress" %}
+                            <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold bg-amber-100 text-amber-800">
+                                ⏳ In Progress
+                            </span>
+                        {% else %}
+                            <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold bg-gray-100 text-gray-800">
+                                ⏱ Pending
+                            </span>
+                        {% endif %}
+                    </div>
+                    
+                    <div>
+                        <div class="text-xs font-semibold text-text-muted uppercase mb-1">Urgency</div>
+                        {% if lab_request.urgency == "urgent" %}
+                            <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold bg-red-100 text-red-800">
+                                🚨 Urgent
+                            </span>
+                        {% else %}
+                            <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold bg-blue-100 text-blue-800">
+                                Routine
+                            </span>
+                        {% endif %}
+                    </div>
+                    
+                    <div>
+                        <div class="text-xs font-semibold text-text-muted uppercase mb-1">Reports Received</div>
+                        <div class="text-lg font-bold text-blue-600">{{ reports|length }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tests Requested Section -->
+    <div class="card">
+        <h3 class="text-lg font-bold text-text-main mb-3">Tests Requested</h3>
+        <p class="text-sm bg-blue-50 p-4 rounded border border-blue-200 text-text-main whitespace-pre-wrap">{{ lab_request.tests_requested }}</p>
+    </div>
+
+    <!-- Clinical Notes Section -->
+    {% if lab_request.clinical_notes %}
+    <div class="card">
+        <h3 class="text-lg font-bold text-text-main mb-3">Clinical Notes</h3>
+        <p class="text-sm bg-gray-50 p-4 rounded border border-gray-200 text-text-main whitespace-pre-wrap">{{ lab_request.clinical_notes }}</p>
+    </div>
+    {% endif %}
+
+    <!-- Lab Reports Section -->
+    <div class="card">
+        <h3 class="text-lg font-bold text-text-main mb-4">Lab Results</h3>
+        
+        {% if reports %}
+            <div class="space-y-4">
+                {% for report in reports %}
+                <div class="bg-emerald-50 p-4 rounded border border-emerald-200">
+                    <div class="flex justify-between items-start gap-4 mb-3">
+                        <div>
+                            <h4 class="font-semibold text-text-main">{{ report.profile.name|default:"Lab Report" }}</h4>
+                            <p class="text-xs text-text-muted">
+                                Specimen: {{ report.specimen_type }} | Collected: {{ report.sample_date|date:"M d, Y" }}
+                            </p>
+                        </div>
+                        {% if report.sent_to_doctor %}
+                            <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold bg-green-200 text-green-800">
+                                ✓ Sent on {{ report.sent_to_doctor_at|date:"M d, Y H:i" }}
+                            </span>
+                        {% endif %}
+                    </div>
+                    
+                    {% if report.results.all %}
+                    <div class="bg-white rounded border border-emerald-100 overflow-hidden">
+                        <table class="w-full text-sm">
+                            <thead class="bg-emerald-50 border-b">
+                                <tr>
+                                    <th class="text-left px-3 py-2 font-semibold">Test Name</th>
+                                    <th class="text-left px-3 py-2 font-semibold">Result</th>
+                                    <th class="text-left px-3 py-2 font-semibold">Reference Range</th>
+                                    <th class="text-left px-3 py-2 font-semibold">Unit</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y">
+                                {% for result in report.results.all %}
+                                <tr class="hover:bg-gray-50">
+                                    <td class="px-3 py-2">
+                                        <span class="font-medium">{{ result.test.name }}</span>
+                                        {% if result.section_name %}<div class="text-xs text-text-muted">{{ result.section_name }}</div>{% endif %}
+                                    </td>
+                                    <td class="px-3 py-2 font-semibold">{{ result.result_value }}</td>
+                                    <td class="px-3 py-2 text-xs">{{ result.reference_range|default:"-" }}</td>
+                                    <td class="px-3 py-2 text-xs">{{ result.unit|default:"-" }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% endif %}
+                    
+                    {% if report.comments %}
+                    <div class="mt-3 bg-white p-3 rounded">
+                        <p class="text-xs text-text-muted font-semibold">Comments</p>
+                        <p class="text-sm text-text-main">{{ report.comments }}</p>
+                    </div>
+                    {% endif %}
+                    
+                    <div class="text-xs text-text-muted mt-3 pt-3 border-t flex justify-between">
+                        <span>Report by: {{ report.attendant_name|default:"Lab Technician" }}</span>
+                        <a href="{% url 'report_detail' report.pk %}" class="text-blue-600 hover:underline">View Full Report →</a>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        {% else %}
+            <div class="bg-amber-50 border border-amber-200 rounded p-4">
+                <p class="text-sm text-amber-800">
+                    No results received yet. The lab is processing your request.
+                </p>
+            </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

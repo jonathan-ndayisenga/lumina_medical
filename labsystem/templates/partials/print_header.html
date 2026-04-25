@@ -1,0 +1,16 @@
+{% load static %}
+<div class="print-header flex justify-between gap-3 items-start pb-2 border-b-2 border-text-main">
+    <div class="print-brand flex items-start gap-2">
+        <img src="{% static 'images/lumina-logo.jpeg' %}" alt="Lumina Logo" class="h-11 rounded-lg">
+        <div class="text-xs">
+            <strong class="block text-text-main text-sm">LUMINA MEDICAL SERVICES</strong>
+            <span class="text-text-muted">lighting up your health.</span><br>
+            <span class="text-text-muted">PO BOX: 200132, Kampala · Kisaasi Kyanja road</span><br>
+            <span class="text-text-muted">Phone: 0750639410 / 0780105909</span>
+        </div>
+    </div>
+    <div class="print-meta text-xs text-right">
+        <div><strong>{{ print_title|default:"DOCUMENT" }}</strong></div>
+        {% if print_subtitle %}<div class="text-text-muted">{{ print_subtitle }}</div>{% endif %}
+    </div>
+</div>

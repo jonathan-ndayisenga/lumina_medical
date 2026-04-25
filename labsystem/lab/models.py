@@ -1,6 +1,8 @@
 from django.conf import settings
 from django.db import models
 
+from accounts.models import Hospital
+
 
 class TestProfile(models.Model):
     """Reusable starter templates such as CBC or urinalysis."""
@@ -29,6 +31,28 @@ class LabReport(models.Model):
         blank=True,
         related_name='reports',
     )
+    lab_request = models.ForeignKey(
+        'doctor.LabRequest',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='reports',
+        help_text="Link to the original lab request"
+    )
+    hospital = models.ForeignKey(
+        Hospital,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='lab_reports',
+    )
+    visit = models.ForeignKey(
+        'reception.Visit',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='lab_reports',
+    )
     patient_name = models.CharField(max_length=200)
     patient_age = models.CharField(max_length=20, help_text="e.g., 22YRS")
     patient_sex = models.CharField(max_length=10, choices=[('M', 'Male'), ('F', 'Female'), ('O', 'Other')])
@@ -38,6 +62,8 @@ class LabReport(models.Model):
     attendant = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)
     attendant_name = models.CharField(max_length=100, blank=True, help_text="Lab attendant's name")
     comments = models.TextField(blank=True)
+    sent_to_doctor = models.BooleanField(default=False, help_text="Whether results have been sent to requesting doctor")
+    sent_to_doctor_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     printed = models.BooleanField(default=False)
     printed_at = models.DateTimeField(null=True, blank=True)
@@ -47,6 +73,37 @@ class LabReport(models.Model):
 
     def __str__(self):
         return f"{self.patient_name} - {self.sample_date}"
+
+    @property
+    def template_label(self) -> str:
+        """
+        UI label for report list/detail headers.
+
+        The report can contain rows loaded from multiple templates (see TestResult.source_profile).
+        In that case, showing a single LabReport.profile name is misleading (it gets overwritten
+        by the last-loaded template). We therefore derive the label from the stored rows.
+        """
+        # Use prefetched results when available to avoid N+1 queries.
+        results = None
+        cache = getattr(self, "_prefetched_objects_cache", {}) or {}
+        if "results" in cache:
+            results = cache["results"]
+        if results is None:
+            results = self.results.select_related("source_profile").all()
+
+        profile_names = []
+        for result in results:
+            if result.source_profile_id and result.source_profile:
+                profile_names.append(result.source_profile.name)
+        distinct = list(dict.fromkeys(profile_names))  # preserve first-seen order
+
+        if len(distinct) == 1:
+            return distinct[0]
+        if len(distinct) > 1:
+            return "Test Results"
+        if self.profile_id and self.profile:
+            return self.profile.name
+        return "Test Results"
 
 
 class TestCatalog(models.Model):
@@ -68,9 +125,8 @@ class ReferenceRangeDefault(models.Model):
         ('neonate', 'Neonate (0-30 days)'),
         ('infant', 'Infant (1-6 months)'),
         ('child_1_5', 'Child (1-5 years)'),
-        ('child_6_11', 'Child (6-11 years)'),
-        ('child_12_17', 'Child (12-17 years)'),
-        ('adult', 'Adult (18+ years)'),
+        ('child_6_11', 'Child (6-12 years)'),
+        ('adult', 'Adult (13+ years)'),
     ]
     test = models.ForeignKey(TestCatalog, on_delete=models.CASCADE, related_name='default_ranges')
     age_category = models.CharField(max_length=20, choices=AGE_CATEGORIES)
@@ -119,6 +175,14 @@ class TestResult(models.Model):
     """Test result tied to catalog + stored range/unit."""
 
     lab_report = models.ForeignKey(LabReport, on_delete=models.CASCADE, related_name='results')
+    source_profile = models.ForeignKey(
+        TestProfile,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="results",
+        help_text="Template/profile that created this row (used for removing a whole template block).",
+    )
     test = models.ForeignKey(TestCatalog, on_delete=models.CASCADE)
     section_name = models.CharField(max_length=100, blank=True)
     display_order = models.PositiveIntegerField(default=0)

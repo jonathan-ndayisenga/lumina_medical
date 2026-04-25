@@ -1,0 +1,114 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Payment Receipt - Hospital EMR{% endblock %}
+{% block print_header %}{% endblock %}
+{% block page_title %}Payment Receipt{% endblock %}
+{% block page_subtitle %}Printable receipt for this payment (supports partial payments).{% endblock %}
+
+{% block extra_css %}
+<style>
+@page { size: A4 portrait; margin: 8mm; }
+@media print {
+    .no-print { display: none !important; }
+    .content { padding: 0 !important; }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="space-y-4 print-shell" style="background: #fff; color: #111827; font-size: 12px; line-height: 1.2;">
+    <div class="flex justify-end gap-3 no-print">
+        <a href="{% url 'patient_visits' visit.patient.pk %}" class="btn btn-secondary">Back to Visits</a>
+        <button type="button" class="btn btn-primary" onclick="window.print()">Print Receipt</button>
+    </div>
+
+    {% include "partials/print_header.html" with hospital=hospital print_title="PAYMENT RECEIPT" print_subtitle=payment.receipt_number %}
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-3 p-3 border border-gray-200 rounded-lg bg-white" style="font-size: 0.78rem;">
+        <div class="space-y-1">
+            <div><strong>Patient:</strong> {{ visit.patient.name }}</div>
+            <div><strong>Age/Sex:</strong> {{ visit.patient.age }} / {{ visit.patient.get_sex_display }}</div>
+            <div><strong>Visit ID:</strong> #{{ visit.id }}</div>
+            <div><strong>Visit Date:</strong> {{ visit.visit_date|date:"Y-m-d H:i" }}</div>
+        </div>
+        <div class="space-y-1">
+            <div><strong>Receipt Date:</strong> {% if payment.paid_at %}{{ payment.paid_at|date:"Y-m-d H:i" }}{% else %}-{% endif %}</div>
+            <div><strong>Mode:</strong> {{ payment.get_mode_display }}</div>
+            <div>
+                <strong>Account:</strong>
+                {% if payment.mode == "card" %}{{ payment.bank_account|default:"-" }}
+                {% elif payment.mode == "mobile_money" %}{{ payment.mobile_account|default:"-" }}
+                {% else %}Cash Drawer{% endif %}
+            </div>
+            <div><strong>Collected By:</strong> {{ payment.recorded_by.get_full_name|default:payment.recorded_by.username|default:"-" }}</div>
+        </div>
+    </div>
+
+    <div class="border border-gray-200 rounded-lg overflow-hidden">
+        <div class="px-3 py-2 bg-brand-soft text-text-main font-bold uppercase text-xs" style="letter-spacing: 0.08em;">Billing Summary</div>
+        <div class="p-3 grid grid-cols-1 md:grid-cols-4 gap-3" style="font-size: 0.78rem;">
+            <div>
+                <div class="text-xs text-text-muted uppercase font-semibold">Total Bill</div>
+                <div class="font-semibold">{{ visit.total_amount }}</div>
+            </div>
+            <div>
+                <div class="text-xs text-text-muted uppercase font-semibold">This Receipt</div>
+                <div class="font-semibold">{{ payment.amount_paid }}</div>
+            </div>
+            <div>
+                <div class="text-xs text-text-muted uppercase font-semibold">Total Paid</div>
+                <div class="font-semibold">{{ total_paid }}</div>
+            </div>
+            <div>
+                <div class="text-xs text-text-muted uppercase font-semibold">Balance Due</div>
+                <div class="font-semibold">{{ balance_due }}</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="border border-gray-200 rounded-lg overflow-hidden">
+        <div class="px-3 py-2 bg-brand-soft text-text-main font-bold uppercase text-xs" style="letter-spacing: 0.08em;">Services</div>
+        <div class="overflow-x-auto">
+            <table class="w-full" style="border-collapse: collapse; font-size: 0.75rem;">
+                <thead>
+                    <tr>
+                        <th style="text-align:left; border-bottom: 1px solid #e6ecf3; padding: 0.35rem 0.45rem;">Service</th>
+                        <th style="text-align:left; border-bottom: 1px solid #e6ecf3; padding: 0.35rem 0.45rem;">Category</th>
+                        <th style="text-align:right; border-bottom: 1px solid #e6ecf3; padding: 0.35rem 0.45rem;">Price</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in visit.visit_services.all %}
+                        <tr>
+                            <td style="border-bottom: 1px solid #e6ecf3; padding: 0.35rem 0.45rem;">{{ item.service.name }}</td>
+                            <td style="border-bottom: 1px solid #e6ecf3; padding: 0.35rem 0.45rem;">{{ item.service.get_category_display }}</td>
+                            <td style="border-bottom: 1px solid #e6ecf3; padding: 0.35rem 0.45rem; text-align:right;">{{ item.price_at_time }}</td>
+                        </tr>
+                    {% empty %}
+                        <tr>
+                            <td colspan="3" style="padding: 0.75rem; text-align:center; color:#6b7280;">No services attached to this visit.</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    {% if payment.notes %}
+        <div class="border border-gray-200 rounded-lg overflow-hidden">
+            <div class="px-3 py-2 bg-brand-soft text-text-main font-bold uppercase text-xs" style="letter-spacing: 0.08em;">Notes</div>
+            <div class="p-3" style="font-size: 0.78rem;">{{ payment.notes }}</div>
+        </div>
+    {% endif %}
+
+    {% include "partials/print_footer.html" with hospital=hospital %}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Auto-print when opened from the receipts list; keep manual print button available.
+// window.addEventListener('load', () => window.print());
+</script>
+{% endblock %}

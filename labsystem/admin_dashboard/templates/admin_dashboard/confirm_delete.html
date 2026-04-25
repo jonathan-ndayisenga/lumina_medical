@@ -1,0 +1,23 @@
+{% extends base_template %}
+
+{% block title %}{{ dashboard_title }} - Lumina{% endblock %}
+{% block page_title %}{{ dashboard_title }}{% endblock %}
+{% block page_subtitle %}Please confirm this action before the record is removed.{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <div class="card max-w-2xl">
+        <h3 class="text-lg font-semibold text-text-main mb-2">{{ dashboard_title }}</h3>
+        <p class="text-text-muted mb-4">{{ dashboard_intro }}</p>
+        <p class="text-text-main mb-2">You are about to remove <strong>{{ object_label }}</strong>{% if object_type %} from the {{ object_type }} records{% endif %}.</p>
+        {% if danger_note %}
+            <p class="text-red-600 font-medium mb-4">{{ danger_note }}</p>
+        {% endif %}
+        <form method="post" class="flex gap-3 flex-wrap">
+            {% csrf_token %}
+            <button type="submit" class="btn bg-red-600 hover:bg-red-700 text-white">{{ confirm_label|default:"Confirm" }}</button>
+            <a href="{% url cancel_url %}" class="btn btn-secondary">Cancel</a>
+        </form>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,102 @@
+{% extends 'base.html' %}
+
+{% block title %}Reception Dashboard - Hospital EMR{% endblock %}
+{% block page_title %}Reception Dashboard{% endblock %}
+{% block page_subtitle %}Register patients, create visits, route work, and finalize billing when care is complete.{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <div class="flex flex-col sm:flex-row gap-3 justify-end">
+        <a href="{% url 'patient_list' %}" class="btn btn-secondary">View All Patients</a>
+        <a href="{% url 'patient_create' %}" class="btn btn-primary">Register New Patient</a>
+    </div>
+
+    <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
+        <div class="card">
+            <p class="text-text-muted text-sm font-medium mb-2">Patients Registered</p>
+            <p class="text-3xl font-bold text-brand-dark">{{ patient_count }}</p>
+        </div>
+        <div class="card">
+            <p class="text-text-muted text-sm font-medium mb-2">Total Visits</p>
+            <p class="text-3xl font-bold text-brand-dark">{{ visit_count }}</p>
+        </div>
+        <div class="card">
+            <p class="text-text-muted text-sm font-medium mb-2">Queue Items</p>
+            <p class="text-3xl font-bold text-brand-dark">{{ queue_count }}</p>
+        </div>
+        <div class="card">
+            <p class="text-text-muted text-sm font-medium mb-2">Ready for Billing</p>
+            <p class="text-3xl font-bold text-amber-600">{{ ready_for_billing_count }}</p>
+        </div>
+        <div class="card">
+            <p class="text-text-muted text-sm font-medium mb-2">Completed</p>
+            <p class="text-3xl font-bold text-green-600">{{ completed_visit_count }}</p>
+        </div>
+    </div>
+
+    <div class="card bg-brand-soft border-l-4 border-brand-dark">
+        <h4 class="text-sm font-semibold text-brand-dark mb-2">Reception Workflow</h4>
+        <p class="text-sm text-text-muted mb-3">
+            Reception starts the patient journey, accumulates the visit bill through selected services, and closes the visit only after final payment is recorded.
+        </p>
+        {% if hospital %}
+            <p class="text-sm text-brand-dark font-medium">Hospital: {{ hospital.name }}</p>
+        {% endif %}
+    </div>
+
+    <div class="grid grid-cols-1 xl:grid-cols-3 gap-4">
+        <div class="card xl:col-span-1">
+            <h4 class="text-sm font-semibold text-text-main mb-4">Recent Patients</h4>
+            <div class="space-y-3 max-h-72 overflow-y-auto">
+                {% for patient in recent_patients %}
+                    <div class="text-sm border-b border-gray-100 pb-2 last:border-0">
+                        <p class="font-medium text-text-main">{{ patient.name }}</p>
+                        <p class="text-xs text-text-muted">Age: {{ patient.age }} | {{ patient.get_sex_display }}</p>
+                        {% if patient.weight_kg %}<p class="text-xs text-text-muted">Weight: {{ patient.weight_kg }} kg</p>{% endif %}
+                    </div>
+                {% empty %}
+                    <p class="text-sm text-text-muted text-center py-8">No patients registered yet.</p>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="card xl:col-span-1">
+            <h4 class="text-sm font-semibold text-text-main mb-4">Recent Visits</h4>
+            <div class="space-y-3 max-h-72 overflow-y-auto">
+                {% for visit in recent_visits %}
+                    <div class="text-sm border-b border-gray-100 pb-2 last:border-0">
+                        <div class="flex items-center justify-between gap-2">
+                            <p class="font-medium text-text-main">{{ visit.patient.name }}</p>
+                            <span class="inline-block px-2 py-0.5 rounded text-xs font-medium bg-blue-50 text-blue-700">{{ visit.get_status_display }}</span>
+                        </div>
+                        <p class="text-xs text-text-muted">{{ visit.visit_date|date:"M d, Y H:i" }}</p>
+                        <p class="text-xs text-text-muted mt-1">Bill: {{ visit.total_amount }}</p>
+                    </div>
+                {% empty %}
+                    <p class="text-sm text-text-muted text-center py-8">No visits created yet.</p>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="card xl:col-span-1">
+            <h4 class="text-sm font-semibold text-text-main mb-4">Ready for Billing</h4>
+            <div class="space-y-3 max-h-72 overflow-y-auto">
+                {% for visit in ready_for_billing_visits %}
+                    <div class="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm">
+                        <div class="flex items-center justify-between gap-3">
+                            <div>
+                                <p class="font-medium text-text-main">{{ visit.patient.name }}</p>
+                                <p class="text-xs text-text-muted">{{ visit.visit_date|date:"M d, Y H:i" }}</p>
+                            </div>
+                            <a href="{% url 'complete_visit' visit.pk %}" class="btn btn-primary btn-sm">Bill Visit</a>
+                        </div>
+                        <p class="text-xs text-text-muted mt-2">Outstanding total: {{ visit.total_amount }}</p>
+                    </div>
+                {% empty %}
+                    <p class="text-sm text-text-muted text-center py-8">No visits are waiting for billing yet.</p>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

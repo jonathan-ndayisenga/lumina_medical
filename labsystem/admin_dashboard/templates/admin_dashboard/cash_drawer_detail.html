@@ -1,0 +1,94 @@
+{% extends 'base.html' %}
+
+{% block title %}Cash Drawer Detail - Lumina{% endblock %}
+{% block page_title %}Cash Drawer Detail{% endblock %}
+{% block page_subtitle %}Review live drawer totals, add cash movements, and close against expected cash on hand.{% endblock %}
+
+{% block content %}
+<div class="space-y-5">
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div class="card">
+            <p class="text-xs uppercase tracking-wide text-text-muted">Opening</p>
+            <p class="text-2xl font-bold text-text-main mt-2">{{ drawer.opening_balance }}</p>
+        </div>
+        <div class="card">
+            <p class="text-xs uppercase tracking-wide text-text-muted">Cash In</p>
+            <p class="text-2xl font-bold text-emerald-700 mt-2">{{ cash_in }}</p>
+        </div>
+        <div class="card">
+            <p class="text-xs uppercase tracking-wide text-text-muted">Cash Out</p>
+            <p class="text-2xl font-bold text-amber-700 mt-2">{{ cash_out }}</p>
+        </div>
+        <div class="card">
+            <p class="text-xs uppercase tracking-wide text-text-muted">Expected Closing</p>
+            <p class="text-2xl font-bold text-text-main mt-2">{{ expected_closing }}</p>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        <div class="card">
+            <h3 class="text-lg font-bold text-text-main mb-4">Add Cash Transaction</h3>
+            <form method="post" class="space-y-4">
+                {% csrf_token %}
+                <div class="grid grid-cols-1 gap-4">
+                    {% for field in transaction_form %}
+                    <div>
+                        <label for="{{ field.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">{{ field.label }}</label>
+                        {{ field }}
+                        {% for error in field.errors %}<div class="text-xs text-red-600 mt-1">{{ error }}</div>{% endfor %}
+                    </div>
+                    {% endfor %}
+                </div>
+                <button type="submit" name="add_transaction" value="1" class="btn btn-primary" {% if drawer.is_closed %}disabled{% endif %}>Add Transaction</button>
+            </form>
+        </div>
+
+        <div class="card">
+            <h3 class="text-lg font-bold text-text-main mb-4">Close Drawer</h3>
+            <p class="text-sm text-text-muted mb-4">When physical cash is counted, record it here and the discrepancy will be calculated automatically.</p>
+            <form method="post" class="space-y-4">
+                {% csrf_token %}
+                <div>
+                    <label for="{{ close_form.closing_balance.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">{{ close_form.closing_balance.label }}</label>
+                    {{ close_form.closing_balance }}
+                    {% for error in close_form.closing_balance.errors %}<div class="text-xs text-red-600 mt-1">{{ error }}</div>{% endfor %}
+                </div>
+                <button type="submit" name="close_drawer" value="1" class="btn btn-primary" {% if drawer.is_closed %}disabled{% endif %}>Close Drawer</button>
+                {% if drawer.is_closed %}
+                    <p class="text-xs text-text-muted">Closed by {{ drawer.closed_by|default:"-" }} on {{ drawer.closed_at|date:"Y-m-d H:i" }}.</p>
+                {% endif %}
+            </form>
+        </div>
+    </div>
+
+    <div class="card">
+        <h3 class="text-lg font-bold text-text-main mb-4">Cash Transactions</h3>
+        <div class="overflow-x-auto">
+            <table class="w-full">
+                <thead class="bg-gray-50 border-b">
+                    <tr>
+                        <th class="text-left px-4 py-3 text-xs font-semibold uppercase">Time</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold uppercase">Type</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold uppercase">Amount</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold uppercase">Description</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y">
+                    {% for txn in drawer.transactions.all %}
+                    <tr class="hover:bg-gray-50">
+                        <td class="px-4 py-3 text-sm text-text-muted">{{ txn.created_at|date:"Y-m-d H:i" }}</td>
+                        <td class="px-4 py-3 text-sm">{{ txn.get_transaction_type_display }}</td>
+                        <td class="px-4 py-3 text-sm font-semibold {% if txn.transaction_type == 'cash_in' %}text-emerald-700{% else %}text-amber-700{% endif %}">{{ txn.amount }}</td>
+                        <td class="px-4 py-3 text-sm text-text-main">{{ txn.description }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="4" class="px-4 py-8 text-center text-text-muted">No cash movements recorded yet.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

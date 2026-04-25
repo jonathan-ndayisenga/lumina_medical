@@ -1,0 +1,227 @@
+{% extends "base.html" %}
+
+{% block title %}Financial Statements - Hospital EMR{% endblock %}
+{% block page_title %}Financial Statements{% endblock %}
+{% block page_subtitle %}Cash, bank, and mobile money statements built directly from receipts and external statement lines.{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <div class="card">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4 items-end">
+            <div>
+                <label class="block text-xs font-semibold uppercase text-text-muted mb-1">Start Date</label>
+                <input type="date" name="start" value="{{ period_start }}" class="form-control">
+            </div>
+            <div>
+                <label class="block text-xs font-semibold uppercase text-text-muted mb-1">End Date</label>
+                <input type="date" name="end" value="{{ period_end }}" class="form-control">
+            </div>
+            <div>
+                <label class="block text-xs font-semibold uppercase text-text-muted mb-1">Bank Account</label>
+                <select name="bank_account" class="form-control">
+                    <option value="">All bank accounts</option>
+                    {% for acc in bank_accounts %}
+                        <option value="{{ acc.id }}" {% if bank_account_id|stringformat:"s" == acc.id|stringformat:"s" %}selected{% endif %}>{{ acc }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="block text-xs font-semibold uppercase text-text-muted mb-1">Mobile Money</label>
+                <select name="mobile_account" class="form-control">
+                    <option value="">All mobile accounts</option>
+                    {% for acc in mobile_accounts %}
+                        <option value="{{ acc.id }}" {% if mobile_account_id|stringformat:"s" == acc.id|stringformat:"s" %}selected{% endif %}>{{ acc }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex gap-2">
+                <button class="btn btn-primary w-full" type="submit">Apply Filters</button>
+            </div>
+        </form>
+        <p class="mt-3 text-xs text-text-muted">These statements always reflect receipts recorded by reception. External statement lines (bank/mobile) are reconciled separately.</p>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="card">
+            <h3 class="text-sm text-text-muted mb-1">Cash Receipts (Period)</h3>
+            <p class="text-3xl font-bold text-text-main">{{ cash_total }}</p>
+            <p class="text-xs text-text-muted mt-2">Sum of all receipts recorded as cash.</p>
+        </div>
+        <div class="card">
+            <h3 class="text-sm text-text-muted mb-1">Bank/Card Receipts (Period)</h3>
+            <p class="text-3xl font-bold text-text-main">{{ bank_total }}</p>
+            <p class="text-xs text-text-muted mt-2">Filtered by bank account when selected.</p>
+        </div>
+        <div class="card">
+            <h3 class="text-sm text-text-muted mb-1">Mobile Money Receipts (Period)</h3>
+            <p class="text-3xl font-bold text-text-main">{{ mobile_total }}</p>
+            <p class="text-xs text-text-muted mt-2">Filtered by mobile number when selected.</p>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        <div class="card space-y-4">
+            <div class="flex items-start justify-between gap-3">
+                <div>
+                    <h3 class="text-lg font-bold text-text-main">Bank Statement</h3>
+                    <p class="text-sm text-text-muted">Receipts recorded as card/bank deposits.</p>
+                </div>
+                <a href="{% url 'bank_statements' %}" class="btn btn-secondary btn-sm">Reconcile</a>
+            </div>
+
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead class="border-b border-gray-200">
+                        <tr>
+                            <th class="text-left py-2 pr-3 text-xs font-semibold uppercase text-text-muted">Receipt</th>
+                            <th class="text-left py-2 pr-3 text-xs font-semibold uppercase text-text-muted">Patient</th>
+                            <th class="text-left py-2 pr-3 text-xs font-semibold uppercase text-text-muted">Account</th>
+                            <th class="text-right py-2 text-xs font-semibold uppercase text-text-muted">Amount</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-100">
+                        {% for p in bank_receipts %}
+                            <tr>
+                                <td class="py-2 pr-3 font-semibold text-text-main">
+                                    <a class="underline" href="{% url 'print_payment_receipt' p.id %}">{{ p.receipt_number }}</a>
+                                </td>
+                                <td class="py-2 pr-3 text-text-muted">{{ p.visit.patient.name }}</td>
+                                <td class="py-2 pr-3 text-text-muted">{{ p.bank_account|default:"-" }}</td>
+                                <td class="py-2 text-right text-text-main">{{ p.amount_paid }}</td>
+                            </tr>
+                        {% empty %}
+                            <tr><td colspan="4" class="py-4 text-center text-text-muted italic">No bank receipts in this period.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <div class="pt-3 border-t border-gray-200 flex items-center justify-between text-sm">
+                <span class="text-text-muted">Unreconciled external credits</span>
+                <span class="font-semibold text-text-main">{{ unreconciled_bank }}</span>
+            </div>
+            {% if latest_bank %}
+                <a href="{% url 'reconciliation_detail' latest_bank.pk %}" class="btn btn-secondary btn-sm">View Latest Statement</a>
+            {% endif %}
+        </div>
+
+        <div class="card space-y-4">
+            <div class="flex items-start justify-between gap-3">
+                <div>
+                    <h3 class="text-lg font-bold text-text-main">Mobile Money Statement</h3>
+                    <p class="text-sm text-text-muted">Receipts recorded as mobile money deposits.</p>
+                </div>
+                <a href="{% url 'mobile_money_statement' %}" class="btn btn-secondary btn-sm">Reconcile</a>
+            </div>
+
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead class="border-b border-gray-200">
+                        <tr>
+                            <th class="text-left py-2 pr-3 text-xs font-semibold uppercase text-text-muted">Receipt</th>
+                            <th class="text-left py-2 pr-3 text-xs font-semibold uppercase text-text-muted">Patient</th>
+                            <th class="text-left py-2 pr-3 text-xs font-semibold uppercase text-text-muted">Account</th>
+                            <th class="text-right py-2 text-xs font-semibold uppercase text-text-muted">Amount</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-100">
+                        {% for p in mobile_receipts %}
+                            <tr>
+                                <td class="py-2 pr-3 font-semibold text-text-main">
+                                    <a class="underline" href="{% url 'print_payment_receipt' p.id %}">{{ p.receipt_number }}</a>
+                                </td>
+                                <td class="py-2 pr-3 text-text-muted">{{ p.visit.patient.name }}</td>
+                                <td class="py-2 pr-3 text-text-muted">{{ p.mobile_account|default:"-" }}</td>
+                                <td class="py-2 text-right text-text-main">{{ p.amount_paid }}</td>
+                            </tr>
+                        {% empty %}
+                            <tr><td colspan="4" class="py-4 text-center text-text-muted italic">No mobile money receipts in this period.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <div class="pt-3 border-t border-gray-200 flex items-center justify-between text-sm">
+                <span class="text-text-muted">Unreconciled external credits</span>
+                <span class="font-semibold text-text-main">{{ unreconciled_mobile }}</span>
+            </div>
+            {% if latest_mobile %}
+                <a href="{% url 'reconciliation_detail' latest_mobile.pk %}" class="btn btn-secondary btn-sm">View Latest Statement</a>
+            {% endif %}
+        </div>
+
+        <div class="card space-y-4">
+            <div class="flex items-start justify-between gap-3">
+                <div>
+                    <h3 class="text-lg font-bold text-text-main">Cash Drawer Statement</h3>
+                    <p class="text-sm text-text-muted">Daily cash tracking: expected vs actual close.</p>
+                </div>
+                <a href="{% url 'receipts_list' %}?mode=cash&start_date={{ period_start }}&end_date={{ period_end }}" class="btn btn-secondary btn-sm">All Cash Receipts</a>
+            </div>
+
+            <div class="rounded-lg border border-gray-200 bg-gray-50 p-4">
+                <form method="get" class="grid grid-cols-1 sm:grid-cols-2 gap-3 items-end">
+                    <div>
+                        <label class="block text-xs font-semibold uppercase text-text-muted mb-1">Cash Date</label>
+                        <input type="date" name="cash_date" value="{{ cash_date }}" class="form-control">
+                        <input type="hidden" name="start" value="{{ period_start }}">
+                        <input type="hidden" name="end" value="{{ period_end }}">
+                        {% if bank_account_id %}<input type="hidden" name="bank_account" value="{{ bank_account_id }}">{% endif %}
+                        {% if mobile_account_id %}<input type="hidden" name="mobile_account" value="{{ mobile_account_id }}">{% endif %}
+                    </div>
+                    <button class="btn btn-secondary" type="submit">Load Day</button>
+                </form>
+
+                <div class="mt-4 grid grid-cols-2 gap-3 text-sm">
+                    <div><span class="text-text-muted">Opening</span><div class="font-semibold text-text-main">{{ cash_opening_balance }}</div></div>
+                    <div><span class="text-text-muted">Cash In (receipts)</span><div class="font-semibold text-text-main">{{ cash_in_day }}</div></div>
+                    <div><span class="text-text-muted">Cash Out (expenses)</span><div class="font-semibold text-text-main">{{ cash_out_day }}</div></div>
+                    <div><span class="text-text-muted">Expected Close</span><div class="font-semibold text-text-main">{{ cash_expected_closing }}</div></div>
+                </div>
+
+                <div class="mt-4">
+                    <form method="post" class="flex flex-col sm:flex-row gap-3 items-end">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="close_cash_day">
+                        <input type="hidden" name="cash_date" value="{{ cash_date }}">
+                        <div class="flex-1">
+                            <label class="block text-xs font-semibold uppercase text-text-muted mb-1">Actual Closing Balance</label>
+                            <input type="number" step="0.01" name="closing_balance" value="{% if cash_actual_closing != None %}{{ cash_actual_closing }}{% endif %}" class="form-control" required>
+                        </div>
+                        <button class="btn btn-primary" type="submit">Save Closing</button>
+                    </form>
+                    {% if cash_computed_discrepancy != None %}
+                        <p class="mt-2 text-sm">
+                            <span class="text-text-muted">Discrepancy:</span>
+                            <strong class="text-text-main">{{ cash_computed_discrepancy }}</strong>
+                        </p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead class="border-b border-gray-200">
+                        <tr>
+                            <th class="text-left py-2 pr-3 text-xs font-semibold uppercase text-text-muted">Receipt</th>
+                            <th class="text-left py-2 pr-3 text-xs font-semibold uppercase text-text-muted">Patient</th>
+                            <th class="text-right py-2 text-xs font-semibold uppercase text-text-muted">Amount</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-100">
+                        {% for p in cash_receipts %}
+                            <tr>
+                                <td class="py-2 pr-3 font-semibold text-text-main">
+                                    <a class="underline" href="{% url 'print_payment_receipt' p.id %}">{{ p.receipt_number }}</a>
+                                </td>
+                                <td class="py-2 pr-3 text-text-muted">{{ p.visit.patient.name }}</td>
+                                <td class="py-2 text-right text-text-main">{{ p.amount_paid }}</td>
+                            </tr>
+                        {% empty %}
+                            <tr><td colspan="3" class="py-4 text-center text-text-muted italic">No cash receipts in this period.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

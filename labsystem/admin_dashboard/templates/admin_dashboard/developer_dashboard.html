@@ -1,0 +1,90 @@
+{% extends 'admin_dashboard/developer_base.html' %}
+
+{% block title %}Superadmin Dashboard - Hospital EMR{% endblock %}
+{% block page_title %}Platform Dashboard{% endblock %}
+{% block page_subtitle %}Monitor all hospitals and platform operations.{% endblock %}
+
+{% block developer_content %}
+<div class="space-y-6">
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div class="card">
+            <p class="text-text-muted text-sm font-medium mb-2">Total Hospitals</p>
+            <p class="text-3xl font-bold text-brand-dark">{{ total_hospitals }}</p>
+        </div>
+        <div class="card">
+            <p class="text-text-muted text-sm font-medium mb-2">Active Hospitals</p>
+            <p class="text-3xl font-bold text-green-600">{{ active_hospitals }}</p>
+        </div>
+        <div class="card">
+            <p class="text-text-muted text-sm font-medium mb-2">Total Users</p>
+            <p class="text-3xl font-bold text-brand-dark">{{ total_users }}</p>
+        </div>
+        <div class="card">
+            <p class="text-text-muted text-sm font-medium mb-2">Subscription Income</p>
+            <p class="text-3xl font-bold text-green-600">{{ total_income }}</p>
+        </div>
+    </div>
+
+    <div class="card">
+        <h4 class="text-sm font-semibold text-text-main mb-4">Platform Management</h4>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            <a href="{% url 'manage_hospitals' %}" class="btn btn-primary text-center">Manage Hospitals</a>
+            <a href="{% url 'manage_subscription_plans' %}" class="btn btn-primary text-center">Subscription Plans</a>
+            <a href="{% url 'manage_subscription_payments' %}" class="btn btn-primary text-center">Payments</a>
+            <a href="{% url 'view_audit_logs' %}" class="btn btn-primary text-center">Audit Logs</a>
+        </div>
+    </div>
+
+    <div class="card">
+        <h4 class="text-sm font-semibold text-text-main mb-4">Active Hospitals</h4>
+        <div class="overflow-x-auto">
+            <table class="w-full">
+                <thead>
+                    <tr class="border-b-2 border-gray-200">
+                        <th class="text-left px-4 py-3 text-xs font-semibold uppercase text-text-muted">Hospital</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold uppercase text-text-muted">Subdomain</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold uppercase text-text-muted">Plan</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold uppercase text-text-muted">Status</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold uppercase text-text-muted">Expires</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for hospital in hospitals %}
+                        <tr class="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                            <td class="px-4 py-3 text-sm font-medium text-text-main">{{ hospital.name }}</td>
+                            <td class="px-4 py-3 text-sm text-text-muted"><code class="bg-gray-100 px-2 py-1 rounded text-xs">{{ hospital.subdomain }}</code></td>
+                            <td class="px-4 py-3 text-sm text-text-muted">{{ hospital.subscription_plan|default:"-" }}</td>
+                            <td class="px-4 py-3 text-sm">
+                                <span class="inline-block px-2 py-1 rounded-full text-xs font-medium {% if hospital.is_active %}bg-green-50 text-green-700{% else %}bg-gray-50 text-gray-700{% endif %}">
+                                    {% if hospital.is_active %}Active{% else %}Inactive{% endif %}
+                                </span>
+                            </td>
+                            <td class="px-4 py-3 text-sm text-text-muted">{{ hospital.subscription_end_date|default:"-" }}</td>
+                        </tr>
+                    {% empty %}
+                        <tr>
+                            <td colspan="5" class="px-4 py-4 text-center text-sm text-text-muted">No hospitals added yet</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="card">
+        <h4 class="text-sm font-semibold text-text-main mb-4">Subscriptions Expiring Within 7 Days</h4>
+        {% if expiring_hospitals %}
+            <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4 space-y-2">
+                {% for hospital in expiring_hospitals %}
+                    <div class="flex justify-between items-start">
+                        <p class="text-sm font-medium text-text-main">{{ hospital.name }}</p>
+                        <span class="text-xs text-yellow-700 font-medium">{{ hospital.subscription_end_date }}</span>
+                    </div>
+                {% endfor %}
+            </div>
+        {% else %}
+            <p class="text-sm text-text-muted text-center py-4">No subscriptions expiring soon.</p>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

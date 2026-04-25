@@ -1,0 +1,61 @@
+{% extends 'base.html' %}
+
+{% block title %}Salaries - Lumina{% endblock %}
+
+{% block content %}
+<div class="space-y-5">
+    <div class="card">
+        <h3 class="text-lg font-bold text-text-main mb-4">Record Salary</h3>
+        <form method="post" class="space-y-4">
+            {% csrf_token %}
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {% for field in form %}
+                    <div>
+                        <label for="{{ field.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">{{ field.label }}</label>
+                        {{ field }}
+                        {% for error in field.errors %}<div class="text-xs text-red-600 mt-1">{{ error }}</div>{% endfor %}
+                    </div>
+                {% endfor %}
+            </div>
+            <button type="submit" class="btn btn-primary">Save Salary Record</button>
+        </form>
+    </div>
+
+    <div class="card">
+        <h3 class="text-lg font-bold text-text-main mb-4">Salary Records</h3>
+        <div class="overflow-x-auto">
+            <table class="w-full">
+                <thead class="bg-gray-50 border-b">
+                    <tr>
+                        <th class="text-left px-4 py-3 text-xs font-semibold uppercase">Month</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold uppercase">Employee</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold uppercase">Amount</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold uppercase">Status</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold uppercase">Paid Date</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold uppercase">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y">
+                    {% for salary in salaries %}
+                        <tr class="hover:bg-gray-50">
+                            <td class="px-4 py-3 text-sm text-text-muted">{{ salary.month|date:"Y-m" }}</td>
+                            <td class="px-4 py-3 text-sm text-text-main">{{ salary.employee.get_full_name|default:salary.employee.username }}</td>
+                            <td class="px-4 py-3 text-sm font-semibold text-text-main">{{ salary.amount }}</td>
+                            <td class="px-4 py-3 text-sm"><span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold {% if salary.paid %}bg-green-50 text-green-700{% else %}bg-yellow-50 text-yellow-700{% endif %}">{% if salary.paid %}Paid{% else %}Unpaid{% endif %}</span></td>
+                            <td class="px-4 py-3 text-sm text-text-muted">{{ salary.paid_at|default:"-" }}</td>
+                            <td class="px-4 py-3 text-sm">
+                                <div class="flex gap-2 flex-wrap">
+                                    <a href="{% url 'edit_salary' salary.pk %}" class="btn btn-secondary btn-sm">Edit</a>
+                                    <a href="{% url 'delete_salary' salary.pk %}" class="btn btn-danger btn-sm">Delete</a>
+                                </div>
+                            </td>
+                        </tr>
+                    {% empty %}
+                        <tr><td colspan="6" class="px-4 py-3 text-center text-text-muted">No salary records recorded yet.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
