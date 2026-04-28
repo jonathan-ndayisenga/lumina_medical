@@ -83,7 +83,7 @@ def lab_visit_services(visit, *, performed=None):
     qs = VisitService.objects.filter(
         visit=visit,
         service__category="lab",
-    ).select_related("service__test_profile")
+    ).select_related("service__test_profile", "lab_report")
     if performed is True:
         qs = qs.filter(performed=True)
     elif performed is False:
@@ -93,6 +93,7 @@ def lab_visit_services(visit, *, performed=None):
 
 def serialize_requested_service(visit_service):
     profile = getattr(visit_service.service, "test_profile", None)
+    report = getattr(visit_service, "lab_report", None)
     return {
         "visit_service_id": visit_service.pk,
         "service_id": visit_service.service_id,
@@ -101,6 +102,7 @@ def serialize_requested_service(visit_service):
         "performed_at": visit_service.performed_at.isoformat() if visit_service.performed_at else "",
         "test_profile_id": profile.pk if profile else None,
         "test_profile_name": profile.name if profile else "",
+        "report_id": report.pk if report else None,
     }
 
 
@@ -109,6 +111,44 @@ def mark_visit_service_performed(visit_service):
         visit_service.performed = True
         visit_service.performed_at = timezone.now()
         visit_service.save(update_fields=["performed", "performed_at"])
+
+
+def ensure_report_for_visit_service(visit_service, *, attendant=None):
+    report = getattr(visit_service, "lab_report", None)
+    if report:
+        return report
+
+    visit = visit_service.visit
+    patient = visit.patient
+    profile = getattr(visit_service.service, "test_profile", None)
+    doctor_entry = (
+        QueueEntry.objects.filter(
+            visit=visit,
+            queue_type=QueueEntry.TYPE_LAB_DOCTOR,
+        )
+        .select_related("requested_by")
+        .order_by("-created_at")
+        .first()
+    )
+    referred_by = ""
+    if doctor_entry and doctor_entry.requested_by:
+        referred_by = doctor_entry.requested_by.get_full_name() or doctor_entry.requested_by.username
+
+    report = LabReport.objects.create(
+        profile=profile,
+        hospital=visit.hospital,
+        visit=visit,
+        requested_visit_service=visit_service,
+        patient_name=patient.name,
+        patient_age=patient.age,
+        patient_sex=patient.sex,
+        referred_by=referred_by,
+        sample_date=timezone.now().date(),
+        specimen_type=(profile.default_specimen_type if profile and profile.default_specimen_type else "BLOOD"),
+        attendant=attendant,
+        attendant_name=(attendant.get_full_name() or attendant.username) if attendant else "",
+    )
+    return report
 
 
 def pending_lab_doctor_entry(report: LabReport):
@@ -384,9 +424,46 @@ def handle_report_form(request, report=None):
     pending_requested_services = []
     completed_requested_services = []
     selected_requested_service_id = (request.POST.get("requested_service_id") or request.GET.get("requested_service_id") or "").strip()
+    if report.visit_id and selected_requested_service_id and not report.requested_visit_service_id:
+        selected_service = VisitService.objects.filter(
+            visit=report.visit,
+            service__category="lab",
+            pk=selected_requested_service_id,
+        ).select_related("service__test_profile").first()
+        if selected_service and not getattr(selected_service, "lab_report", None):
+            report.requested_visit_service = selected_service
+            if selected_service.service.test_profile_id and not report.profile_id:
+                report.profile = selected_service.service.test_profile
+            if report.pk:
+                report.save(update_fields=["requested_visit_service", "profile"])
     if report.visit_id:
-        pending_requested_services = [serialize_requested_service(item) for item in lab_visit_services(report.visit, performed=False)]
-        completed_requested_services = [serialize_requested_service(item) for item in lab_visit_services(report.visit, performed=True)]
+        pending_services_qs = list(lab_visit_services(report.visit, performed=False))
+        completed_services_qs = list(lab_visit_services(report.visit, performed=True))
+        for visit_service in pending_services_qs:
+            ensure_report_for_visit_service(visit_service, attendant=request.user)
+        pending_requested_services = [serialize_requested_service(item) for item in pending_services_qs]
+        completed_requested_services = [serialize_requested_service(item) for item in completed_services_qs]
+
+    if (
+        request.method == "GET"
+        and report.visit_id
+        and report.requested_visit_service_id
+        and selected_requested_service_id
+        and str(report.requested_visit_service_id) != str(selected_requested_service_id)
+    ):
+        selected_service = VisitService.objects.filter(
+            visit=report.visit,
+            service__category="lab",
+            pk=selected_requested_service_id,
+        ).first()
+        if selected_service:
+            target_report = ensure_report_for_visit_service(selected_service, attendant=request.user)
+            return redirect(
+                f"{reverse('report_edit', kwargs={'pk': target_report.pk})}?requested_service_id={selected_service.pk}"
+            )
+
+    if report.requested_visit_service_id and not selected_requested_service_id:
+        selected_requested_service_id = str(report.requested_visit_service_id)
 
     can_send_to_doctor = report_ready_to_send_to_doctor(report)
 
@@ -426,6 +503,11 @@ def handle_report_form(request, report=None):
             if report.visit_id and selected_requested_service_id:
                 selected_visit_service = lab_visit_services(report.visit, performed=False).filter(pk=selected_requested_service_id).first()
                 if selected_visit_service:
+                    if not report.requested_visit_service_id:
+                        report.requested_visit_service = selected_visit_service
+                    if selected_visit_service.service.test_profile_id and not report.profile_id:
+                        report.profile = selected_visit_service.service.test_profile
+                    report.save(update_fields=["requested_visit_service", "profile"])
                     mark_visit_service_performed(selected_visit_service)
 
             remaining_pending_services = []
@@ -433,11 +515,15 @@ def handle_report_form(request, report=None):
                 remaining_pending_services = list(lab_visit_services(report.visit, performed=False))
 
             if selected_visit_service and remaining_pending_services:
+                next_pending_service = remaining_pending_services[0]
+                next_report = ensure_report_for_visit_service(next_pending_service, attendant=request.user)
                 messages.success(
                     request,
-                    f"{selected_visit_service.service.name} saved. {len(remaining_pending_services)} requested lab test(s) still waiting in the queue.",
+                    f"{selected_visit_service.service.name} saved. Loading the next pending test so you can finish this request in one pass.",
                 )
-                return redirect("lab_queue")
+                return redirect(
+                    f"{reverse('report_edit', kwargs={'pk': next_report.pk})}?requested_service_id={next_pending_service.pk}"
+                )
 
             if action == "send_to_doctor" and report_ready_to_send_to_doctor(report):
                 if report.visit_id:
@@ -652,9 +738,21 @@ def perform_lab_test(request, queue_entry_id):
         queue_entries = queue_entries.filter(hospital=hospital)
     queue_entry = get_object_or_404(queue_entries)
     visit = queue_entry.visit
-    report = LabReport.objects.filter(visit=visit).first()
+    pending_services = list(lab_visit_services(visit, performed=False))
+    if pending_services:
+        requested_service_id = (request.GET.get("requested_service_id") or "").strip()
+        selected_visit_service = next(
+            (item for item in pending_services if str(item.pk) == requested_service_id),
+            pending_services[0],
+        )
+        report = ensure_report_for_visit_service(selected_visit_service, attendant=request.user)
+        return redirect(
+            f"{reverse('report_edit', kwargs={'pk': report.pk})}?requested_service_id={selected_visit_service.pk}"
+        )
+
+    report = LabReport.objects.filter(visit=visit, requested_visit_service__isnull=True).first()
     if not report:
-        report = LabReport(
+        report = LabReport.objects.create(
             hospital=visit.hospital,
             visit=visit,
             patient_name=visit.patient.name,
@@ -665,10 +763,6 @@ def perform_lab_test(request, queue_entry_id):
             attendant=request.user,
             attendant_name=request.user.get_full_name() or request.user.username,
         )
-        report.save()
-    pending_services = list(lab_visit_services(visit, performed=False))
-    if len(pending_services) == 1:
-        return redirect(f"{reverse('report_edit', kwargs={'pk': report.pk})}?requested_service_id={pending_services[0].pk}")
     return redirect('report_edit', pk=report.pk)
 
 

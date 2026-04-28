@@ -305,27 +305,35 @@ class EndToEndPatientJourneyTests(TestCase):
         )
 
     def test_doctor_requests_lab_lab_sends_results_and_reception_bills(self):
-        # Doctor requests lab services during consultation.
+        # Doctor saves consultation notes first.
         self.client.force_login(self.doctor)
         resp = self.client.post(
             reverse("consultation", kwargs={"visit_id": self.visit.pk}),
             data={
+                "weight_kg": "",
+                "bp_systolic": "",
+                "bp_diastolic": "",
+                "pulse": "",
+                "respiratory_rate": "",
+                "temperature_celsius": "",
+                "glucose_mg_dl": "",
+                "oxygen_saturation": "",
                 "signs_symptoms": "Fever",
                 "diagnosis": "Malaria?",
                 "treatment": "Test first",
                 "follow_up_date": "",
-                "bp": "",
-                "pr": "",
-                "rr": "",
-                "temp": "",
-                "glucose": "",
-                "spo2": "",
                 "send_to_nurse": "",
                 "send_to_reception": "",
-                "lab_services": str(self.lab_service.id),
             },
         )
         self.assertEqual(resp.status_code, 302)
+
+        # Doctor sends the requested lab service through the dedicated AJAX path.
+        resp = self.client.post(
+            reverse("send_lab_request_api", kwargs={"visit_id": self.visit.pk}),
+            data={"service_id": self.lab_service.id},
+        )
+        self.assertEqual(resp.status_code, 200)
 
         self.visit.refresh_from_db()
         self.assertEqual(self.visit.total_amount, Decimal("80.00"))

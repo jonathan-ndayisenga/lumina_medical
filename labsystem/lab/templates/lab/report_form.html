@@ -28,7 +28,7 @@
 {% endblock %}
 
 {% block content %}
-<form method="post" id="labReportForm" class="space-y-6">
+<form method="post" id="labReportForm" class="space-y-6" data-report-id="{% if report %}{{ report.pk }}{% endif %}">
     {% csrf_token %}
 
     <div class="card">
@@ -350,6 +350,21 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         updateTemplatePreview();
         refreshResultsLayout();
+    }
+
+    function redirectToRequestedServiceReport() {
+        const requestedService = currentRequestedService();
+        const currentReportId = form.dataset.reportId || '';
+        if (!requestedService || !requestedService.report_id) {
+            syncTemplateToRequestedService();
+            return;
+        }
+        if (String(requestedService.report_id) === String(currentReportId)) {
+            syncTemplateToRequestedService();
+            return;
+        }
+        const targetUrl = `/lab/${requestedService.report_id}/edit/?requested_service_id=${requestedService.visit_service_id}`;
+        window.location.assign(targetUrl);
     }
 
     function isUrinalysisProfile(config) {
@@ -855,7 +870,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (requestedServiceSelect) {
         requestedServiceSelect.addEventListener('change', () => {
-            syncTemplateToRequestedService();
+            redirectToRequestedServiceReport();
         });
     }
 

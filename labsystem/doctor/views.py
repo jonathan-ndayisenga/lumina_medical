@@ -1,3 +1,5 @@
+from decimal import Decimal, InvalidOperation
+
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
@@ -7,13 +9,14 @@ from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 
 from accounts.models import User
+from admin_dashboard.models import InventoryItem
 from lab.models import LabReport
 from nurse.models import NurseNote
 from reception.models import QueueEntry, Service, Triage, Visit, VisitService
 from reception.workflow import ensure_pending_queue_entry, sync_visit_status
 
 from .forms import ConsultationForm
-from .models import Consultation, LabRequest
+from .models import Consultation, LabRequest, Prescription
 
 
 def doctor_role_required(view_func):
@@ -34,6 +37,84 @@ def doctor_role_required(view_func):
 
 def get_active_hospital(request):
     return getattr(request, "hospital", None) or getattr(request.user, "hospital", None)
+
+
+def lab_visit_services(visit, *, performed=None):
+    services = (
+        VisitService.objects.filter(
+            visit=visit,
+            service__category=Service.CATEGORY_LAB,
+        )
+        .select_related("service__test_profile")
+        .order_by("created_at", "id")
+    )
+    if performed is True:
+        services = services.filter(performed=True)
+    elif performed is False:
+        services = services.filter(performed=False)
+    return services
+
+
+def requested_lab_service_payload(visit_service):
+    test_profile = getattr(visit_service.service, "test_profile", None)
+    return {
+        "visit_service_id": visit_service.pk,
+        "service_id": visit_service.service_id,
+        "service_name": visit_service.service.name,
+        "price": str(visit_service.price_at_time),
+        "performed": visit_service.performed,
+        "test_profile_id": test_profile.pk if test_profile else None,
+        "test_profile_name": test_profile.name if test_profile else "",
+    }
+
+
+def available_drug_payload(item):
+    return {
+        "id": item.pk,
+        "name": item.name,
+        "category": item.category,
+        "unit": item.unit,
+        "base_unit": item.base_unit,
+        "units_per_pack": str(item.units_per_pack or ""),
+        "strength_mg_per_unit": str(item.strength_mg_per_unit or ""),
+        "selling_price": str(item.selling_price or 0),
+        "current_quantity": str(item.current_quantity),
+        "concentration_mg_per_ml": str(item.concentration_mg_per_ml or ""),
+        "pack_size_ml": str(item.pack_size_ml or ""),
+        "days_covered_per_pack": str(item.days_covered_per_pack or ""),
+    }
+
+
+def prescription_payload(prescription):
+    return {
+        "id": prescription.pk,
+        "drug_name": prescription.drug.name,
+        "regimen": prescription.regimen_display,
+        "quantity_display": prescription.quantity_display,
+        "total_price": str(prescription.total_price),
+        "dispensed": prescription.dispensed,
+        "dispensed_at": prescription.dispensed_at.strftime("%Y-%m-%d %H:%M") if prescription.dispensed_at else "",
+    }
+
+
+def pending_lab_queue_reason(visit):
+    pending_names = list(
+        lab_visit_services(visit, performed=False).values_list("service__name", flat=True)
+    )
+    if pending_names:
+        return f"Doctor requested: {', '.join(pending_names)}"
+    return "Doctor requested laboratory follow-up."
+
+
+def ensure_doctor_lab_queue_entry(*, visit, requested_by):
+    return ensure_pending_queue_entry(
+        visit=visit,
+        hospital=visit.hospital,
+        queue_type=QueueEntry.TYPE_LAB_DOCTOR,
+        reason=pending_lab_queue_reason(visit),
+        requested_by=requested_by,
+        notes="Pending lab services requested during consultation.",
+    )
 
 
 @doctor_role_required
@@ -79,10 +160,10 @@ def add_lab_service_api(request):
             return JsonResponse({"error": "Service price is required"}, status=400)
         
         try:
-            price = float(price_str)
+            price = Decimal(price_str)
             if price < 0:
                 raise ValueError("Price cannot be negative")
-        except ValueError:
+        except (InvalidOperation, ValueError):
             return JsonResponse({"error": "Invalid price format"}, status=400)
         
         # Check if service already exists
@@ -112,11 +193,212 @@ def add_lab_service_api(request):
         return JsonResponse({
             "id": service.id,
             "name": service.name,
-            "price": float(service.price),
+            "price": str(service.price),
             "message": f"Service '{name}' created successfully"
         })
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=500)
+
+
+@doctor_role_required
+@require_http_methods(["POST"])
+@transaction.atomic
+def send_lab_request_api(request, visit_id):
+    hospital = get_active_hospital(request)
+    visits = Visit.objects.select_related("hospital").all()
+    if hospital and getattr(request.user, "role", "") != User.ROLE_SUPERADMIN:
+        visits = visits.filter(hospital=hospital)
+    visit = get_object_or_404(visits, pk=visit_id)
+
+    service_id = request.POST.get("service_id", "").strip()
+    if not service_id:
+        return JsonResponse({"error": "Select a lab service first."}, status=400)
+
+    service = get_object_or_404(
+        Service,
+        pk=service_id,
+        hospital=visit.hospital,
+        category=Service.CATEGORY_LAB,
+        is_active=True,
+    )
+
+    existing_visit_service = VisitService.objects.filter(
+        visit=visit,
+        service=service,
+    ).first()
+    if existing_visit_service:
+        if existing_visit_service.performed:
+            return JsonResponse(
+                {"error": f"{service.name} already has recorded results on this visit and now lives under Lab Results."},
+                status=400,
+            )
+        return JsonResponse(
+            {"error": f"{service.name} is already pending in the lab workflow for this visit."},
+            status=400,
+        )
+
+    visit_service = VisitService.objects.create(
+        visit=visit,
+        service=service,
+        price_at_time=service.price,
+        notes=f"Requested during consultation by {request.user.get_full_name() or request.user.username}",
+    )
+    visit.total_amount += service.price
+    visit.save(update_fields=["total_amount"])
+
+    consultation = getattr(visit, "consultation", None)
+    if consultation:
+        existing_ids = [int(item) for item in (consultation.lab_requests or [])]
+        if service.pk not in existing_ids:
+            consultation.lab_requests = existing_ids + [service.pk]
+            consultation.save(update_fields=["lab_requests"])
+
+    ensure_doctor_lab_queue_entry(visit=visit, requested_by=request.user)
+    sync_visit_status(visit)
+
+    pending_services = [
+        requested_lab_service_payload(item)
+        for item in lab_visit_services(visit, performed=False)
+    ]
+    return JsonResponse(
+        {
+            "message": f"{service.name} sent to lab.",
+            "service": requested_lab_service_payload(visit_service),
+            "visit_total_amount": str(visit.total_amount),
+            "pending_services": pending_services,
+        }
+    )
+
+
+@doctor_role_required
+@require_http_methods(["POST"])
+@transaction.atomic
+def add_billable_service_api(request, visit_id):
+    hospital = get_active_hospital(request)
+    visits = Visit.objects.select_related("hospital").all()
+    if hospital and getattr(request.user, "role", "") != User.ROLE_SUPERADMIN:
+        visits = visits.filter(hospital=hospital)
+    visit = get_object_or_404(visits, pk=visit_id)
+
+    service_id = request.POST.get("service_id", "").strip()
+    if not service_id:
+        return JsonResponse({"error": "Select a service first."}, status=400)
+
+    service = get_object_or_404(
+        Service.objects.exclude(category=Service.CATEGORY_LAB),
+        pk=service_id,
+        hospital=visit.hospital,
+        is_active=True,
+    )
+
+    visit_service, created = VisitService.objects.get_or_create(
+        visit=visit,
+        service=service,
+        defaults={
+            "price_at_time": service.price,
+            "notes": f"Added during consultation by {request.user.get_full_name() or request.user.username}",
+        },
+    )
+    if not created:
+        return JsonResponse({"error": f"{service.name} is already on this visit."}, status=400)
+
+    visit.total_amount += service.price
+    visit.save(update_fields=["total_amount"])
+
+    return JsonResponse(
+        {
+            "message": f"{service.name} added to the visit bill.",
+            "service": {
+                "visit_service_id": visit_service.pk,
+                "service_id": service.pk,
+                "service_name": service.name,
+                "price": str(visit_service.price_at_time),
+                "category": service.get_category_display(),
+            },
+            "visit_total_amount": str(visit.total_amount),
+        }
+    )
+
+
+@doctor_role_required
+@require_http_methods(["POST"])
+@transaction.atomic
+def add_prescription_api(request, visit_id):
+    hospital = get_active_hospital(request)
+    visits = Visit.objects.select_related("hospital").all()
+    if hospital and getattr(request.user, "role", "") != User.ROLE_SUPERADMIN:
+        visits = visits.filter(hospital=hospital)
+    visit = get_object_or_404(visits, pk=visit_id)
+
+    drug_id = request.POST.get("drug_id", "").strip()
+    dosage_value = request.POST.get("dosage_mg", "").strip()
+    frequency_value = request.POST.get("frequency_per_day", "").strip()
+    duration_value = request.POST.get("duration_days", "").strip()
+    notes = (request.POST.get("notes") or "").strip()
+
+    if not drug_id:
+        return JsonResponse({"error": "Select a medication first."}, status=400)
+
+    try:
+        dosage = Decimal(dosage_value)
+        frequency = int(frequency_value)
+        duration = int(duration_value)
+    except (InvalidOperation, TypeError, ValueError):
+        return JsonResponse({"error": "Enter a valid dosage, frequency, and duration."}, status=400)
+
+    if dosage <= 0 or frequency <= 0 or duration <= 0:
+        return JsonResponse({"error": "Dosage, frequency, and duration must all be greater than zero."}, status=400)
+
+    drug = get_object_or_404(
+        InventoryItem,
+        pk=drug_id,
+        hospital=visit.hospital,
+        category__in=[
+            InventoryItem.CATEGORY_DRUG,
+            InventoryItem.CATEGORY_SYRUP,
+            InventoryItem.CATEGORY_TUBE,
+        ],
+        is_active=True,
+    )
+
+    prescription = Prescription.objects.create(
+        visit=visit,
+        drug=drug,
+        dosage_mg=dosage,
+        frequency_per_day=frequency,
+        duration_days=duration,
+        notes=notes,
+        prescribed_by=request.user,
+    )
+
+    service, _ = Service.objects.get_or_create(
+        hospital=visit.hospital,
+        name=f"Pharmacy Item: {drug.name}",
+        defaults={
+            "category": Service.CATEGORY_PHARMACY,
+            "price": drug.selling_price or Decimal("0"),
+            "is_active": True,
+        },
+    )
+    billing_line = VisitService.objects.create(
+        visit=visit,
+        service=service,
+        price_at_time=prescription.total_price,
+        notes=f"Prescription: {prescription.regimen_display}",
+    )
+    prescription.billing_visit_service = billing_line
+    prescription.save(update_fields=["billing_visit_service"])
+
+    visit.total_amount += prescription.total_price
+    visit.save(update_fields=["total_amount"])
+
+    return JsonResponse(
+        {
+            "message": f"{drug.name} added to the prescription list.",
+            "prescription": prescription_payload(prescription),
+            "visit_total_amount": str(visit.total_amount),
+        }
+    )
 
 
 @doctor_role_required
@@ -187,19 +469,56 @@ def consultation(request, visit_id):
     lab_reports = LabReport.objects.filter(visit=visit).prefetch_related("results__test")
     nurse_queue_entries = visit.queue_entries.filter(queue_type=QueueEntry.TYPE_NURSE).order_by("-created_at")
     nurse_notes = NurseNote.objects.filter(visit=visit).select_related("created_by")
+    prescriptions = list(
+        visit.prescriptions.select_related("drug", "dispensed_by").order_by("-prescribed_at", "-id")
+    )
+    existing_lab_service_ids = list(
+        VisitService.objects.filter(
+            visit=visit,
+            service__category=Service.CATEGORY_LAB,
+        ).values_list("service_id", flat=True)
+    )
     available_lab_services = list(
         Service.objects.filter(
             hospital=visit.hospital,
             category=Service.CATEGORY_LAB,
             is_active=True,
         )
+        .exclude(pk__in=existing_lab_service_ids)
         .order_by("name")
         .values("id", "name", "price")
     )
-    selected_service_ids = [int(service_id) for service_id in (consultation_instance.lab_requests or [])] if consultation_instance else []
-    selected_lab_services = list(
-        Service.objects.filter(id__in=selected_service_ids, hospital=visit.hospital).order_by("name")
+    added_non_lab_visit_services = list(
+        VisitService.objects.filter(visit=visit)
+        .exclude(service__category=Service.CATEGORY_LAB)
+        .select_related("service")
+        .order_by("created_at", "id")
     )
+    existing_billable_service_ids = [item.service_id for item in added_non_lab_visit_services]
+    available_billable_services = list(
+        Service.objects.filter(
+            hospital=visit.hospital,
+            is_active=True,
+        )
+        .exclude(category__in=[Service.CATEGORY_LAB, Service.CATEGORY_PHARMACY])
+        .exclude(pk__in=existing_billable_service_ids)
+        .order_by("category", "name")
+        .values("id", "name", "price", "category")
+    )
+    available_drugs = list(
+        InventoryItem.objects.filter(
+            hospital=visit.hospital,
+            category__in=[
+                InventoryItem.CATEGORY_DRUG,
+                InventoryItem.CATEGORY_SYRUP,
+                InventoryItem.CATEGORY_TUBE,
+            ],
+            is_active=True,
+        )
+        .order_by("name")
+    )
+    pending_lab_services = list(lab_visit_services(visit, performed=False))
+    completed_lab_services = list(lab_visit_services(visit, performed=True))
 
     if request.method == "POST":
         form = ConsultationForm(
@@ -234,68 +553,6 @@ def consultation(request, visit_id):
                     triage_obj.recorded_by = request.user
                 triage_obj.updated_by = request.user
                 triage_obj.save()
-             
-            # Handle selected lab services from hidden field (CSV: "1,2,3")
-            lab_services_str = form.cleaned_data.get("lab_services", "").strip()
-            service_ids = []
-            
-            if lab_services_str:
-                try:
-                    service_ids = [int(sid.strip()) for sid in lab_services_str.split(",") if sid.strip()]
-                except ValueError:
-                    service_ids = []
-            
-            if service_ids:
-                # Get the Service objects for the selected IDs
-                selected_services = Service.objects.filter(
-                    id__in=service_ids,
-                    hospital=visit.hospital,
-                    category=Service.CATEGORY_LAB,
-                    is_active=True
-                ).order_by("name")
-                
-                service_names = []
-                stored_service_ids = []
-                
-                for service in selected_services:
-                    # Check if this service is already in the visit (avoid duplicates)
-                    existing = VisitService.objects.filter(
-                        visit=visit,
-                        service=service
-                    ).exists()
-                    
-                    if not existing:
-                        # Create VisitService record
-                        visit_service = VisitService.objects.create(
-                            visit=visit,
-                            service=service,
-                            price_at_time=service.price,
-                            notes=f"Requested during consultation by {request.user.get_full_name() or request.user.username}"
-                        )
-                        # Update visit total amount
-                        visit.total_amount += service.price
-                        service_names.append(service.name)
-                    
-                    stored_service_ids.append(service.id)
-                
-                # Save the updated visit total
-                visit.save(update_fields=["total_amount"])
-                
-                # Store service IDs in consultation for reference
-                consultation.lab_requests = stored_service_ids
-                consultation.save(update_fields=["lab_requests"])
-                
-                # Create a single lab queue entry with all requested tests
-                if service_names:
-                    ensure_pending_queue_entry(
-                        visit=visit,
-                        hospital=visit.hospital,
-                        queue_type=QueueEntry.TYPE_LAB_DOCTOR,
-                        reason=f"Doctor requested: {', '.join(service_names)}",
-                        requested_by=request.user,
-                        notes=f"Multiple lab services requested during consultation",
-                    )
-                    feedback.append(f"Lab services requested: {', '.join(service_names)}")
 
             if form.cleaned_data.get("send_to_nurse"):
                 ensure_pending_queue_entry(
@@ -343,8 +600,12 @@ def consultation(request, visit_id):
             "nurse_queue_entries": nurse_queue_entries,
             "nurse_notes": nurse_notes,
             "available_lab_services": available_lab_services,
-            "selected_lab_services": selected_lab_services,
-            "selected_lab_service_ids": selected_service_ids,
+            "available_billable_services": available_billable_services,
+            "available_drugs": available_drugs,
+            "pending_lab_services": pending_lab_services,
+            "completed_lab_services": completed_lab_services,
+            "added_non_lab_visit_services": added_non_lab_visit_services,
+            "prescriptions": prescriptions,
         },
     )
 

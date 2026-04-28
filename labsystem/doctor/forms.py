@@ -1,7 +1,5 @@
 from django import forms
 
-from reception.models import Service
-
 from .models import Consultation, LabRequest
 
 
@@ -17,12 +15,6 @@ class ConsultationForm(forms.ModelForm):
     glucose_mg_dl = forms.IntegerField(label="Glucose (mg/dL)", required=False)
     send_to_nurse = forms.BooleanField(required=False)
     send_to_reception = forms.BooleanField(required=False, label="Send to reception for billing")
-    # Lab services handled via AJAX - hidden field to collect selected service IDs
-    lab_services = forms.CharField(
-        required=False,
-        widget=forms.HiddenInput(),
-        label="Lab Services"
-    )
 
     class Meta:
         model = Consultation

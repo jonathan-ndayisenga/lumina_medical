@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Inventory Stock Sheet</title>
+    <style>
+        body { font-family: Arial, sans-serif; color: #1f2937; margin: 24px; }
+        h1, h2, h3, p { margin: 0; }
+        .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; }
+        .muted { color: #6b7280; font-size: 12px; }
+        .summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 20px 0; }
+        .summary-card { border: 1px solid #d1d5db; border-radius: 8px; padding: 12px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+        th, td { border: 1px solid #d1d5db; padding: 8px; font-size: 12px; text-align: left; vertical-align: top; }
+        th { background: #f3f4f6; text-transform: uppercase; font-size: 11px; letter-spacing: 0.04em; }
+        .totals { margin-top: 16px; display: flex; gap: 16px; flex-wrap: wrap; }
+        .totals .box { border: 1px solid #d1d5db; border-radius: 8px; padding: 10px 12px; min-width: 220px; }
+        @media print {
+            body { margin: 10mm; }
+            .no-print { display: none; }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div>
+            <h1>{{ hospital.name }}</h1>
+            <p class="muted">Inventory Stock Sheet</p>
+            <p class="muted">Generated {{ generated_on|date:"Y-m-d H:i" }}</p>
+        </div>
+        <button class="no-print" onclick="window.print()">Print / Save as PDF</button>
+    </div>
+
+    <div class="summary">
+        <div class="summary-card">
+            <p class="muted">Rows</p>
+            <h3>{{ report_rows|length }}</h3>
+        </div>
+        <div class="summary-card">
+            <p class="muted">Total Stock Units</p>
+            <h3>{{ totals.stock_units }}</h3>
+        </div>
+        <div class="summary-card">
+            <p class="muted">Estimated Cost</p>
+            <h3>UGX {{ totals.stock_cost }}</h3>
+        </div>
+        <div class="summary-card">
+            <p class="muted">Estimated Retail</p>
+            <h3>UGX {{ totals.stock_retail }}</h3>
+        </div>
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Item Name</th>
+                <th>Category</th>
+                <th>Pack Type</th>
+                <th>Base Unit</th>
+                <th>Units / Pack</th>
+                <th>Current Stock</th>
+                <th>Minimum</th>
+                <th>Buying Price</th>
+                <th>Selling Price</th>
+                <th>Stock Cost</th>
+                <th>Stock Retail</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in report_rows %}
+                <tr>
+                    <td>{{ row.name }}</td>
+                    <td>{{ row.category }}</td>
+                    <td>{{ row.pack_type }}</td>
+                    <td>{{ row.base_unit }}</td>
+                    <td>{{ row.units_per_pack }}</td>
+                    <td>{{ row.current_stock }}</td>
+                    <td>{{ row.minimum_stock }}</td>
+                    <td>{{ row.buying_price }}</td>
+                    <td>{{ row.selling_price }}</td>
+                    <td>{{ row.stock_cost }}</td>
+                    <td>{{ row.stock_retail }}</td>
+                    <td>{{ row.status }}</td>
+                </tr>
+            {% empty %}
+                <tr>
+                    <td colspan="12">No inventory items recorded yet.</td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <div class="totals">
+        <div class="box">
+            <p class="muted">Total Stock Cost</p>
+            <strong>UGX {{ totals.stock_cost }}</strong>
+        </div>
+        <div class="box">
+            <p class="muted">Total Stock Retail</p>
+            <strong>UGX {{ totals.stock_retail }}</strong>
+        </div>
+    </div>
+</body>
+</html>

@@ -186,9 +186,15 @@ class SequentialRequestedLabWorkflowTests(TestCase):
             self.build_post_data(self.cbc_visit_service.pk),
         )
 
-        self.assertRedirects(response, reverse("lab_queue"))
+        next_report = LabReport.objects.get(requested_visit_service=self.urine_visit_service)
+        self.assertRedirects(
+            response,
+            f"{reverse('report_edit', args=[next_report.pk])}?requested_service_id={self.urine_visit_service.pk}",
+        )
+        self.report.refresh_from_db()
         self.cbc_visit_service.refresh_from_db()
         self.urine_visit_service.refresh_from_db()
+        self.assertEqual(self.report.requested_visit_service, self.cbc_visit_service)
         self.assertTrue(self.cbc_visit_service.performed)
         self.assertFalse(self.urine_visit_service.performed)
         self.assertTrue(report_needs_doctor_send(self.report))

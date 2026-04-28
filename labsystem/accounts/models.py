@@ -1,6 +1,7 @@
 from django.contrib.auth.models import AbstractUser
 from django.templatetags.static import static
 from django.db import models
+from django.utils.functional import cached_property
 
 
 class SubscriptionPlan(models.Model):
@@ -91,6 +92,53 @@ class User(AbstractUser):
     @property
     def is_hospital_admin(self):
         return self.role == self.ROLE_HOSPITAL_ADMIN
+
+    @cached_property
+    def module_group_names(self):
+        return set(self.groups.values_list("name", flat=True))
+
+    def has_module_group(self, name):
+        return name in self.module_group_names
+
+    @property
+    def can_access_hospital_admin(self):
+        return self.is_superadmin or self.role == self.ROLE_HOSPITAL_ADMIN
+
+    @property
+    def can_access_reception(self):
+        return self.can_access_hospital_admin or self.role == self.ROLE_RECEPTIONIST or self.has_module_group("Reception")
+
+    @property
+    def can_access_doctor(self):
+        return self.can_access_hospital_admin or self.role == self.ROLE_DOCTOR or self.has_module_group("Doctor")
+
+    @property
+    def can_access_nurse(self):
+        return self.can_access_hospital_admin or self.role == self.ROLE_NURSE or self.has_module_group("Nurse")
+
+    @property
+    def can_access_lab(self):
+        return self.can_access_hospital_admin or self.role == self.ROLE_LAB_ATTENDANT or self.has_module_group("Lab")
+
+    @property
+    def navigation_role_labels(self):
+        labels = []
+        if self.is_superadmin:
+            labels.append("Super Admin")
+        elif self.role:
+            labels.append(self.get_role_display())
+
+        group_label_map = {
+            "Reception": "Reception",
+            "Doctor": "Doctor",
+            "Nurse": "Nurse",
+            "Lab": "Lab",
+        }
+        for group_name in ("Reception", "Doctor", "Nurse", "Lab"):
+            label = group_label_map[group_name]
+            if self.has_module_group(group_name) and label not in labels:
+                labels.append(label)
+        return labels
 
     def save(self, *args, **kwargs):
         # Treat Django superusers as platform superadmins even if the role field

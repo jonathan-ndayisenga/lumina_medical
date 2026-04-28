@@ -53,6 +53,14 @@ class LabReport(models.Model):
         blank=True,
         related_name='lab_reports',
     )
+    requested_visit_service = models.OneToOneField(
+        'reception.VisitService',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='lab_report',
+        help_text="The specific requested visit service this report satisfies when tests are worked one-by-one.",
+    )
     patient_name = models.CharField(max_length=200)
     patient_age = models.CharField(max_length=20, help_text="e.g., 22YRS")
     patient_sex = models.CharField(max_length=10, choices=[('M', 'Male'), ('F', 'Female'), ('O', 'Other')])

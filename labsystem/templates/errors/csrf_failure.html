@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+
+{% block title %}Session Check Needed{% endblock %}
+
+{% block auth_content %}
+<div class="w-full max-w-lg">
+    <div class="card bg-white/95 backdrop-blur-sm shadow-2xl border border-white/50">
+        <div class="mb-6">
+            <p class="text-xs uppercase tracking-widest text-amber-600 font-semibold mb-2">Security Check</p>
+            <h1 class="text-2xl font-bold text-text-main mb-3">We need you to refresh and try again</h1>
+            <p class="text-sm text-text-muted leading-6">
+                Your browser submitted a form without the security cookie Django expects. This usually happens
+                after a fresh deploy, when a login page stays open for a long time, or when Safari reuses an old tab.
+            </p>
+        </div>
+
+        <div class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 mb-6">
+            <p class="text-sm font-medium text-amber-800">Quick fix</p>
+            <ol class="mt-2 space-y-1 text-sm text-amber-900 list-decimal list-inside">
+                <li>Refresh the page or close the tab and open the site again.</li>
+                <li>Make sure cookies are allowed for this site.</li>
+                <li>Submit the form one more time.</li>
+            </ol>
+        </div>
+
+        {% if csrf_failure_reason %}
+        <div class="mb-6 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3">
+            <p class="text-xs uppercase tracking-wide text-text-muted mb-1">Technical reason</p>
+            <p class="text-sm text-text-main break-words">{{ csrf_failure_reason }}</p>
+        </div>
+        {% endif %}
+
+        <div class="flex flex-col sm:flex-row gap-3">
+            <a href="{% url 'login' %}" class="btn btn-primary w-full sm:w-auto text-center">Open login again</a>
+            <button type="button" onclick="window.location.reload();" class="btn btn-secondary w-full sm:w-auto">
+                Refresh this page
+            </button>
+        </div>
+    </div>
+</div>
+{% endblock %}

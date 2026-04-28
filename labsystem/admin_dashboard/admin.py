@@ -8,6 +8,7 @@ from .models import (
     Expense,
     HospitalAccount,
     InventoryItem,
+    InventoryTransaction,
     MobileMoneyAccount,
     MobileMoneyTransaction,
     ReconciliationStatement,
@@ -40,9 +41,16 @@ class SalaryAdmin(admin.ModelAdmin):
 
 @admin.register(InventoryItem)
 class InventoryItemAdmin(admin.ModelAdmin):
-    list_display = ("name", "hospital", "quantity", "low_stock_threshold", "unit_price")
-    list_filter = ("hospital",)
+    list_display = ("name", "hospital", "category", "current_quantity", "unit", "reorder_level", "selling_price", "is_active")
+    list_filter = ("hospital", "category", "is_active")
     search_fields = ("name", "hospital__name")
+
+
+@admin.register(InventoryTransaction)
+class InventoryTransactionAdmin(admin.ModelAdmin):
+    list_display = ("item", "hospital", "transaction_type", "quantity", "visit", "performed_by", "created_at")
+    list_filter = ("hospital", "transaction_type", "item__category")
+    search_fields = ("item__name", "notes", "visit__patient__name")
 
 
 @admin.register(BankAccount)

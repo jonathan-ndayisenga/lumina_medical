@@ -1,9 +1,12 @@
+from decimal import Decimal
+
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 
 from accounts.models import Hospital
-from doctor.models import Consultation
+from admin_dashboard.models import InventoryItem
+from doctor.models import Consultation, Prescription
 from reception.models import Patient, QueueEntry, Service, Visit, VisitService
 
 
@@ -35,6 +38,50 @@ class DoctorWorkflowTests(TestCase):
             category=Service.CATEGORY_LAB,
             price="15.00",
         )
+        self.billable_service = Service.objects.create(
+            hospital=self.hospital,
+            name="Injection",
+            category=Service.CATEGORY_PROCEDURE,
+            price="10.00",
+        )
+        self.tablet_drug = InventoryItem.objects.create(
+            hospital=self.hospital,
+            name="Paracetamol",
+            category=InventoryItem.CATEGORY_DRUG,
+            unit="tablet",
+            base_unit="tablet",
+            units_per_pack="1",
+            strength_mg_per_unit="500",
+            current_quantity="120",
+            unit_cost="0.50",
+            selling_price="2.00",
+            reorder_level="20",
+        )
+        self.syrup_drug = InventoryItem.objects.create(
+            hospital=self.hospital,
+            name="Amoxicillin Syrup",
+            category=InventoryItem.CATEGORY_SYRUP,
+            unit="bottle",
+            base_unit="ml",
+            units_per_pack="100",
+            current_quantity="20",
+            unit_cost="5000.00",
+            selling_price="10.00",
+            reorder_level="5",
+        )
+        self.tube_drug = InventoryItem.objects.create(
+            hospital=self.hospital,
+            name="Clotrimazole Cream",
+            category=InventoryItem.CATEGORY_TUBE,
+            unit="tube",
+            base_unit="g",
+            units_per_pack="30",
+            current_quantity="12",
+            unit_cost="3.00",
+            selling_price="8.00",
+            reorder_level="2",
+            days_covered_per_pack="7.00",
+        )
         self.visit = Visit.objects.create(
             patient=self.patient,
             hospital=self.hospital,
@@ -65,31 +112,117 @@ class DoctorWorkflowTests(TestCase):
             "diagnosis": "Malaria rule-out",
             "treatment": "Supportive care",
             "follow_up_date": "",
-            "lab_services": str(self.lab_service.pk),
         }
         data.update(overrides)
         return data
 
-    def test_doctor_can_request_lab_and_bill_increases(self):
-        response = self.client.post(reverse("consultation", args=[self.visit.pk]), self.consultation_payload())
+    def test_doctor_can_save_consultation_without_creating_duplicate_lab_requests(self):
+        response = self.client.post(
+            reverse("consultation", args=[self.visit.pk]),
+            self.consultation_payload(send_to_reception="on"),
+        )
 
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response.headers["Location"], reverse("consultation_detail", args=[self.visit.pk]))
         self.visit.refresh_from_db()
         consultation = Consultation.objects.get(visit=self.visit)
-        self.assertEqual(consultation.lab_requests, [self.lab_service.pk])
-        self.assertEqual(self.visit.total_amount, 40)
-        self.assertTrue(VisitService.objects.filter(visit=self.visit, service=self.lab_service).exists())
+        self.assertEqual(consultation.lab_requests, [])
+        self.assertEqual(self.visit.total_amount, Decimal("25.00"))
+        self.assertFalse(VisitService.objects.filter(visit=self.visit, service=self.lab_service).exists())
+        self.assertFalse(QueueEntry.objects.filter(visit=self.visit, queue_type=QueueEntry.TYPE_LAB_DOCTOR, processed=False).exists())
 
+    def test_doctor_can_send_lab_request_immediately(self):
+        response = self.client.post(
+            reverse("send_lab_request_api", args=[self.visit.pk]),
+            {"service_id": self.lab_service.pk},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.visit.refresh_from_db()
+        self.assertEqual(self.visit.total_amount, Decimal("40.00"))
+        visit_service = VisitService.objects.get(visit=self.visit, service=self.lab_service)
+        self.assertFalse(visit_service.performed)
         lab_queue = QueueEntry.objects.get(visit=self.visit, queue_type=QueueEntry.TYPE_LAB_DOCTOR, processed=False)
         self.assertEqual(lab_queue.reason, "Doctor requested: CBC")
-        self.assertEqual(lab_queue.requested_by, self.doctor)
-        self.assertTrue(QueueEntry.objects.filter(visit=self.visit, queue_type=QueueEntry.TYPE_DOCTOR, processed=False).exists())
+
+        payload = response.json()
+        self.assertEqual(payload["service"]["service_name"], "CBC")
+        self.assertEqual(payload["pending_services"][0]["service_name"], "CBC")
+
+    def test_doctor_can_add_billable_service_without_reload(self):
+        response = self.client.post(
+            reverse("add_billable_service_api", args=[self.visit.pk]),
+            {"service_id": self.billable_service.pk},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.visit.refresh_from_db()
+        self.assertEqual(self.visit.total_amount, Decimal("35.00"))
+        self.assertTrue(VisitService.objects.filter(visit=self.visit, service=self.billable_service).exists())
+        payload = response.json()
+        self.assertEqual(payload["service"]["service_name"], "Injection")
+
+    def test_doctor_can_add_tablet_prescription_without_reload(self):
+        response = self.client.post(
+            reverse("add_prescription_api", args=[self.visit.pk]),
+            {
+                "drug_id": self.tablet_drug.pk,
+                "dosage_mg": "500",
+                "frequency_per_day": "3",
+                "duration_days": "5",
+                "notes": "Take after meals",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.visit.refresh_from_db()
+        prescription = Prescription.objects.get(visit=self.visit, drug=self.tablet_drug)
+        self.assertEqual(prescription.total_quantity, Decimal("15.00"))
+        self.assertEqual(prescription.total_price, Decimal("30.00"))
+        self.assertEqual(self.visit.total_amount, Decimal("55.00"))
+        self.assertIsNotNone(prescription.billing_visit_service)
+        self.assertEqual(prescription.billing_visit_service.price_at_time, Decimal("30.00"))
+
+    def test_doctor_can_add_liquid_prescription_and_calculate_bottles(self):
+        response = self.client.post(
+            reverse("add_prescription_api", args=[self.visit.pk]),
+            {
+                "drug_id": self.syrup_drug.pk,
+                "dosage_mg": "10",
+                "frequency_per_day": "3",
+                "duration_days": "5",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        prescription = Prescription.objects.get(visit=self.visit, drug=self.syrup_drug)
+        self.assertEqual(prescription.total_quantity, Decimal("2.00"))
+        self.assertEqual(prescription.number_of_packs, 2)
+        self.assertEqual(prescription.total_price, Decimal("20.00"))
+        self.assertEqual(response.json()["prescription"]["quantity_display"], "2 bottle(s) covering 150.00 ml")
+
+    def test_doctor_can_add_tube_prescription_and_calculate_whole_tubes(self):
+        response = self.client.post(
+            reverse("add_prescription_api", args=[self.visit.pk]),
+            {
+                "drug_id": self.tube_drug.pk,
+                "dosage_mg": "1",
+                "frequency_per_day": "2",
+                "duration_days": "10",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        prescription = Prescription.objects.get(visit=self.visit, drug=self.tube_drug)
+        self.assertEqual(prescription.number_of_packs, 2)
+        self.assertEqual(prescription.total_quantity, Decimal("2.00"))
+        self.assertEqual(prescription.total_price, Decimal("16.00"))
+        self.assertEqual(response.json()["prescription"]["quantity_display"], "2 tube(s)")
 
     def test_doctor_can_send_visit_to_billing(self):
         response = self.client.post(
             reverse("consultation", args=[self.visit.pk]),
-            self.consultation_payload(lab_services="", send_to_reception="on"),
+            self.consultation_payload(send_to_reception="on"),
         )
 
         self.assertEqual(response.status_code, 302)

@@ -6,7 +6,14 @@
 {% block page_subtitle %}Review the visit, request additional lab work when needed, and decide the next handoff clearly.{% endblock %}
 
 {% block content %}
-<div class="space-y-6" data-lab-services-url="{% url 'lab_services_api' %}" data-add-lab-service-url="{% url 'add_lab_service_api' %}">
+<div
+    class="space-y-6"
+    data-lab-services-url="{% url 'lab_services_api' %}"
+    data-add-lab-service-url="{% url 'add_lab_service_api' %}"
+    data-send-lab-request-url="{% url 'send_lab_request_api' visit.pk %}"
+    data-add-service-url="{% url 'add_billable_service_api' visit.pk %}"
+    data-add-prescription-url="{% url 'add_prescription_api' visit.pk %}"
+>
     <div class="card">
         <h3 class="text-sm font-semibold text-text-main mb-3">Visit Summary</h3>
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 text-sm">
@@ -17,7 +24,7 @@
                     <p><strong class="text-text-main">Weight:</strong> <span class="text-text-muted">{{ visit.patient.weight_kg }} kg</span></p>
                 {% endif %}
                 <p><strong class="text-text-main">Visit Date:</strong> <span class="text-text-muted">{{ visit.visit_date|date:"Y-m-d H:i" }}</span></p>
-                <p><strong class="text-text-main">Current Bill:</strong> <span class="text-text-muted">{{ visit.total_amount }}</span></p>
+                <p><strong class="text-text-main">Current Bill:</strong> <span id="visit-total-amount" class="text-text-muted">{{ visit.total_amount }}</span></p>
             </div>
             <div class="space-y-2">
                 {% if visit.notes %}
@@ -33,18 +40,226 @@
                         </p>
                     </div>
                 {% endif %}
-                {% if selected_lab_services %}
-                    <div class="p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                        <strong class="block text-text-main">Existing Requested Lab Tests</strong>
+                {% if pending_lab_services %}
+                    <div class="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                        <strong class="block text-text-main">Pending Lab Requests</strong>
                         <p class="text-xs text-text-muted mt-1">
-                            {% for service in selected_lab_services %}
-                                {{ service.name }}{% if not forloop.last %}, {% endif %}
-                            {% endfor %}
+                            {{ pending_lab_services|length }} test{{ pending_lab_services|length|pluralize }} still waiting on the lab.
+                        </p>
+                    </div>
+                {% elif completed_lab_services %}
+                    <div class="p-3 bg-green-50 border border-green-200 rounded-lg">
+                        <strong class="block text-text-main">Completed Lab Work</strong>
+                        <p class="text-xs text-text-muted mt-1">
+                            {{ completed_lab_services|length }} requested lab test{{ completed_lab_services|length|pluralize }} already recorded for this visit.
                         </p>
                     </div>
                 {% endif %}
             </div>
         </div>
+    </div>
+
+    <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+        <div class="card">
+            <div class="flex items-start justify-between gap-3 flex-wrap mb-4">
+                <div>
+                    <h3 class="text-sm font-semibold text-text-main">Pending Lab Requests</h3>
+                    <p class="text-xs text-text-muted mt-1">Send tests straight to the lab, then let the lab attendant work through them one by one.</p>
+                </div>
+                <span class="inline-flex items-center rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700" id="pending-lab-count">
+                    {{ pending_lab_services|length }} pending
+                </span>
+            </div>
+
+            <div class="flex flex-col sm:flex-row gap-2">
+                <select id="lab-service-select" class="form-control flex-1">
+                    <option value="">Select a lab service</option>
+                </select>
+                <button type="button" id="send-lab-request-btn" class="btn btn-primary whitespace-nowrap">Send to Lab</button>
+                <button type="button" id="open-add-service-modal-btn" class="btn btn-secondary whitespace-nowrap">Add Other</button>
+            </div>
+            <p class="mt-2 text-xs text-text-muted">Use “Add Other” when the test does not exist yet. We will create it and send it to the lab immediately.</p>
+
+            <div id="lab-request-message" class="hidden mt-3 rounded-lg border px-3 py-2 text-sm"></div>
+
+            <div class="mt-4 space-y-3" id="pending-lab-services-list">
+                {% for visit_service in pending_lab_services %}
+                    <div class="rounded-xl border border-amber-200 bg-amber-50 p-3">
+                        <div class="flex items-start justify-between gap-3 flex-wrap">
+                            <div>
+                                <p class="font-semibold text-text-main">{{ visit_service.service.name }}</p>
+                                <p class="text-xs text-text-muted mt-1">
+                                    {% if visit_service.service.test_profile %}
+                                        Template: {{ visit_service.service.test_profile.name }}
+                                    {% else %}
+                                        No saved profile yet.
+                                    {% endif %}
+                                </p>
+                            </div>
+                            <span class="text-xs font-semibold text-amber-700">Pending</span>
+                        </div>
+                        <p class="text-xs text-text-muted mt-2">UGX {{ visit_service.price_at_time }}</p>
+                    </div>
+                {% empty %}
+                    <p id="pending-lab-empty" class="text-sm text-text-muted italic">No pending lab requests for this visit yet.</p>
+                {% endfor %}
+            </div>
+            {% if pending_lab_services %}
+                <p id="pending-lab-empty" class="hidden text-sm text-text-muted italic">No pending lab requests for this visit yet.</p>
+            {% endif %}
+
+            <div class="mt-4 rounded-lg border border-gray-200 bg-gray-50 p-3">
+                <p class="text-xs font-semibold uppercase tracking-wide text-text-muted mb-2">Completed requested tests</p>
+                <div id="completed-lab-services-list" class="space-y-2">
+                    {% for visit_service in completed_lab_services %}
+                        <div class="flex items-center justify-between gap-3 rounded-lg bg-white px-3 py-2">
+                            <div>
+                                <p class="text-sm font-semibold text-text-main">{{ visit_service.service.name }}</p>
+                                <p class="text-xs text-text-muted">Completed {{ visit_service.performed_at|date:"Y-m-d H:i"|default:"recently" }}</p>
+                            </div>
+                            <span class="text-xs font-semibold text-green-700">Done</span>
+                        </div>
+                    {% empty %}
+                        <p id="completed-lab-empty" class="text-xs text-text-muted italic">No completed requested tests yet.</p>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="flex items-start justify-between gap-3 flex-wrap mb-4">
+                <div>
+                    <h3 class="text-sm font-semibold text-text-main">Additional Billable Services</h3>
+                    <p class="text-xs text-text-muted mt-1">Add non-lab services straight onto the visit bill without leaving the consultation page.</p>
+                </div>
+            </div>
+
+            <div class="flex flex-col sm:flex-row gap-2">
+                <select id="billable-service-select" class="form-control flex-1">
+                    <option value="">Select a billable service</option>
+                    {% for service in available_billable_services %}
+                        <option value="{{ service.id }}">{{ service.name }} - {{ service.category|title }} ({{ service.price }})</option>
+                    {% endfor %}
+                </select>
+                <button type="button" id="add-billable-service-btn" class="btn btn-primary whitespace-nowrap">Add to Bill</button>
+            </div>
+
+            <div id="billable-service-message" class="hidden mt-3 rounded-lg border px-3 py-2 text-sm"></div>
+
+            <div class="mt-4 space-y-3" id="billable-services-list">
+                {% for visit_service in added_non_lab_visit_services %}
+                    <div class="rounded-xl border border-gray-200 bg-gray-50 p-3">
+                        <div class="flex items-start justify-between gap-3 flex-wrap">
+                            <div>
+                                <p class="font-semibold text-text-main">{{ visit_service.service.name }}</p>
+                                <p class="text-xs text-text-muted mt-1">{{ visit_service.service.get_category_display }}</p>
+                            </div>
+                            <span class="text-xs font-semibold text-text-muted">UGX {{ visit_service.price_at_time }}</span>
+                        </div>
+                    </div>
+                {% empty %}
+                    <p id="billable-services-empty" class="text-sm text-text-muted italic">No extra billable services added yet.</p>
+                {% endfor %}
+            </div>
+            {% if added_non_lab_visit_services %}
+                <p id="billable-services-empty" class="hidden text-sm text-text-muted italic">No extra billable services added yet.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="flex items-start justify-between gap-3 flex-wrap mb-4">
+            <div>
+                <h3 class="text-sm font-semibold text-text-main">Prescribe Medication</h3>
+                <p class="text-xs text-text-muted mt-1">Pick a stocked drug, enter the regimen, and we will calculate the quantity, bottles, and bill instantly.</p>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-5 gap-3">
+            <div class="lg:col-span-2">
+                <label for="drug-select" class="block text-sm font-semibold text-text-main mb-1">Drug</label>
+                <select id="drug-select" class="form-control w-full">
+                    <option value="">Select a stocked drug</option>
+                    {% for drug in available_drugs %}
+                        <option
+                            value="{{ drug.id }}"
+                            data-category="{{ drug.category }}"
+                            data-unit="{{ drug.unit }}"
+                            data-base-unit="{{ drug.base_unit }}"
+                            data-units-per-pack="{{ drug.units_per_pack }}"
+                            data-strength="{{ drug.strength_mg_per_unit|default:'' }}"
+                            data-price="{{ drug.selling_price|default:0 }}"
+                            data-stock="{{ drug.current_quantity }}"
+                            data-days-covered="{{ drug.days_covered_per_pack|default:'' }}"
+                        >
+                            {{ drug.name }} — {{ drug.get_category_display }} — {{ drug.quantity_label }}{% if drug.selling_price %} ({{ drug.selling_price }}){% endif %}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="dosage-mg" id="dosage-label" class="block text-sm font-semibold text-text-main mb-1">Dosage</label>
+                <input id="dosage-mg" type="number" step="0.01" min="0" class="form-control w-full" placeholder="500">
+            </div>
+            <div>
+                <label for="frequency-per-day" id="frequency-label" class="block text-sm font-semibold text-text-main mb-1">Times / Day</label>
+                <select id="frequency-per-day" class="form-control w-full">
+                    <option value="1">1 time</option>
+                    <option value="2" selected>2 times</option>
+                    <option value="3">3 times</option>
+                    <option value="4">4 times</option>
+                    <option value="6">6 times</option>
+                </select>
+            </div>
+            <div>
+                <label for="duration-days" id="duration-label" class="block text-sm font-semibold text-text-main mb-1">Days</label>
+                <input id="duration-days" type="number" step="1" min="1" value="1" class="form-control w-full" placeholder="1">
+            </div>
+        </div>
+
+        <div class="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3 items-start">
+            <div class="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm">
+                <p class="font-semibold text-text-main mb-1">Calculated Dispense</p>
+                <p id="prescription-preview" class="text-text-muted">Choose a drug and enter the regimen to preview quantity and price.</p>
+            </div>
+            <div>
+                <label for="prescription-notes" class="block text-sm font-semibold text-text-main mb-1">Prescription Notes (optional)</label>
+                <textarea id="prescription-notes" class="form-control w-full" rows="2" placeholder="Example: Take after meals."></textarea>
+            </div>
+        </div>
+
+        <div class="mt-3 flex flex-wrap gap-2">
+            <button type="button" id="add-prescription-btn" class="btn btn-primary">Add Prescription</button>
+        </div>
+
+        <div id="prescription-message" class="hidden mt-3 rounded-lg border px-3 py-2 text-sm"></div>
+
+        <div class="mt-4 space-y-3" id="prescription-list">
+            {% for prescription in prescriptions %}
+                <div class="rounded-xl border {% if prescription.dispensed %}border-green-200 bg-green-50{% else %}border-blue-200 bg-blue-50{% endif %} p-3">
+                    <div class="flex items-start justify-between gap-3 flex-wrap">
+                        <div>
+                            <p class="font-semibold text-text-main">{{ prescription.drug.name }}</p>
+                            <p class="text-xs text-text-muted mt-1">{{ prescription.regimen_display }}</p>
+                            <p class="text-xs text-text-muted mt-1">Dispense {{ prescription.quantity_display }}</p>
+                        </div>
+                        <div class="text-right">
+                            <p class="text-xs font-semibold text-text-muted">UGX {{ prescription.total_price }}</p>
+                            {% if prescription.dispensed %}
+                                <span class="inline-flex items-center rounded-full bg-green-100 px-2 py-1 text-xs font-semibold text-green-700 mt-2">Dispensed</span>
+                            {% else %}
+                                <span class="inline-flex items-center rounded-full bg-blue-100 px-2 py-1 text-xs font-semibold text-blue-700 mt-2">Pending dispense</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            {% empty %}
+                <p id="prescription-empty" class="text-sm text-text-muted italic">No prescriptions recorded for this visit yet.</p>
+            {% endfor %}
+        </div>
+        {% if prescriptions %}
+            <p id="prescription-empty" class="hidden text-sm text-text-muted italic">No prescriptions recorded for this visit yet.</p>
+        {% endif %}
     </div>
 
     <div class="card">
@@ -180,25 +395,6 @@
                 {% if form.follow_up_date.errors %}<div class="text-xs text-red-600 mt-1">{{ form.follow_up_date.errors }}</div>{% endif %}
             </div>
             <div class="space-y-3">
-                <div>
-                    <label for="lab-service-select" class="block text-sm font-semibold text-text-main mb-2">Request additional lab tests</label>
-                    <div class="flex flex-col sm:flex-row gap-2">
-                        <select id="lab-service-select" class="form-control flex-1">
-                            <option value="">Select a lab service</option>
-                        </select>
-                        <button type="button" id="add-selected-service-btn" class="btn btn-secondary whitespace-nowrap">Add Selected</button>
-                        <button type="button" id="open-add-service-modal-btn" class="btn btn-primary whitespace-nowrap">Add Other</button>
-                    </div>
-                    <p class="mt-2 text-xs text-text-muted">Existing lab services load here automatically. Use Add Other to create a new hospital lab service on the spot.</p>
-                    {{ form.lab_services }}
-                </div>
-
-                <div class="rounded-lg border border-gray-200 bg-gray-50 p-3">
-                    <p class="text-xs font-semibold uppercase tracking-wide text-text-muted mb-2">Selected lab services</p>
-                    <div id="selected-services-list" class="flex flex-wrap gap-2 min-h-8"></div>
-                    <p id="selected-services-empty" class="text-xs text-text-muted italic">No extra lab services selected yet.</p>
-                </div>
-
                 <div class="space-y-2 rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm">
                     <label class="flex items-start gap-2 text-text-main">
                         {{ form.send_to_nurse }}
@@ -249,7 +445,6 @@
 </div>
 
 {{ available_lab_services|json_script:"available-lab-services-data" }}
-{{ selected_lab_service_ids|json_script:"selected-lab-service-ids-data" }}
 {% endblock %}
 
 {% block extra_js %}
@@ -266,162 +461,405 @@
     return '';
   }
 
-  // Main initialization
   document.addEventListener('DOMContentLoaded', async function () {
-    console.log('🔍 Lab requests script - DOMContentLoaded fired');
-    
     const page = document.querySelector('[data-lab-services-url][data-add-lab-service-url]');
     if (!page) {
-      console.warn('⚠️ Lab services page wrapper not found');
       return;
     }
 
-    // Get DOM elements
     const select = document.getElementById('lab-service-select');
-    const addSelectedButton = document.getElementById('add-selected-service-btn');
+    const sendLabRequestButton = document.getElementById('send-lab-request-btn');
     const openModalButton = document.getElementById('open-add-service-modal-btn');
-    const selectedList = document.getElementById('selected-services-list');
-    const selectedEmpty = document.getElementById('selected-services-empty');
-    const hiddenField = document.querySelector('input[name="lab_services"]');
+    const labRequestMessage = document.getElementById('lab-request-message');
+    const pendingList = document.getElementById('pending-lab-services-list');
+    const completedList = document.getElementById('completed-lab-services-list');
+    const pendingEmpty = document.getElementById('pending-lab-empty');
+    const completedEmpty = document.getElementById('completed-lab-empty');
+    const pendingCount = document.getElementById('pending-lab-count');
+    const totalAmount = document.getElementById('visit-total-amount');
+    const billableServiceSelect = document.getElementById('billable-service-select');
+    const addBillableServiceButton = document.getElementById('add-billable-service-btn');
+    const billableServiceMessage = document.getElementById('billable-service-message');
+    const billableServicesList = document.getElementById('billable-services-list');
+    const billableServicesEmpty = document.getElementById('billable-services-empty');
+    const drugSelect = document.getElementById('drug-select');
+    const dosageInput = document.getElementById('dosage-mg');
+    const dosageLabel = document.getElementById('dosage-label');
+    const frequencySelect = document.getElementById('frequency-per-day');
+    const frequencyLabel = document.getElementById('frequency-label');
+    const durationInput = document.getElementById('duration-days');
+    const durationLabel = document.getElementById('duration-label');
+    const prescriptionNotes = document.getElementById('prescription-notes');
+    const prescriptionPreview = document.getElementById('prescription-preview');
+    const prescriptionMessage = document.getElementById('prescription-message');
+    const prescriptionList = document.getElementById('prescription-list');
+    const prescriptionEmpty = document.getElementById('prescription-empty');
+    const addPrescriptionButton = document.getElementById('add-prescription-btn');
     const modal = document.getElementById('add-service-modal');
     const closeModalButton = document.getElementById('close-modal-btn');
     const addServiceForm = document.getElementById('add-service-form');
     const modalMessage = document.getElementById('modal-message');
     const saveServiceButton = document.getElementById('save-service-btn');
 
-    // Verify critical elements exist
-    const requiredElements = { select, modal, addServiceForm, modalMessage };
-    const missing = Object.keys(requiredElements).filter(k => !requiredElements[k]);
-    if (missing.length > 0) {
-      console.error('❌ Missing critical elements:', missing);
+    if (!select || !sendLabRequestButton || !modal || !addServiceForm || !modalMessage) {
       return;
     }
-    console.log('✅ All critical elements found');
 
-    // Initialize state
     const servicesById = new Map();
-    const selectedServices = new Map();
     let allServices = [];
-
-    // Try to get embedded data
     const availableScript = document.getElementById('available-lab-services-data');
-    const selectedIdsScript = document.getElementById('selected-lab-service-ids-data');
-    
+
     if (availableScript) {
       try {
         allServices = JSON.parse(availableScript.textContent);
-        console.log('📋 Loaded services from embedded JSON:', allServices.length);
-      } catch (e) {
-        console.warn('⚠️ Failed to parse embedded services JSON:', e);
+      } catch (error) {
+        allServices = [];
       }
     }
 
-    const selectedIds = selectedIdsScript ? JSON.parse(selectedIdsScript.textContent) : [];
-    console.log('✅ Selected IDs:', selectedIds.length);
-
-    // Fetch from API if no embedded data
     if (allServices.length === 0) {
-      console.log('📡 No embedded services, fetching from API...');
       try {
         const response = await fetch(page.dataset.labServicesUrl);
         if (response.ok) {
           allServices = await response.json();
-          console.log('✅ Loaded services from API:', allServices.length);
-        } else {
-          console.error('API error:', response.status);
         }
       } catch (error) {
-        console.error('❌ Failed to fetch from API:', error);
+        allServices = [];
       }
     }
 
-    // Build service maps
     allServices.forEach(service => {
       servicesById.set(Number(service.id), {
         id: Number(service.id),
         name: service.name,
-        price: service.price
+        price: service.price,
       });
     });
 
-    selectedIds.forEach(id => {
-      const numericId = Number(id);
-      if (servicesById.has(numericId)) {
-        selectedServices.set(numericId, servicesById.get(numericId));
+    function showMessage(target, text, kind) {
+      if (!target) {
+        return;
       }
-    });
+      target.textContent = text;
+      target.className = 'mt-3 rounded-lg border px-3 py-2 text-sm';
+      if (kind === 'error') {
+        target.classList.add('border-red-200', 'bg-red-50', 'text-red-700');
+      } else {
+        target.classList.add('border-green-200', 'bg-green-50', 'text-green-700');
+      }
+      target.classList.remove('hidden');
+    }
 
-    console.log('🎯 Initialization complete. Services:', servicesById.size, '| Selected:', selectedServices.size);
+    function createPendingCard(service) {
+      const card = document.createElement('div');
+      card.className = 'rounded-xl border border-amber-200 bg-amber-50 p-3';
+      card.dataset.serviceId = service.service_id;
+      card.innerHTML = `
+        <div class="flex items-start justify-between gap-3 flex-wrap">
+          <div>
+            <p class="font-semibold text-text-main">${service.service_name}</p>
+            <p class="text-xs text-text-muted mt-1">${service.test_profile_name ? `Template: ${service.test_profile_name}` : 'No saved profile yet.'}</p>
+          </div>
+          <span class="text-xs font-semibold text-amber-700">Pending</span>
+        </div>
+        <p class="text-xs text-text-muted mt-2">UGX ${service.price}</p>
+      `;
+      return card;
+    }
 
-    // UI Functions
-    function populateSelect() {
+    function createCompletedCard(serviceName) {
+      const card = document.createElement('div');
+      card.className = 'flex items-center justify-between gap-3 rounded-lg bg-white px-3 py-2';
+      card.innerHTML = `
+        <div>
+          <p class="text-sm font-semibold text-text-main">${serviceName}</p>
+          <p class="text-xs text-text-muted">Completed just now</p>
+        </div>
+        <span class="text-xs font-semibold text-green-700">Done</span>
+      `;
+      return card;
+    }
+
+    function createBillableCard(service) {
+      const card = document.createElement('div');
+      card.className = 'rounded-xl border border-gray-200 bg-gray-50 p-3';
+      card.innerHTML = `
+        <div class="flex items-start justify-between gap-3 flex-wrap">
+          <div>
+            <p class="font-semibold text-text-main">${service.service_name}</p>
+            <p class="text-xs text-text-muted mt-1">${service.category}</p>
+          </div>
+          <span class="text-xs font-semibold text-text-muted">UGX ${service.price}</span>
+        </div>
+      `;
+      return card;
+    }
+
+    function createPrescriptionCard(prescription) {
+      const card = document.createElement('div');
+      card.className = prescription.dispensed
+        ? 'rounded-xl border border-green-200 bg-green-50 p-3'
+        : 'rounded-xl border border-blue-200 bg-blue-50 p-3';
+      card.innerHTML = `
+        <div class="flex items-start justify-between gap-3 flex-wrap">
+          <div>
+            <p class="font-semibold text-text-main">${prescription.drug_name}</p>
+            <p class="text-xs text-text-muted mt-1">${prescription.regimen}</p>
+            <p class="text-xs text-text-muted mt-1">Dispense ${prescription.quantity_display}</p>
+          </div>
+          <div class="text-right">
+            <p class="text-xs font-semibold text-text-muted">UGX ${prescription.total_price}</p>
+            <span class="inline-flex items-center rounded-full ${prescription.dispensed ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'} px-2 py-1 text-xs font-semibold mt-2">
+              ${prescription.dispensed ? 'Dispensed' : 'Pending dispense'}
+            </span>
+          </div>
+        </div>
+      `;
+      return card;
+    }
+
+    function updateTotalAmount(value) {
+      if (totalAmount) {
+        totalAmount.textContent = value;
+      }
+    }
+
+    function currentDrugOption() {
+      return drugSelect?.options?.[drugSelect.selectedIndex] || null;
+    }
+
+    function syncPrescriptionLabels() {
+      const option = currentDrugOption();
+      const category = option?.dataset.category || '';
+      if (!dosageLabel || !frequencyLabel || !durationLabel || !dosageInput) {
+        return;
+      }
+      if (category === 'syrup') {
+        dosageLabel.textContent = 'Dose / Intake (ml)';
+        frequencyLabel.textContent = 'Times / Day';
+        durationLabel.textContent = 'Days';
+        dosageInput.placeholder = '10';
+        return;
+      }
+      if (category === 'tube') {
+        dosageLabel.textContent = 'Strength / Note Qty';
+        frequencyLabel.textContent = 'Applications / Day';
+        durationLabel.textContent = 'Days on Treatment';
+        dosageInput.placeholder = '1';
+        return;
+      }
+      dosageLabel.textContent = 'Dosage';
+      frequencyLabel.textContent = 'Times / Day';
+      durationLabel.textContent = 'Days';
+      dosageInput.placeholder = '500';
+    }
+
+    function calculatePrescriptionPreview() {
+      if (!prescriptionPreview || !drugSelect || !drugSelect.value) {
+        if (prescriptionPreview) {
+          prescriptionPreview.textContent = 'Choose a drug and enter the regimen to preview quantity and price.';
+        }
+        return null;
+      }
+
+      const option = currentDrugOption();
+      const dosage = Number(dosageInput?.value || 0);
+      const frequency = Number(frequencySelect?.value || 0);
+      const duration = Number(durationInput?.value || 0);
+      const category = option?.dataset.category || '';
+      const unit = option?.dataset.unit || 'unit';
+      const baseUnit = option?.dataset.baseUnit || unit;
+      const unitsPerPack = Number(option?.dataset.unitsPerPack || 1);
+      const strength = Number(option?.dataset.strength || 0);
+      const price = Number(option?.dataset.price || 0);
+      const daysCovered = Number(option?.dataset.daysCovered || 0);
+      const drugName = option?.textContent?.split('—')[0]?.trim() || 'Selected drug';
+
+      if (!dosage || !frequency || !duration) {
+        prescriptionPreview.textContent = 'Enter dosage, frequency, and duration to preview the dispense quantity.';
+        return null;
+      }
+
+      let quantity = frequency * duration;
+      let packs = Math.ceil(quantity);
+      let label = `${quantity.toFixed(2)} ${unit}`;
+      let totalPrice = quantity * price;
+
+      if (category === 'syrup') {
+        const totalMl = dosage * frequency * duration;
+        packs = Math.ceil(totalMl / Math.max(unitsPerPack, 1));
+        quantity = packs;
+        label = `${packs} ${unit}(s) covering ${totalMl.toFixed(2)} ${baseUnit}`;
+        totalPrice = packs * price;
+      } else if (category === 'tube') {
+        const coverageDays = daysCovered > 0 ? daysCovered : 1;
+        packs = Math.ceil(duration / coverageDays);
+        quantity = packs;
+        label = `${packs} tube(s)`;
+        totalPrice = packs * price;
+      } else if (category === 'drug' && strength > 0) {
+        const unitsPerDose = dosage / strength;
+        quantity = Math.ceil(unitsPerDose * frequency * duration);
+        packs = quantity;
+        label = `${quantity} ${unit}(s)`;
+        totalPrice = quantity * price;
+      }
+
+      prescriptionPreview.textContent = `${drugName}: dispense ${label} for this regimen. Estimated charge: UGX ${totalPrice.toFixed(2)}.`;
+      return { quantity, packs, totalPrice };
+    }
+
+    function pendingServiceIds() {
+      return new Set(
+        Array.from(pendingList.querySelectorAll('[data-service-id]')).map(node => Number(node.dataset.serviceId))
+      );
+    }
+
+    function populateLabSelect() {
       const currentValue = select.value;
+      const pendingIds = pendingServiceIds();
       select.innerHTML = '<option value="">Select a lab service</option>';
-      
-      const available = Array.from(servicesById.values())
-        .filter(s => !selectedServices.has(s.id))
-        .sort((a, b) => a.name.localeCompare(b.name));
-      
-      available.forEach(service => {
-        const option = document.createElement('option');
-        option.value = String(service.id);
-        option.textContent = `${service.name} (${service.price})`;
-        select.appendChild(option);
-      });
-      
-      if ([...select.options].some(opt => opt.value === currentValue)) {
+      Array.from(servicesById.values())
+        .filter(service => !pendingIds.has(service.id))
+        .sort((a, b) => a.name.localeCompare(b.name))
+        .forEach(service => {
+          const option = document.createElement('option');
+          option.value = String(service.id);
+          option.textContent = `${service.name} (${service.price})`;
+          select.appendChild(option);
+        });
+      if ([...select.options].some(option => option.value === currentValue)) {
         select.value = currentValue;
       }
-      console.log('✨ Dropdown populated:', available.length, 'options');
     }
 
-    function syncHiddenField() {
-      hiddenField.value = Array.from(selectedServices.keys()).join(',');
+    function setPendingServices(services, latestCompletedServiceName) {
+      pendingList.innerHTML = '';
+      if (!services.length) {
+        pendingEmpty.classList.remove('hidden');
+      } else {
+        pendingEmpty.classList.add('hidden');
+        services.forEach(service => pendingList.appendChild(createPendingCard(service)));
+      }
+      pendingCount.textContent = `${services.length} pending`;
+      populateLabSelect();
+
+      if (latestCompletedServiceName) {
+        completedEmpty?.classList.add('hidden');
+        completedList.prepend(createCompletedCard(latestCompletedServiceName));
+      }
     }
 
-    function renderSelectedServices() {
-      selectedList.innerHTML = '';
-      
-      if (selectedServices.size === 0) {
-        selectedEmpty.classList.remove('hidden');
-        syncHiddenField();
-        populateSelect();
+    function openModal() {
+      modal.classList.remove('hidden');
+      document.getElementById('service-name')?.focus();
+    }
+
+    function closeModal() {
+      modal.classList.add('hidden');
+      addServiceForm.reset();
+      modalMessage.classList.add('hidden');
+    }
+
+    async function postForm(url, formData) {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'X-CSRFToken': getCookie('csrftoken'),
+          'X-Requested-With': 'XMLHttpRequest'
+        },
+        body: formData
+      });
+      const payload = await response.json();
+      if (!response.ok) {
+        throw new Error(payload.error || 'Request failed.');
+      }
+      return payload;
+    }
+
+    async function sendSelectedLabRequest(serviceId) {
+      if (!serviceId) {
+        showMessage(labRequestMessage, 'Select a lab service first.', 'error');
+        return;
+      }
+      sendLabRequestButton.disabled = true;
+      try {
+        const formData = new FormData();
+        formData.append('service_id', serviceId);
+        const payload = await postForm(page.dataset.sendLabRequestUrl, formData);
+        updateTotalAmount(payload.visit_total_amount);
+        setPendingServices(payload.pending_services || [], payload.service.service_name);
+        select.value = '';
+        showMessage(labRequestMessage, payload.message, 'success');
+      } catch (error) {
+        showMessage(labRequestMessage, error.message, 'error');
+      } finally {
+        sendLabRequestButton.disabled = false;
+      }
+    }
+
+    async function addBillableService() {
+      if (!billableServiceSelect || !billableServiceSelect.value) {
+        showMessage(billableServiceMessage, 'Select a billable service first.', 'error');
+        return;
+      }
+      addBillableServiceButton.disabled = true;
+      try {
+        const currentValue = billableServiceSelect.value;
+        const formData = new FormData();
+        formData.append('service_id', currentValue);
+        const payload = await postForm(page.dataset.addServiceUrl, formData);
+        billableServicesEmpty?.classList.add('hidden');
+        billableServicesList.prepend(createBillableCard(payload.service));
+        updateTotalAmount(payload.visit_total_amount);
+        billableServiceSelect.querySelector(`option[value="${currentValue}"]`)?.remove();
+        billableServiceSelect.value = '';
+        showMessage(billableServiceMessage, payload.message, 'success');
+      } catch (error) {
+        showMessage(billableServiceMessage, error.message, 'error');
+      } finally {
+        addBillableServiceButton.disabled = false;
+      }
+    }
+
+    async function addPrescription() {
+      if (!drugSelect || !drugSelect.value) {
+        showMessage(prescriptionMessage, 'Select a medication first.', 'error');
         return;
       }
 
-      selectedEmpty.classList.add('hidden');
-      
-      Array.from(selectedServices.values())
-        .sort((a, b) => a.name.localeCompare(b.name))
-        .forEach(service => {
-          const chip = document.createElement('div');
-          chip.className = 'inline-flex items-center gap-2 rounded-full bg-blue-100 px-3 py-1.5 text-sm text-blue-900';
-          chip.innerHTML = `<span>${service.name} (${service.price})</span>`;
+      const dosage = dosageInput?.value || '';
+      const frequency = frequencySelect?.value || '';
+      const duration = durationInput?.value || '';
+      if (!dosage || !frequency || !duration) {
+        showMessage(prescriptionMessage, 'Enter dosage, frequency, and duration first.', 'error');
+        return;
+      }
 
-          const removeBtn = document.createElement('button');
-          removeBtn.type = 'button';
-          removeBtn.className = 'font-bold text-blue-700 hover:text-blue-900 cursor-pointer';
-          removeBtn.textContent = '✕';
-          removeBtn.addEventListener('click', e => {
-            e.preventDefault();
-            selectedServices.delete(service.id);
-            renderSelectedServices();
-          });
-
-          chip.appendChild(removeBtn);
-          selectedList.appendChild(chip);
-        });
-      
-      syncHiddenField();
-      populateSelect();
-    }
-
-    function addSelectedService() {
-      const serviceId = Number(select.value);
-      if (!serviceId || !servicesById.has(serviceId)) return;
-      selectedServices.set(serviceId, servicesById.get(serviceId));
-      select.value = '';
-      renderSelectedServices();
+      addPrescriptionButton.disabled = true;
+      try {
+        const formData = new FormData();
+        formData.append('drug_id', drugSelect.value);
+        formData.append('dosage_mg', dosage);
+        formData.append('frequency_per_day', frequency);
+        formData.append('duration_days', duration);
+        formData.append('notes', prescriptionNotes?.value || '');
+        const payload = await postForm(page.dataset.addPrescriptionUrl, formData);
+        prescriptionEmpty?.classList.add('hidden');
+        prescriptionList?.prepend(createPrescriptionCard(payload.prescription));
+        updateTotalAmount(payload.visit_total_amount);
+        if (dosageInput) dosageInput.value = '';
+        if (durationInput) durationInput.value = '1';
+        if (frequencySelect) frequencySelect.value = '2';
+        if (prescriptionNotes) prescriptionNotes.value = '';
+        if (drugSelect) drugSelect.value = '';
+        calculatePrescriptionPreview();
+        showMessage(prescriptionMessage, payload.message, 'success');
+      } catch (error) {
+        showMessage(prescriptionMessage, error.message, 'error');
+      } finally {
+        addPrescriptionButton.disabled = false;
+      }
     }
 
     function showModalMessage(text, type) {
@@ -435,85 +873,53 @@
       modalMessage.classList.remove('hidden');
     }
 
-    function openModal() {
-      console.log('🔓 Opening modal');
-      modal.classList.remove('hidden');
-      const nameInput = modal.querySelector('#service-name');
-      if (nameInput) nameInput.focus();
-    }
-
-    function closeModal() {
-      console.log('🔒 Closing modal');
-      modal.classList.add('hidden');
-      addServiceForm.reset();
-      modalMessage.classList.add('hidden');
-    }
-
-    // Event Listeners
-    addSelectedButton.addEventListener('click', () => {
-      console.log('🖱️ Add Selected clicked');
-      addSelectedService();
+    sendLabRequestButton.addEventListener('click', () => sendSelectedLabRequest(select.value));
+    select.addEventListener('change', () => labRequestMessage.classList.add('hidden'));
+    openModalButton.addEventListener('click', openModal);
+    closeModalButton.addEventListener('click', closeModal);
+    addBillableServiceButton?.addEventListener('click', addBillableService);
+    addPrescriptionButton?.addEventListener('click', addPrescription);
+    drugSelect?.addEventListener('change', () => {
+      syncPrescriptionLabels();
+      calculatePrescriptionPreview();
     });
+    dosageInput?.addEventListener('input', calculatePrescriptionPreview);
+    frequencySelect?.addEventListener('change', calculatePrescriptionPreview);
+    durationInput?.addEventListener('input', calculatePrescriptionPreview);
 
-    select.addEventListener('change', () => {
-      if (select.value) {
-        console.log('🔄 Service selected:', select.value);
-        addSelectedService();
+    modal.addEventListener('click', event => {
+      if (event.target === modal) {
+        closeModal();
       }
     });
 
-    openModalButton.addEventListener('click', openModal);
-    closeModalButton.addEventListener('click', closeModal);
-
-    modal.addEventListener('click', e => {
-      if (e.target === modal) closeModal();
-    });
-
-    addServiceForm.addEventListener('submit', async e => {
-      e.preventDefault();
+    addServiceForm.addEventListener('submit', async event => {
+      event.preventDefault();
       saveServiceButton.disabled = true;
 
       const formData = new FormData(addServiceForm);
       try {
-        const response = await fetch(page.dataset.addLabServiceUrl, {
-          method: 'POST',
-          headers: {
-            'X-CSRFToken': getCookie('csrftoken'),
-            'X-Requested-With': 'XMLHttpRequest'
-          },
-          body: formData
-        });
-
-        const payload = await response.json();
-        
-        if (!response.ok) {
-          showModalMessage(payload.error || 'Failed to create service', 'error');
-          return;
-        }
-
+        const payload = await postForm(page.dataset.addLabServiceUrl, formData);
         const service = {
           id: Number(payload.id),
           name: payload.name,
-          price: payload.price
+          price: payload.price,
         };
-        
         servicesById.set(service.id, service);
-        selectedServices.set(service.id, service);
-        renderSelectedServices();
-        showModalMessage(payload.message || 'Service added', 'success');
-        
+        populateLabSelect();
+        showModalMessage(payload.message || 'Service created.', 'success');
+        await sendSelectedLabRequest(service.id);
         setTimeout(closeModal, 1200);
       } catch (error) {
-        console.error('Form submission error:', error);
-        showModalMessage('Failed to create service. Please try again.', 'error');
+        showModalMessage(error.message || 'Failed to create service. Please try again.', 'error');
       } finally {
         saveServiceButton.disabled = false;
       }
     });
 
-    // Initial render
-    renderSelectedServices();
-    console.log('✅ Lab services UI ready!');
+    populateLabSelect();
+    syncPrescriptionLabels();
+    calculatePrescriptionPreview();
   });
 })();
 </script>

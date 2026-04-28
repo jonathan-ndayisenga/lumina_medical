@@ -1,13 +1,16 @@
 from datetime import date
+from decimal import Decimal
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 
 from accounts.models import Hospital
+from admin_dashboard.models import InventoryItem, InventoryTransaction
+from doctor.models import Prescription
 from lab.models import LabReport, TestCatalog, TestResult
 from nurse.models import NurseNote
-from reception.models import Patient, QueueEntry, Visit
+from reception.models import Patient, QueueEntry, Service, Visit, VisitService
 from lab.views import mark_lab_queue_complete
 
 
@@ -71,6 +74,37 @@ class NurseWorkflowTests(TestCase):
         )
         self.patient = Patient.objects.create(hospital=self.hospital, name="Nurse Patient", age="22YRS", sex="M")
         self.visit = Visit.objects.create(patient=self.patient, hospital=self.hospital, created_by=self.nurse, total_amount="25.00")
+        self.drug = InventoryItem.objects.create(
+            hospital=self.hospital,
+            name="Paracetamol",
+            category=InventoryItem.CATEGORY_DRUG,
+            unit="tablet",
+            current_quantity="120",
+            unit_cost="0.50",
+            selling_price="2.00",
+            reorder_level="20",
+        )
+        self.pharmacy_service = Service.objects.create(
+            hospital=self.hospital,
+            name="Pharmacy Item: Paracetamol",
+            category=Service.CATEGORY_PHARMACY,
+            price="2.00",
+        )
+        self.billing_line = VisitService.objects.create(
+            visit=self.visit,
+            service=self.pharmacy_service,
+            price_at_time="12.00",
+            notes="Prescription billing line",
+        )
+        self.prescription = Prescription.objects.create(
+            visit=self.visit,
+            drug=self.drug,
+            dosage_mg="500",
+            frequency_per_day=3,
+            duration_days=2,
+            prescribed_by=self.nurse,
+            billing_visit_service=self.billing_line,
+        )
         self.queue_entry = QueueEntry.objects.create(
             hospital=self.hospital,
             visit=self.visit,
@@ -116,3 +150,19 @@ class NurseWorkflowTests(TestCase):
         self.assertEqual(response.headers["Location"], reverse("nurse_queue"))
         self.visit.refresh_from_db()
         self.assertEqual(self.visit.status, Visit.STATUS_READY_FOR_BILLING)
+
+    def test_nurse_can_dispense_prescription_and_deduct_inventory(self):
+        response = self.client.post(
+            reverse("dispense_prescription", args=[self.queue_entry.pk, self.prescription.pk]),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.headers["Location"], reverse("perform_nursing", args=[self.queue_entry.pk]))
+        self.prescription.refresh_from_db()
+        self.drug.refresh_from_db()
+        self.billing_line.refresh_from_db()
+        self.assertTrue(self.prescription.dispensed)
+        self.assertEqual(self.drug.current_quantity, Decimal("114.00"))
+        self.assertTrue(self.billing_line.performed)
+        transaction = InventoryTransaction.objects.get(prescription=self.prescription)
+        self.assertEqual(transaction.quantity, Decimal("6.00"))

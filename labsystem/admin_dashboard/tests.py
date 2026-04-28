@@ -3,6 +3,7 @@ import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
+from django.contrib.auth.models import Group
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.templatetags.static import static
@@ -12,7 +13,7 @@ from PIL import Image
 
 from accounts.models import Hospital, SubscriptionPlan
 from admin_dashboard.forms import ExpenseForm, HospitalForm
-from admin_dashboard.models import BankAccount, CashDrawer, MobileMoneyAccount
+from admin_dashboard.models import BankAccount, CashDrawer, InventoryItem, InventoryTransaction, MobileMoneyAccount
 
 TEST_MEDIA_ROOT = Path(__file__).resolve().parent.parent / "test_media"
 TEST_MEDIA_ROOT.mkdir(exist_ok=True)
@@ -255,3 +256,97 @@ class ExpenseFormSourceTests(TestCase):
         self.assertEqual(expense.bank_account, self.bank_account)
         self.assertIsNone(expense.mobile_money_account)
         self.assertIsNone(expense.cash_drawer)
+
+
+class MultiRoleNavigationTests(TestCase):
+    def setUp(self):
+        self.User = get_user_model()
+        self.hospital = Hospital.objects.create(name="Union Hospital", subdomain="union-hospital")
+        self.user = self.User.objects.create_user(
+            username="flexstaff",
+            password="StrongPass123!",
+            role=self.User.ROLE_RECEPTIONIST,
+            hospital=self.hospital,
+        )
+        nurse_group, _ = Group.objects.get_or_create(name="Nurse")
+        lab_group, _ = Group.objects.get_or_create(name="Lab")
+        self.user.groups.add(nurse_group, lab_group)
+        self.client.force_login(self.user)
+
+    def test_multi_role_user_sees_union_of_module_navigation(self):
+        response = self.client.get(reverse("reception_dashboard"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, reverse("reception_dashboard"))
+        self.assertContains(response, reverse("patient_list"))
+        self.assertContains(response, reverse("nurse_queue"))
+        self.assertContains(response, reverse("lab_queue"))
+        self.assertContains(response, reverse("report_list"))
+        self.assertNotContains(response, reverse("doctor_queue"))
+        self.assertContains(response, "Receptionist, Nurse, Lab")
+
+
+class InventoryManagementTests(TestCase):
+    def setUp(self):
+        self.User = get_user_model()
+        self.hospital = Hospital.objects.create(name="Stock Hospital", subdomain="stock-hospital")
+        self.admin_user = self.User.objects.create_user(
+            username="stockadmin",
+            password="StrongPass123!",
+            role=self.User.ROLE_HOSPITAL_ADMIN,
+            hospital=self.hospital,
+        )
+        self.client.force_login(self.admin_user)
+        self.item = InventoryItem.objects.create(
+            hospital=self.hospital,
+            name="Grovit Syrup",
+            category=InventoryItem.CATEGORY_SYRUP,
+            unit="bottle",
+            base_unit="ml",
+            units_per_pack="100",
+            current_quantity="0",
+            unit_cost="5000",
+            selling_price="8000",
+            reorder_level="5",
+        )
+
+    def test_inventory_report_downloads_csv(self):
+        response = self.client.get(reverse("download_inventory_report"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "text/csv")
+        self.assertIn("Grovit Syrup", response.content.decode("utf-8"))
+
+    def test_printable_inventory_report_renders_stock_sheet(self):
+        response = self.client.get(reverse("printable_inventory_report"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Inventory Stock Sheet")
+        self.assertContains(response, "Grovit Syrup")
+
+    def test_inventory_report_downloads_xlsx(self):
+        response = self.client.get(reverse("download_inventory_xlsx"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response["Content-Type"],
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+        self.assertTrue(response.content.startswith(b"PK"))
+
+    def test_hospital_admin_can_restock_existing_item(self):
+        response = self.client.post(
+            reverse("restock_inventory_item", args=[self.item.pk]),
+            {
+                "quantity_received": "12",
+                "unit_cost": "5200",
+                "notes": "Supplier delivery",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.item.refresh_from_db()
+        self.assertEqual(self.item.current_quantity, 12)
+        self.assertEqual(self.item.unit_cost, 5200)
+        transaction = InventoryTransaction.objects.get(item=self.item, transaction_type=InventoryTransaction.TYPE_RECEIVE)
+        self.assertEqual(transaction.quantity, 12)

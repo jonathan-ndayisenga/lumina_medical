@@ -145,21 +145,21 @@
 
     <!-- Inventory Watch -->
     <div class="card">
-        <h4 class="text-sm font-semibold text-text-main mb-4">⚠️ Inventory Watch</h4>
+        <h4 class="text-sm font-semibold text-text-main mb-4">Inventory Watch</h4>
         {% if low_stock_items %}
             <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4 space-y-2">
                 {% for item in low_stock_items %}
                     <div class="flex justify-between items-start">
                         <div>
                             <p class="text-sm font-medium text-text-main">{{ item.name }}</p>
-                            <p class="text-xs text-text-muted">{{ item.quantity }} remaining</p>
+                            <p class="text-xs text-text-muted">{{ item.quantity_label }} remaining</p>
                         </div>
-                        <span class="inline-block px-2 py-1 rounded-full bg-red-100 text-red-700 text-xs font-medium">Low (&lt; {{ item.low_stock_threshold }})</span>
+                        <span class="inline-block px-2 py-1 rounded-full bg-red-100 text-red-700 text-xs font-medium">Low (&lt;= {{ item.reorder_level }} {{ item.unit }})</span>
                     </div>
                 {% endfor %}
             </div>
         {% else %}
-            <p class="text-sm text-text-muted text-center py-4">✓ All inventory levels are healthy</p>
+            <p class="text-sm text-text-muted text-center py-4">All inventory levels are healthy.</p>
         {% endif %}
     </div>
 

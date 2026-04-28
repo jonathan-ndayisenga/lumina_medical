@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from django import forms
 from django.utils import timezone
 from django.contrib.auth import get_user_model
@@ -259,12 +261,109 @@ class SalaryForm(forms.ModelForm):
 class InventoryItemForm(forms.ModelForm):
     class Meta:
         model = InventoryItem
-        fields = ("name", "quantity", "unit_price", "low_stock_threshold")
+        fields = (
+            "name",
+            "category",
+            "unit",
+            "base_unit",
+            "units_per_pack",
+            "strength_mg_per_unit",
+            "current_quantity",
+            "unit_cost",
+            "selling_price",
+            "reorder_level",
+            "concentration_mg_per_ml",
+            "pack_size_ml",
+            "days_covered_per_pack",
+            "is_active",
+        )
+        widgets = {
+            "current_quantity": forms.NumberInput(attrs={"step": "0.01", "min": "0", "class": "form-control"}),
+            "unit_cost": forms.NumberInput(attrs={"step": "0.01", "min": "0", "class": "form-control"}),
+            "selling_price": forms.NumberInput(attrs={"step": "0.01", "min": "0", "class": "form-control"}),
+            "units_per_pack": forms.NumberInput(attrs={"step": "0.01", "min": "0.01", "class": "form-control"}),
+            "strength_mg_per_unit": forms.NumberInput(attrs={"step": "0.01", "min": "0", "class": "form-control"}),
+            "reorder_level": forms.NumberInput(attrs={"step": "0.01", "min": "0", "class": "form-control"}),
+            "concentration_mg_per_ml": forms.NumberInput(attrs={"step": "0.01", "min": "0", "class": "form-control"}),
+            "pack_size_ml": forms.NumberInput(attrs={"step": "0.01", "min": "0", "class": "form-control"}),
+            "days_covered_per_pack": forms.NumberInput(attrs={"step": "0.01", "min": "0", "class": "form-control"}),
+        }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        for field in self.fields.values():
+        for name, field in self.fields.items():
             field.widget.attrs.setdefault("class", "form-control")
+        self.fields["name"].label = "Drug / Item Name"
+        self.fields["category"].label = "Form / Category"
+        self.fields["unit"].label = "Pack Type"
+        self.fields["base_unit"].label = "Base Unit"
+        self.fields["units_per_pack"].label = "Units per Pack"
+        self.fields["current_quantity"].label = "Opening Stock"
+        self.fields["unit_cost"].label = "Buying Price (Per Pack / Unit)"
+        self.fields["selling_price"].label = "Selling Price (Per Pack / Unit)"
+        self.fields["reorder_level"].label = "Minimum Stock Level"
+        self.fields["strength_mg_per_unit"].label = "Strength (mg per base unit)"
+        self.fields["days_covered_per_pack"].label = "Days Covered Per Pack"
+        self.fields["base_unit"].help_text = "Smallest clinical unit used for prescribing and reporting, e.g. tablet, ml, g, vial."
+        self.fields["unit"].help_text = "How the stocked item is packaged for sale or storage, e.g. bottle, strip, tube, vial."
+        self.fields["units_per_pack"].help_text = "How many base units are inside one stocked pack."
+        self.fields["current_quantity"].help_text = "Enter how many packs or units are physically in stock right now."
+        self.fields["strength_mg_per_unit"].help_text = "Useful for tablets/capsules so the doctor can prescribe by mg accurately."
+        self.fields["days_covered_per_pack"].help_text = "Useful for creams/tubes where one tube covers a number of treatment days."
+
+    def clean(self):
+        cleaned_data = super().clean()
+        category = cleaned_data.get("category")
+        units_per_pack = cleaned_data.get("units_per_pack")
+        base_unit = (cleaned_data.get("base_unit") or "").strip().lower()
+        pack_type = (cleaned_data.get("unit") or "").strip().lower()
+
+        if units_per_pack is not None and units_per_pack <= 0:
+            self.add_error("units_per_pack", "Units per pack must be greater than zero.")
+
+        if category == InventoryItem.CATEGORY_SYRUP:
+            if not units_per_pack:
+                self.add_error("units_per_pack", "Syrups need the bottle size in ml.")
+            if not base_unit:
+                cleaned_data["base_unit"] = "ml"
+            if not pack_type or pack_type == "unit":
+                cleaned_data["unit"] = "bottle"
+
+        if category == InventoryItem.CATEGORY_TUBE:
+            if not pack_type or pack_type == "unit":
+                cleaned_data["unit"] = "tube"
+            if not base_unit:
+                cleaned_data["base_unit"] = "g"
+
+        if category == InventoryItem.CATEGORY_DRUG and not base_unit:
+            cleaned_data["base_unit"] = "tablet"
+
+        return cleaned_data
+
+
+class InventoryRestockForm(forms.Form):
+    quantity_received = forms.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        min_value=Decimal("0.01"),
+        widget=forms.NumberInput(attrs={"step": "0.01", "min": "0.01", "class": "form-control"}),
+        label="Quantity Received",
+        help_text="How many packs or units you are adding to stock now.",
+    )
+    unit_cost = forms.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        min_value=Decimal("0"),
+        required=False,
+        widget=forms.NumberInput(attrs={"step": "0.01", "min": "0", "class": "form-control"}),
+        label="Buying Price (optional)",
+        help_text="Leave blank to keep the current buying price.",
+    )
+    notes = forms.CharField(
+        required=False,
+        widget=forms.Textarea(attrs={"rows": 2, "class": "form-control"}),
+        label="Restock Notes",
+    )
 
 
 class BankAccountForm(forms.ModelForm):

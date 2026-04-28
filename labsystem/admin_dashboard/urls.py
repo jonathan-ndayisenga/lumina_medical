@@ -48,6 +48,10 @@ urlpatterns = [
     path("hospital/salaries/<int:salary_id>/edit/", views.edit_salary, name="edit_salary"),
     path("hospital/salaries/<int:salary_id>/delete/", views.delete_salary, name="delete_salary"),
     path("hospital/inventory/", views.manage_inventory, name="manage_inventory"),
+    path("hospital/inventory/report/", views.download_inventory_report, name="download_inventory_report"),
+    path("hospital/inventory/report/print/", views.printable_inventory_report, name="printable_inventory_report"),
+    path("hospital/inventory/report/xlsx/", views.download_inventory_xlsx, name="download_inventory_xlsx"),
+    path("hospital/inventory/<int:item_id>/restock/", views.restock_inventory_item, name="restock_inventory_item"),
     path("hospital/inventory/<int:item_id>/edit/", views.edit_inventory_item, name="edit_inventory_item"),
     path("hospital/inventory/<int:item_id>/delete/", views.delete_inventory_item, name="delete_inventory_item"),
 ]

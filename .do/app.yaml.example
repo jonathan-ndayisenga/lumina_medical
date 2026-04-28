@@ -12,7 +12,7 @@ services:
     instance_count: 1
     instance_size_slug: apps-s-1vcpu-1gb
     build_command: python manage.py collectstatic --noinput
-    run_command: gunicorn --worker-tmp-dir /dev/shm labsystem.wsgi:application --workers 2 --bind 0.0.0.0:$PORT
+    run_command: bash -lc "python manage.py migrate --noinput && gunicorn --worker-tmp-dir /dev/shm labsystem.wsgi:application --workers 2 --bind 0.0.0.0:$PORT"
     envs:
       - key: DJANGO_SECRET_KEY
         value: replace-with-a-long-random-secret

@@ -1,14 +1,18 @@
+import csv
 from datetime import timedelta
 from decimal import Decimal
+from io import BytesIO
 import json
 import re
+from xml.sax.saxutils import escape
+import zipfile
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db import models, transaction
 from django.db.models import Q, Sum
-from django.db.models.functions import TruncDate
-from django.http import HttpResponseForbidden
+from django.db.models.functions import TruncDate, TruncMonth
+from django.http import HttpResponse, HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -29,6 +33,7 @@ from .forms import (
     HospitalStaffUserForm,
     HospitalStaffUserUpdateForm,
     InventoryItemForm,
+    InventoryRestockForm,
     MobileMoneyAccountForm,
     MobileMoneyStatementForm,
     MobileMoneyTransactionForm,
@@ -44,6 +49,7 @@ from .models import (
     Expense,
     HospitalAccount,
     InventoryItem,
+    InventoryTransaction,
     MobileMoneyAccount,
     MobileMoneyTransaction,
     ReconciliationStatement,
@@ -450,6 +456,317 @@ def finance_context(request, active_nav, dashboard_title, dashboard_intro):
     return context
 
 
+def inventory_dashboard_snapshot(hospital):
+    if not hospital:
+        return {
+            "stats": {},
+            "category_breakdown": [],
+            "monthly_sales": [],
+            "restock_items": [],
+        }
+
+    from doctor.models import Prescription
+
+    items = InventoryItem.objects.filter(hospital=hospital).order_by("name")
+    total_items = items.count()
+    active_items = items.filter(is_active=True).count()
+    out_of_stock_items = list(items.filter(current_quantity__lte=0).order_by("name"))
+    low_stock_items = list(
+        items.filter(current_quantity__gt=0, current_quantity__lte=models.F("reorder_level")).order_by("current_quantity", "name")
+    )
+
+    stock_cost_value = sum((item.current_quantity or 0) * (item.unit_cost or 0) for item in items)
+    stock_retail_value = sum((item.current_quantity or 0) * (item.selling_price or 0) for item in items)
+
+    category_rows = (
+        items.values("category")
+        .annotate(
+            item_count=models.Count("id"),
+            stock_units=Sum("current_quantity"),
+        )
+        .order_by("category")
+    )
+    max_category_units = max((row["stock_units"] or 0) for row in category_rows) if category_rows else 0
+    category_breakdown = []
+    for row in category_rows:
+        stock_units = Decimal(row["stock_units"] or 0)
+        width_pct = float((stock_units / max_category_units) * 100) if max_category_units else 0
+        category_breakdown.append(
+            {
+                "label": dict(InventoryItem.CATEGORY_CHOICES).get(row["category"], row["category"]),
+                "item_count": row["item_count"],
+                "stock_units": stock_units,
+                "width_pct": max(width_pct, 8 if stock_units else 0),
+            }
+        )
+
+    today = timezone.localdate()
+    period_start = today.replace(day=1)
+    for _ in range(5):
+        previous_day = period_start - timedelta(days=1)
+        period_start = previous_day.replace(day=1)
+
+    monthly_rows = (
+        Prescription.objects.filter(
+            visit__hospital=hospital,
+            dispensed=True,
+            dispensed_at__date__gte=period_start,
+        )
+        .annotate(month=TruncMonth("dispensed_at"))
+        .values("month")
+        .annotate(total=Sum("total_price"))
+        .order_by("month")
+    )
+    monthly_map = {row["month"].date() if hasattr(row["month"], "date") else row["month"]: Decimal(row["total"] or 0) for row in monthly_rows}
+    monthly_sales = []
+    cursor = period_start
+    while cursor <= today.replace(day=1):
+        amount = monthly_map.get(cursor, Decimal("0"))
+        monthly_sales.append({"label": cursor.strftime("%b %Y"), "amount": amount})
+        next_month = (cursor.replace(day=28) + timedelta(days=4)).replace(day=1)
+        cursor = next_month
+    sales_max = max((entry["amount"] for entry in monthly_sales), default=Decimal("0"))
+    for entry in monthly_sales:
+        entry["height_pct"] = float((entry["amount"] / sales_max) * 100) if sales_max else 0
+
+    stats = {
+        "total_items": total_items,
+        "active_items": active_items,
+        "out_of_stock_count": len(out_of_stock_items),
+        "low_stock_count": len(low_stock_items),
+        "stock_cost_value": stock_cost_value,
+        "stock_retail_value": stock_retail_value,
+        "estimated_margin": stock_retail_value - stock_cost_value,
+        "month_sales": sum((entry["amount"] for entry in monthly_sales if entry["label"] == today.replace(day=1).strftime("%b %Y")), Decimal("0")),
+    }
+
+    return {
+        "stats": stats,
+        "category_breakdown": category_breakdown,
+        "monthly_sales": monthly_sales,
+        "restock_items": out_of_stock_items[:8] or low_stock_items[:8],
+        "out_of_stock_items": out_of_stock_items,
+        "low_stock_items": low_stock_items,
+    }
+
+
+def inventory_report_rows(items):
+    rows = []
+    totals = {
+        "stock_cost": Decimal("0"),
+        "stock_retail": Decimal("0"),
+        "stock_units": Decimal("0"),
+    }
+    for item in items:
+        stock_cost = (item.current_quantity or Decimal("0")) * (item.unit_cost or Decimal("0"))
+        stock_retail = (item.current_quantity or Decimal("0")) * (item.selling_price or Decimal("0"))
+        status = "Out of Stock" if item.current_quantity <= 0 else "Low Stock" if item.is_low_stock else "Healthy"
+        row = {
+            "name": item.name,
+            "category": item.get_category_display(),
+            "pack_type": item.unit,
+            "base_unit": item.base_unit,
+            "units_per_pack": item.units_per_pack,
+            "current_stock": item.current_quantity,
+            "minimum_stock": item.reorder_level,
+            "buying_price": item.unit_cost,
+            "selling_price": item.selling_price or Decimal("0"),
+            "stock_cost": stock_cost,
+            "stock_retail": stock_retail,
+            "status": status,
+        }
+        rows.append(row)
+        totals["stock_cost"] += stock_cost
+        totals["stock_retail"] += stock_retail
+        totals["stock_units"] += item.current_quantity or Decimal("0")
+    return rows, totals
+
+
+def _xlsx_cell_ref(column_index):
+    letters = ""
+    while column_index > 0:
+        column_index, remainder = divmod(column_index - 1, 26)
+        letters = chr(65 + remainder) + letters
+    return letters
+
+
+def build_inventory_xlsx_bytes(report_rows, totals):
+    shared_strings = []
+    string_index = {}
+
+    def shared_string_id(value):
+        value = "" if value is None else str(value)
+        if value not in string_index:
+            string_index[value] = len(shared_strings)
+            shared_strings.append(value)
+        return string_index[value]
+
+    def text_cell(ref, value):
+        idx = shared_string_id(value)
+        return f'<c r="{ref}" t="s"><v>{idx}</v></c>'
+
+    def number_cell(ref, value):
+        number = Decimal(value or 0)
+        return f'<c r="{ref}"><v>{number}</v></c>'
+
+    headers = [
+        "Item Name",
+        "Category",
+        "Pack Type",
+        "Base Unit",
+        "Units Per Pack",
+        "Current Stock",
+        "Minimum Stock Level",
+        "Buying Price",
+        "Selling Price",
+        "Estimated Stock Cost",
+        "Estimated Stock Retail",
+        "Status",
+    ]
+
+    rows_xml = []
+    rows_xml.append(
+        "<row r=\"1\">"
+        + "".join(text_cell(f"{_xlsx_cell_ref(idx)}1", header) for idx, header in enumerate(headers, start=1))
+        + "</row>"
+    )
+
+    for row_number, row in enumerate(report_rows, start=2):
+        cells = [
+            text_cell(f"A{row_number}", row["name"]),
+            text_cell(f"B{row_number}", row["category"]),
+            text_cell(f"C{row_number}", row["pack_type"]),
+            text_cell(f"D{row_number}", row["base_unit"]),
+            number_cell(f"E{row_number}", row["units_per_pack"]),
+            number_cell(f"F{row_number}", row["current_stock"]),
+            number_cell(f"G{row_number}", row["minimum_stock"]),
+            number_cell(f"H{row_number}", row["buying_price"]),
+            number_cell(f"I{row_number}", row["selling_price"]),
+            number_cell(f"J{row_number}", row["stock_cost"]),
+            number_cell(f"K{row_number}", row["stock_retail"]),
+            text_cell(f"L{row_number}", row["status"]),
+        ]
+        rows_xml.append(f"<row r=\"{row_number}\">{''.join(cells)}</row>")
+
+    totals_row = len(report_rows) + 3
+    rows_xml.append(
+        f"<row r=\"{totals_row}\">"
+        + text_cell(f"A{totals_row}", "Totals")
+        + text_cell(f"B{totals_row}", "")
+        + text_cell(f"C{totals_row}", "")
+        + text_cell(f"D{totals_row}", "")
+        + text_cell(f"E{totals_row}", "")
+        + number_cell(f"F{totals_row}", totals["stock_units"])
+        + text_cell(f"G{totals_row}", "")
+        + text_cell(f"H{totals_row}", "")
+        + text_cell(f"I{totals_row}", "")
+        + number_cell(f"J{totals_row}", totals["stock_cost"])
+        + number_cell(f"K{totals_row}", totals["stock_retail"])
+        + text_cell(f"L{totals_row}", "")
+        + "</row>"
+    )
+
+    worksheet_xml = f"""<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <dimension ref="A1:L{totals_row}"/>
+  <sheetViews><sheetView workbookViewId="0"/></sheetViews>
+  <sheetFormatPr defaultRowHeight="15"/>
+  <cols>
+    <col min="1" max="1" width="28" customWidth="1"/>
+    <col min="2" max="4" width="18" customWidth="1"/>
+    <col min="5" max="11" width="16" customWidth="1"/>
+    <col min="12" max="12" width="16" customWidth="1"/>
+  </cols>
+  <sheetData>
+    {''.join(rows_xml)}
+  </sheetData>
+  <autoFilter ref="A1:L{max(2, len(report_rows) + 1)}"/>
+</worksheet>
+"""
+
+    shared_strings_xml = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        f'<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="{len(shared_strings)}" uniqueCount="{len(shared_strings)}">'
+        + "".join(f"<si><t>{escape(value)}</t></si>" for value in shared_strings)
+        + "</sst>"
+    )
+
+    workbook_xml = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <sheets>
+    <sheet name="Inventory Report" sheetId="1" r:id="rId1"/>
+  </sheets>
+</workbook>
+"""
+
+    workbook_rels_xml = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
+  <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
+  <Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings" Target="sharedStrings.xml"/>
+</Relationships>
+"""
+
+    root_rels_xml = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
+  <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/>
+  <Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/>
+</Relationships>
+"""
+
+    content_types_xml = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+  <Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+  <Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>
+  <Override PartName="/xl/sharedStrings.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml"/>
+  <Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>
+  <Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/>
+</Types>
+"""
+
+    styles_xml = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <fonts count="1"><font><sz val="11"/><name val="Calibri"/></font></fonts>
+  <fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills>
+  <borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>
+  <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
+  <cellXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/></cellXfs>
+  <cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>
+</styleSheet>
+"""
+
+    core_xml = f"""<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:dcmitype="http://purl.org/dc/dcmitype/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <dc:title>Inventory Report</dc:title>
+  <dc:creator>Lumina Medical Services</dc:creator>
+  <cp:lastModifiedBy>Lumina Medical Services</cp:lastModifiedBy>
+</cp:coreProperties>
+"""
+
+    app_xml = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes">
+  <Application>Lumina Medical Services</Application>
+</Properties>
+"""
+
+    buffer = BytesIO()
+    with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as workbook:
+        workbook.writestr("[Content_Types].xml", content_types_xml)
+        workbook.writestr("_rels/.rels", root_rels_xml)
+        workbook.writestr("docProps/core.xml", core_xml)
+        workbook.writestr("docProps/app.xml", app_xml)
+        workbook.writestr("xl/workbook.xml", workbook_xml)
+        workbook.writestr("xl/_rels/workbook.xml.rels", workbook_rels_xml)
+        workbook.writestr("xl/styles.xml", styles_xml)
+        workbook.writestr("xl/sharedStrings.xml", shared_strings_xml)
+        workbook.writestr("xl/worksheets/sheet1.xml", worksheet_xml)
+    return buffer.getvalue()
+
+
 @role_required(User.ROLE_SUPERADMIN)
 def developer_dashboard(request):
     hospitals = Hospital.objects.select_related("subscription_plan").all()
@@ -484,7 +801,7 @@ def hospital_dashboard(request):
     payments = Payment.objects.filter(visit__hospital=hospital) if hospital else Payment.objects.none()
     services = Service.objects.filter(hospital=hospital, is_active=True) if hospital else Service.objects.none()
     account = sync_hospital_account_balance(hospital) if hospital else None
-    low_stock_items = InventoryItem.objects.filter(hospital=hospital, quantity__lte=models.F("low_stock_threshold")) if hospital else InventoryItem.objects.none()
+    low_stock_items = InventoryItem.objects.filter(hospital=hospital, current_quantity__lte=models.F("reorder_level")) if hospital else InventoryItem.objects.none()
 
     context = {
         "active_nav": "hospital_admin",
@@ -871,7 +1188,7 @@ def financial_report(request):
             else []
         ),
         "salary_items": Salary.objects.filter(hospital=hospital).select_related("employee").order_by("-month", "-id")[:10] if hospital else [],
-        "low_stock_items": InventoryItem.objects.filter(hospital=hospital, quantity__lte=models.F("low_stock_threshold")).order_by("quantity", "name")[:10] if hospital else [],
+        "low_stock_items": InventoryItem.objects.filter(hospital=hospital, current_quantity__lte=models.F("reorder_level")).order_by("current_quantity", "name")[:10] if hospital else [],
         "part_paid_count": payments.filter(status=Payment.STATUS_PART_PAID).count(),
         "outstanding_balance": (payments.aggregate(total=Sum(models.F("amount") - models.F("amount_paid")))["total"] or 0),
         "open_drawer": open_drawer,
@@ -1398,6 +1715,7 @@ def delete_salary(request, salary_id):
 def manage_inventory(request):
     hospital = active_hospital(request)
     inventory_items = InventoryItem.objects.filter(hospital=hospital).order_by("name") if hospital else InventoryItem.objects.none()
+    inventory_items = inventory_items.prefetch_related("transactions")
 
     if request.method == "POST":
         form = InventoryItemForm(request.POST)
@@ -1417,7 +1735,15 @@ def manage_inventory(request):
         "Inventory",
         "Maintain stock visibility and watch low-stock items before they disrupt care.",
     )
-    context.update({"inventory_items": inventory_items, "form": form})
+    snapshot = inventory_dashboard_snapshot(hospital)
+    context.update(
+        {
+            "inventory_items": inventory_items,
+            "form": form,
+            "restock_form": InventoryRestockForm(),
+            **snapshot,
+        }
+    )
     return render(request, "admin_dashboard/manage_inventory.html", context)
 
 
@@ -1466,6 +1792,128 @@ def delete_inventory_item(request, item_id):
         }
     )
     return render(request, "admin_dashboard/confirm_delete.html", context)
+
+
+@role_required(User.ROLE_HOSPITAL_ADMIN)
+@transaction.atomic
+def restock_inventory_item(request, item_id):
+    item = hospital_owned_or_404(InventoryItem, request, pk=item_id)
+    if request.method != "POST":
+        return redirect("manage_inventory")
+
+    form = InventoryRestockForm(request.POST)
+    if not form.is_valid():
+        messages.error(request, f"Please fix the restock details for {item.name}.")
+        return redirect("manage_inventory")
+
+    quantity_received = form.cleaned_data["quantity_received"]
+    new_unit_cost = form.cleaned_data.get("unit_cost")
+    notes = form.cleaned_data.get("notes") or ""
+
+    if new_unit_cost is not None:
+        item.unit_cost = new_unit_cost
+    item.current_quantity = (item.current_quantity or Decimal("0")) + quantity_received
+    item.save()
+
+    InventoryTransaction.objects.create(
+        hospital=item.hospital,
+        item=item,
+        transaction_type=InventoryTransaction.TYPE_RECEIVE,
+        quantity=quantity_received,
+        unit_cost=item.unit_cost or Decimal("0"),
+        performed_by=request.user,
+        notes=notes or f"Restocked through inventory dashboard by {request.user.get_full_name() or request.user.username}.",
+    )
+    messages.success(request, f"Restocked {item.name} with {quantity_received} {item.unit}(s).")
+    return redirect("manage_inventory")
+
+
+@role_required(User.ROLE_HOSPITAL_ADMIN)
+def download_inventory_report(request):
+    hospital = active_hospital(request)
+    inventory_items = InventoryItem.objects.filter(hospital=hospital).order_by("category", "name") if hospital else InventoryItem.objects.none()
+
+    response = HttpResponse(content_type="text/csv")
+    filename_date = timezone.localdate().isoformat()
+    response["Content-Disposition"] = f'attachment; filename="inventory-report-{filename_date}.csv"'
+
+    writer = csv.writer(response)
+    writer.writerow(
+        [
+            "Item Name",
+            "Category",
+            "Pack Type",
+            "Base Unit",
+            "Units Per Pack",
+            "Current Stock",
+            "Minimum Stock Level",
+            "Buying Price",
+            "Selling Price",
+            "Estimated Stock Cost",
+            "Estimated Stock Retail",
+            "Status",
+        ]
+    )
+
+    for item in inventory_items:
+        stock_cost = (item.current_quantity or Decimal("0")) * (item.unit_cost or Decimal("0"))
+        stock_retail = (item.current_quantity or Decimal("0")) * (item.selling_price or Decimal("0"))
+        status = "Out of Stock" if item.current_quantity <= 0 else "Low Stock" if item.is_low_stock else "Healthy"
+        writer.writerow(
+            [
+                item.name,
+                item.get_category_display(),
+                item.unit,
+                item.base_unit,
+                item.units_per_pack,
+                item.current_quantity,
+                item.reorder_level,
+                item.unit_cost,
+                item.selling_price or Decimal("0"),
+                stock_cost,
+                stock_retail,
+                status,
+            ]
+        )
+
+    return response
+
+
+@role_required(User.ROLE_HOSPITAL_ADMIN)
+def printable_inventory_report(request):
+    hospital = active_hospital(request)
+    inventory_items = InventoryItem.objects.filter(hospital=hospital).order_by("category", "name") if hospital else InventoryItem.objects.none()
+    report_rows, totals = inventory_report_rows(inventory_items)
+    context = hospital_admin_context(
+        request,
+        "hospital_inventory",
+        "Printable Inventory Stock Sheet",
+        "Use your browser print dialog to save this page as PDF or hand it to the procurement team as a clean stock sheet.",
+    )
+    context.update(
+        {
+            "report_rows": report_rows,
+            "totals": totals,
+            "generated_on": timezone.localtime(),
+        }
+    )
+    return render(request, "admin_dashboard/inventory_printable_report.html", context)
+
+
+@role_required(User.ROLE_HOSPITAL_ADMIN)
+def download_inventory_xlsx(request):
+    hospital = active_hospital(request)
+    inventory_items = InventoryItem.objects.filter(hospital=hospital).order_by("category", "name") if hospital else InventoryItem.objects.none()
+    report_rows, totals = inventory_report_rows(inventory_items)
+    workbook_bytes = build_inventory_xlsx_bytes(report_rows, totals)
+
+    response = HttpResponse(
+        workbook_bytes,
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+    filename_date = timezone.localdate().isoformat()
+    response["Content-Disposition"] = f'attachment; filename="inventory-report-{filename_date}.xlsx"'
+    return response
 
 
 @hospital_admin_only

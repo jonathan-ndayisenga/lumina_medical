@@ -218,11 +218,59 @@ class Salary(models.Model):
 
 
 class InventoryItem(models.Model):
+    CATEGORY_DRUG = "drug"
+    CATEGORY_SYRUP = "syrup"
+    CATEGORY_TUBE = "tube"
+    CATEGORY_REAGENT = "reagent"
+    CATEGORY_SUNDRY = "sundry"
+
+    CATEGORY_CHOICES = [
+        (CATEGORY_DRUG, "Tablet / Capsule"),
+        (CATEGORY_SYRUP, "Syrup / Suspension"),
+        (CATEGORY_TUBE, "Tube / Cream / Ointment"),
+        (CATEGORY_REAGENT, "Reagent"),
+        (CATEGORY_SUNDRY, "Sundry"),
+    ]
+
     hospital = models.ForeignKey(Hospital, on_delete=models.CASCADE, related_name="inventory_items")
     name = models.CharField(max_length=100)
-    quantity = models.IntegerField()
-    unit_price = models.DecimalField(max_digits=10, decimal_places=2)
+    quantity = models.IntegerField(default=0)
+    unit_price = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     low_stock_threshold = models.IntegerField(default=5)
+    category = models.CharField(max_length=50, choices=CATEGORY_CHOICES, default=CATEGORY_SUNDRY)
+    unit = models.CharField(max_length=20, default="unit")
+    base_unit = models.CharField(
+        max_length=20,
+        default="unit",
+        help_text="The smallest clinical unit used for prescribing, e.g. tablet, ml, g, vial.",
+    )
+    units_per_pack = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=1,
+        help_text="How many base units are contained in one stocked/sold pack.",
+    )
+    strength_mg_per_unit = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="For tablets/capsules, how many mg one unit contains.",
+    )
+    current_quantity = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    unit_cost = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    selling_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    reorder_level = models.DecimalField(max_digits=10, decimal_places=2, default=10)
+    is_active = models.BooleanField(default=True)
+    concentration_mg_per_ml = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    pack_size_ml = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    days_covered_per_pack = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="For tubes and other whole-pack items, how many treatment days one pack usually covers.",
+    )
 
     class Meta:
         ordering = ["name"]
@@ -233,7 +281,115 @@ class InventoryItem(models.Model):
 
     @property
     def is_low_stock(self):
-        return self.quantity <= self.low_stock_threshold
+        return self.current_quantity <= self.reorder_level
+
+    @property
+    def quantity_label(self):
+        if self.category == self.CATEGORY_SYRUP:
+            if self.units_per_pack > 0 and self.base_unit:
+                total_base = self.current_quantity * self.units_per_pack
+                return f"{self.current_quantity} {self.unit}(s) (~{total_base} {self.base_unit})"
+            return f"{self.current_quantity} {self.unit}(s)"
+        if self.category == self.CATEGORY_TUBE:
+            if self.units_per_pack > 0 and self.base_unit and self.base_unit != "unit":
+                total_base = self.current_quantity * self.units_per_pack
+                return f"{self.current_quantity} tube(s) (~{total_base} {self.base_unit})"
+            return f"{self.current_quantity} tube(s)"
+        return f"{self.current_quantity} {self.unit}"
+
+    @property
+    def is_prescribable(self):
+        return self.category in {self.CATEGORY_DRUG, self.CATEGORY_SYRUP, self.CATEGORY_TUBE}
+
+    @property
+    def price_per_base_unit(self):
+        selling_price = Decimal(self.selling_price or 0)
+        units_per_pack = Decimal(self.units_per_pack or 0)
+        if units_per_pack <= 0:
+            return Decimal("0")
+        return (selling_price / units_per_pack).quantize(Decimal("0.01"))
+
+    def save(self, *args, **kwargs):
+        if not self.current_quantity and self.quantity:
+            self.current_quantity = Decimal(self.quantity)
+        if not self.unit_cost and self.unit_price:
+            self.unit_cost = self.unit_price
+        if not self.reorder_level and self.low_stock_threshold:
+            self.reorder_level = Decimal(self.low_stock_threshold)
+        if self.category == self.CATEGORY_DRUG:
+            self.base_unit = self.base_unit or "tablet"
+            self.units_per_pack = self.units_per_pack or Decimal("1")
+            if self.unit == "unit":
+                self.unit = "tablet"
+        elif self.category == self.CATEGORY_SYRUP:
+            self.base_unit = "ml"
+            if self.unit == "unit":
+                self.unit = "bottle"
+            if self.pack_size_ml and (not self.units_per_pack or self.units_per_pack == Decimal("1")):
+                self.units_per_pack = self.pack_size_ml
+        elif self.category == self.CATEGORY_TUBE:
+            if self.unit == "unit":
+                self.unit = "tube"
+            if self.base_unit == "unit":
+                self.base_unit = "g"
+        self.quantity = int(self.current_quantity or 0)
+        self.unit_price = self.unit_cost or Decimal("0")
+        self.low_stock_threshold = int(self.reorder_level or 0)
+        super().save(*args, **kwargs)
+
+
+class InventoryTransaction(models.Model):
+    TYPE_RECEIVE = "receive"
+    TYPE_CONSUME = "consume"
+    TYPE_ADJUST = "adjust"
+
+    TYPE_CHOICES = [
+        (TYPE_RECEIVE, "Receive"),
+        (TYPE_CONSUME, "Consume"),
+        (TYPE_ADJUST, "Adjust"),
+    ]
+
+    hospital = models.ForeignKey(Hospital, on_delete=models.CASCADE, related_name="inventory_transactions")
+    item = models.ForeignKey(InventoryItem, on_delete=models.CASCADE, related_name="transactions")
+    transaction_type = models.CharField(max_length=20, choices=TYPE_CHOICES, default=TYPE_CONSUME)
+    quantity = models.DecimalField(max_digits=10, decimal_places=2)
+    unit_cost = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    visit = models.ForeignKey(
+        "reception.Visit",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="inventory_transactions",
+    )
+    prescription = models.ForeignKey(
+        "doctor.Prescription",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="inventory_transactions",
+    )
+    lab_report = models.ForeignKey(
+        "lab.LabReport",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="inventory_transactions",
+    )
+    performed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="inventory_transactions",
+    )
+    notes = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+
+    def __str__(self):
+        return f"{self.get_transaction_type_display()} - {self.item.name}"
 
 
 class BankAccount(models.Model):

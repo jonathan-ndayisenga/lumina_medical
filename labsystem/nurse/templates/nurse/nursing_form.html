@@ -59,6 +59,46 @@
         </div>
     </div>
 
+    <div class="card">
+        <div class="flex items-start justify-between gap-3 flex-wrap mb-4">
+            <div>
+                <h3 class="text-sm font-semibold text-text-main">Medications to Dispense</h3>
+                <p class="text-xs text-text-muted mt-1">Dispensing deducts stock immediately and records the inventory consumption against this visit.</p>
+            </div>
+        </div>
+        <div class="space-y-3">
+            {% for prescription in prescriptions %}
+                <div class="rounded-xl border {% if prescription.dispensed %}border-green-200 bg-green-50{% else %}border-blue-200 bg-blue-50{% endif %} p-4">
+                    <div class="flex items-start justify-between gap-3 flex-wrap">
+                        <div>
+                            <p class="font-semibold text-text-main">{{ prescription.drug.name }}</p>
+                            <p class="text-xs text-text-muted mt-1">{{ prescription.regimen_display }}</p>
+                            <p class="text-xs text-text-muted mt-1">Dispense {{ prescription.quantity_display }}</p>
+                            <p class="text-xs text-text-muted mt-1">Stock on hand: {{ prescription.drug.quantity_label }}</p>
+                            {% if prescription.notes %}
+                                <p class="text-xs text-text-muted mt-1">Notes: {{ prescription.notes }}</p>
+                            {% endif %}
+                        </div>
+                        <div class="text-right">
+                            <p class="text-xs font-semibold text-text-muted">UGX {{ prescription.total_price }}</p>
+                            {% if prescription.dispensed %}
+                                <span class="inline-flex items-center rounded-full bg-green-100 px-2 py-1 text-xs font-semibold text-green-700 mt-2">Dispensed</span>
+                                <p class="text-xs text-text-muted mt-2">{{ prescription.dispensed_at|date:"M d, Y H:i" }}</p>
+                            {% else %}
+                                <form method="post" action="{% url 'dispense_prescription' queue_entry.pk prescription.pk %}" class="mt-2">
+                                    {% csrf_token %}
+                                    <button type="submit" class="btn btn-primary btn-sm">Dispense Now</button>
+                                </form>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            {% empty %}
+                <p class="text-sm text-text-muted italic">No prescriptions have been recorded for this visit yet.</p>
+            {% endfor %}
+        </div>
+    </div>
+
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div class="card">
             <h3 class="text-sm font-semibold text-text-main mb-4">New Nursing Note</h3>

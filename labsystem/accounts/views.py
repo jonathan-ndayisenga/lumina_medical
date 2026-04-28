@@ -1,9 +1,12 @@
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.views import LoginView
-from django.shortcuts import redirect
+from django.shortcuts import redirect, render
 from django.urls import reverse
+from django.utils.decorators import method_decorator
+from django.views.decorators.csrf import ensure_csrf_cookie
 
 
+@method_decorator(ensure_csrf_cookie, name="dispatch")
 class RoleAwareLoginView(LoginView):
     """Always land users on the correct module after login."""
 
@@ -39,14 +42,13 @@ class RoleAwareLoginView(LoginView):
 
 @login_required
 def app_home(request):
-    """Redirect authenticated users to their role-specific dashboard"""
+    """Redirect authenticated users to their role-specific dashboard."""
+
     user = request.user
-    
-    # Superadmin/Software Owner → Developer Dashboard (Platform Owner)
+
     if user.is_superuser or getattr(user, "role", "") == "superadmin":
         return redirect("developer_dashboard")
-    
-    # Hospital Admin → Hospital Dashboard
+
     if getattr(user, "role", "") == "hospital_admin":
         return redirect("hospital_dashboard")
 
@@ -59,22 +61,27 @@ def app_home(request):
         return redirect("lab_queue")
     if user.groups.filter(name="Nurse").exists():
         return redirect("nurse_queue")
-    
-    # Receptionist → Reception Dashboard
+
     if getattr(user, "role", "") == "receptionist":
         return redirect("reception_dashboard")
-    
-    # Lab Attendant → Lab Queue
     if getattr(user, "role", "") == "lab_attendant":
         return redirect("lab_queue")
-    
-    # Doctor → Doctor Queue
     if getattr(user, "role", "") == "doctor":
         return redirect("doctor_queue")
-    
-    # Nurse → Nurse Queue
     if getattr(user, "role", "") == "nurse":
         return redirect("nurse_queue")
-    
-    # Default → Lab Reports
+
     return redirect("report_list")
+
+
+def csrf_failure(request, reason="", template_name="errors/csrf_failure.html"):
+    """Show a friendlier CSRF failure page with next-step guidance."""
+
+    return render(
+        request,
+        template_name,
+        {
+            "csrf_failure_reason": reason,
+        },
+        status=403,
+    )

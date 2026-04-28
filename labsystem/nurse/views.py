@@ -1,11 +1,13 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.core.exceptions import PermissionDenied
 from django.db import transaction
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 
 from accounts.models import User
-from doctor.models import Consultation
+from admin_dashboard.models import InventoryTransaction
+from doctor.models import Consultation, Prescription
 from lab.models import LabReport
 from reception.models import QueueEntry, Triage, Visit
 from reception.workflow import ensure_pending_queue_entry, sync_visit_status
@@ -64,6 +66,9 @@ def perform_nursing(request, queue_entry_id):
         queue_entries = queue_entries.filter(hospital=hospital)
     queue_entry = get_object_or_404(queue_entries, pk=queue_entry_id)
     visit = queue_entry.visit
+    prescriptions = list(
+        visit.prescriptions.select_related("drug", "dispensed_by").order_by("-dispensed", "-prescribed_at", "-id")
+    )
     triage_obj, triage_created = Triage.objects.get_or_create(
         visit=visit,
         defaults={
@@ -136,6 +141,7 @@ def perform_nursing(request, queue_entry_id):
                         "triage_form": triage_form,
                         "form": note_form,
                         "triage": triage_obj,
+                        "prescriptions": prescriptions,
                     },
                 )
 
@@ -174,5 +180,67 @@ def perform_nursing(request, queue_entry_id):
             "triage_form": triage_form,
             "form": note_form,
             "triage": triage_obj,
+            "prescriptions": prescriptions,
         },
     )
+
+
+@nurse_role_required
+@transaction.atomic
+def dispense_prescription(request, queue_entry_id, prescription_id):
+    hospital = get_active_hospital(request)
+    queue_entries = QueueEntry.objects.select_related("visit__hospital").filter(queue_type=QueueEntry.TYPE_NURSE)
+    if hospital and getattr(request.user, "role", "") != User.ROLE_SUPERADMIN:
+        queue_entries = queue_entries.filter(hospital=hospital)
+    queue_entry = get_object_or_404(queue_entries, pk=queue_entry_id)
+
+    prescription_qs = Prescription.objects.select_related("drug", "visit__hospital", "billing_visit_service").filter(
+        visit=queue_entry.visit
+    )
+    if hospital and getattr(request.user, "role", "") != User.ROLE_SUPERADMIN:
+        prescription_qs = prescription_qs.filter(visit__hospital=hospital)
+    prescription = get_object_or_404(prescription_qs, pk=prescription_id)
+
+    if request.method != "POST":
+        raise PermissionDenied("Dispensing requires a POST request.")
+
+    if prescription.dispensed:
+        messages.info(request, f"{prescription.drug.name} was already dispensed for this visit.")
+        return redirect("perform_nursing", queue_entry_id=queue_entry.pk)
+
+    drug = prescription.drug
+    quantity_to_deduct = prescription.total_quantity
+    if drug.current_quantity < quantity_to_deduct:
+        messages.error(
+            request,
+            f"Insufficient stock for {drug.name}. Available: {drug.quantity_label}. Needed: {prescription.quantity_display}.",
+        )
+        return redirect("perform_nursing", queue_entry_id=queue_entry.pk)
+
+    drug.current_quantity -= quantity_to_deduct
+    drug.save(update_fields=["current_quantity", "quantity", "unit_price", "low_stock_threshold"])
+
+    InventoryTransaction.objects.create(
+        hospital=queue_entry.visit.hospital,
+        item=drug,
+        transaction_type=InventoryTransaction.TYPE_CONSUME,
+        quantity=quantity_to_deduct,
+        unit_cost=drug.unit_cost,
+        visit=queue_entry.visit,
+        prescription=prescription,
+        performed_by=request.user,
+        notes=f"Dispensed via nurse workflow for prescription {prescription.pk}",
+    )
+
+    prescription.dispensed = True
+    prescription.dispensed_at = timezone.now()
+    prescription.dispensed_by = request.user
+    prescription.save(update_fields=["dispensed", "dispensed_at", "dispensed_by"])
+
+    if prescription.billing_visit_service_id:
+        prescription.billing_visit_service.performed = True
+        prescription.billing_visit_service.performed_at = timezone.now()
+        prescription.billing_visit_service.save(update_fields=["performed", "performed_at"])
+
+    messages.success(request, f"Dispensed {prescription.quantity_display} of {drug.name}.")
+    return redirect("perform_nursing", queue_entry_id=queue_entry.pk)

@@ -11,4 +11,7 @@ urlpatterns = [
     path("lab-requests/<int:lab_request_id>/", views.view_lab_request, name="view_lab_request"),
     path("api/services/lab/", views.lab_services_api, name="lab_services_api"),
     path("api/add-lab-service/", views.add_lab_service_api, name="add_lab_service_api"),
+    path("visit/<int:visit_id>/api/send-lab-request/", views.send_lab_request_api, name="send_lab_request_api"),
+    path("visit/<int:visit_id>/api/add-service/", views.add_billable_service_api, name="add_billable_service_api"),
+    path("visit/<int:visit_id>/api/add-prescription/", views.add_prescription_api, name="add_prescription_api"),
 ]
