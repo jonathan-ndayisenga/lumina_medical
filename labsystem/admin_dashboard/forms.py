@@ -259,6 +259,40 @@ class SalaryForm(forms.ModelForm):
 
 
 class InventoryItemForm(forms.ModelForm):
+    PACK_TYPE_CHOICES = [
+        ("tablet", "Tablet"),
+        ("capsule", "Capsule"),
+        ("bottle", "Bottle"),
+        ("strip", "Strip"),
+        ("tube", "Tube"),
+        ("bag", "Bag"),
+        ("vial", "Vial"),
+        ("ampoule", "Ampoule"),
+        ("box", "Box"),
+        ("unit", "Unit"),
+    ]
+    BASE_UNIT_CHOICES = [
+        ("tablet", "Tablet"),
+        ("capsule", "Capsule"),
+        ("ml", "ml"),
+        ("g", "g"),
+        ("vial", "Vial"),
+        ("ampoule", "Ampoule"),
+        ("pair", "Pair"),
+        ("piece", "Piece"),
+        ("unit", "Unit"),
+    ]
+
+    unit = forms.ChoiceField(
+        choices=PACK_TYPE_CHOICES,
+        widget=forms.Select(attrs={"class": "form-control"}),
+        label="Pack Type",
+    )
+    base_unit = forms.ChoiceField(
+        choices=BASE_UNIT_CHOICES,
+        widget=forms.Select(attrs={"class": "form-control"}),
+        label="Base Unit",
+    )
     opening_batch_number = forms.CharField(
         required=False,
         widget=forms.TextInput(attrs={"class": "form-control"}),

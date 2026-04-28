@@ -49,7 +49,7 @@
         <div class="xl:col-span-2 card space-y-5">
             <div>
                 <h3 class="text-lg font-bold text-text-main">Stock a New Item</h3>
-                <p class="mt-1 text-sm text-text-muted">Capture the form, pack size, prices, and opening batch details once so the printed stock sheet looks clean and complete.</p>
+                <p class="mt-1 text-sm text-text-muted">Capture the form, pack size, pricing, and opening batch once so prescribing, dispensing, and reporting all stay consistent.</p>
             </div>
             <form method="post" class="space-y-5">
                 {% csrf_token %}
@@ -59,81 +59,189 @@
                     </div>
                 {% endif %}
 
-                <div class="rounded-xl border border-gray-200 bg-gray-50 p-4 space-y-4">
-                    <div>
-                        <h4 class="text-sm font-semibold text-text-main">Basic Information</h4>
-                        <p class="text-xs text-text-muted mt-1">Name the item and choose the medicine form or inventory category first.</p>
-                    </div>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                            <label for="{{ form.name.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">{{ form.name.label }}</label>
-                            {{ form.name }}
-                            {% if form.name.help_text %}<p class="mt-1 text-xs text-text-muted">{{ form.name.help_text }}</p>{% endif %}
-                            {% for error in form.name.errors %}<div class="text-xs text-red-600 mt-1">{{ error }}</div>{% endfor %}
-                        </div>
-                        <div>
-                            <label for="{{ form.category.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">{{ form.category.label }}</label>
-                            {{ form.category }}
-                            {% if form.category.help_text %}<p class="mt-1 text-xs text-text-muted">{{ form.category.help_text }}</p>{% endif %}
-                            {% for error in form.category.errors %}<div class="text-xs text-red-600 mt-1">{{ error }}</div>{% endfor %}
-                        </div>
-                    </div>
-                </div>
-
-                <div class="rounded-xl border border-gray-200 bg-gray-50 p-4 space-y-4">
-                    <div>
-                        <h4 class="text-sm font-semibold text-text-main">Packaging & Units</h4>
-                        <p class="text-xs text-text-muted mt-1">One base unit keeps the prescription and dispensing math consistent.</p>
-                    </div>
-                    <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                        {% for field in form %}
-                            {% if field.name == "unit" or field.name == "base_unit" or field.name == "units_per_pack" or field.name == "strength_mg_per_unit" or field.name == "concentration_mg_per_ml" or field.name == "pack_size_ml" or field.name == "days_covered_per_pack" %}
+                <div class="grid grid-cols-1 gap-5 2xl:grid-cols-[minmax(0,1fr)_320px]">
+                    <div class="space-y-5">
+                        <div class="rounded-xl border border-gray-200 bg-gray-50 p-4 space-y-4">
+                            <div>
+                                <h4 class="text-sm font-semibold text-text-main">Basic Information</h4>
+                                <p class="text-xs text-text-muted mt-1">Start with the item name and form so the rest of the form can guide the user properly.</p>
+                            </div>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>
-                                    <label for="{{ field.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">{{ field.label }}</label>
-                                    {{ field }}
-                                    {% if field.help_text %}<p class="mt-1 text-xs text-text-muted">{{ field.help_text }}</p>{% endif %}
-                                    {% for error in field.errors %}<div class="text-xs text-red-600 mt-1">{{ error }}</div>{% endfor %}
+                                    <label for="{{ form.name.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">{{ form.name.label }}</label>
+                                    {{ form.name }}
+                                    <p class="mt-1 text-xs text-text-muted">Example: Paracetamol 500mg, Normal Saline, Vitamin C Syrup.</p>
+                                    {% for error in form.name.errors %}<div class="text-xs text-red-600 mt-1">{{ error }}</div>{% endfor %}
                                 </div>
-                            {% endif %}
-                        {% endfor %}
-                    </div>
-                </div>
-
-                <div class="rounded-xl border border-gray-200 bg-gray-50 p-4 space-y-4">
-                    <div>
-                        <h4 class="text-sm font-semibold text-text-main">Pricing & Opening Batch</h4>
-                        <p class="text-xs text-text-muted mt-1">Keep prices separate and always attach opening stock to a batch number and expiry date.</p>
-                    </div>
-                    <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-                        {% for field in form %}
-                            {% if field.name == "current_quantity" or field.name == "unit_cost" or field.name == "selling_price" or field.name == "reorder_level" or field.name == "is_active" %}
                                 <div>
-                                    <label for="{{ field.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">{{ field.label }}</label>
-                                    {{ field }}
-                                    {% if field.help_text %}<p class="mt-1 text-xs text-text-muted">{{ field.help_text }}</p>{% endif %}
-                                    {% for error in field.errors %}<div class="text-xs text-red-600 mt-1">{{ error }}</div>{% endfor %}
+                                    <label for="{{ form.category.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">{{ form.category.label }}</label>
+                                    {{ form.category }}
+                                    <p class="mt-1 text-xs text-text-muted">This choice controls what prescribing math the system uses later.</p>
+                                    {% for error in form.category.errors %}<div class="text-xs text-red-600 mt-1">{{ error }}</div>{% endfor %}
                                 </div>
-                            {% endif %}
-                        {% endfor %}
-                    </div>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                            <label for="{{ form.opening_batch_number.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">{{ form.opening_batch_number.label }}</label>
-                            {{ form.opening_batch_number }}
-                            {% if form.opening_batch_number.help_text %}<p class="mt-1 text-xs text-text-muted">{{ form.opening_batch_number.help_text }}</p>{% endif %}
-                            {% for error in form.opening_batch_number.errors %}<div class="text-xs text-red-600 mt-1">{{ error }}</div>{% endfor %}
+                            </div>
                         </div>
-                        <div>
-                            <label for="{{ form.opening_expiry_date.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">{{ form.opening_expiry_date.label }}</label>
-                            {{ form.opening_expiry_date }}
-                            {% if form.opening_expiry_date.help_text %}<p class="mt-1 text-xs text-text-muted">{{ form.opening_expiry_date.help_text }}</p>{% endif %}
-                            {% for error in form.opening_expiry_date.errors %}<div class="text-xs text-red-600 mt-1">{{ error }}</div>{% endfor %}
-                        </div>
-                    </div>
-                </div>
 
-                <div class="flex flex-wrap gap-3">
-                    <button type="submit" class="btn btn-primary">Save Inventory Item</button>
+                        <div class="rounded-xl border border-gray-200 bg-gray-50 p-4 space-y-4">
+                            <div>
+                                <h4 class="text-sm font-semibold text-text-main">Packaging & Units</h4>
+                                <p class="text-xs text-text-muted mt-1">One base unit keeps the prescription and dispensing math clean and consistent.</p>
+                            </div>
+                            <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                                <div id="field-unit-wrapper">
+                                    <label for="{{ form.unit.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">{{ form.unit.label }}</label>
+                                    {{ form.unit }}
+                                    <p class="mt-1 text-xs text-text-muted">Example: bottle, strip, tube, bag, vial.</p>
+                                    {% for error in form.unit.errors %}<div class="text-xs text-red-600 mt-1">{{ error }}</div>{% endfor %}
+                                </div>
+                                <div id="field-base-unit-wrapper">
+                                    <label for="{{ form.base_unit.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">{{ form.base_unit.label }}</label>
+                                    {{ form.base_unit }}
+                                    <p class="mt-1 text-xs text-text-muted">Example: tablet, ml, g, vial.</p>
+                                    {% for error in form.base_unit.errors %}<div class="text-xs text-red-600 mt-1">{{ error }}</div>{% endfor %}
+                                </div>
+                                <div id="field-units-per-pack-wrapper">
+                                    <label for="{{ form.units_per_pack.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">{{ form.units_per_pack.label }}</label>
+                                    {{ form.units_per_pack }}
+                                    <p class="mt-1 text-xs text-text-muted">Example: 100 for a 100ml bottle, 10 for a strip of 10 tablets.</p>
+                                    {% for error in form.units_per_pack.errors %}<div class="text-xs text-red-600 mt-1">{{ error }}</div>{% endfor %}
+                                </div>
+                                <div id="field-strength-wrapper">
+                                    <label for="{{ form.strength_mg_per_unit.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">{{ form.strength_mg_per_unit.label }}</label>
+                                    {{ form.strength_mg_per_unit }}
+                                    <p class="mt-1 text-xs text-text-muted">For tablets/capsules only. Example: 500 means one tablet contains 500mg.</p>
+                                    {% for error in form.strength_mg_per_unit.errors %}<div class="text-xs text-red-600 mt-1">{{ error }}</div>{% endfor %}
+                                </div>
+                                <div id="field-concentration-wrapper">
+                                    <label for="{{ form.concentration_mg_per_ml.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">{{ form.concentration_mg_per_ml.label }}</label>
+                                    {{ form.concentration_mg_per_ml }}
+                                    <p class="mt-1 text-xs text-text-muted">Optional for liquids. Example: 50 means 50mg in each 1ml.</p>
+                                    {% for error in form.concentration_mg_per_ml.errors %}<div class="text-xs text-red-600 mt-1">{{ error }}</div>{% endfor %}
+                                </div>
+                                <div id="field-pack-size-wrapper">
+                                    <label for="{{ form.pack_size_ml.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">{{ form.pack_size_ml.label }}</label>
+                                    {{ form.pack_size_ml }}
+                                    <p class="mt-1 text-xs text-text-muted">Only for liquids. Enter how many ml are in one bottle, bag, or vial.</p>
+                                    {% for error in form.pack_size_ml.errors %}<div class="text-xs text-red-600 mt-1">{{ error }}</div>{% endfor %}
+                                </div>
+                                <div id="field-days-covered-wrapper">
+                                    <label for="{{ form.days_covered_per_pack.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">{{ form.days_covered_per_pack.label }}</label>
+                                    {{ form.days_covered_per_pack }}
+                                    <p class="mt-1 text-xs text-text-muted">Only for creams/tubes. Example: one tube may cover 7 treatment days.</p>
+                                    {% for error in form.days_covered_per_pack.errors %}<div class="text-xs text-red-600 mt-1">{{ error }}</div>{% endfor %}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="rounded-xl border border-gray-200 bg-gray-50 p-4 space-y-4">
+                            <div>
+                                <h4 class="text-sm font-semibold text-text-main">Pricing</h4>
+                                <p class="text-xs text-text-muted mt-1">Keep buying and selling prices separate so stock value and profit reporting stay meaningful.</p>
+                            </div>
+                            <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                                <div>
+                                    <label for="{{ form.unit_cost.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">{{ form.unit_cost.label }}</label>
+                                    {{ form.unit_cost }}
+                                    <p class="mt-1 text-xs text-text-muted">What one pack costs from the supplier.</p>
+                                    {% for error in form.unit_cost.errors %}<div class="text-xs text-red-600 mt-1">{{ error }}</div>{% endfor %}
+                                </div>
+                                <div>
+                                    <label for="{{ form.selling_price.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">{{ form.selling_price.label }}</label>
+                                    {{ form.selling_price }}
+                                    <p class="mt-1 text-xs text-text-muted">What one pack sells for in the hospital.</p>
+                                    {% for error in form.selling_price.errors %}<div class="text-xs text-red-600 mt-1">{{ error }}</div>{% endfor %}
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-semibold text-text-main mb-1">Price Per Base Unit</label>
+                                    <input id="inventory-price-per-unit" type="text" class="form-control bg-white/70" value="UGX 0.00" readonly>
+                                    <p class="mt-1 text-xs text-text-muted">Auto-calculated from selling price divided by units per pack.</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="rounded-xl border border-gray-200 bg-gray-50 p-4 space-y-4">
+                            <div>
+                                <h4 class="text-sm font-semibold text-text-main">Stock Information</h4>
+                                <p class="text-xs text-text-muted mt-1">Capture what is currently on shelf and when the system should start warning the team.</p>
+                            </div>
+                            <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                                <div>
+                                    <label for="{{ form.current_quantity.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">{{ form.current_quantity.label }}</label>
+                                    {{ form.current_quantity }}
+                                    <p class="mt-1 text-xs text-text-muted">How many packs/units are physically available right now.</p>
+                                    {% for error in form.current_quantity.errors %}<div class="text-xs text-red-600 mt-1">{{ error }}</div>{% endfor %}
+                                </div>
+                                <div>
+                                    <label for="{{ form.reorder_level.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">{{ form.reorder_level.label }}</label>
+                                    {{ form.reorder_level }}
+                                    <p class="mt-1 text-xs text-text-muted">System will alert the team when stock falls below this number.</p>
+                                    {% for error in form.reorder_level.errors %}<div class="text-xs text-red-600 mt-1">{{ error }}</div>{% endfor %}
+                                </div>
+                                <div class="flex items-center gap-3 rounded-lg border border-gray-200 bg-white px-3 py-3">
+                                    {{ form.is_active }}
+                                    <div>
+                                        <label for="{{ form.is_active.id_for_label }}" class="block text-sm font-semibold text-text-main">{{ form.is_active.label }}</label>
+                                        <p class="mt-1 text-xs text-text-muted">Turn this off if the item should stop appearing in new workflows.</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="opening-batch-section" class="rounded-xl border border-gray-200 bg-gray-50 p-4 space-y-4">
+                            <div>
+                                <h4 class="text-sm font-semibold text-text-main">Batch Details</h4>
+                                <p class="text-xs text-text-muted mt-1">Only needed when opening stock is more than zero, so the printable stock sheet can show shelf-ready details.</p>
+                            </div>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label for="{{ form.opening_batch_number.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">{{ form.opening_batch_number.label }}</label>
+                                    {{ form.opening_batch_number }}
+                                    <p class="mt-1 text-xs text-text-muted">Use the exact supplier or manufacturer batch code.</p>
+                                    {% for error in form.opening_batch_number.errors %}<div class="text-xs text-red-600 mt-1">{{ error }}</div>{% endfor %}
+                                </div>
+                                <div>
+                                    <label for="{{ form.opening_expiry_date.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">{{ form.opening_expiry_date.label }}</label>
+                                    {{ form.opening_expiry_date }}
+                                    <p class="mt-1 text-xs text-text-muted">Choose the expiry date printed on the pack.</p>
+                                    {% for error in form.opening_expiry_date.errors %}<div class="text-xs text-red-600 mt-1">{{ error }}</div>{% endfor %}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="flex flex-wrap gap-3">
+                            <button type="submit" class="btn btn-primary">Save Inventory Item</button>
+                            <button type="reset" class="btn btn-secondary">Cancel</button>
+                        </div>
+                    </div>
+
+                    <div class="space-y-4">
+                        <div class="rounded-xl border border-indigo-100 bg-indigo-50 p-4 sticky top-4">
+                            <h4 class="text-sm font-semibold text-indigo-900">Smart Preview</h4>
+                            <p class="mt-1 text-xs text-indigo-800">This updates live so the user can confirm the item will behave correctly before saving.</p>
+                            <div id="inventory-preview" class="mt-4 space-y-3 text-sm text-indigo-950">
+                                <div class="rounded-lg bg-white px-3 py-2 shadow-sm">
+                                    <p class="text-xs uppercase tracking-wide text-text-muted">Packaging</p>
+                                    <p id="preview-packaging" class="mt-1 font-semibold">Choose a form and enter the pack setup.</p>
+                                </div>
+                                <div class="rounded-lg bg-white px-3 py-2 shadow-sm">
+                                    <p class="text-xs uppercase tracking-wide text-text-muted">Pricing</p>
+                                    <p id="preview-pricing" class="mt-1 font-semibold">Price per base unit will appear here.</p>
+                                </div>
+                                <div class="rounded-lg bg-white px-3 py-2 shadow-sm">
+                                    <p class="text-xs uppercase tracking-wide text-text-muted">Prescription Logic</p>
+                                    <p id="preview-logic" class="mt-1 font-semibold">Tablet, liquid, or tube rules will be explained here.</p>
+                                </div>
+                            </div>
+                            <div class="mt-4 rounded-lg border border-indigo-100 bg-white px-3 py-3 text-xs text-text-muted">
+                                <p class="font-semibold text-text-main">Quick guide</p>
+                                <ul class="mt-2 space-y-1 list-disc list-inside">
+                                    <li>Tablets need strength in mg so the doctor can see pill counts.</li>
+                                    <li>Syrups, IV, and IM use ml-based packing and round up to whole packs.</li>
+                                    <li>Tubes use treatment-day coverage instead of ml math.</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </form>
         </div>
@@ -373,4 +481,128 @@
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    const categoryField = document.getElementById('id_category');
+    const unitsPerPackField = document.getElementById('id_units_per_pack');
+    const sellingPriceField = document.getElementById('id_selling_price');
+    const openingStockField = document.getElementById('id_current_quantity');
+    const unitField = document.getElementById('id_unit');
+    const baseUnitField = document.getElementById('id_base_unit');
+    const packSizeField = document.getElementById('id_pack_size_ml');
+    const strengthField = document.getElementById('id_strength_mg_per_unit');
+    const concentrationField = document.getElementById('id_concentration_mg_per_ml');
+    const daysCoveredField = document.getElementById('id_days_covered_per_pack');
+
+    const wrappers = {
+      strength: document.getElementById('field-strength-wrapper'),
+      concentration: document.getElementById('field-concentration-wrapper'),
+      packSize: document.getElementById('field-pack-size-wrapper'),
+      daysCovered: document.getElementById('field-days-covered-wrapper'),
+      openingBatch: document.getElementById('opening-batch-section'),
+    };
+
+    const previewPackaging = document.getElementById('preview-packaging');
+    const previewPricing = document.getElementById('preview-pricing');
+    const previewLogic = document.getElementById('preview-logic');
+    const pricePerUnitField = document.getElementById('inventory-price-per-unit');
+
+    function showWrapper(wrapper, visible) {
+      if (!wrapper) return;
+      wrapper.classList.toggle('hidden', !visible);
+    }
+
+    function asNumber(field) {
+      if (!field || field.value === '') return 0;
+      const parsed = parseFloat(field.value);
+      return Number.isFinite(parsed) ? parsed : 0;
+    }
+
+    function formatMoney(value) {
+      return `UGX ${value.toFixed(2)}`;
+    }
+
+    function categoryMode() {
+      return (categoryField?.value || '').toLowerCase();
+    }
+
+    function updateVisibility() {
+      const category = categoryMode();
+      const isTablet = category === 'drug';
+      const isLiquid = ['syrup', 'iv', 'im'].includes(category);
+      const isTube = category === 'tube';
+
+      showWrapper(wrappers.strength, isTablet);
+      showWrapper(wrappers.concentration, isLiquid);
+      showWrapper(wrappers.packSize, isLiquid);
+      showWrapper(wrappers.daysCovered, isTube);
+
+      const openingStock = asNumber(openingStockField);
+      showWrapper(wrappers.openingBatch, openingStock > 0);
+    }
+
+    function updatePreview() {
+      const category = categoryMode();
+      const itemName = document.getElementById('id_name')?.value?.trim() || 'This item';
+      const packType = unitField?.value?.trim() || 'pack';
+      const baseUnit = baseUnitField?.value?.trim() || 'unit';
+      const unitsPerPack = asNumber(unitsPerPackField);
+      const sellingPrice = asNumber(sellingPriceField);
+      const packSize = asNumber(packSizeField);
+      const strength = asNumber(strengthField);
+      const concentration = asNumber(concentrationField);
+      const daysCovered = asNumber(daysCoveredField);
+
+      let pricePerUnit = 0;
+      if (unitsPerPack > 0) {
+        pricePerUnit = sellingPrice / unitsPerPack;
+      }
+      pricePerUnitField.value = formatMoney(pricePerUnit);
+
+      previewPackaging.textContent = `${itemName}: 1 ${packType} = ${unitsPerPack || 1} ${baseUnit}${unitsPerPack === 1 ? '' : 's'}.`;
+      previewPricing.textContent = unitsPerPack > 0
+        ? `Selling price ${formatMoney(sellingPrice)} means about ${formatMoney(pricePerUnit)} per ${baseUnit}.`
+        : 'Enter units per pack to calculate price per base unit.';
+
+      if (category === 'drug') {
+        previewLogic.textContent = strength > 0
+          ? `Tablet/capsule mode: the doctor prescribes by mg, and the system converts that to pill count using ${strength}mg per ${baseUnit}.`
+          : 'Tablet/capsule mode: add the mg strength so the doctor can see exactly how many pills to dispense.';
+      } else if (['syrup', 'iv', 'im'].includes(category)) {
+        if (packSize > 0) {
+          previewLogic.textContent = `${category.toUpperCase()} liquid mode: the doctor prescribes by ml, and the system rounds up to whole ${packType}s of ${packSize}ml each.`
+        } else if (concentration > 0) {
+          previewLogic.textContent = `Liquid mode: concentration is ${concentration}mg/ml, and dispensing still rounds up to whole ${packType}s.`;
+        } else {
+          previewLogic.textContent = `Liquid mode: add the pack size in ml so the system knows how many whole ${packType}s to dispense.`;
+        }
+      } else if (category === 'tube') {
+        previewLogic.textContent = daysCovered > 0
+          ? `Tube mode: one ${packType} covers about ${daysCovered} treatment day(s), so dispensing rounds up to whole tubes.`
+          : 'Tube mode: add how many treatment days one pack covers so the system can round up to full tubes.';
+      } else {
+        previewLogic.textContent = 'Stock-only item: this will be tracked in inventory and reports without medicine-specific prescription math.';
+      }
+    }
+
+    [categoryField, unitsPerPackField, sellingPriceField, openingStockField, unitField, baseUnitField, packSizeField, strengthField, concentrationField, daysCoveredField, document.getElementById('id_name')]
+      .filter(Boolean)
+      .forEach(function (field) {
+        field.addEventListener('input', function () {
+          updateVisibility();
+          updatePreview();
+        });
+        field.addEventListener('change', function () {
+          updateVisibility();
+          updatePreview();
+        });
+      });
+
+    updateVisibility();
+    updatePreview();
+  });
+</script>
 {% endblock %}
