@@ -13,7 +13,7 @@ from PIL import Image
 
 from accounts.models import Hospital, SubscriptionPlan
 from admin_dashboard.forms import ExpenseForm, HospitalForm
-from admin_dashboard.models import BankAccount, CashDrawer, InventoryItem, InventoryTransaction, MobileMoneyAccount
+from admin_dashboard.models import BankAccount, CashDrawer, InventoryBatch, InventoryItem, InventoryTransaction, MobileMoneyAccount
 
 TEST_MEDIA_ROOT = Path(__file__).resolve().parent.parent / "test_media"
 TEST_MEDIA_ROOT.mkdir(exist_ok=True)
@@ -309,13 +309,23 @@ class InventoryManagementTests(TestCase):
             selling_price="8000",
             reorder_level="5",
         )
+        InventoryBatch.objects.create(
+            item=self.item,
+            batch_number="GVT-001",
+            quantity="4",
+            expiry_date="2027-12-31",
+            unit_cost="5000",
+        )
+        self.item.recalculate_current_quantity()
 
     def test_inventory_report_downloads_csv(self):
         response = self.client.get(reverse("download_inventory_report"))
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response["Content-Type"], "text/csv")
-        self.assertIn("Grovit Syrup", response.content.decode("utf-8"))
+        content = response.content.decode("utf-8")
+        self.assertIn("Grovit Syrup", content)
+        self.assertIn("GVT-001", content)
 
     def test_printable_inventory_report_renders_stock_sheet(self):
         response = self.client.get(reverse("printable_inventory_report"))
@@ -323,6 +333,7 @@ class InventoryManagementTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Inventory Stock Sheet")
         self.assertContains(response, "Grovit Syrup")
+        self.assertContains(response, "Batch details")
 
     def test_inventory_report_downloads_xlsx(self):
         response = self.client.get(reverse("download_inventory_xlsx"))
@@ -340,13 +351,17 @@ class InventoryManagementTests(TestCase):
             {
                 "quantity_received": "12",
                 "unit_cost": "5200",
+                "batch_number": "GVT-RESTOCK",
+                "expiry_date": "2028-06-30",
                 "notes": "Supplier delivery",
             },
         )
 
         self.assertEqual(response.status_code, 302)
         self.item.refresh_from_db()
-        self.assertEqual(self.item.current_quantity, 12)
+        self.assertEqual(self.item.current_quantity, 16)
         self.assertEqual(self.item.unit_cost, 5200)
+        batch = InventoryBatch.objects.get(item=self.item, batch_number="GVT-RESTOCK")
+        self.assertEqual(batch.quantity, 12)
         transaction = InventoryTransaction.objects.get(item=self.item, transaction_type=InventoryTransaction.TYPE_RECEIVE)
         self.assertEqual(transaction.quantity, 12)

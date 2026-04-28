@@ -82,6 +82,30 @@ class DoctorWorkflowTests(TestCase):
             reorder_level="2",
             days_covered_per_pack="7.00",
         )
+        self.iv_drug = InventoryItem.objects.create(
+            hospital=self.hospital,
+            name="Normal Saline IV",
+            category=InventoryItem.CATEGORY_IV,
+            unit="bag",
+            base_unit="ml",
+            units_per_pack="500",
+            current_quantity="10",
+            unit_cost="3000.00",
+            selling_price="6000.00",
+            reorder_level="2",
+        )
+        self.im_drug = InventoryItem.objects.create(
+            hospital=self.hospital,
+            name="Diclofenac IM",
+            category=InventoryItem.CATEGORY_IM,
+            unit="vial",
+            base_unit="ml",
+            units_per_pack="3",
+            current_quantity="30",
+            unit_cost="800.00",
+            selling_price="1500.00",
+            reorder_level="5",
+        )
         self.visit = Visit.objects.create(
             patient=self.patient,
             hospital=self.hospital,
@@ -182,6 +206,7 @@ class DoctorWorkflowTests(TestCase):
         self.assertEqual(self.visit.total_amount, Decimal("55.00"))
         self.assertIsNotNone(prescription.billing_visit_service)
         self.assertEqual(prescription.billing_visit_service.price_at_time, Decimal("30.00"))
+        self.assertEqual(response.json()["prescription"]["quantity_display"], "15 tablet(s)")
 
     def test_doctor_can_add_liquid_prescription_and_calculate_bottles(self):
         response = self.client.post(
@@ -199,7 +224,7 @@ class DoctorWorkflowTests(TestCase):
         self.assertEqual(prescription.total_quantity, Decimal("2.00"))
         self.assertEqual(prescription.number_of_packs, 2)
         self.assertEqual(prescription.total_price, Decimal("20.00"))
-        self.assertEqual(response.json()["prescription"]["quantity_display"], "2 bottle(s) covering 150.00 ml")
+        self.assertEqual(response.json()["prescription"]["quantity_display"], "2 bottle(s) covering 150 ml")
 
     def test_doctor_can_add_tube_prescription_and_calculate_whole_tubes(self):
         response = self.client.post(
@@ -218,6 +243,42 @@ class DoctorWorkflowTests(TestCase):
         self.assertEqual(prescription.total_quantity, Decimal("2.00"))
         self.assertEqual(prescription.total_price, Decimal("16.00"))
         self.assertEqual(response.json()["prescription"]["quantity_display"], "2 tube(s)")
+
+    def test_doctor_can_add_iv_prescription_and_calculate_whole_bags(self):
+        response = self.client.post(
+            reverse("add_prescription_api", args=[self.visit.pk]),
+            {
+                "drug_id": self.iv_drug.pk,
+                "dosage_mg": "250",
+                "frequency_per_day": "2",
+                "duration_days": "2",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        prescription = Prescription.objects.get(visit=self.visit, drug=self.iv_drug)
+        self.assertEqual(prescription.total_quantity, Decimal("2.00"))
+        self.assertEqual(prescription.number_of_packs, 2)
+        self.assertEqual(prescription.total_price, Decimal("12000.00"))
+        self.assertEqual(response.json()["prescription"]["quantity_display"], "2 bag(s) covering 1000 ml")
+
+    def test_doctor_can_add_im_prescription_and_calculate_whole_vials(self):
+        response = self.client.post(
+            reverse("add_prescription_api", args=[self.visit.pk]),
+            {
+                "drug_id": self.im_drug.pk,
+                "dosage_mg": "2",
+                "frequency_per_day": "2",
+                "duration_days": "2",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        prescription = Prescription.objects.get(visit=self.visit, drug=self.im_drug)
+        self.assertEqual(prescription.total_quantity, Decimal("3.00"))
+        self.assertEqual(prescription.number_of_packs, 3)
+        self.assertEqual(prescription.total_price, Decimal("4500.00"))
+        self.assertEqual(response.json()["prescription"]["quantity_display"], "3 vial(s) covering 8 ml")
 
     def test_doctor_can_send_visit_to_billing(self):
         response = self.client.post(

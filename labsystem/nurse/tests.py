@@ -6,7 +6,7 @@ from django.test import TestCase
 from django.urls import reverse
 
 from accounts.models import Hospital
-from admin_dashboard.models import InventoryItem, InventoryTransaction
+from admin_dashboard.models import InventoryBatch, InventoryItem, InventoryTransaction
 from doctor.models import Prescription
 from lab.models import LabReport, TestCatalog, TestResult
 from nurse.models import NurseNote
@@ -84,6 +84,14 @@ class NurseWorkflowTests(TestCase):
             selling_price="2.00",
             reorder_level="20",
         )
+        InventoryBatch.objects.create(
+            item=self.drug,
+            batch_number="PCM-001",
+            quantity="120",
+            expiry_date="2028-01-31",
+            unit_cost="0.50",
+        )
+        self.drug.recalculate_current_quantity()
         self.pharmacy_service = Service.objects.create(
             hospital=self.hospital,
             name="Pharmacy Item: Paracetamol",
@@ -164,5 +172,7 @@ class NurseWorkflowTests(TestCase):
         self.assertTrue(self.prescription.dispensed)
         self.assertEqual(self.drug.current_quantity, Decimal("114.00"))
         self.assertTrue(self.billing_line.performed)
+        batch = InventoryBatch.objects.get(item=self.drug, batch_number="PCM-001")
+        self.assertEqual(batch.quantity, Decimal("114.00"))
         transaction = InventoryTransaction.objects.get(prescription=self.prescription)
         self.assertEqual(transaction.quantity, Decimal("6.00"))

@@ -217,8 +217,7 @@ def dispense_prescription(request, queue_entry_id, prescription_id):
         )
         return redirect("perform_nursing", queue_entry_id=queue_entry.pk)
 
-    drug.current_quantity -= quantity_to_deduct
-    drug.save(update_fields=["current_quantity", "quantity", "unit_price", "low_stock_threshold"])
+    drug.consume_stock(quantity_to_deduct)
 
     InventoryTransaction.objects.create(
         hospital=queue_entry.visit.hospital,

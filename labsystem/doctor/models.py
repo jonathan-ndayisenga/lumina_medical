@@ -167,20 +167,28 @@ class Prescription(models.Model):
 
     @property
     def is_liquid(self):
-        return self.drug.category == "syrup"
+        return self.drug.category in {
+            "syrup",
+            "iv",
+            "im",
+        }
 
     @property
     def is_tube(self):
         return self.drug.category == "tube"
 
+    def _display_quantity(self, value):
+        value = Decimal(value or 0)
+        return str(int(value)) if value == value.to_integral_value() else f"{value.normalize()}"
+
     @property
     def quantity_display(self):
         if self.is_liquid and self.number_of_packs:
             total_ml = (Decimal(self.dosage_mg or 0) * Decimal(self.frequency_per_day or 0) * Decimal(self.duration_days or 0)).quantize(Decimal("0.01"))
-            return f"{self.number_of_packs} bottle(s) covering {total_ml} ml"
+            return f"{self.number_of_packs} {self.drug.unit}(s) covering {self._display_quantity(total_ml)} ml"
         if self.is_tube:
             return f"{self.number_of_packs} tube(s)"
-        return f"{self.total_quantity} {self.drug.unit}"
+        return f"{self._display_quantity(self.total_quantity)} {self.drug.unit}(s)"
 
     @property
     def regimen_display(self):

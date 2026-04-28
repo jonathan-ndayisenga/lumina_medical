@@ -259,6 +259,17 @@ class SalaryForm(forms.ModelForm):
 
 
 class InventoryItemForm(forms.ModelForm):
+    opening_batch_number = forms.CharField(
+        required=False,
+        widget=forms.TextInput(attrs={"class": "form-control"}),
+        label="Opening Batch Number",
+    )
+    opening_expiry_date = forms.DateField(
+        required=False,
+        widget=forms.DateInput(attrs={"type": "date", "class": "form-control"}),
+        label="Opening Expiry Date",
+    )
+
     class Meta:
         model = InventoryItem
         fields = (
@@ -304,6 +315,8 @@ class InventoryItemForm(forms.ModelForm):
         self.fields["reorder_level"].label = "Minimum Stock Level"
         self.fields["strength_mg_per_unit"].label = "Strength (mg per base unit)"
         self.fields["days_covered_per_pack"].label = "Days Covered Per Pack"
+        self.fields["opening_batch_number"].help_text = "Use the supplier/manufacturer batch code so reports can show each lot clearly."
+        self.fields["opening_expiry_date"].help_text = "Add the first expiry date if this item is already in stock."
         self.fields["base_unit"].help_text = "Smallest clinical unit used for prescribing and reporting, e.g. tablet, ml, g, vial."
         self.fields["unit"].help_text = "How the stocked item is packaged for sale or storage, e.g. bottle, strip, tube, vial."
         self.fields["units_per_pack"].help_text = "How many base units are inside one stocked pack."
@@ -321,12 +334,20 @@ class InventoryItemForm(forms.ModelForm):
         if units_per_pack is not None and units_per_pack <= 0:
             self.add_error("units_per_pack", "Units per pack must be greater than zero.")
 
-        if category == InventoryItem.CATEGORY_SYRUP:
+        if category in {InventoryItem.CATEGORY_SYRUP, InventoryItem.CATEGORY_IV, InventoryItem.CATEGORY_IM}:
             if not units_per_pack:
-                self.add_error("units_per_pack", "Syrups need the bottle size in ml.")
+                self.add_error("units_per_pack", "This medicine form needs the pack volume in ml.")
             if not base_unit:
                 cleaned_data["base_unit"] = "ml"
             if not pack_type or pack_type == "unit":
+                if category == InventoryItem.CATEGORY_IM:
+                    cleaned_data["unit"] = "vial"
+                elif category == InventoryItem.CATEGORY_IV:
+                    cleaned_data["unit"] = "bag"
+                else:
+                    cleaned_data["unit"] = "bottle"
+
+        if category == InventoryItem.CATEGORY_SYRUP and (not pack_type or pack_type == "unit"):
                 cleaned_data["unit"] = "bottle"
 
         if category == InventoryItem.CATEGORY_TUBE:
@@ -337,6 +358,14 @@ class InventoryItemForm(forms.ModelForm):
 
         if category == InventoryItem.CATEGORY_DRUG and not base_unit:
             cleaned_data["base_unit"] = "tablet"
+
+        opening_stock = cleaned_data.get("current_quantity") or Decimal("0")
+        batch_number = (cleaned_data.get("opening_batch_number") or "").strip()
+        expiry_date = cleaned_data.get("opening_expiry_date")
+        if opening_stock > 0 and not batch_number:
+            self.add_error("opening_batch_number", "Add a batch number so the printable stock report can show this stock clearly.")
+        if opening_stock > 0 and not expiry_date:
+            self.add_error("opening_expiry_date", "Add an expiry date for the opening stock batch.")
 
         return cleaned_data
 
@@ -358,6 +387,17 @@ class InventoryRestockForm(forms.Form):
         widget=forms.NumberInput(attrs={"step": "0.01", "min": "0", "class": "form-control"}),
         label="Buying Price (optional)",
         help_text="Leave blank to keep the current buying price.",
+    )
+    batch_number = forms.CharField(
+        max_length=100,
+        widget=forms.TextInput(attrs={"class": "form-control"}),
+        label="Batch Number",
+        help_text="Each restock should be tied to a batch so the stock sheet shows what is on shelf.",
+    )
+    expiry_date = forms.DateField(
+        required=False,
+        widget=forms.DateInput(attrs={"type": "date", "class": "form-control"}),
+        label="Expiry Date",
     )
     notes = forms.CharField(
         required=False,

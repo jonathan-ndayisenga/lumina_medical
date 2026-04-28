@@ -356,6 +356,8 @@ def add_prescription_api(request, visit_id):
         category__in=[
             InventoryItem.CATEGORY_DRUG,
             InventoryItem.CATEGORY_SYRUP,
+            InventoryItem.CATEGORY_IV,
+            InventoryItem.CATEGORY_IM,
             InventoryItem.CATEGORY_TUBE,
         ],
         is_active=True,
@@ -511,6 +513,8 @@ def consultation(request, visit_id):
             category__in=[
                 InventoryItem.CATEGORY_DRUG,
                 InventoryItem.CATEGORY_SYRUP,
+                InventoryItem.CATEGORY_IV,
+                InventoryItem.CATEGORY_IM,
                 InventoryItem.CATEGORY_TUBE,
             ],
             is_active=True,

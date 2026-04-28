@@ -561,21 +561,78 @@ def inventory_report_rows(items):
         stock_cost = (item.current_quantity or Decimal("0")) * (item.unit_cost or Decimal("0"))
         stock_retail = (item.current_quantity or Decimal("0")) * (item.selling_price or Decimal("0"))
         status = "Out of Stock" if item.current_quantity <= 0 else "Low Stock" if item.is_low_stock else "Healthy"
-        row = {
-            "name": item.name,
-            "category": item.get_category_display(),
-            "pack_type": item.unit,
-            "base_unit": item.base_unit,
-            "units_per_pack": item.units_per_pack,
-            "current_stock": item.current_quantity,
-            "minimum_stock": item.reorder_level,
-            "buying_price": item.unit_cost,
-            "selling_price": item.selling_price or Decimal("0"),
-            "stock_cost": stock_cost,
-            "stock_retail": stock_retail,
-            "status": status,
-        }
-        rows.append(row)
+        positive_batches = list(item.batches.filter(quantity__gt=0).order_by("expiry_date", "batch_number", "id"))
+        if positive_batches:
+            for index, batch in enumerate(positive_batches):
+                rows.append(
+                    {
+                        "name": item.name if index == 0 else "",
+                        "category": item.get_category_display() if index == 0 else "",
+                        "pack_type": item.unit if index == 0 else "",
+                        "base_unit": item.base_unit if index == 0 else "",
+                        "units_per_pack": item.units_per_pack if index == 0 else "",
+                        "batch_number": batch.batch_number,
+                        "batch_quantity": batch.quantity,
+                        "batch_expiry_date": batch.expiry_date.isoformat() if batch.expiry_date else "",
+                        "batch_unit_cost": batch.unit_cost,
+                        "current_stock": item.current_quantity if index == 0 else "",
+                        "minimum_stock": item.reorder_level if index == 0 else "",
+                        "buying_price": item.unit_cost if index == 0 else "",
+                        "selling_price": item.selling_price or Decimal("0") if index == 0 else "",
+                        "stock_cost": stock_cost if index == 0 else "",
+                        "stock_retail": stock_retail if index == 0 else "",
+                        "status": status if index == 0 else "",
+                    }
+                )
+        else:
+            rows.append(
+                {
+                    "name": item.name,
+                    "category": item.get_category_display(),
+                    "pack_type": item.unit,
+                    "base_unit": item.base_unit,
+                    "units_per_pack": item.units_per_pack,
+                    "batch_number": "",
+                    "batch_quantity": "",
+                    "batch_expiry_date": "",
+                    "batch_unit_cost": "",
+                    "current_stock": item.current_quantity,
+                    "minimum_stock": item.reorder_level,
+                    "buying_price": item.unit_cost,
+                    "selling_price": item.selling_price or Decimal("0"),
+                    "stock_cost": stock_cost,
+                    "stock_retail": stock_retail,
+                    "status": status,
+                }
+            )
+        totals["stock_cost"] += stock_cost
+        totals["stock_retail"] += stock_retail
+        totals["stock_units"] += item.current_quantity or Decimal("0")
+    return rows, totals
+
+
+def inventory_printable_rows(items):
+    rows = []
+    totals = {
+        "stock_cost": Decimal("0"),
+        "stock_retail": Decimal("0"),
+        "stock_units": Decimal("0"),
+    }
+    for item in items:
+        stock_cost = (item.current_quantity or Decimal("0")) * (item.unit_cost or Decimal("0"))
+        stock_retail = (item.current_quantity or Decimal("0")) * (item.selling_price or Decimal("0"))
+        rows.append(
+            {
+                "name": item.name,
+                "category": item.get_category_display(),
+                "stock_quantity": item.current_quantity or Decimal("0"),
+                "buying_price": item.unit_cost or Decimal("0"),
+                "stock_cost": stock_cost,
+                "selling_price": item.selling_price or Decimal("0"),
+                "stock_retail": stock_retail,
+                "batches": list(item.batches.filter(quantity__gt=0).order_by("expiry_date", "batch_number", "id")),
+            }
+        )
         totals["stock_cost"] += stock_cost
         totals["stock_retail"] += stock_retail
         totals["stock_units"] += item.current_quantity or Decimal("0")
@@ -615,6 +672,10 @@ def build_inventory_xlsx_bytes(report_rows, totals):
         "Pack Type",
         "Base Unit",
         "Units Per Pack",
+        "Batch Number",
+        "Batch Quantity",
+        "Batch Expiry Date",
+        "Batch Unit Cost",
         "Current Stock",
         "Minimum Stock Level",
         "Buying Price",
@@ -638,13 +699,17 @@ def build_inventory_xlsx_bytes(report_rows, totals):
             text_cell(f"C{row_number}", row["pack_type"]),
             text_cell(f"D{row_number}", row["base_unit"]),
             number_cell(f"E{row_number}", row["units_per_pack"]),
-            number_cell(f"F{row_number}", row["current_stock"]),
-            number_cell(f"G{row_number}", row["minimum_stock"]),
-            number_cell(f"H{row_number}", row["buying_price"]),
-            number_cell(f"I{row_number}", row["selling_price"]),
-            number_cell(f"J{row_number}", row["stock_cost"]),
-            number_cell(f"K{row_number}", row["stock_retail"]),
-            text_cell(f"L{row_number}", row["status"]),
+            text_cell(f"F{row_number}", row["batch_number"]),
+            number_cell(f"G{row_number}", row["batch_quantity"]),
+            text_cell(f"H{row_number}", row["batch_expiry_date"]),
+            number_cell(f"I{row_number}", row["batch_unit_cost"]),
+            number_cell(f"J{row_number}", row["current_stock"]),
+            number_cell(f"K{row_number}", row["minimum_stock"]),
+            number_cell(f"L{row_number}", row["buying_price"]),
+            number_cell(f"M{row_number}", row["selling_price"]),
+            number_cell(f"N{row_number}", row["stock_cost"]),
+            number_cell(f"O{row_number}", row["stock_retail"]),
+            text_cell(f"P{row_number}", row["status"]),
         ]
         rows_xml.append(f"<row r=\"{row_number}\">{''.join(cells)}</row>")
 
@@ -656,31 +721,36 @@ def build_inventory_xlsx_bytes(report_rows, totals):
         + text_cell(f"C{totals_row}", "")
         + text_cell(f"D{totals_row}", "")
         + text_cell(f"E{totals_row}", "")
-        + number_cell(f"F{totals_row}", totals["stock_units"])
+        + text_cell(f"F{totals_row}", "")
         + text_cell(f"G{totals_row}", "")
         + text_cell(f"H{totals_row}", "")
         + text_cell(f"I{totals_row}", "")
-        + number_cell(f"J{totals_row}", totals["stock_cost"])
-        + number_cell(f"K{totals_row}", totals["stock_retail"])
+        + number_cell(f"J{totals_row}", totals["stock_units"])
+        + text_cell(f"K{totals_row}", "")
         + text_cell(f"L{totals_row}", "")
+        + text_cell(f"M{totals_row}", "")
+        + number_cell(f"N{totals_row}", totals["stock_cost"])
+        + number_cell(f"O{totals_row}", totals["stock_retail"])
+        + text_cell(f"P{totals_row}", "")
         + "</row>"
     )
 
     worksheet_xml = f"""<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
-  <dimension ref="A1:L{totals_row}"/>
+  <dimension ref="A1:P{totals_row}"/>
   <sheetViews><sheetView workbookViewId="0"/></sheetViews>
   <sheetFormatPr defaultRowHeight="15"/>
   <cols>
-    <col min="1" max="1" width="28" customWidth="1"/>
-    <col min="2" max="4" width="18" customWidth="1"/>
-    <col min="5" max="11" width="16" customWidth="1"/>
-    <col min="12" max="12" width="16" customWidth="1"/>
+     <col min="1" max="1" width="28" customWidth="1"/>
+     <col min="2" max="5" width="16" customWidth="1"/>
+     <col min="6" max="9" width="18" customWidth="1"/>
+     <col min="10" max="15" width="16" customWidth="1"/>
+     <col min="16" max="16" width="16" customWidth="1"/>
   </cols>
   <sheetData>
     {''.join(rows_xml)}
   </sheetData>
-  <autoFilter ref="A1:L{max(2, len(report_rows) + 1)}"/>
+  <autoFilter ref="A1:P{max(2, len(report_rows) + 1)}"/>
 </worksheet>
 """
 
@@ -1715,7 +1785,7 @@ def delete_salary(request, salary_id):
 def manage_inventory(request):
     hospital = active_hospital(request)
     inventory_items = InventoryItem.objects.filter(hospital=hospital).order_by("name") if hospital else InventoryItem.objects.none()
-    inventory_items = inventory_items.prefetch_related("transactions")
+    inventory_items = inventory_items.prefetch_related("transactions", "batches")
 
     if request.method == "POST":
         form = InventoryItemForm(request.POST)
@@ -1723,6 +1793,16 @@ def manage_inventory(request):
             item = form.save(commit=False)
             item.hospital = hospital
             item.save()
+            opening_stock = form.cleaned_data.get("current_quantity") or Decimal("0")
+            opening_batch_number = form.cleaned_data.get("opening_batch_number")
+            opening_expiry_date = form.cleaned_data.get("opening_expiry_date")
+            if opening_stock > 0:
+                item.add_or_update_batch(
+                    opening_batch_number,
+                    opening_stock,
+                    expiry_date=opening_expiry_date,
+                    unit_cost=item.unit_cost,
+                )
             messages.success(request, f"Inventory item '{item.name}' saved.")
             return redirect("manage_inventory")
         messages.error(request, "Please fix the inventory details below.")
@@ -1808,12 +1888,19 @@ def restock_inventory_item(request, item_id):
 
     quantity_received = form.cleaned_data["quantity_received"]
     new_unit_cost = form.cleaned_data.get("unit_cost")
+    batch_number = form.cleaned_data["batch_number"]
+    expiry_date = form.cleaned_data.get("expiry_date")
     notes = form.cleaned_data.get("notes") or ""
 
     if new_unit_cost is not None:
         item.unit_cost = new_unit_cost
-    item.current_quantity = (item.current_quantity or Decimal("0")) + quantity_received
     item.save()
+    batch = item.add_or_update_batch(
+        batch_number,
+        quantity_received,
+        expiry_date=expiry_date,
+        unit_cost=item.unit_cost,
+    )
 
     InventoryTransaction.objects.create(
         hospital=item.hospital,
@@ -1822,16 +1909,21 @@ def restock_inventory_item(request, item_id):
         quantity=quantity_received,
         unit_cost=item.unit_cost or Decimal("0"),
         performed_by=request.user,
-        notes=notes or f"Restocked through inventory dashboard by {request.user.get_full_name() or request.user.username}.",
+        notes=notes or f"Restocked batch {batch.batch_number} through inventory dashboard by {request.user.get_full_name() or request.user.username}.",
     )
-    messages.success(request, f"Restocked {item.name} with {quantity_received} {item.unit}(s).")
+    messages.success(request, f"Restocked {item.name} batch {batch.batch_number} with {quantity_received} {item.unit}(s).")
     return redirect("manage_inventory")
 
 
 @role_required(User.ROLE_HOSPITAL_ADMIN)
 def download_inventory_report(request):
     hospital = active_hospital(request)
-    inventory_items = InventoryItem.objects.filter(hospital=hospital).order_by("category", "name") if hospital else InventoryItem.objects.none()
+    inventory_items = (
+        InventoryItem.objects.filter(hospital=hospital).order_by("category", "name").prefetch_related("batches")
+        if hospital
+        else InventoryItem.objects.none()
+    )
+    report_rows, _ = inventory_report_rows(inventory_items)
 
     response = HttpResponse(content_type="text/csv")
     filename_date = timezone.localdate().isoformat()
@@ -1845,6 +1937,10 @@ def download_inventory_report(request):
             "Pack Type",
             "Base Unit",
             "Units Per Pack",
+            "Batch Number",
+            "Batch Quantity",
+            "Batch Expiry Date",
+            "Batch Unit Cost",
             "Current Stock",
             "Minimum Stock Level",
             "Buying Price",
@@ -1855,24 +1951,25 @@ def download_inventory_report(request):
         ]
     )
 
-    for item in inventory_items:
-        stock_cost = (item.current_quantity or Decimal("0")) * (item.unit_cost or Decimal("0"))
-        stock_retail = (item.current_quantity or Decimal("0")) * (item.selling_price or Decimal("0"))
-        status = "Out of Stock" if item.current_quantity <= 0 else "Low Stock" if item.is_low_stock else "Healthy"
+    for row in report_rows:
         writer.writerow(
             [
-                item.name,
-                item.get_category_display(),
-                item.unit,
-                item.base_unit,
-                item.units_per_pack,
-                item.current_quantity,
-                item.reorder_level,
-                item.unit_cost,
-                item.selling_price or Decimal("0"),
-                stock_cost,
-                stock_retail,
-                status,
+                row["name"],
+                row["category"],
+                row["pack_type"],
+                row["base_unit"],
+                row["units_per_pack"],
+                row["batch_number"],
+                row["batch_quantity"],
+                row["batch_expiry_date"],
+                row["batch_unit_cost"],
+                row["current_stock"],
+                row["minimum_stock"],
+                row["buying_price"],
+                row["selling_price"],
+                row["stock_cost"],
+                row["stock_retail"],
+                row["status"],
             ]
         )
 
@@ -1882,8 +1979,12 @@ def download_inventory_report(request):
 @role_required(User.ROLE_HOSPITAL_ADMIN)
 def printable_inventory_report(request):
     hospital = active_hospital(request)
-    inventory_items = InventoryItem.objects.filter(hospital=hospital).order_by("category", "name") if hospital else InventoryItem.objects.none()
-    report_rows, totals = inventory_report_rows(inventory_items)
+    inventory_items = (
+        InventoryItem.objects.filter(hospital=hospital).order_by("category", "name").prefetch_related("batches")
+        if hospital
+        else InventoryItem.objects.none()
+    )
+    printable_rows, totals = inventory_printable_rows(inventory_items)
     context = hospital_admin_context(
         request,
         "hospital_inventory",
@@ -1892,8 +1993,9 @@ def printable_inventory_report(request):
     )
     context.update(
         {
-            "report_rows": report_rows,
+            "report_rows": printable_rows,
             "totals": totals,
+            "estimated_margin": totals["stock_retail"] - totals["stock_cost"],
             "generated_on": timezone.localtime(),
         }
     )
@@ -1903,7 +2005,11 @@ def printable_inventory_report(request):
 @role_required(User.ROLE_HOSPITAL_ADMIN)
 def download_inventory_xlsx(request):
     hospital = active_hospital(request)
-    inventory_items = InventoryItem.objects.filter(hospital=hospital).order_by("category", "name") if hospital else InventoryItem.objects.none()
+    inventory_items = (
+        InventoryItem.objects.filter(hospital=hospital).order_by("category", "name").prefetch_related("batches")
+        if hospital
+        else InventoryItem.objects.none()
+    )
     report_rows, totals = inventory_report_rows(inventory_items)
     workbook_bytes = build_inventory_xlsx_bytes(report_rows, totals)
 

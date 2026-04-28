@@ -3,6 +3,7 @@ from decimal import Decimal
 from django.apps import apps
 from django.conf import settings
 from django.db import models
+from django.db.models import Sum
 from django.utils import timezone
 
 from accounts.models import Hospital
@@ -220,6 +221,8 @@ class Salary(models.Model):
 class InventoryItem(models.Model):
     CATEGORY_DRUG = "drug"
     CATEGORY_SYRUP = "syrup"
+    CATEGORY_IV = "iv"
+    CATEGORY_IM = "im"
     CATEGORY_TUBE = "tube"
     CATEGORY_REAGENT = "reagent"
     CATEGORY_SUNDRY = "sundry"
@@ -227,6 +230,8 @@ class InventoryItem(models.Model):
     CATEGORY_CHOICES = [
         (CATEGORY_DRUG, "Tablet / Capsule"),
         (CATEGORY_SYRUP, "Syrup / Suspension"),
+        (CATEGORY_IV, "IV Medication / Fluid"),
+        (CATEGORY_IM, "IM Medication"),
         (CATEGORY_TUBE, "Tube / Cream / Ointment"),
         (CATEGORY_REAGENT, "Reagent"),
         (CATEGORY_SUNDRY, "Sundry"),
@@ -290,6 +295,11 @@ class InventoryItem(models.Model):
                 total_base = self.current_quantity * self.units_per_pack
                 return f"{self.current_quantity} {self.unit}(s) (~{total_base} {self.base_unit})"
             return f"{self.current_quantity} {self.unit}(s)"
+        if self.category in {self.CATEGORY_IV, self.CATEGORY_IM}:
+            if self.units_per_pack > 0 and self.base_unit:
+                total_base = self.current_quantity * self.units_per_pack
+                return f"{self.current_quantity} {self.unit}(s) (~{total_base} {self.base_unit})"
+            return f"{self.current_quantity} {self.unit}(s)"
         if self.category == self.CATEGORY_TUBE:
             if self.units_per_pack > 0 and self.base_unit and self.base_unit != "unit":
                 total_base = self.current_quantity * self.units_per_pack
@@ -299,7 +309,13 @@ class InventoryItem(models.Model):
 
     @property
     def is_prescribable(self):
-        return self.category in {self.CATEGORY_DRUG, self.CATEGORY_SYRUP, self.CATEGORY_TUBE}
+        return self.category in {
+            self.CATEGORY_DRUG,
+            self.CATEGORY_SYRUP,
+            self.CATEGORY_IV,
+            self.CATEGORY_IM,
+            self.CATEGORY_TUBE,
+        }
 
     @property
     def price_per_base_unit(self):
@@ -308,6 +324,74 @@ class InventoryItem(models.Model):
         if units_per_pack <= 0:
             return Decimal("0")
         return (selling_price / units_per_pack).quantize(Decimal("0.01"))
+
+    @property
+    def has_batch_tracking(self):
+        return self.batches.exists()
+
+    def recalculate_current_quantity(self, save=True):
+        batch_total = self.batches.aggregate(total=Sum("quantity")).get("total")
+        if batch_total is None:
+            return self.current_quantity
+        self.current_quantity = Decimal(batch_total or 0)
+        self.quantity = int(self.current_quantity or 0)
+        if save:
+            super().save(update_fields=["current_quantity", "quantity"])
+        return self.current_quantity
+
+    def add_or_update_batch(self, batch_number, quantity, expiry_date=None, unit_cost=None):
+        batch_number = (batch_number or "").strip() or "UNSPECIFIED"
+        defaults = {
+            "expiry_date": expiry_date,
+            "unit_cost": unit_cost if unit_cost is not None else Decimal("0"),
+        }
+        batch, created = self.batches.get_or_create(batch_number=batch_number, defaults=defaults)
+        if created:
+            batch.quantity = Decimal("0")
+        elif expiry_date and batch.expiry_date != expiry_date:
+            batch.expiry_date = expiry_date
+        if unit_cost is not None:
+            batch.unit_cost = unit_cost
+        batch.quantity = (batch.quantity or Decimal("0")) + Decimal(quantity or 0)
+        batch.save()
+        self.recalculate_current_quantity()
+        return batch
+
+    def consume_stock(self, quantity_to_deduct):
+        quantity_to_deduct = Decimal(quantity_to_deduct or 0)
+        if quantity_to_deduct <= 0:
+            return []
+
+        consumption_log = []
+        positive_batches = list(
+            self.batches.filter(quantity__gt=0).order_by(
+                models.F("expiry_date").asc(nulls_last=True),
+                "created_at",
+                "id",
+            )
+        )
+        if not positive_batches:
+            self.current_quantity = (self.current_quantity or Decimal("0")) - quantity_to_deduct
+            self.save(update_fields=["current_quantity", "quantity", "unit_price", "low_stock_threshold"])
+            return consumption_log
+
+        remaining = quantity_to_deduct
+        for batch in positive_batches:
+            if remaining <= 0:
+                break
+            available = Decimal(batch.quantity or 0)
+            if available <= 0:
+                continue
+            used = available if available <= remaining else remaining
+            batch.quantity = available - used
+            batch.save(update_fields=["quantity", "updated_at"])
+            consumption_log.append({"batch": batch, "quantity": used})
+            remaining -= used
+
+        self.recalculate_current_quantity()
+        if remaining > 0:
+            raise ValueError(f"Not enough batch stock available for {self.name}. Remaining: {remaining}")
+        return consumption_log
 
     def save(self, *args, **kwargs):
         if not self.current_quantity and self.quantity:
@@ -327,6 +411,10 @@ class InventoryItem(models.Model):
                 self.unit = "bottle"
             if self.pack_size_ml and (not self.units_per_pack or self.units_per_pack == Decimal("1")):
                 self.units_per_pack = self.pack_size_ml
+        elif self.category in {self.CATEGORY_IV, self.CATEGORY_IM}:
+            self.base_unit = self.base_unit or "ml"
+            if self.unit == "unit":
+                self.unit = "vial" if self.category == self.CATEGORY_IM else "bag"
         elif self.category == self.CATEGORY_TUBE:
             if self.unit == "unit":
                 self.unit = "tube"
@@ -390,6 +478,23 @@ class InventoryTransaction(models.Model):
 
     def __str__(self):
         return f"{self.get_transaction_type_display()} - {self.item.name}"
+
+
+class InventoryBatch(models.Model):
+    item = models.ForeignKey(InventoryItem, on_delete=models.CASCADE, related_name="batches")
+    batch_number = models.CharField(max_length=100)
+    quantity = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    expiry_date = models.DateField(null=True, blank=True)
+    unit_cost = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["item__name", "expiry_date", "batch_number", "id"]
+        unique_together = ("item", "batch_number")
+
+    def __str__(self):
+        return f"{self.item.name} - {self.batch_number}"
 
 
 class BankAccount(models.Model):

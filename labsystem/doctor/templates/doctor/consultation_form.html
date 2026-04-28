@@ -634,7 +634,7 @@
       if (!dosageLabel || !frequencyLabel || !durationLabel || !dosageInput) {
         return;
       }
-      if (category === 'syrup') {
+      if (['syrup', 'iv', 'im'].includes(category)) {
         dosageLabel.textContent = 'Dose / Intake (ml)';
         frequencyLabel.textContent = 'Times / Day';
         durationLabel.textContent = 'Days';
@@ -648,7 +648,7 @@
         dosageInput.placeholder = '1';
         return;
       }
-      dosageLabel.textContent = 'Dosage';
+      dosageLabel.textContent = 'Dose / Intake (mg)';
       frequencyLabel.textContent = 'Times / Day';
       durationLabel.textContent = 'Days';
       dosageInput.placeholder = '500';
@@ -682,10 +682,10 @@
 
       let quantity = frequency * duration;
       let packs = Math.ceil(quantity);
-      let label = `${quantity.toFixed(2)} ${unit}`;
+      let label = `${Number.isInteger(quantity) ? quantity : quantity.toFixed(2)} ${unit}(s)`;
       let totalPrice = quantity * price;
 
-      if (category === 'syrup') {
+      if (['syrup', 'iv', 'im'].includes(category)) {
         const totalMl = dosage * frequency * duration;
         packs = Math.ceil(totalMl / Math.max(unitsPerPack, 1));
         quantity = packs;
