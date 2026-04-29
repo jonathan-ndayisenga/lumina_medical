@@ -48,6 +48,7 @@ urlpatterns = [
     path("hospital/salaries/<int:salary_id>/edit/", views.edit_salary, name="edit_salary"),
     path("hospital/salaries/<int:salary_id>/delete/", views.delete_salary, name="delete_salary"),
     path("hospital/inventory/", views.manage_inventory, name="manage_inventory"),
+    path("hospital/inventory/insights/", views.inventory_insights, name="inventory_insights"),
     path("hospital/inventory/template/", views.download_inventory_import_template, name="download_inventory_import_template"),
     path("hospital/inventory/upload/", views.upload_inventory_bulk, name="upload_inventory_bulk"),
     path("hospital/inventory/report/", views.download_inventory_report, name="download_inventory_report"),

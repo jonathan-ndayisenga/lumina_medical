@@ -302,12 +302,21 @@
                                         <a href="{% url 'mobile_money_list' %}" class="sidebar-sublink {% if active_nav == 'hospital_mobile_money' %}active{% endif %}">Mobile Money</a>
                                     </div>
                                 </details>
-                                <a href="{% url 'manage_inventory' %}" class="sidebar-link {% if active_nav == 'hospital_inventory' %}active{% endif %}">
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-5 h-5">
-                                        <path stroke-linecap="round" stroke-linejoin="round" d="M20 7 12 3 4 7m16 0v10l-8 4-8-4V7m16 0-8 4m-8-4 8 4m0 0v10" />
-                                    </svg>
-                                    Inventory
-                                </a>
+                                <details class="group" {% if active_nav == 'hospital_inventory' or active_nav == 'hospital_inventory_insights' %}open{% endif %}>
+                                    <summary class="sidebar-link list-none cursor-pointer {% if active_nav == 'hospital_inventory' or active_nav == 'hospital_inventory_insights' %}active{% endif %}">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-5 h-5">
+                                            <path stroke-linecap="round" stroke-linejoin="round" d="M20 7 12 3 4 7m16 0v10l-8 4-8-4V7m16 0-8 4m-8-4 8 4m0 0v10" />
+                                        </svg>
+                                        <span class="flex-1">Inventory</span>
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-4 h-4 opacity-80">
+                                            <path stroke-linecap="round" stroke-linejoin="round" d="m6 9 6 6 6-6" />
+                                        </svg>
+                                    </summary>
+                                    <div class="space-y-1 pt-1">
+                                        <a href="{% url 'manage_inventory' %}" class="sidebar-sublink {% if active_nav == 'hospital_inventory' %}active{% endif %}">Inventory Stock</a>
+                                        <a href="{% url 'inventory_insights' %}" class="sidebar-sublink {% if active_nav == 'hospital_inventory_insights' %}active{% endif %}">Insights & Restock</a>
+                                    </div>
+                                </details>
                             </div>
                         </div>
                     {% endif %}

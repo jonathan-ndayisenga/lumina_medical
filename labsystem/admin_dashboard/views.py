@@ -1950,6 +1950,19 @@ def manage_inventory(request):
 
 
 @role_required(User.ROLE_HOSPITAL_ADMIN)
+def inventory_insights(request):
+    hospital = active_hospital(request)
+    context = hospital_admin_context(
+        request,
+        "hospital_inventory_insights",
+        "Inventory Insights",
+        "Review quick restock priorities, sales trend, and category mix without crowding the main stock page.",
+    )
+    context.update(inventory_dashboard_snapshot(hospital))
+    return render(request, "admin_dashboard/inventory_insights.html", context)
+
+
+@role_required(User.ROLE_HOSPITAL_ADMIN)
 def download_inventory_import_template(request):
     response = HttpResponse(content_type="text/csv")
     filename_date = timezone.localdate().isoformat()

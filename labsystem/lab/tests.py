@@ -80,6 +80,13 @@ class LabDoctorHandoffTests(TestCase):
         doctor_queue = QueueEntry.objects.get(visit=self.visit, queue_type=QueueEntry.TYPE_DOCTOR, processed=False)
         self.assertIn("Lab results ready for review", doctor_queue.reason)
         self.assertEqual(doctor_queue.requested_by, self.doctor)
+        self.assertFalse(
+            QueueEntry.objects.filter(
+                visit=self.visit,
+                queue_type__in=[QueueEntry.TYPE_LAB_DOCTOR, QueueEntry.TYPE_LAB_RECEPTION],
+                processed=False,
+            ).exists()
+        )
 
 
 class SequentialRequestedLabWorkflowTests(TestCase):

@@ -1,0 +1,128 @@
+{% extends 'base.html' %}
+
+{% block title %}Inventory Insights - Lumina{% endblock %}
+{% block page_title %}Inventory Insights{% endblock %}
+{% block page_subtitle %}Watch the restock list, sales trend, and category mix without crowding the stock-entry page.{% endblock %}
+{% block content_container_classes %}max-w-[110rem] mx-auto px-4 lg:px-8 py-6{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+        <div class="card">
+            <p class="text-xs uppercase tracking-wide text-text-muted">Low Stock</p>
+            <p class="mt-2 text-2xl font-bold text-amber-700">{{ stats.low_stock_count|default:0 }}</p>
+            <p class="mt-1 text-xs text-text-muted">Items getting close to disruption level.</p>
+        </div>
+        <div class="card">
+            <p class="text-xs uppercase tracking-wide text-text-muted">Out of Stock</p>
+            <p class="mt-2 text-2xl font-bold text-red-700">{{ stats.out_of_stock_count|default:0 }}</p>
+            <p class="mt-1 text-xs text-text-muted">Items that need urgent restocking.</p>
+        </div>
+        <div class="card">
+            <p class="text-xs uppercase tracking-wide text-text-muted">Stock Cost Value</p>
+            <p class="mt-2 text-2xl font-bold text-text-main">UGX {{ stats.stock_cost_value|default:0 }}</p>
+            <p class="mt-1 text-xs text-text-muted">Approximate supplier value still on shelf.</p>
+        </div>
+        <div class="card">
+            <p class="text-xs uppercase tracking-wide text-text-muted">This Month's Dispensed Sales</p>
+            <p class="mt-2 text-2xl font-bold text-green-700">UGX {{ stats.month_sales|default:0 }}</p>
+            <p class="mt-1 text-xs text-text-muted">Medication already issued to patients this month.</p>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 xl:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)] gap-6 items-start">
+        <div class="card border border-gray-100 shadow-none">
+            <div class="flex items-start justify-between gap-3 flex-wrap">
+                <div>
+                    <h3 class="text-lg font-bold text-text-main">Quick Restock List</h3>
+                    <p class="mt-1 text-sm text-text-muted">Use this list when planning purchases or checking what should be replenished first.</p>
+                </div>
+                <a href="{% url 'manage_inventory' %}?stock=low" class="btn btn-secondary btn-sm">Open Inventory Filters</a>
+            </div>
+            <div class="mt-4 space-y-3">
+                {% for item in restock_items %}
+                    <div class="rounded-xl border {% if item.current_quantity <= 0 %}border-red-200 bg-red-50{% else %}border-amber-200 bg-amber-50{% endif %} p-4">
+                        <div class="flex items-start justify-between gap-3 flex-wrap">
+                            <div>
+                                <p class="font-semibold text-text-main">{{ item.name }}</p>
+                                <p class="text-xs text-text-muted mt-1">{{ item.get_category_display }} - {{ item.quantity_label }}</p>
+                            </div>
+                            {% if item.current_quantity <= 0 %}
+                                <span class="inline-flex items-center rounded-full bg-red-100 px-2 py-1 text-xs font-semibold text-red-700">Zero stock</span>
+                            {% else %}
+                                <span class="inline-flex items-center rounded-full bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-700">Low stock</span>
+                            {% endif %}
+                        </div>
+                        <form method="post" action="{% url 'restock_inventory_item' item.pk %}" class="mt-4 space-y-3">
+                            {% csrf_token %}
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                <div>
+                                    <label class="block text-xs font-semibold text-text-main mb-1">Quantity Received</label>
+                                    <input type="number" name="quantity_received" min="0.01" step="0.01" class="form-control" placeholder="How many {{ item.unit }}s?">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-semibold text-text-main mb-1">Buying Price (optional)</label>
+                                    <input type="number" name="unit_cost" min="0" step="0.01" class="form-control" placeholder="Update supplier price if needed">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-semibold text-text-main mb-1">Batch Number</label>
+                                    <input type="text" name="batch_number" class="form-control" placeholder="Supplier batch code">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-semibold text-text-main mb-1">Expiry Date</label>
+                                    <input type="date" name="expiry_date" class="form-control">
+                                </div>
+                            </div>
+                            <button type="submit" class="btn btn-primary btn-sm">Add Batch / Restock {{ item.name }}</button>
+                        </form>
+                    </div>
+                {% empty %}
+                    <p class="text-sm text-text-muted italic">No urgent restock items right now.</p>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="space-y-6">
+            <div class="card border border-gray-100 shadow-none">
+                <h3 class="text-lg font-bold text-text-main">Inventory Sales Trend</h3>
+                <p class="mt-1 text-sm text-text-muted">A quick view of dispensed prescription value over the last few months.</p>
+                <div class="mt-4">
+                    {% if monthly_sales %}
+                        <div class="h-48 flex items-end gap-3">
+                            {% for month in monthly_sales %}
+                                <div class="flex-1 flex flex-col items-center gap-2">
+                                    <div class="w-full rounded-t-lg bg-indigo-500" style="height: {% if month.height_pct %}{{ month.height_pct }}%{% else %}6%{% endif %}; min-height: 12px;"></div>
+                                    <p class="text-[11px] text-center text-text-muted">{{ month.label }}</p>
+                                    <p class="text-[11px] font-semibold text-text-main">UGX {{ month.amount }}</p>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <p class="text-sm text-text-muted italic">Sales bars will appear after prescriptions start being dispensed.</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="card border border-gray-100 shadow-none">
+                <h3 class="text-lg font-bold text-text-main">Category Snapshot</h3>
+                <div class="mt-4 space-y-3">
+                    {% for row in category_breakdown %}
+                        <div>
+                            <div class="flex items-center justify-between gap-3 text-sm">
+                                <span class="font-semibold text-text-main">{{ row.label }}</span>
+                                <span class="text-text-muted">{{ row.item_count }} item{{ row.item_count|pluralize }}</span>
+                            </div>
+                            <div class="mt-2 h-3 rounded-full bg-gray-100 overflow-hidden">
+                                <div class="h-full rounded-full bg-emerald-500" style="width: {{ row.width_pct }}%;"></div>
+                            </div>
+                            <p class="mt-1 text-xs text-text-muted">{{ row.stock_units }} stock unit{{ row.stock_units|pluralize }}</p>
+                        </div>
+                    {% empty %}
+                        <p class="text-sm text-text-muted italic">Add stock items to start seeing category breakdowns.</p>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

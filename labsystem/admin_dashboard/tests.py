@@ -428,3 +428,11 @@ class InventoryManagementTests(TestCase):
         self.assertContains(response, "Syrups only")
         self.assertContains(response, "Out of stock only")
         self.assertEqual(response.context["inventory_quick_filter_counts"]["syrup"], 1)
+
+    def test_inventory_insights_page_renders_restock_sections(self):
+        response = self.client.get(reverse("inventory_insights"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Quick Restock List")
+        self.assertContains(response, "Inventory Sales Trend")
+        self.assertContains(response, "Category Snapshot")
