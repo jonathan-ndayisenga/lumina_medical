@@ -30,7 +30,49 @@
         </div>
     </div>
 
-    <div class="grid grid-cols-1 xl:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)] gap-6 items-start">
+    <div class="space-y-6">
+        <div class="card border border-gray-100 shadow-none">
+            <h3 class="text-lg font-bold text-text-main">Inventory Sales Trend</h3>
+            <p class="mt-1 text-sm text-text-muted">A quick view of dispensed prescription value over the last few months.</p>
+            <div class="mt-4">
+                {% if monthly_sales %}
+                    <div class="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6 xl:gap-4">
+                        {% for month in monthly_sales %}
+                            <div class="rounded-xl border border-gray-100 bg-white px-4 py-5 text-center">
+                                <div class="mx-auto mb-4 flex h-36 w-full max-w-[5.5rem] items-end">
+                                    <div class="w-full rounded-t-lg bg-indigo-500" style="height: {% if month.height_pct %}{{ month.height_pct }}%{% else %}6%{% endif %}; min-height: 12px;"></div>
+                                </div>
+                                <p class="text-sm font-semibold text-text-main">{{ month.label }}</p>
+                                <p class="mt-2 text-sm font-bold text-text-main">UGX {{ month.amount }}</p>
+                            </div>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <p class="text-sm text-text-muted italic">Sales bars will appear after prescriptions start being dispensed.</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card border border-gray-100 shadow-none">
+            <h3 class="text-lg font-bold text-text-main">Category Snapshot</h3>
+            <div class="mt-4 space-y-3">
+                {% for row in category_breakdown %}
+                    <div>
+                        <div class="flex items-center justify-between gap-3 text-sm">
+                            <span class="font-semibold text-text-main">{{ row.label }}</span>
+                            <span class="text-text-muted">{{ row.item_count }} item{{ row.item_count|pluralize }}</span>
+                        </div>
+                        <div class="mt-2 h-3 rounded-full bg-gray-100 overflow-hidden">
+                            <div class="h-full rounded-full bg-emerald-500" style="width: {{ row.width_pct }}%;"></div>
+                        </div>
+                        <p class="mt-1 text-xs text-text-muted">{{ row.stock_units }} stock unit{{ row.stock_units|pluralize }}</p>
+                    </div>
+                {% empty %}
+                    <p class="text-sm text-text-muted italic">Add stock items to start seeing category breakdowns.</p>
+                {% endfor %}
+            </div>
+        </div>
+
         <div class="card border border-gray-100 shadow-none">
             <div class="flex items-start justify-between gap-3 flex-wrap">
                 <div>
@@ -79,48 +121,6 @@
                 {% empty %}
                     <p class="text-sm text-text-muted italic">No urgent restock items right now.</p>
                 {% endfor %}
-            </div>
-        </div>
-
-        <div class="space-y-6">
-            <div class="card border border-gray-100 shadow-none">
-                <h3 class="text-lg font-bold text-text-main">Inventory Sales Trend</h3>
-                <p class="mt-1 text-sm text-text-muted">A quick view of dispensed prescription value over the last few months.</p>
-                <div class="mt-4">
-                    {% if monthly_sales %}
-                        <div class="h-48 flex items-end gap-3">
-                            {% for month in monthly_sales %}
-                                <div class="flex-1 flex flex-col items-center gap-2">
-                                    <div class="w-full rounded-t-lg bg-indigo-500" style="height: {% if month.height_pct %}{{ month.height_pct }}%{% else %}6%{% endif %}; min-height: 12px;"></div>
-                                    <p class="text-[11px] text-center text-text-muted">{{ month.label }}</p>
-                                    <p class="text-[11px] font-semibold text-text-main">UGX {{ month.amount }}</p>
-                                </div>
-                            {% endfor %}
-                        </div>
-                    {% else %}
-                        <p class="text-sm text-text-muted italic">Sales bars will appear after prescriptions start being dispensed.</p>
-                    {% endif %}
-                </div>
-            </div>
-
-            <div class="card border border-gray-100 shadow-none">
-                <h3 class="text-lg font-bold text-text-main">Category Snapshot</h3>
-                <div class="mt-4 space-y-3">
-                    {% for row in category_breakdown %}
-                        <div>
-                            <div class="flex items-center justify-between gap-3 text-sm">
-                                <span class="font-semibold text-text-main">{{ row.label }}</span>
-                                <span class="text-text-muted">{{ row.item_count }} item{{ row.item_count|pluralize }}</span>
-                            </div>
-                            <div class="mt-2 h-3 rounded-full bg-gray-100 overflow-hidden">
-                                <div class="h-full rounded-full bg-emerald-500" style="width: {{ row.width_pct }}%;"></div>
-                            </div>
-                            <p class="mt-1 text-xs text-text-muted">{{ row.stock_units }} stock unit{{ row.stock_units|pluralize }}</p>
-                        </div>
-                    {% empty %}
-                        <p class="text-sm text-text-muted italic">Add stock items to start seeing category breakdowns.</p>
-                    {% endfor %}
-                </div>
             </div>
         </div>
     </div>
