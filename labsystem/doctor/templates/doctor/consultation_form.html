@@ -72,13 +72,12 @@
             </div>
 
             <div class="flex flex-col sm:flex-row gap-2">
-                <select id="lab-service-select" class="form-control flex-1">
-                    <option value="">Select a lab service</option>
+                <select id="lab-service-select" class="form-control flex-1 min-h-[10rem]" multiple size="6" aria-label="Select one or more lab services">
                 </select>
-                <button type="button" id="send-lab-request-btn" class="btn btn-primary whitespace-nowrap">Send to Lab</button>
+                <button type="button" id="send-lab-request-btn" class="btn btn-primary whitespace-nowrap">Send Selected to Lab</button>
                 <button type="button" id="open-add-service-modal-btn" class="btn btn-secondary whitespace-nowrap">Add Other</button>
             </div>
-            <p class="mt-2 text-xs text-text-muted">Use “Add Other” when the test does not exist yet. We will create it and send it to the lab immediately.</p>
+            <p class="mt-2 text-xs text-text-muted">Select one or more tests, then send them in one lab handoff. Use "Add Other" when the test does not exist yet.</p>
 
             <div id="lab-request-message" class="hidden mt-3 rounded-lg border px-3 py-2 text-sm"></div>
 
@@ -472,9 +471,7 @@
     const openModalButton = document.getElementById('open-add-service-modal-btn');
     const labRequestMessage = document.getElementById('lab-request-message');
     const pendingList = document.getElementById('pending-lab-services-list');
-    const completedList = document.getElementById('completed-lab-services-list');
     const pendingEmpty = document.getElementById('pending-lab-empty');
-    const completedEmpty = document.getElementById('completed-lab-empty');
     const pendingCount = document.getElementById('pending-lab-count');
     const totalAmount = document.getElementById('visit-total-amount');
     const billableServiceSelect = document.getElementById('billable-service-select');
@@ -563,19 +560,6 @@
           <span class="text-xs font-semibold text-amber-700">Pending</span>
         </div>
         <p class="text-xs text-text-muted mt-2">UGX ${service.price}</p>
-      `;
-      return card;
-    }
-
-    function createCompletedCard(serviceName) {
-      const card = document.createElement('div');
-      card.className = 'flex items-center justify-between gap-3 rounded-lg bg-white px-3 py-2';
-      card.innerHTML = `
-        <div>
-          <p class="text-sm font-semibold text-text-main">${serviceName}</p>
-          <p class="text-xs text-text-muted">Completed just now</p>
-        </div>
-        <span class="text-xs font-semibold text-green-700">Done</span>
       `;
       return card;
     }
@@ -716,24 +700,34 @@
     }
 
     function populateLabSelect() {
-      const currentValue = select.value;
+      const currentValues = new Set(Array.from(select.selectedOptions || []).map(option => option.value));
       const pendingIds = pendingServiceIds();
-      select.innerHTML = '<option value="">Select a lab service</option>';
-      Array.from(servicesById.values())
+      const availableServices = Array.from(servicesById.values())
         .filter(service => !pendingIds.has(service.id))
-        .sort((a, b) => a.name.localeCompare(b.name))
-        .forEach(service => {
-          const option = document.createElement('option');
-          option.value = String(service.id);
-          option.textContent = `${service.name} (${service.price})`;
-          select.appendChild(option);
-        });
-      if ([...select.options].some(option => option.value === currentValue)) {
-        select.value = currentValue;
+        .sort((a, b) => a.name.localeCompare(b.name));
+
+      select.innerHTML = '';
+      if (!availableServices.length) {
+        const option = document.createElement('option');
+        option.value = '';
+        option.textContent = 'No more lab services available';
+        option.disabled = true;
+        select.appendChild(option);
+        return;
       }
+
+      availableServices.forEach(service => {
+        const option = document.createElement('option');
+        option.value = String(service.id);
+        option.textContent = `${service.name} (UGX ${service.price})`;
+        if (currentValues.has(option.value)) {
+          option.selected = true;
+        }
+        select.appendChild(option);
+      });
     }
 
-    function setPendingServices(services, latestCompletedServiceName) {
+    function setPendingServices(services) {
       pendingList.innerHTML = '';
       if (!services.length) {
         pendingEmpty.classList.remove('hidden');
@@ -743,11 +737,6 @@
       }
       pendingCount.textContent = `${services.length} pending`;
       populateLabSelect();
-
-      if (latestCompletedServiceName) {
-        completedEmpty?.classList.add('hidden');
-        completedList.prepend(createCompletedCard(latestCompletedServiceName));
-      }
     }
 
     function openModal() {
@@ -777,19 +766,27 @@
       return payload;
     }
 
-    async function sendSelectedLabRequest(serviceId) {
-      if (!serviceId) {
-        showMessage(labRequestMessage, 'Select a lab service first.', 'error');
+    function selectedLabServiceIds() {
+      return Array.from(select.selectedOptions || [])
+        .map(option => option.value)
+        .filter(Boolean);
+    }
+
+    async function sendSelectedLabRequests(serviceIds) {
+      if (!serviceIds.length) {
+        showMessage(labRequestMessage, 'Select at least one lab service first.', 'error');
         return;
       }
       sendLabRequestButton.disabled = true;
       try {
         const formData = new FormData();
-        formData.append('service_id', serviceId);
+        serviceIds.forEach(serviceId => formData.append('service_ids', serviceId));
         const payload = await postForm(page.dataset.sendLabRequestUrl, formData);
         updateTotalAmount(payload.visit_total_amount);
-        setPendingServices(payload.pending_services || [], payload.service.service_name);
-        select.value = '';
+        setPendingServices(payload.pending_services || []);
+        Array.from(select.options || []).forEach(option => {
+          option.selected = false;
+        });
         showMessage(labRequestMessage, payload.message, 'success');
       } catch (error) {
         showMessage(labRequestMessage, error.message, 'error');
@@ -873,7 +870,7 @@
       modalMessage.classList.remove('hidden');
     }
 
-    sendLabRequestButton.addEventListener('click', () => sendSelectedLabRequest(select.value));
+    sendLabRequestButton.addEventListener('click', () => sendSelectedLabRequests(selectedLabServiceIds()));
     select.addEventListener('change', () => labRequestMessage.classList.add('hidden'));
     openModalButton.addEventListener('click', openModal);
     closeModalButton.addEventListener('click', closeModal);

@@ -56,6 +56,12 @@ class LabDoctorHandoffTests(TestCase):
             reason="Doctor requested: CBC",
             requested_by=self.doctor,
         )
+        self.reception_lab_queue = QueueEntry.objects.create(
+            hospital=self.hospital,
+            visit=self.visit,
+            queue_type=QueueEntry.TYPE_LAB_RECEPTION,
+            reason="Reception sent patient to lab",
+        )
 
     def test_pending_doctor_queue_requires_explicit_send(self):
         self.assertTrue(report_needs_doctor_send(self.report))
@@ -67,8 +73,10 @@ class LabDoctorHandoffTests(TestCase):
         self.assertTrue(send_report_results_to_doctor(self.report))
         self.report.refresh_from_db()
         self.lab_queue.refresh_from_db()
+        self.reception_lab_queue.refresh_from_db()
         self.assertTrue(self.report.sent_to_doctor)
         self.assertTrue(self.lab_queue.processed)
+        self.assertTrue(self.reception_lab_queue.processed)
         doctor_queue = QueueEntry.objects.get(visit=self.visit, queue_type=QueueEntry.TYPE_DOCTOR, processed=False)
         self.assertIn("Lab results ready for review", doctor_queue.reason)
         self.assertEqual(doctor_queue.requested_by, self.doctor)
@@ -198,4 +206,6 @@ class SequentialRequestedLabWorkflowTests(TestCase):
         self.assertTrue(self.cbc_visit_service.performed)
         self.assertFalse(self.urine_visit_service.performed)
         self.assertTrue(report_needs_doctor_send(self.report))
+        self.queue_entry.refresh_from_db()
         self.assertFalse(self.queue_entry.processed)
+        self.assertEqual(self.queue_entry.reason, "Doctor requested: Urinalysis")

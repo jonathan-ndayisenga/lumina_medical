@@ -440,6 +440,21 @@ class InventoryRestockForm(forms.Form):
     )
 
 
+class InventoryBulkUploadForm(forms.Form):
+    file = forms.FileField(
+        label="Inventory CSV File",
+        help_text="Download the template, fill it in with Excel or Google Sheets, then upload it here as CSV.",
+        widget=forms.ClearableFileInput(attrs={"class": "form-control", "accept": ".csv,text/csv"}),
+    )
+
+    def clean_file(self):
+        upload = self.cleaned_data["file"]
+        filename = (upload.name or "").lower()
+        if not filename.endswith(".csv"):
+            raise forms.ValidationError("Please upload the inventory file as a CSV.")
+        return upload
+
+
 class BankAccountForm(forms.ModelForm):
     class Meta:
         model = BankAccount

@@ -124,7 +124,9 @@
 
     {% for group in result_groups %}
     <section class="section-block border border-gray-200 rounded-lg overflow-hidden{% if report.profile and report.profile.code == 'cbc' %} paper-section{% endif %}">
+        {% if group.name %}
         <div class="section-heading px-3 py-2 bg-brand-soft text-text-main font-bold uppercase text-xs" style="letter-spacing: 0.08em;">{{ group.name }}</div>
+        {% endif %}
         <div class="results-table-wrap overflow-x-auto">
             <table class="results-table w-full text-right" style="border-collapse: collapse; font-size: 0.75rem; line-height: 1.12;">
                 <thead>

@@ -85,14 +85,13 @@
 
         <div class="template-toolbar flex gap-4 items-end flex-wrap mb-4">
             <div class="flex-1 min-w-[16rem]">
-                <label for="{{ form.profile.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">Additional Template</label>
+                <label for="{{ form.profile.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">Template</label>
                 {{ form.profile }}
                 {% if form.profile.errors %}
                     <div class="text-xs text-red-600 mt-1">{{ form.profile.errors }}</div>
                 {% endif %}
-                <p class="mt-2 text-xs text-text-muted">Tip: choose “Manual Entry (Simple)” to capture test + result only.</p>
+                <p class="mt-2 text-xs text-text-muted">Choose a template and it will load immediately. Use "Manual Entry (Simple)" to capture only the test name and result.</p>
             </div>
-            <button type="button" id="load-template-btn" class="btn btn-secondary">Load Additional Template</button>
         </div>
 
         <div id="template-preview" class="p-3 bg-brand-soft border border-gray-200 rounded-lg text-text-main hidden" style="display:none;"></div>
@@ -297,7 +296,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const totalFormsInput = document.getElementById('id_results-TOTAL_FORMS');
     const templateSelect = document.getElementById('{{ form.profile.id_for_label }}');
     const templatePreview = document.getElementById('template-preview');
-    const loadTemplateBtn = document.getElementById('load-template-btn');
     const addRowBtn = document.getElementById('add-row-btn');
     const patientNameInput = document.getElementById('{{ form.patient_name.id_for_label }}');
     const patientAgeInput = document.getElementById('{{ form.patient_age.id_for_label }}');
@@ -350,6 +348,9 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         updateTemplatePreview();
         refreshResultsLayout();
+        if (!visibleRows().length && currentProfileConfig()) {
+            loadTemplate({ replaceExisting: true, silent: true });
+        }
     }
 
     function redirectToRequestedServiceReport() {
@@ -865,27 +866,22 @@ document.addEventListener('DOMContentLoaded', () => {
         templateSelect.addEventListener('change', () => {
             updateTemplatePreview();
             refreshResultsLayout();
-        });
-    }
-
-    if (requestedServiceSelect) {
-        requestedServiceSelect.addEventListener('change', () => {
-            redirectToRequestedServiceReport();
-        });
-    }
-
-    if (loadTemplateBtn) {
-        loadTemplateBtn.addEventListener('click', () => {
             if (pendingRequestedServices.length && requestedServiceSelect && !requestedServiceSelect.value) {
                 window.alert('Choose the requested test you are working on first.');
                 return;
             }
             const config = currentProfileConfig();
             if (!config) {
-                window.alert('Manual Entry Mode: Choose a test template to append into this report, or manually add test rows using the "Add Test Row" button.');
+                window.alert('Manual Entry Mode: choose a test template to load into this report, or add rows manually.');
                 return;
             }
             loadTemplate({ replaceExisting: false });
+        });
+    }
+
+    if (requestedServiceSelect) {
+        requestedServiceSelect.addEventListener('change', () => {
+            redirectToRequestedServiceReport();
         });
     }
 

@@ -1,7 +1,7 @@
 import csv
 from datetime import timedelta
 from decimal import Decimal
-from io import BytesIO
+from io import BytesIO, TextIOWrapper
 import json
 import re
 from xml.sax.saxutils import escape
@@ -33,6 +33,7 @@ from .forms import (
     HospitalStaffUserForm,
     HospitalStaffUserUpdateForm,
     InventoryItemForm,
+    InventoryBulkUploadForm,
     InventoryRestockForm,
     MobileMoneyAccountForm,
     MobileMoneyStatementForm,
@@ -547,6 +548,70 @@ def inventory_dashboard_snapshot(hospital):
         "restock_items": out_of_stock_items[:8] or low_stock_items[:8],
         "out_of_stock_items": out_of_stock_items,
         "low_stock_items": low_stock_items,
+    }
+
+
+INVENTORY_IMPORT_HEADERS = [
+    "name",
+    "category",
+    "unit",
+    "base_unit",
+    "units_per_pack",
+    "strength_mg_per_unit",
+    "concentration_mg_per_ml",
+    "pack_size_ml",
+    "days_covered_per_pack",
+    "current_quantity",
+    "unit_cost",
+    "selling_price",
+    "reorder_level",
+    "is_active",
+    "opening_batch_number",
+    "opening_expiry_date",
+]
+
+
+def normalize_inventory_choice(raw_value, choices):
+    value = (raw_value or "").strip()
+    if not value:
+        return ""
+    normalized = value.lower()
+    choice_map = {}
+    for choice_value, choice_label in choices:
+        choice_map[str(choice_value).strip().lower()] = choice_value
+        choice_map[str(choice_label).strip().lower()] = choice_value
+    return choice_map.get(normalized, value)
+
+
+def parse_inventory_boolean(raw_value):
+    value = (raw_value or "").strip().lower()
+    if not value:
+        return True
+    if value in {"1", "true", "yes", "y", "on"}:
+        return True
+    if value in {"0", "false", "no", "n", "off"}:
+        return False
+    return raw_value
+
+
+def build_inventory_import_form_data(row):
+    return {
+        "name": (row.get("name") or "").strip(),
+        "category": normalize_inventory_choice(row.get("category"), InventoryItem.CATEGORY_CHOICES),
+        "unit": normalize_inventory_choice(row.get("unit"), InventoryItemForm.PACK_TYPE_CHOICES),
+        "base_unit": normalize_inventory_choice(row.get("base_unit"), InventoryItemForm.BASE_UNIT_CHOICES),
+        "units_per_pack": (row.get("units_per_pack") or "").strip(),
+        "strength_mg_per_unit": (row.get("strength_mg_per_unit") or "").strip(),
+        "concentration_mg_per_ml": (row.get("concentration_mg_per_ml") or "").strip(),
+        "pack_size_ml": (row.get("pack_size_ml") or "").strip(),
+        "days_covered_per_pack": (row.get("days_covered_per_pack") or "").strip(),
+        "current_quantity": (row.get("current_quantity") or "").strip(),
+        "unit_cost": (row.get("unit_cost") or "").strip(),
+        "selling_price": (row.get("selling_price") or "").strip(),
+        "reorder_level": (row.get("reorder_level") or "").strip(),
+        "is_active": parse_inventory_boolean(row.get("is_active")),
+        "opening_batch_number": (row.get("opening_batch_number") or "").strip(),
+        "opening_expiry_date": (row.get("opening_expiry_date") or "").strip(),
     }
 
 
@@ -1785,6 +1850,50 @@ def delete_salary(request, salary_id):
 def manage_inventory(request):
     hospital = active_hospital(request)
     inventory_items = InventoryItem.objects.filter(hospital=hospital).order_by("name") if hospital else InventoryItem.objects.none()
+    search_query = (request.GET.get("search") or "").strip()
+    selected_category = (request.GET.get("category") or "").strip()
+    selected_stock_filter = (request.GET.get("stock") or "").strip()
+
+    valid_categories = {choice[0] for choice in InventoryItem.CATEGORY_CHOICES}
+    valid_stock_filters = {
+        "all",
+        "out",
+        "low",
+        "healthy",
+        "active",
+        "inactive",
+    }
+
+    if search_query:
+        inventory_items = inventory_items.filter(
+            Q(name__icontains=search_query)
+            | Q(unit__icontains=search_query)
+            | Q(base_unit__icontains=search_query)
+            | Q(category__icontains=search_query)
+        )
+    if selected_category in valid_categories:
+        inventory_items = inventory_items.filter(category=selected_category)
+    else:
+        selected_category = ""
+
+    if selected_stock_filter not in valid_stock_filters:
+        selected_stock_filter = "all"
+
+    if selected_stock_filter == "out":
+        inventory_items = inventory_items.filter(current_quantity__lte=0)
+    elif selected_stock_filter == "low":
+        inventory_items = inventory_items.filter(
+            current_quantity__gt=0,
+            current_quantity__lte=models.F("reorder_level"),
+        )
+    elif selected_stock_filter == "healthy":
+        inventory_items = inventory_items.filter(current_quantity__gt=models.F("reorder_level"))
+    elif selected_stock_filter == "active":
+        inventory_items = inventory_items.filter(is_active=True)
+    elif selected_stock_filter == "inactive":
+        inventory_items = inventory_items.filter(is_active=False)
+
+    filtered_inventory_count = inventory_items.count()
     inventory_items = inventory_items.prefetch_related("transactions", "batches")
 
     if request.method == "POST":
@@ -1819,12 +1928,173 @@ def manage_inventory(request):
     context.update(
         {
             "inventory_items": inventory_items,
+            "filtered_inventory_count": filtered_inventory_count,
+            "inventory_search_query": search_query,
+            "inventory_selected_category": selected_category,
+            "inventory_selected_stock_filter": selected_stock_filter,
+            "inventory_category_choices": InventoryItem.CATEGORY_CHOICES,
             "form": form,
+            "bulk_upload_form": InventoryBulkUploadForm(),
             "restock_form": InventoryRestockForm(),
             **snapshot,
         }
     )
     return render(request, "admin_dashboard/manage_inventory.html", context)
+
+
+@role_required(User.ROLE_HOSPITAL_ADMIN)
+def download_inventory_import_template(request):
+    response = HttpResponse(content_type="text/csv")
+    filename_date = timezone.localdate().isoformat()
+    response["Content-Disposition"] = f'attachment; filename="inventory-import-template-{filename_date}.csv"'
+    writer = csv.writer(response)
+    writer.writerow(INVENTORY_IMPORT_HEADERS)
+    return response
+
+
+@role_required(User.ROLE_HOSPITAL_ADMIN)
+@transaction.atomic
+def upload_inventory_bulk(request):
+    if request.method != "POST":
+        return redirect("manage_inventory")
+
+    hospital = active_hospital(request)
+    form = InventoryBulkUploadForm(request.POST, request.FILES)
+    if not form.is_valid():
+        messages.error(request, "Please upload a valid inventory CSV file.")
+        return redirect("manage_inventory")
+
+    upload = form.cleaned_data["file"]
+    reader = csv.DictReader(TextIOWrapper(upload.file, encoding="utf-8-sig"))
+    if not reader.fieldnames:
+        messages.error(request, "The uploaded CSV is empty.")
+        return redirect("manage_inventory")
+
+    normalized_headers = [str(header).strip() for header in reader.fieldnames]
+    missing_headers = [header for header in INVENTORY_IMPORT_HEADERS if header not in normalized_headers]
+    if missing_headers:
+        messages.error(
+            request,
+            "The inventory CSV is missing required column(s): " + ", ".join(missing_headers),
+        )
+        return redirect("manage_inventory")
+
+    created_count = 0
+    updated_count = 0
+    skipped_count = 0
+    row_errors = []
+
+    for line_number, raw_row in enumerate(reader, start=2):
+        row = {}
+        for key, value in raw_row.items():
+            normalized_key = (key or "").strip()
+            if isinstance(value, list):
+                normalized_value = " ".join((part or "").strip() for part in value if part is not None).strip()
+            else:
+                normalized_value = (value or "").strip()
+            row[normalized_key] = normalized_value
+        if not any(row.values()):
+            continue
+
+        item_name = row.get("name", "")
+        if not item_name:
+            skipped_count += 1
+            row_errors.append(f"Row {line_number}: name is required.")
+            continue
+
+        existing_item = InventoryItem.objects.filter(hospital=hospital, name=item_name).first()
+        form_data = build_inventory_import_form_data(row)
+        validation_form = InventoryItemForm(form_data, instance=existing_item)
+        if not validation_form.is_valid():
+            skipped_count += 1
+            joined_errors = []
+            for field_name, errors in validation_form.errors.items():
+                if field_name == "__all__":
+                    joined_errors.extend(errors)
+                else:
+                    joined_errors.extend([f"{field_name}: {error}" for error in errors])
+            row_errors.append(f"Row {line_number}: {'; '.join(joined_errors)}")
+            continue
+
+        cleaned = validation_form.cleaned_data
+        opening_stock = cleaned.get("current_quantity") or Decimal("0")
+        batch_number = cleaned.get("opening_batch_number")
+        expiry_date = cleaned.get("opening_expiry_date")
+
+        if existing_item:
+            for field_name in (
+                "category",
+                "unit",
+                "base_unit",
+                "units_per_pack",
+                "strength_mg_per_unit",
+                "unit_cost",
+                "selling_price",
+                "reorder_level",
+                "concentration_mg_per_ml",
+                "pack_size_ml",
+                "days_covered_per_pack",
+                "is_active",
+            ):
+                setattr(existing_item, field_name, cleaned.get(field_name))
+            existing_item.save()
+
+            if opening_stock > 0:
+                batch = existing_item.add_or_update_batch(
+                    batch_number,
+                    opening_stock,
+                    expiry_date=expiry_date,
+                    unit_cost=existing_item.unit_cost,
+                )
+                InventoryTransaction.objects.create(
+                    hospital=hospital,
+                    item=existing_item,
+                    transaction_type=InventoryTransaction.TYPE_RECEIVE,
+                    quantity=opening_stock,
+                    unit_cost=existing_item.unit_cost or Decimal("0"),
+                    performed_by=request.user,
+                    notes=f"Imported batch {batch.batch_number} through bulk inventory upload.",
+                )
+            updated_count += 1
+            continue
+
+        item = validation_form.save(commit=False)
+        item.hospital = hospital
+        item.save()
+        if opening_stock > 0:
+            batch = item.add_or_update_batch(
+                batch_number,
+                opening_stock,
+                expiry_date=expiry_date,
+                unit_cost=item.unit_cost,
+            )
+            InventoryTransaction.objects.create(
+                hospital=hospital,
+                item=item,
+                transaction_type=InventoryTransaction.TYPE_RECEIVE,
+                quantity=opening_stock,
+                unit_cost=item.unit_cost or Decimal("0"),
+                performed_by=request.user,
+                notes=f"Imported opening batch {batch.batch_number} through bulk inventory upload.",
+            )
+        created_count += 1
+
+    if created_count or updated_count:
+        messages.success(
+            request,
+            f"Inventory upload complete: {created_count} item(s) created, {updated_count} item(s) updated.",
+        )
+    if skipped_count:
+        preview_errors = " | ".join(row_errors[:4])
+        if len(row_errors) > 4:
+            preview_errors += " | ..."
+        messages.warning(
+            request,
+            f"{skipped_count} row(s) were skipped. {preview_errors}",
+        )
+    elif not created_count and not updated_count:
+        messages.info(request, "The CSV did not contain any inventory rows to import.")
+    return redirect("manage_inventory")
 
 
 @role_required(User.ROLE_HOSPITAL_ADMIN)

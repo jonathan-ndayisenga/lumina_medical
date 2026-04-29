@@ -210,48 +210,93 @@ def send_lab_request_api(request, visit_id):
         visits = visits.filter(hospital=hospital)
     visit = get_object_or_404(visits, pk=visit_id)
 
-    service_id = request.POST.get("service_id", "").strip()
-    if not service_id:
-        return JsonResponse({"error": "Select a lab service first."}, status=400)
+    consultation = getattr(visit, "consultation", None)
+    raw_service_ids = request.POST.getlist("service_ids[]") or request.POST.getlist("service_ids")
+    single_service_id = request.POST.get("service_id", "").strip()
+    if not raw_service_ids and single_service_id:
+        raw_service_ids = [single_service_id]
 
-    service = get_object_or_404(
-        Service,
-        pk=service_id,
-        hospital=visit.hospital,
-        category=Service.CATEGORY_LAB,
-        is_active=True,
-    )
+    service_ids = []
+    seen_ids = set()
+    for raw_service_id in raw_service_ids:
+        value = str(raw_service_id).strip()
+        if not value or value in seen_ids:
+            continue
+        seen_ids.add(value)
+        service_ids.append(value)
 
-    existing_visit_service = VisitService.objects.filter(
-        visit=visit,
-        service=service,
-    ).first()
-    if existing_visit_service:
-        if existing_visit_service.performed:
+    if not service_ids:
+        return JsonResponse({"error": "Select one or more lab services first."}, status=400)
+
+    services = {
+        str(service.pk): service
+        for service in Service.objects.filter(
+            pk__in=service_ids,
+            hospital=visit.hospital,
+            category=Service.CATEGORY_LAB,
+            is_active=True,
+        )
+    }
+    missing_ids = [service_id for service_id in service_ids if service_id not in services]
+    if missing_ids:
+        return JsonResponse({"error": "One or more selected lab services could not be found."}, status=400)
+
+    consultation_request_ids = []
+    if consultation:
+        consultation_request_ids = [int(item) for item in (consultation.lab_requests or [])]
+
+    created_visit_services = []
+    skipped_pending = []
+    skipped_completed = []
+    added_total = Decimal("0")
+
+    for service_id in service_ids:
+        service = services[service_id]
+        existing_visit_service = VisitService.objects.filter(
+            visit=visit,
+            service=service,
+        ).first()
+        if existing_visit_service:
+            if existing_visit_service.performed:
+                skipped_completed.append(service.name)
+            else:
+                skipped_pending.append(service.name)
+            continue
+
+        visit_service = VisitService.objects.create(
+            visit=visit,
+            service=service,
+            price_at_time=service.price,
+            notes=f"Requested during consultation by {request.user.get_full_name() or request.user.username}",
+        )
+        created_visit_services.append(visit_service)
+        added_total += service.price
+        if consultation and service.pk not in consultation_request_ids:
+            consultation_request_ids.append(service.pk)
+
+    if not created_visit_services:
+        if skipped_completed:
+            completed_message = (
+                f"{skipped_completed[0]} already has recorded results on this visit and now lives under Lab Results."
+                if len(skipped_completed) == 1
+                else f"{', '.join(skipped_completed)} already have recorded results on this visit and now live under Lab Results."
+            )
             return JsonResponse(
-                {"error": f"{service.name} already has recorded results on this visit and now lives under Lab Results."},
+                {"error": completed_message},
                 status=400,
             )
         return JsonResponse(
-            {"error": f"{service.name} is already pending in the lab workflow for this visit."},
+            {"error": f"{', '.join(skipped_pending)} already {'is' if len(skipped_pending) == 1 else 'are'} pending in the lab workflow for this visit."},
             status=400,
         )
 
-    visit_service = VisitService.objects.create(
-        visit=visit,
-        service=service,
-        price_at_time=service.price,
-        notes=f"Requested during consultation by {request.user.get_full_name() or request.user.username}",
-    )
-    visit.total_amount += service.price
-    visit.save(update_fields=["total_amount"])
+    if added_total:
+        visit.total_amount += added_total
+        visit.save(update_fields=["total_amount"])
 
-    consultation = getattr(visit, "consultation", None)
-    if consultation:
-        existing_ids = [int(item) for item in (consultation.lab_requests or [])]
-        if service.pk not in existing_ids:
-            consultation.lab_requests = existing_ids + [service.pk]
-            consultation.save(update_fields=["lab_requests"])
+    if consultation and consultation_request_ids != (consultation.lab_requests or []):
+        consultation.lab_requests = consultation_request_ids
+        consultation.save(update_fields=["lab_requests"])
 
     ensure_doctor_lab_queue_entry(visit=visit, requested_by=request.user)
     sync_visit_status(visit)
@@ -260,10 +305,26 @@ def send_lab_request_api(request, visit_id):
         requested_lab_service_payload(item)
         for item in lab_visit_services(visit, performed=False)
     ]
+
+    added_names = [visit_service.service.name for visit_service in created_visit_services]
+    if len(added_names) == 1:
+        message = f"{added_names[0]} sent to lab."
+    else:
+        message = f"{len(added_names)} lab requests sent to lab: {', '.join(added_names)}."
+
+    skipped_notes = []
+    if skipped_pending:
+        skipped_notes.append(f"Already pending: {', '.join(skipped_pending)}.")
+    if skipped_completed:
+        skipped_notes.append(f"Already completed: {', '.join(skipped_completed)}.")
+    if skipped_notes:
+        message = f"{message} {' '.join(skipped_notes)}"
+
     return JsonResponse(
         {
-            "message": f"{service.name} sent to lab.",
-            "service": requested_lab_service_payload(visit_service),
+            "message": message,
+            "service": requested_lab_service_payload(created_visit_services[0]),
+            "services": [requested_lab_service_payload(item) for item in created_visit_services],
             "visit_total_amount": str(visit.total_amount),
             "pending_services": pending_services,
         }

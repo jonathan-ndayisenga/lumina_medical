@@ -38,6 +38,12 @@ class DoctorWorkflowTests(TestCase):
             category=Service.CATEGORY_LAB,
             price="15.00",
         )
+        self.second_lab_service = Service.objects.create(
+            hospital=self.hospital,
+            name="Urinalysis",
+            category=Service.CATEGORY_LAB,
+            price="12.00",
+        )
         self.billable_service = Service.objects.create(
             hospital=self.hospital,
             name="Injection",
@@ -172,6 +178,27 @@ class DoctorWorkflowTests(TestCase):
         payload = response.json()
         self.assertEqual(payload["service"]["service_name"], "CBC")
         self.assertEqual(payload["pending_services"][0]["service_name"], "CBC")
+
+    def test_doctor_can_send_multiple_lab_requests_in_one_call(self):
+        response = self.client.post(
+            reverse("send_lab_request_api", args=[self.visit.pk]),
+            {"service_ids": [self.lab_service.pk, self.second_lab_service.pk]},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.visit.refresh_from_db()
+        self.assertEqual(self.visit.total_amount, Decimal("52.00"))
+        self.assertTrue(VisitService.objects.filter(visit=self.visit, service=self.lab_service).exists())
+        self.assertTrue(VisitService.objects.filter(visit=self.visit, service=self.second_lab_service).exists())
+        lab_queue = QueueEntry.objects.get(visit=self.visit, queue_type=QueueEntry.TYPE_LAB_DOCTOR, processed=False)
+        self.assertEqual(lab_queue.reason, "Doctor requested: CBC, Urinalysis")
+
+        payload = response.json()
+        self.assertEqual(len(payload["services"]), 2)
+        self.assertEqual(
+            {item["service_name"] for item in payload["pending_services"]},
+            {"CBC", "Urinalysis"},
+        )
 
     def test_doctor_can_add_billable_service_without_reload(self):
         response = self.client.post(

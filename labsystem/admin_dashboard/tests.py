@@ -327,6 +327,14 @@ class InventoryManagementTests(TestCase):
         self.assertIn("Grovit Syrup", content)
         self.assertIn("GVT-001", content)
 
+    def test_inventory_import_template_downloads_csv_headers(self):
+        response = self.client.get(reverse("download_inventory_import_template"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "text/csv")
+        content = response.content.decode("utf-8")
+        self.assertIn("name,category,unit,base_unit", content)
+
     def test_printable_inventory_report_renders_stock_sheet(self):
         response = self.client.get(reverse("printable_inventory_report"))
 
@@ -365,3 +373,48 @@ class InventoryManagementTests(TestCase):
         self.assertEqual(batch.quantity, 12)
         transaction = InventoryTransaction.objects.get(item=self.item, transaction_type=InventoryTransaction.TYPE_RECEIVE)
         self.assertEqual(transaction.quantity, 12)
+
+    def test_hospital_admin_can_bulk_upload_inventory_csv(self):
+        csv_content = "\n".join(
+            [
+                "name,category,unit,base_unit,units_per_pack,strength_mg_per_unit,concentration_mg_per_ml,pack_size_ml,days_covered_per_pack,current_quantity,unit_cost,selling_price,reorder_level,is_active,opening_batch_number,opening_expiry_date",
+                "Paracetamol 500mg,drug,strip,tablet,10,500,,,,24,1000,2000,3,True,PCT-001,2027-12-31",
+                "Grovit Syrup,syrup,bottle,ml,100,,50,100,,6,5500,8500,5,True,GVT-NEW,2028-01-31",
+            ]
+        )
+        upload = SimpleUploadedFile("inventory-upload.csv", csv_content.encode("utf-8"), content_type="text/csv")
+
+        response = self.client.post(reverse("upload_inventory_bulk"), {"file": upload})
+
+        self.assertEqual(response.status_code, 302)
+        new_item = InventoryItem.objects.get(hospital=self.hospital, name="Paracetamol 500mg")
+        self.assertEqual(new_item.category, InventoryItem.CATEGORY_DRUG)
+        self.assertEqual(new_item.current_quantity, 24)
+        self.item.refresh_from_db()
+        self.assertEqual(self.item.current_quantity, 10)
+        self.assertTrue(self.item.batches.filter(batch_number="GVT-NEW").exists())
+
+    def test_manage_inventory_filters_by_search_and_stock_status(self):
+        healthy_item = InventoryItem.objects.create(
+            hospital=self.hospital,
+            name="Paracetamol 500mg",
+            category=InventoryItem.CATEGORY_DRUG,
+            unit="strip",
+            base_unit="tablet",
+            units_per_pack="10",
+            current_quantity="40",
+            unit_cost="1000",
+            selling_price="2000",
+            reorder_level="5",
+        )
+
+        response = self.client.get(
+            reverse("manage_inventory"),
+            {"search": "grovit", "stock": "low"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Grovit Syrup")
+        self.assertContains(response, "Showing")
+        self.assertEqual(list(response.context["inventory_items"]), [self.item])
+        self.assertEqual(response.context["filtered_inventory_count"], 1)

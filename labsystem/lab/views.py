@@ -11,7 +11,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from accounts.models import User
-from reception.models import QueueEntry, VisitService
+from reception.models import QueueEntry, Service, VisitService
 from reception.workflow import ensure_pending_queue_entry, sync_visit_status
 from doctor.models import LabRequest, Notification
 
@@ -166,6 +166,38 @@ def pending_lab_doctor_entry(report: LabReport):
     )
 
 
+def pending_lab_service_names(visit):
+    return list(
+        VisitService.objects.filter(
+            visit=visit,
+            service__category=Service.CATEGORY_LAB,
+            performed=False,
+        ).values_list("service__name", flat=True)
+    )
+
+
+def refresh_lab_doctor_queue_reason(visit):
+    pending_names = pending_lab_service_names(visit)
+    reason = (
+        f"Doctor requested: {', '.join(pending_names)}"
+        if pending_names
+        else "All requested tests are complete. Send results to doctor."
+    )
+    QueueEntry.objects.filter(
+        visit=visit,
+        queue_type=QueueEntry.TYPE_LAB_DOCTOR,
+        processed=False,
+    ).exclude(reason=reason).update(reason=reason)
+
+
+def mark_open_lab_queue_entries_processed(visit):
+    return QueueEntry.objects.filter(
+        visit=visit,
+        queue_type__in=[QueueEntry.TYPE_LAB_RECEPTION, QueueEntry.TYPE_LAB_DOCTOR],
+        processed=False,
+    ).update(processed=True, processed_at=timezone.now())
+
+
 def report_needs_doctor_send(report: LabReport) -> bool:
     return bool(
         report.visit_id
@@ -190,11 +222,7 @@ def mark_lab_queue_complete(report: LabReport) -> bool:
             processed=False,
         )
     )
-    QueueEntry.objects.filter(
-        visit=report.visit,
-        queue_type__in=[QueueEntry.TYPE_LAB_RECEPTION, QueueEntry.TYPE_LAB_DOCTOR],
-        processed=False,
-    ).update(processed=True, processed_at=timezone.now())
+    mark_open_lab_queue_entries_processed(report.visit)
     doctor_request_entry = next(
         (entry for entry in pending_lab_entries if entry.queue_type == QueueEntry.TYPE_LAB_DOCTOR),
         None,
@@ -223,11 +251,7 @@ def send_report_results_to_doctor(report: LabReport) -> bool:
     elif doctor_request_entry and doctor_request_entry.requested_by:
         requested_by = doctor_request_entry.requested_by
 
-    QueueEntry.objects.filter(
-        visit=report.visit,
-        queue_type=QueueEntry.TYPE_LAB_DOCTOR,
-        processed=False,
-    ).update(processed=True, processed_at=timezone.now())
+    mark_open_lab_queue_entries_processed(report.visit)
 
     if report.lab_request_id and report.lab_request:
         report.lab_request.status = LabRequest.STATUS_COMPLETED
@@ -387,6 +411,8 @@ def group_results(report, results):
             grouped[-1]['results'].append(result)
         else:
             grouped.append({'name': section_name, 'results': [result]})
+    if len(grouped) == 1:
+        grouped[0]["name"] = ""
     return grouped
 
 
@@ -509,6 +535,7 @@ def handle_report_form(request, report=None):
                         report.profile = selected_visit_service.service.test_profile
                     report.save(update_fields=["requested_visit_service", "profile"])
                     mark_visit_service_performed(selected_visit_service)
+                    refresh_lab_doctor_queue_reason(report.visit)
 
             remaining_pending_services = []
             if report.visit_id:
@@ -526,14 +553,6 @@ def handle_report_form(request, report=None):
                 )
 
             if action == "send_to_doctor" and report_ready_to_send_to_doctor(report):
-                if report.visit_id:
-                    VisitService.objects.filter(
-                        visit=report.visit,
-                        performed=False
-                    ).update(
-                        performed=True,
-                        performed_at=timezone.now()
-                    )
                 send_report_results_to_doctor(report)
                 messages.success(request, "Report saved and sent to doctor.")
                 return redirect('report_detail', pk=report.pk)
@@ -546,15 +565,6 @@ def handle_report_form(request, report=None):
                 return redirect('report_edit', pk=report.pk)
 
             if not report_needs_doctor_send(report) and not remaining_pending_services:
-                if report.visit_id:
-                    VisitService.objects.filter(
-                        visit=report.visit,
-                        performed=False
-                    ).update(
-                        performed=True,
-                        performed_at=timezone.now()
-                    )
-
                 returned_to_doctor = mark_lab_queue_complete(report)
                 if returned_to_doctor:
                     messages.success(
