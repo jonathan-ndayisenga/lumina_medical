@@ -386,6 +386,33 @@
             <div class="text-sm text-text-muted">Showing <strong class="text-text-main">{{ filtered_inventory_count }}</strong> of <strong class="text-text-main">{{ stats.total_items|default:0 }}</strong> item{{ stats.total_items|default:0|pluralize }}</div>
         </div>
 
+        <div class="flex flex-wrap items-center gap-2">
+            <span class="text-sm font-semibold text-text-main">Quick filters:</span>
+            <a href="{% url 'manage_inventory' %}{% if inventory_search_query %}?search={{ inventory_search_query|urlencode }}{% endif %}"
+               class="inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-semibold transition {% if inventory_selected_stock_filter == 'all' and not inventory_selected_category %}bg-indigo-600 text-white{% else %}bg-indigo-50 text-indigo-700 hover:bg-indigo-100{% endif %}">
+                <span>All items</span>
+                <span class="rounded-full {% if inventory_selected_stock_filter == 'all' and not inventory_selected_category %}bg-white/20 text-white{% else %}bg-white text-indigo-700{% endif %} px-2 py-0.5 text-xs">{{ inventory_quick_filter_counts.all }}</span>
+            </a>
+            <a href="{% url 'manage_inventory' %}?stock=low{% if inventory_search_query %}&search={{ inventory_search_query|urlencode }}{% endif %}"
+               class="inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-semibold transition {% if inventory_selected_stock_filter == 'low' %}bg-amber-500 text-white{% else %}bg-amber-50 text-amber-700 hover:bg-amber-100{% endif %}">
+                <span>Low stock only</span>
+                <span class="rounded-full {% if inventory_selected_stock_filter == 'low' %}bg-white/20 text-white{% else %}bg-white text-amber-700{% endif %} px-2 py-0.5 text-xs">{{ inventory_quick_filter_counts.low }}</span>
+            </a>
+            <a href="{% url 'manage_inventory' %}?category=syrup{% if inventory_search_query %}&search={{ inventory_search_query|urlencode }}{% endif %}"
+               class="inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-semibold transition {% if inventory_selected_category == 'syrup' %}bg-emerald-600 text-white{% else %}bg-emerald-50 text-emerald-700 hover:bg-emerald-100{% endif %}">
+                <span>Syrups only</span>
+                <span class="rounded-full {% if inventory_selected_category == 'syrup' %}bg-white/20 text-white{% else %}bg-white text-emerald-700{% endif %} px-2 py-0.5 text-xs">{{ inventory_quick_filter_counts.syrup }}</span>
+            </a>
+            <a href="{% url 'manage_inventory' %}?stock=out{% if inventory_search_query %}&search={{ inventory_search_query|urlencode }}{% endif %}"
+               class="inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-semibold transition {% if inventory_selected_stock_filter == 'out' %}bg-red-600 text-white{% else %}bg-red-50 text-red-700 hover:bg-red-100{% endif %}">
+                <span>Out of stock only</span>
+                <span class="rounded-full {% if inventory_selected_stock_filter == 'out' %}bg-white/20 text-white{% else %}bg-white text-red-700{% endif %} px-2 py-0.5 text-xs">{{ inventory_quick_filter_counts.out }}</span>
+            </a>
+            {% if inventory_search_query or inventory_selected_category or inventory_selected_stock_filter != 'all' %}
+                <a href="{% url 'manage_inventory' %}" class="inline-flex items-center rounded-full bg-gray-100 px-3 py-1.5 text-sm font-semibold text-text-muted hover:bg-gray-200">Clear all</a>
+            {% endif %}
+        </div>
+
         <form method="get" class="rounded-xl border border-gray-200 bg-gray-50 p-4">
             <div class="grid grid-cols-1 gap-4 md:grid-cols-4">
                 <div class="md:col-span-2">

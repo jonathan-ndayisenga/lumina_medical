@@ -1925,6 +1925,7 @@ def manage_inventory(request):
         "Maintain stock visibility and watch low-stock items before they disrupt care.",
     )
     snapshot = inventory_dashboard_snapshot(hospital)
+    all_inventory_items = InventoryItem.objects.filter(hospital=hospital) if hospital else InventoryItem.objects.none()
     context.update(
         {
             "inventory_items": inventory_items,
@@ -1933,6 +1934,12 @@ def manage_inventory(request):
             "inventory_selected_category": selected_category,
             "inventory_selected_stock_filter": selected_stock_filter,
             "inventory_category_choices": InventoryItem.CATEGORY_CHOICES,
+            "inventory_quick_filter_counts": {
+                "all": snapshot["stats"]["total_items"],
+                "low": snapshot["stats"]["low_stock_count"],
+                "out": snapshot["stats"]["out_of_stock_count"],
+                "syrup": all_inventory_items.filter(category=InventoryItem.CATEGORY_SYRUP).count(),
+            },
             "form": form,
             "bulk_upload_form": InventoryBulkUploadForm(),
             "restock_form": InventoryRestockForm(),

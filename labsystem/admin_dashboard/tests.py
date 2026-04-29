@@ -418,3 +418,13 @@ class InventoryManagementTests(TestCase):
         self.assertContains(response, "Showing")
         self.assertEqual(list(response.context["inventory_items"]), [self.item])
         self.assertEqual(response.context["filtered_inventory_count"], 1)
+
+    def test_manage_inventory_shows_quick_filter_chips(self):
+        response = self.client.get(reverse("manage_inventory"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Quick filters:")
+        self.assertContains(response, "Low stock only")
+        self.assertContains(response, "Syrups only")
+        self.assertContains(response, "Out of stock only")
+        self.assertEqual(response.context["inventory_quick_filter_counts"]["syrup"], 1)
