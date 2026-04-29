@@ -9,6 +9,7 @@ import zipfile
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.core.paginator import Paginator
 from django.db import models, transaction
 from django.db.models import Q, Sum
 from django.db.models.functions import TruncDate, TruncMonth
@@ -1895,6 +1896,12 @@ def manage_inventory(request):
 
     filtered_inventory_count = inventory_items.count()
     inventory_items = inventory_items.prefetch_related("transactions", "batches")
+    paginator = Paginator(inventory_items, 5)
+    page_number = request.GET.get("page")
+    page_obj = paginator.get_page(page_number)
+    inventory_items = page_obj.object_list
+    filter_query = request.GET.copy()
+    filter_query.pop("page", None)
 
     if request.method == "POST":
         form = InventoryItemForm(request.POST)
@@ -1940,6 +1947,8 @@ def manage_inventory(request):
                 "out": snapshot["stats"]["out_of_stock_count"],
                 "syrup": all_inventory_items.filter(category=InventoryItem.CATEGORY_SYRUP).count(),
             },
+            "page_obj": page_obj,
+            "inventory_filter_querystring": filter_query.urlencode(),
             "form": form,
             "bulk_upload_form": InventoryBulkUploadForm(),
             "restock_form": InventoryRestockForm(),

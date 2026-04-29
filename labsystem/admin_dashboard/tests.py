@@ -429,6 +429,35 @@ class InventoryManagementTests(TestCase):
         self.assertContains(response, "Out of stock only")
         self.assertEqual(response.context["inventory_quick_filter_counts"]["syrup"], 1)
 
+    def test_manage_inventory_paginates_five_items_per_page(self):
+        for index in range(1, 7):
+            InventoryItem.objects.create(
+                hospital=self.hospital,
+                name=f"Paged Item {index}",
+                category=InventoryItem.CATEGORY_DRUG,
+                unit="strip",
+                base_unit="tablet",
+                units_per_pack="10",
+                current_quantity="5",
+                unit_cost="1000",
+                selling_price="2000",
+                reorder_level="2",
+                strength_mg_per_unit="500",
+            )
+
+        first_page = self.client.get(reverse("manage_inventory"))
+        second_page = self.client.get(reverse("manage_inventory"), {"page": 2})
+
+        self.assertEqual(first_page.status_code, 200)
+        self.assertEqual(first_page.context["page_obj"].paginator.per_page, 5)
+        self.assertEqual(len(first_page.context["inventory_items"]), 5)
+        self.assertContains(first_page, "Page 1 of 2")
+
+        self.assertEqual(second_page.status_code, 200)
+        self.assertEqual(second_page.context["page_obj"].number, 2)
+        self.assertEqual(len(second_page.context["inventory_items"]), 2)
+        self.assertContains(second_page, "Page 2 of 2")
+
     def test_inventory_insights_page_renders_restock_sections(self):
         response = self.client.get(reverse("inventory_insights"))
 

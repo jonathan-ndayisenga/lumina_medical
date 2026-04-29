@@ -277,6 +277,7 @@
                 </div>
             </form>
         </div>
+    </div>
 
     <div class="card space-y-5">
         <div class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
@@ -479,6 +480,29 @@
                 <p class="text-sm text-text-muted italic">No inventory items recorded yet.</p>
             {% endfor %}
         </div>
+
+        {% if page_obj and page_obj.paginator.num_pages > 1 %}
+            <div class="flex flex-col gap-3 border-t border-gray-200 pt-4 sm:flex-row sm:items-center sm:justify-between">
+                <p class="text-sm text-text-muted">
+                    Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
+                </p>
+                <div class="flex flex-wrap gap-2">
+                    {% if page_obj.has_previous %}
+                        <a href="?{% if inventory_filter_querystring %}{{ inventory_filter_querystring }}&{% endif %}page={{ page_obj.previous_page_number }}" class="btn btn-secondary btn-sm">Previous</a>
+                    {% endif %}
+                    {% for page_number in page_obj.paginator.page_range %}
+                        {% if page_number == page_obj.number %}
+                            <span class="inline-flex items-center rounded-lg bg-indigo-600 px-3 py-2 text-sm font-semibold text-white">{{ page_number }}</span>
+                        {% elif page_number >= page_obj.number|add:'-2' and page_number <= page_obj.number|add:'2' %}
+                            <a href="?{% if inventory_filter_querystring %}{{ inventory_filter_querystring }}&{% endif %}page={{ page_number }}" class="btn btn-secondary btn-sm">{{ page_number }}</a>
+                        {% endif %}
+                    {% endfor %}
+                    {% if page_obj.has_next %}
+                        <a href="?{% if inventory_filter_querystring %}{{ inventory_filter_querystring }}&{% endif %}page={{ page_obj.next_page_number }}" class="btn btn-secondary btn-sm">Next</a>
+                    {% endif %}
+                </div>
+            </div>
+        {% endif %}
     </div>
 </div>
 {% endblock %}
