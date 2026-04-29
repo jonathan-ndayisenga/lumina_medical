@@ -71,13 +71,32 @@
                 </span>
             </div>
 
-            <div class="flex flex-col sm:flex-row gap-2">
-                <select id="lab-service-select" class="form-control flex-1 min-h-[10rem]" multiple size="6" aria-label="Select one or more lab services">
-                </select>
-                <button type="button" id="send-lab-request-btn" class="btn btn-primary whitespace-nowrap">Send Selected to Lab</button>
-                <button type="button" id="open-add-service-modal-btn" class="btn btn-secondary whitespace-nowrap">Add Other</button>
+            <div class="space-y-3">
+                <div class="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_auto_auto] gap-2 items-end">
+                    <div class="space-y-2">
+                        <div>
+                            <label for="lab-service-search" class="block text-xs font-semibold uppercase tracking-wide text-text-muted mb-1">Search lab service</label>
+                            <input id="lab-service-search" type="text" class="form-control" placeholder="Type to narrow the lab services list">
+                        </div>
+                        <div>
+                            <label for="lab-service-select" class="block text-xs font-semibold uppercase tracking-wide text-text-muted mb-1">Choose service</label>
+                            <select id="lab-service-select" class="form-control flex-1" aria-label="Choose a lab service to add">
+                            </select>
+                        </div>
+                    </div>
+                    <button type="button" id="add-lab-service-btn" class="btn btn-secondary btn-sm whitespace-nowrap">Add Service</button>
+                    <button type="button" id="open-add-service-modal-btn" class="btn btn-secondary btn-sm whitespace-nowrap">Add Other</button>
+                </div>
+                <div class="rounded-lg border border-gray-200 bg-gray-50 p-3">
+                    <p class="text-xs font-semibold uppercase tracking-wide text-text-muted mb-2">Selected to send</p>
+                    <div id="selected-lab-services-list" class="flex flex-wrap gap-2"></div>
+                    <p id="selected-lab-empty" class="text-sm text-text-muted italic">No lab services selected yet.</p>
+                </div>
+                <div class="flex justify-start">
+                    <button type="button" id="send-lab-request-btn" class="btn btn-primary btn-sm whitespace-nowrap">Send to Lab</button>
+                </div>
             </div>
-            <p class="mt-2 text-xs text-text-muted">Select one or more tests, then send them in one lab handoff. Use "Add Other" when the test does not exist yet.</p>
+            <p class="mt-2 text-xs text-text-muted">Search for a service, add it to the send list, then send the whole batch to the lab in one handoff.</p>
 
             <div id="lab-request-message" class="hidden mt-3 rounded-lg border px-3 py-2 text-sm"></div>
 
@@ -467,12 +486,16 @@
     }
 
     const select = document.getElementById('lab-service-select');
+    const labServiceSearch = document.getElementById('lab-service-search');
+    const addLabServiceButton = document.getElementById('add-lab-service-btn');
     const sendLabRequestButton = document.getElementById('send-lab-request-btn');
     const openModalButton = document.getElementById('open-add-service-modal-btn');
     const labRequestMessage = document.getElementById('lab-request-message');
     const pendingList = document.getElementById('pending-lab-services-list');
     const pendingEmpty = document.getElementById('pending-lab-empty');
     const pendingCount = document.getElementById('pending-lab-count');
+    const selectedLabServicesList = document.getElementById('selected-lab-services-list');
+    const selectedLabEmpty = document.getElementById('selected-lab-empty');
     const totalAmount = document.getElementById('visit-total-amount');
     const billableServiceSelect = document.getElementById('billable-service-select');
     const addBillableServiceButton = document.getElementById('add-billable-service-btn');
@@ -503,6 +526,7 @@
     }
 
     const servicesById = new Map();
+    let selectedLabServices = [];
     let allServices = [];
     const availableScript = document.getElementById('available-lab-services-data');
 
@@ -681,12 +705,13 @@
         quantity = packs;
         label = `${packs} tube(s)`;
         totalPrice = packs * price;
-      } else if (category === 'drug' && strength > 0) {
-        const unitsPerDose = dosage / strength;
+      } else if (category === 'drug') {
+        const unitsPerDose = strength > 0 ? (dosage / strength) : 1;
         quantity = Math.ceil(unitsPerDose * frequency * duration);
         packs = quantity;
-        label = `${quantity} ${unit}(s)`;
-        totalPrice = quantity * price;
+        const pricePerBaseUnit = unit !== baseUnit && unitsPerPack > 0 ? (price / unitsPerPack) : price;
+        label = `${quantity} ${baseUnit}(s)`;
+        totalPrice = quantity * pricePerBaseUnit;
       }
 
       prescriptionPreview.textContent = `${drugName}: dispense ${label} for this regimen. Estimated charge: UGX ${totalPrice.toFixed(2)}.`;
@@ -699,20 +724,81 @@
       );
     }
 
+    function selectedLabServiceIds() {
+      return selectedLabServices.map(service => String(service.id));
+    }
+
+    function renderSelectedLabServices() {
+      selectedLabServicesList.innerHTML = '';
+      if (!selectedLabServices.length) {
+        selectedLabEmpty.classList.remove('hidden');
+        return;
+      }
+
+      selectedLabEmpty.classList.add('hidden');
+      selectedLabServices.forEach(service => {
+        const chip = document.createElement('div');
+        chip.className = 'inline-flex items-center gap-2 rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-sm';
+        chip.innerHTML = `
+          <span class="font-semibold text-text-main">${service.name}</span>
+          <span class="text-xs text-text-muted">UGX ${service.price}</span>
+          <button type="button" class="text-indigo-700 hover:text-indigo-900 font-bold" data-remove-service-id="${service.id}" aria-label="Remove ${service.name}">&times;</button>
+        `;
+        selectedLabServicesList.appendChild(chip);
+      });
+    }
+
+    function addSelectedLabService(serviceId) {
+      const numericId = Number(serviceId);
+      const service = servicesById.get(numericId);
+      if (!service) {
+        showMessage(labRequestMessage, 'Choose a lab service first.', 'error');
+        return;
+      }
+      if (selectedLabServices.some(selected => selected.id === numericId)) {
+        showMessage(labRequestMessage, `${service.name} is already in the send list.`, 'error');
+        return;
+      }
+
+      selectedLabServices.push(service);
+      if (labRequestMessage) {
+        labRequestMessage.classList.add('hidden');
+      }
+      renderSelectedLabServices();
+      populateLabSelect();
+      if (labServiceSearch) {
+        labServiceSearch.focus();
+      }
+    }
+
+    function removeSelectedLabService(serviceId) {
+      selectedLabServices = selectedLabServices.filter(service => service.id !== Number(serviceId));
+      renderSelectedLabServices();
+      populateLabSelect();
+    }
+
     function populateLabSelect() {
-      const currentValues = new Set(Array.from(select.selectedOptions || []).map(option => option.value));
       const pendingIds = pendingServiceIds();
+      const selectedIds = new Set(selectedLabServices.map(service => service.id));
+      const searchTerm = (labServiceSearch?.value || '').trim().toLowerCase();
       const availableServices = Array.from(servicesById.values())
-        .filter(service => !pendingIds.has(service.id))
+        .filter(service => !pendingIds.has(service.id) && !selectedIds.has(service.id))
+        .filter(service => {
+          if (!searchTerm) {
+            return true;
+          }
+          return service.name.toLowerCase().includes(searchTerm);
+        })
         .sort((a, b) => a.name.localeCompare(b.name));
 
       select.innerHTML = '';
+      const placeholder = document.createElement('option');
+      placeholder.value = '';
+      placeholder.textContent = availableServices.length ? 'Choose a lab service' : 'No lab services match this filter';
+      select.appendChild(placeholder);
+
       if (!availableServices.length) {
-        const option = document.createElement('option');
-        option.value = '';
-        option.textContent = 'No more lab services available';
-        option.disabled = true;
-        select.appendChild(option);
+        placeholder.disabled = true;
         return;
       }
 
@@ -720,9 +806,6 @@
         const option = document.createElement('option');
         option.value = String(service.id);
         option.textContent = `${service.name} (UGX ${service.price})`;
-        if (currentValues.has(option.value)) {
-          option.selected = true;
-        }
         select.appendChild(option);
       });
     }
@@ -736,6 +819,8 @@
         services.forEach(service => pendingList.appendChild(createPendingCard(service)));
       }
       pendingCount.textContent = `${services.length} pending`;
+      selectedLabServices = selectedLabServices.filter(service => !services.some(pending => pending.service_id === service.id));
+      renderSelectedLabServices();
       populateLabSelect();
     }
 
@@ -766,12 +851,6 @@
       return payload;
     }
 
-    function selectedLabServiceIds() {
-      return Array.from(select.selectedOptions || [])
-        .map(option => option.value)
-        .filter(Boolean);
-    }
-
     async function sendSelectedLabRequests(serviceIds) {
       if (!serviceIds.length) {
         showMessage(labRequestMessage, 'Select at least one lab service first.', 'error');
@@ -784,9 +863,12 @@
         const payload = await postForm(page.dataset.sendLabRequestUrl, formData);
         updateTotalAmount(payload.visit_total_amount);
         setPendingServices(payload.pending_services || []);
-        Array.from(select.options || []).forEach(option => {
-          option.selected = false;
-        });
+        selectedLabServices = [];
+        renderSelectedLabServices();
+        if (labServiceSearch) {
+          labServiceSearch.value = '';
+        }
+        populateLabSelect();
         showMessage(labRequestMessage, payload.message, 'success');
       } catch (error) {
         showMessage(labRequestMessage, error.message, 'error');
@@ -871,7 +953,16 @@
     }
 
     sendLabRequestButton.addEventListener('click', () => sendSelectedLabRequests(selectedLabServiceIds()));
+    addLabServiceButton?.addEventListener('click', () => addSelectedLabService(select.value));
     select.addEventListener('change', () => labRequestMessage.classList.add('hidden'));
+    labServiceSearch?.addEventListener('input', populateLabSelect);
+    selectedLabServicesList?.addEventListener('click', event => {
+      const button = event.target.closest('[data-remove-service-id]');
+      if (!button) {
+        return;
+      }
+      removeSelectedLabService(button.dataset.removeServiceId);
+    });
     openModalButton.addEventListener('click', openModal);
     closeModalButton.addEventListener('click', closeModal);
     addBillableServiceButton?.addEventListener('click', addBillableService);
@@ -903,9 +994,8 @@
           price: payload.price,
         };
         servicesById.set(service.id, service);
-        populateLabSelect();
         showModalMessage(payload.message || 'Service created.', 'success');
-        await sendSelectedLabRequest(service.id);
+        await sendSelectedLabRequests([String(service.id)]);
         setTimeout(closeModal, 1200);
       } catch (error) {
         showModalMessage(error.message || 'Failed to create service. Please try again.', 'error');
@@ -915,6 +1005,7 @@
     });
 
     populateLabSelect();
+    renderSelectedLabServices();
     syncPrescriptionLabels();
     calculatePrescriptionPreview();
   });

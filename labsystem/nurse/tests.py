@@ -78,18 +78,21 @@ class NurseWorkflowTests(TestCase):
             hospital=self.hospital,
             name="Paracetamol",
             category=InventoryItem.CATEGORY_DRUG,
-            unit="tablet",
-            current_quantity="120",
-            unit_cost="0.50",
-            selling_price="2.00",
-            reorder_level="20",
+            unit="strip",
+            base_unit="tablet",
+            units_per_pack="10",
+            current_quantity="12",
+            unit_cost="5.00",
+            selling_price="20.00",
+            reorder_level="2",
+            strength_mg_per_unit="500",
         )
         InventoryBatch.objects.create(
             item=self.drug,
             batch_number="PCM-001",
-            quantity="120",
+            quantity="12",
             expiry_date="2028-01-31",
-            unit_cost="0.50",
+            unit_cost="5.00",
         )
         self.drug.recalculate_current_quantity()
         self.pharmacy_service = Service.objects.create(
@@ -170,9 +173,9 @@ class NurseWorkflowTests(TestCase):
         self.drug.refresh_from_db()
         self.billing_line.refresh_from_db()
         self.assertTrue(self.prescription.dispensed)
-        self.assertEqual(self.drug.current_quantity, Decimal("114.00"))
+        self.assertEqual(self.drug.current_quantity, Decimal("11.40"))
         self.assertTrue(self.billing_line.performed)
         batch = InventoryBatch.objects.get(item=self.drug, batch_number="PCM-001")
-        self.assertEqual(batch.quantity, Decimal("114.00"))
+        self.assertEqual(batch.quantity, Decimal("11.40"))
         transaction = InventoryTransaction.objects.get(prescription=self.prescription)
         self.assertEqual(transaction.quantity, Decimal("6.00"))

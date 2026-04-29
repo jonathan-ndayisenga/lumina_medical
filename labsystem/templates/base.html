@@ -440,7 +440,7 @@
 
                 <!-- Main Content -->
                 <div class="flex-1 overflow-auto">
-                    <div class="max-w-7xl mx-auto px-4 lg:px-8 py-6">
+                    <div class="{% block content_container_classes %}max-w-7xl mx-auto px-4 lg:px-8 py-6{% endblock %}">
                         {% if messages %}
                             {% for message in messages %}
                                 <div class="mb-4 p-4 rounded-lg bg-blue-50 border border-blue-200 text-blue-800 no-print">{{ message }}</div>

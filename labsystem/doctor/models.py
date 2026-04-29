@@ -188,7 +188,7 @@ class Prescription(models.Model):
             return f"{self.number_of_packs} {self.drug.unit}(s) covering {self._display_quantity(total_ml)} ml"
         if self.is_tube:
             return f"{self.number_of_packs} tube(s)"
-        return f"{self._display_quantity(self.total_quantity)} {self.drug.unit}(s)"
+        return f"{self._display_quantity(self.total_quantity)} {self.drug.base_unit}(s)"
 
     @property
     def regimen_display(self):
@@ -235,7 +235,7 @@ class Prescription(models.Model):
             total_units = (frequency * duration).quantize(Decimal("1"), rounding=ROUND_CEILING)
         self.total_quantity = total_units
         self.number_of_packs = int(total_units) if total_units else 0
-        self.total_price = (self.total_quantity * selling_price).quantize(Decimal("0.01"))
+        self.total_price = (self.total_quantity * self.drug.price_per_base_unit).quantize(Decimal("0.01"))
 
     def save(self, *args, **kwargs):
         self.calculate_totals()

@@ -3,6 +3,7 @@
 {% block title %}Inventory - Lumina{% endblock %}
 {% block page_title %}Inventory{% endblock %}
 {% block page_subtitle %}Stock items cleanly, track batches and expiry dates, restock existing items, and carry a printable inventory report when shopping.{% endblock %}
+{% block content_container_classes %}max-w-[110rem] mx-auto px-4 lg:px-8 py-6{% endblock %}
 
 {% block content %}
 <div class="space-y-6">
@@ -71,8 +72,8 @@
         </div>
     </div>
 
-    <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
-        <div class="xl:col-span-2 card space-y-5">
+    <div class="grid grid-cols-1 xl:grid-cols-[minmax(0,1.55fr)_minmax(320px,0.85fr)] gap-6 items-start">
+        <div class="card space-y-5">
             <div>
                 <h3 class="text-lg font-bold text-text-main">Stock a New Item</h3>
                 <p class="mt-1 text-sm text-text-muted">Capture the form, pack size, pricing, and opening batch once so prescribing, dispensing, and reporting all stay consistent.</p>
@@ -85,7 +86,7 @@
                     </div>
                 {% endif %}
 
-                <div class="grid grid-cols-1 gap-5 2xl:grid-cols-[minmax(0,1fr)_320px]">
+                <div class="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
                     <div class="space-y-5">
                         <div class="rounded-xl border border-gray-200 bg-gray-50 p-4 space-y-4">
                             <div>
@@ -194,8 +195,13 @@
                                 <div>
                                     <label for="{{ form.current_quantity.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">{{ form.current_quantity.label }}</label>
                                     {{ form.current_quantity }}
-                                    <p class="mt-1 text-xs text-text-muted">How many packs/units are physically available right now.</p>
+                                    <p id="opening-stock-help" class="mt-1 text-xs text-text-muted">How many packs/units are physically available right now.</p>
                                     {% for error in form.current_quantity.errors %}<div class="text-xs text-red-600 mt-1">{{ error }}</div>{% endfor %}
+                                </div>
+                                <div id="field-opening-base-unit-wrapper">
+                                    <label class="block text-sm font-semibold text-text-main mb-1">Opening Stock in Base Units</label>
+                                    <input id="inventory-opening-base-units" type="text" class="form-control bg-white/70" value="0 unit(s)" readonly>
+                                    <p class="mt-1 text-xs text-text-muted">For tablets/capsules this shows how many pills are available from the strips entered above.</p>
                                 </div>
                                 <div>
                                     <label for="{{ form.reorder_level.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">{{ form.reorder_level.label }}</label>
@@ -595,12 +601,15 @@
     const strengthField = document.getElementById('id_strength_mg_per_unit');
     const concentrationField = document.getElementById('id_concentration_mg_per_ml');
     const daysCoveredField = document.getElementById('id_days_covered_per_pack');
+    const openingStockHelp = document.getElementById('opening-stock-help');
+    const openingBaseUnitsField = document.getElementById('inventory-opening-base-units');
 
     const wrappers = {
       strength: document.getElementById('field-strength-wrapper'),
       concentration: document.getElementById('field-concentration-wrapper'),
       packSize: document.getElementById('field-pack-size-wrapper'),
       daysCovered: document.getElementById('field-days-covered-wrapper'),
+      openingBaseUnits: document.getElementById('field-opening-base-unit-wrapper'),
       openingBatch: document.getElementById('opening-batch-section'),
     };
 
@@ -657,9 +666,22 @@
       showWrapper(wrappers.concentration, isLiquid);
       showWrapper(wrappers.packSize, isLiquid);
       showWrapper(wrappers.daysCovered, isTube);
+      showWrapper(wrappers.openingBaseUnits, isTablet);
 
       const openingStock = asNumber(openingStockField);
       showWrapper(wrappers.openingBatch, openingStock > 0);
+
+      if (openingStockHelp) {
+        if (isTablet) {
+          const packLabel = (unitField && unitField.value) || 'strip';
+          openingStockHelp.textContent = `Enter how many ${packLabel}(s) are physically available right now.`;
+        } else if (isLiquid) {
+          const packLabel = (unitField && unitField.value) || 'pack';
+          openingStockHelp.textContent = `Enter how many ${packLabel}(s) are physically available right now.`;
+        } else {
+          openingStockHelp.textContent = 'How many packs/units are physically available right now.';
+        }
+      }
     }
 
     function updatePreview() {
@@ -680,6 +702,14 @@
         pricePerUnit = sellingPrice / unitsPerPack;
       }
       pricePerUnitField.value = formatMoney(pricePerUnit);
+      if (openingBaseUnitsField) {
+        const openingStock = asNumber(openingStockField);
+        const openingBaseUnits = category === 'drug' && unitsPerPack > 0
+          ? openingStock * unitsPerPack
+          : openingStock;
+        const formattedOpeningBaseUnits = openingBaseUnits % 1 === 0 ? openingBaseUnits.toFixed(0) : openingBaseUnits.toFixed(2);
+        openingBaseUnitsField.value = `${formattedOpeningBaseUnits} ${baseUnit}(s)`;
+      }
 
       previewPackaging.textContent = `${itemName}: 1 ${packType} = ${unitsPerPack || 1} ${baseUnit}${unitsPerPack === 1 ? '' : 's'}.`;
       previewPricing.textContent = unitsPerPack > 0

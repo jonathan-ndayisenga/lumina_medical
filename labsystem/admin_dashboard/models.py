@@ -290,6 +290,11 @@ class InventoryItem(models.Model):
 
     @property
     def quantity_label(self):
+        if self.category == self.CATEGORY_DRUG:
+            if self.unit != self.base_unit and self.units_per_pack > 0 and self.base_unit:
+                total_base = self.current_quantity * self.units_per_pack
+                return f"{self.current_quantity} {self.unit}(s) (~{total_base} {self.base_unit}(s))"
+            return f"{self.current_quantity} {self.base_unit}(s)"
         if self.category == self.CATEGORY_SYRUP:
             if self.units_per_pack > 0 and self.base_unit:
                 total_base = self.current_quantity * self.units_per_pack
@@ -324,6 +329,23 @@ class InventoryItem(models.Model):
         if units_per_pack <= 0:
             return Decimal("0")
         return (selling_price / units_per_pack).quantize(Decimal("0.01"))
+
+    @property
+    def available_dispense_quantity(self):
+        quantity = Decimal(self.current_quantity or 0)
+        if self.category == self.CATEGORY_DRUG and self.unit != self.base_unit:
+            units_per_pack = Decimal(self.units_per_pack or 0)
+            if units_per_pack > 0:
+                return (quantity * units_per_pack).quantize(Decimal("0.01"))
+        return quantity
+
+    def to_stock_quantity(self, dispense_quantity):
+        quantity = Decimal(dispense_quantity or 0)
+        if self.category == self.CATEGORY_DRUG and self.unit != self.base_unit:
+            units_per_pack = Decimal(self.units_per_pack or 0)
+            if units_per_pack > 0:
+                return (quantity / units_per_pack).quantize(Decimal("0.01"))
+        return quantity
 
     @property
     def has_batch_tracking(self):

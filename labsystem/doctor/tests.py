@@ -54,13 +54,13 @@ class DoctorWorkflowTests(TestCase):
             hospital=self.hospital,
             name="Paracetamol",
             category=InventoryItem.CATEGORY_DRUG,
-            unit="tablet",
+            unit="strip",
             base_unit="tablet",
-            units_per_pack="1",
+            units_per_pack="10",
             strength_mg_per_unit="500",
-            current_quantity="120",
-            unit_cost="0.50",
-            selling_price="2.00",
+            current_quantity="12",
+            unit_cost="5.00",
+            selling_price="20.00",
             reorder_level="20",
         )
         self.syrup_drug = InventoryItem.objects.create(

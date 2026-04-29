@@ -210,14 +210,16 @@ def dispense_prescription(request, queue_entry_id, prescription_id):
 
     drug = prescription.drug
     quantity_to_deduct = prescription.total_quantity
-    if drug.current_quantity < quantity_to_deduct:
+    stock_quantity_to_deduct = drug.to_stock_quantity(quantity_to_deduct)
+    available_dispense_quantity = drug.available_dispense_quantity
+    if available_dispense_quantity < quantity_to_deduct:
         messages.error(
             request,
             f"Insufficient stock for {drug.name}. Available: {drug.quantity_label}. Needed: {prescription.quantity_display}.",
         )
         return redirect("perform_nursing", queue_entry_id=queue_entry.pk)
 
-    drug.consume_stock(quantity_to_deduct)
+    drug.consume_stock(stock_quantity_to_deduct)
 
     InventoryTransaction.objects.create(
         hospital=queue_entry.visit.hospital,
