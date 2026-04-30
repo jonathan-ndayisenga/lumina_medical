@@ -2,12 +2,15 @@ from decimal import Decimal
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.core.exceptions import PermissionDenied
 from django.db import transaction
 from django.db.models import Count, Max, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 
 from accounts.models import User
+from admin_dashboard.models import InventoryItem, InventoryTransaction
+from doctor.models import Prescription
 from .forms import CompleteVisitForm, PatientForm, VisitCreateForm
 from .models import Patient, Payment, QueueEntry, Visit, VisitService
 from .workflow import sync_visit_status
@@ -50,6 +53,23 @@ def queue_reason_for_service(service):
     if service.category == service.CATEGORY_TRIAGE:
         return f"Triage required: {service.name}"
     return f"Initial {service.category}: {service.name}"
+
+
+def available_drug_payload(item):
+    return {
+        "id": item.pk,
+        "name": item.name,
+        "category": item.category,
+        "unit": item.unit,
+        "base_unit": item.base_unit,
+        "units_per_pack": str(item.units_per_pack or ""),
+        "strength_mg_per_unit": str(item.strength_mg_per_unit or ""),
+        "selling_price": str(item.selling_price or 0),
+        "current_quantity": str(item.current_quantity),
+        "concentration_mg_per_ml": str(item.concentration_mg_per_ml or ""),
+        "pack_size_ml": str(item.pack_size_ml or ""),
+        "days_covered_per_pack": str(item.days_covered_per_pack or ""),
+    }
 
 
 @reception_role_required
@@ -389,6 +409,22 @@ def complete_visit(request, visit_id):
     mobile_qs = form.fields["mobile_account"].queryset
     bank_count = bank_qs.count() if bank_qs is not None else 0
     mobile_count = mobile_qs.count() if mobile_qs is not None else 0
+    prescriptions = list(
+        visit.prescriptions.select_related("drug", "dispensed_by").order_by("-dispensed", "-prescribed_at", "-id")
+    )
+    available_drugs = list(
+        InventoryItem.objects.filter(
+            hospital=hospital,
+            category__in=[
+                InventoryItem.CATEGORY_DRUG,
+                InventoryItem.CATEGORY_SYRUP,
+                InventoryItem.CATEGORY_IV,
+                InventoryItem.CATEGORY_IM,
+                InventoryItem.CATEGORY_TUBE,
+            ],
+            is_active=True,
+        ).order_by("name")
+    )
 
     return render(
         request,
@@ -406,8 +442,71 @@ def complete_visit(request, visit_id):
             "mobile_accounts_count": mobile_count,
             "single_bank_account": bank_qs.first() if bank_count == 1 else None,
             "single_mobile_account": mobile_qs.first() if mobile_count == 1 else None,
+            "prescriptions": prescriptions,
+            "available_drugs": available_drugs,
         },
     )
+
+
+@reception_role_required
+@transaction.atomic
+def dispense_prescription(request, visit_id, prescription_id):
+    hospital = get_active_hospital(request)
+    visit = get_object_or_404(
+        Visit.objects.select_related("hospital", "patient"),
+        pk=visit_id,
+        hospital=hospital,
+    )
+    prescription = get_object_or_404(
+        Prescription.objects.select_related("drug", "billing_visit_service", "visit"),
+        pk=prescription_id,
+        visit=visit,
+    )
+
+    if request.method != "POST":
+        raise PermissionDenied("Dispensing requires a POST request.")
+
+    if prescription.dispensed:
+        messages.info(request, f"{prescription.drug.name} was already dispensed for this visit.")
+        return redirect("complete_visit", visit_id=visit.pk)
+
+    drug = prescription.drug
+    quantity_to_deduct = prescription.total_quantity
+    stock_quantity_to_deduct = drug.to_stock_quantity(quantity_to_deduct)
+    available_dispense_quantity = drug.available_dispense_quantity
+    if available_dispense_quantity < quantity_to_deduct:
+        messages.error(
+            request,
+            f"Insufficient stock for {drug.name}. Available: {drug.quantity_label}. Needed: {prescription.quantity_display}.",
+        )
+        return redirect("complete_visit", visit_id=visit.pk)
+
+    drug.consume_stock(stock_quantity_to_deduct)
+
+    InventoryTransaction.objects.create(
+        hospital=visit.hospital,
+        item=drug,
+        transaction_type=InventoryTransaction.TYPE_CONSUME,
+        quantity=quantity_to_deduct,
+        unit_cost=drug.unit_cost,
+        visit=visit,
+        prescription=prescription,
+        performed_by=request.user,
+        notes=f"Dispensed via reception workflow for prescription {prescription.pk}",
+    )
+
+    prescription.dispensed = True
+    prescription.dispensed_at = timezone.now()
+    prescription.dispensed_by = request.user
+    prescription.save(update_fields=["dispensed", "dispensed_at", "dispensed_by"])
+
+    if prescription.billing_visit_service_id:
+        prescription.billing_visit_service.performed = True
+        prescription.billing_visit_service.performed_at = timezone.now()
+        prescription.billing_visit_service.save(update_fields=["performed", "performed_at"])
+
+    messages.success(request, f"Dispensed {prescription.quantity_display} of {drug.name}.")
+    return redirect("complete_visit", visit_id=visit.pk)
 
 
 @reception_role_required

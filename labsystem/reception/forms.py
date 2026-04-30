@@ -135,7 +135,7 @@ class PatientForm(forms.ModelForm):
 class VisitCreateForm(forms.ModelForm):
     services = forms.ModelMultipleChoiceField(
         queryset=Service.objects.none(),
-        widget=forms.CheckboxSelectMultiple,
+        widget=forms.SelectMultiple(attrs={"class": "hidden", "id": "service-select-hidden"}),
         required=True,
     )
     class Meta:

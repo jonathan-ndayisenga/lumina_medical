@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load lab_extras %}
 
 {% block title %}Visit Report - {{ visit.patient.name }} - Hospital EMR{% endblock %}
 {% block print_header %}{% endblock %}
@@ -160,6 +161,7 @@
                 <div class="bg-white p-3 rounded space-y-2">
                     {% for result in report.results.all %}
                     <div class="flex justify-between text-sm">
+                        {% with flag=result.result_value|range_flag:result.reference_range %}
                         <div>
                             <span class="font-medium text-text-main">{{ result.test.name }}</span>
                             {% if result.section_name %}<span class="text-xs text-text-muted">({{ result.section_name }})</span>{% endif %}
@@ -167,8 +169,10 @@
                         <div class="text-right">
                             <div class="font-semibold text-text-main">{{ result.result_value }}</div>
                             {% if result.reference_range %}<div class="text-xs text-text-muted">ref: {{ result.reference_range }}</div>{% endif %}
+                            {% if flag == "HIGH" %}<div class="text-xs font-semibold text-red-600">{{ flag }}</div>{% elif flag == "LOW" %}<div class="text-xs font-semibold text-blue-600">{{ flag }}</div>{% elif flag == "NORMAL" %}<div class="text-xs font-semibold text-text-main">{{ flag }}</div>{% endif %}
                             {% if result.unit %}<div class="text-xs text-text-muted">{{ result.unit }}</div>{% endif %}
                         </div>
+                        {% endwith %}
                     </div>
                     {% endfor %}
                 </div>

@@ -301,6 +301,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const patientAgeInput = document.getElementById('{{ form.patient_age.id_for_label }}');
     const ageValueInput = document.getElementById('{{ form.age_value.id_for_label }}');
     const ageUnitInput = document.getElementById('{{ form.age_unit.id_for_label }}');
+    const patientSexInput = document.getElementById('{{ form.patient_sex.id_for_label }}');
     const specimenInput = document.getElementById('{{ form.specimen_type.id_for_label }}');
     const resultsTable = tbody ? tbody.closest('table') : null;
     const profilePayload = JSON.parse(document.getElementById('test-profile-data')?.textContent || '{}');
@@ -486,7 +487,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         try {
-            const params = new URLSearchParams({ test: testName, age });
+            const params = new URLSearchParams({ test: testName, age, sex: patientSexInput?.value || '' });
             const response = await fetch("{% url 'default_range' %}?" + params.toString(), { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
             if (!response.ok) {
                 return;
@@ -577,7 +578,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const profileConfig = currentProfileConfig();
         const urinalysisMode = isUrinalysisProfile(profileConfig);
         const cbcMode = isCbcProfile(profileConfig);
-        const showSectionDividers = urinalysisMode || cbcMode;
+        const showSectionDividers = urinalysisMode;
 
         if (addRowBtn) {
             addRowBtn.textContent = urinalysisMode ? 'Add Other Finding' : (cbcMode ? 'Add CBC Row' : 'Add Test Row');
@@ -785,6 +786,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         updateFormIndices();
         refreshResultsLayout();
+        visibleRows().forEach(row => fetchDefault(row));
         return true;
     }
 
@@ -858,6 +860,12 @@ document.addEventListener('DOMContentLoaded', () => {
     if (ageUnitInput) {
         ageUnitInput.addEventListener('change', () => {
             syncAgeValue();
+            visibleRows().forEach(row => fetchDefault(row));
+        });
+    }
+
+    if (patientSexInput) {
+        patientSexInput.addEventListener('change', () => {
             visibleRows().forEach(row => fetchDefault(row));
         });
     }

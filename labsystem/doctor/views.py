@@ -35,6 +35,23 @@ def doctor_role_required(view_func):
     return wrapped
 
 
+def prescribing_role_required(view_func):
+    @login_required
+    def wrapped(request, *args, **kwargs):
+        user = request.user
+        allowed = getattr(user, "role", "") in {
+            User.ROLE_SUPERADMIN,
+            User.ROLE_HOSPITAL_ADMIN,
+            User.ROLE_DOCTOR,
+            User.ROLE_RECEPTIONIST,
+        } or user.groups.filter(name__in=["Doctor", "Reception"]).exists()
+        if not allowed:
+            return redirect("app_home")
+        return view_func(request, *args, **kwargs)
+
+    return wrapped
+
+
 def get_active_hospital(request):
     return getattr(request, "hospital", None) or getattr(request.user, "hospital", None)
 
@@ -381,7 +398,7 @@ def add_billable_service_api(request, visit_id):
     )
 
 
-@doctor_role_required
+@prescribing_role_required
 @require_http_methods(["POST"])
 @transaction.atomic
 def add_prescription_api(request, visit_id):

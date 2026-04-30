@@ -140,6 +140,6 @@ TestResultFormSet = inlineformset_factory(
     TestResult,
     form=TestResultForm,
     formset=TestResultInlineFormSet,
-    extra=1,
+    extra=0,
     can_delete=True,
 )

@@ -5,7 +5,8 @@ from django.test import TestCase
 from django.urls import reverse
 
 from accounts.models import Hospital
-from lab.models import LabReport, TestCatalog, TestProfile, TestResult
+from lab.models import LabReport, ReferenceRangeDefault, TestCatalog, TestProfile, TestResult
+from lab.templatetags.lab_extras import range_flag
 from lab.views import report_needs_doctor_send, send_report_results_to_doctor
 from reception.models import Patient, QueueEntry, Service, Visit, VisitService
 
@@ -216,3 +217,118 @@ class SequentialRequestedLabWorkflowTests(TestCase):
         self.queue_entry.refresh_from_db()
         self.assertFalse(self.queue_entry.processed)
         self.assertEqual(self.queue_entry.reason, "Doctor requested: Urinalysis")
+
+
+class LabWorkflowPolishTests(TestCase):
+    def setUp(self):
+        self.User = get_user_model()
+        self.hospital = Hospital.objects.create(name="Lumina Polish", subdomain="lumina-polish")
+        self.lab_user = self.User.objects.create_user(
+            username="labpolish",
+            password="StrongPass123!",
+            role=self.User.ROLE_LAB_ATTENDANT,
+            hospital=self.hospital,
+        )
+        self.reception_user = self.User.objects.create_user(
+            username="receptionpolish",
+            password="StrongPass123!",
+            role=self.User.ROLE_RECEPTIONIST,
+            hospital=self.hospital,
+        )
+        self.patient = Patient.objects.create(
+            hospital=self.hospital,
+            name="Routing Patient",
+            age="32YRS",
+            sex="F",
+        )
+        self.visit = Visit.objects.create(
+            patient=self.patient,
+            hospital=self.hospital,
+            created_by=self.reception_user,
+            total_amount="15.00",
+        )
+        self.service = Service.objects.create(
+            hospital=self.hospital,
+            name="CBC Direct",
+            category=Service.CATEGORY_LAB,
+            price="15.00",
+        )
+        self.visit_service = VisitService.objects.create(
+            visit=self.visit,
+            service=self.service,
+            price_at_time="15.00",
+        )
+        self.report = LabReport.objects.create(
+            hospital=self.hospital,
+            visit=self.visit,
+            requested_visit_service=self.visit_service,
+            patient_name=self.patient.name,
+            patient_age=self.patient.age,
+            patient_sex=self.patient.sex,
+            sample_date=date.today(),
+            specimen_type="BLOOD",
+            attendant=self.lab_user,
+            attendant_name="Lab Polish",
+        )
+        self.test_catalog, _ = TestCatalog.objects.get_or_create(name="HGB", defaults={"unit": "g/dL"})
+        TestResult.objects.create(
+            lab_report=self.report,
+            test=self.test_catalog,
+            result_value="12.5",
+            reference_range="11.0-15.0",
+            unit="g/dL",
+        )
+        self.lab_queue = QueueEntry.objects.create(
+            hospital=self.hospital,
+            visit=self.visit,
+            queue_type=QueueEntry.TYPE_LAB_RECEPTION,
+            reason="Reception sent patient to lab",
+        )
+        self.client.force_login(self.lab_user)
+
+    def test_report_create_redirects_to_lab_queue(self):
+        response = self.client.get(reverse("report_create"))
+        self.assertRedirects(response, reverse("lab_queue"))
+
+    def test_direct_lab_report_can_be_routed_to_reception_and_queue_clears(self):
+        response = self.client.post(
+            reverse("route_lab_report", args=[self.report.pk]),
+            {"destination": "reception"},
+        )
+        self.assertRedirects(response, reverse("report_detail", args=[self.report.pk]))
+        self.visit.refresh_from_db()
+        self.lab_queue.refresh_from_db()
+        self.assertEqual(self.visit.status, Visit.STATUS_READY_FOR_BILLING)
+        self.assertTrue(self.lab_queue.processed)
+        self.assertFalse(
+            QueueEntry.objects.filter(
+                visit=self.visit,
+                queue_type__in=[QueueEntry.TYPE_LAB_RECEPTION, QueueEntry.TYPE_LAB_DOCTOR],
+                processed=False,
+            ).exists()
+        )
+
+    def test_default_range_uses_sex_specific_age_group(self):
+        woman_test, _ = TestCatalog.objects.get_or_create(name="RBC", defaults={"unit": "10^6/uL"})
+        ReferenceRangeDefault.objects.update_or_create(
+            test=woman_test,
+            age_category="woman",
+            defaults={
+                "reference_range": "3.50-5.00",
+                "unit": "10^6/uL",
+            },
+        )
+        response = self.client.get(
+            reverse("default_range"),
+            {"test": "RBC", "age": "32YRS", "sex": "F"},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["reference_range"], "3.50-5.00")
+
+
+class LabRangeFlagTests(TestCase):
+    def test_range_flag_marks_high_low_and_normal(self):
+        self.assertEqual(range_flag("16.2", "11.0-15.0"), "HIGH")
+        self.assertEqual(range_flag("10.4", "11.0-15.0"), "LOW")
+        self.assertEqual(range_flag("13.3", "11.0-15.0"), "NORMAL")
+        self.assertEqual(range_flag("Positive", "11.0-15.0"), "")

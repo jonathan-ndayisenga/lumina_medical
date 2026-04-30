@@ -57,6 +57,100 @@
                 </table>
             </div>
         </div>
+
+        <div class="card" data-add-prescription-url="{% url 'add_prescription_api' visit.pk %}" data-dispense-url-template="/reception/complete/{{ visit.pk }}/prescriptions/__PRESCRIPTION_ID__/dispense/" data-csrf-token="{{ csrf_token }}">
+            <h3 class="text-sm font-semibold text-text-main mb-4">Reception Pharmacy</h3>
+            <p class="text-sm text-text-muted mb-4">Add medicines with the same dose calculation used by the doctor module, then dispense them here before final billing.</p>
+
+            <div class="grid grid-cols-1 lg:grid-cols-5 gap-3">
+                <div class="lg:col-span-2">
+                    <label for="drug-select" class="block text-sm font-semibold text-text-main mb-1">Drug</label>
+                    <select id="drug-select" class="form-control w-full">
+                        <option value="">Select a stocked drug</option>
+                        {% for drug in available_drugs %}
+                            <option
+                                value="{{ drug.id }}"
+                                data-category="{{ drug.category }}"
+                                data-unit="{{ drug.unit }}"
+                                data-base-unit="{{ drug.base_unit }}"
+                                data-units-per-pack="{{ drug.units_per_pack }}"
+                                data-strength="{{ drug.strength_mg_per_unit|default:'' }}"
+                                data-price="{{ drug.selling_price|default:0 }}"
+                                data-stock="{{ drug.current_quantity }}"
+                                data-days-covered="{{ drug.days_covered_per_pack|default:'' }}"
+                            >
+                                {{ drug.name }} - {{ drug.get_category_display }} - {{ drug.quantity_label }}{% if drug.selling_price %} ({{ drug.selling_price }}){% endif %}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label for="dosage-mg" id="dosage-label" class="block text-sm font-semibold text-text-main mb-1">Dosage</label>
+                    <input id="dosage-mg" type="number" step="0.01" min="0" class="form-control w-full" placeholder="500">
+                </div>
+                <div>
+                    <label for="frequency-per-day" class="block text-sm font-semibold text-text-main mb-1">Times / Day</label>
+                    <select id="frequency-per-day" class="form-control w-full">
+                        <option value="1">1 time</option>
+                        <option value="2" selected>2 times</option>
+                        <option value="3">3 times</option>
+                        <option value="4">4 times</option>
+                        <option value="6">6 times</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="duration-days" class="block text-sm font-semibold text-text-main mb-1">Days</label>
+                    <input id="duration-days" type="number" step="1" min="1" value="1" class="form-control w-full" placeholder="1">
+                </div>
+            </div>
+
+            <div class="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3 items-start">
+                <div class="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm">
+                    <p class="font-semibold text-text-main mb-1">Calculated Dispense</p>
+                    <p id="prescription-preview" class="text-text-muted">Choose a drug and enter the regimen to preview quantity and price.</p>
+                </div>
+                <div>
+                    <label for="prescription-notes" class="block text-sm font-semibold text-text-main mb-1">Prescription Notes (optional)</label>
+                    <textarea id="prescription-notes" class="form-control w-full" rows="2" placeholder="Example: Take after meals."></textarea>
+                </div>
+            </div>
+
+            <div class="mt-3 flex flex-wrap gap-2">
+                <button type="button" id="add-prescription-btn" class="btn btn-primary">Add Prescription</button>
+            </div>
+
+            <div id="prescription-message" class="hidden mt-3 rounded-lg border px-3 py-2 text-sm"></div>
+
+            <div class="mt-4 space-y-3" id="prescription-list">
+                {% for prescription in prescriptions %}
+                    <div class="rounded-xl border {% if prescription.dispensed %}border-green-200 bg-green-50{% else %}border-blue-200 bg-blue-50{% endif %} p-3">
+                        <div class="flex items-start justify-between gap-3 flex-wrap">
+                            <div>
+                                <p class="font-semibold text-text-main">{{ prescription.drug.name }}</p>
+                                <p class="text-xs text-text-muted mt-1">{{ prescription.regimen_display }}</p>
+                                <p class="text-xs text-text-muted mt-1">Dispense {{ prescription.quantity_display }}</p>
+                            </div>
+                            <div class="text-right">
+                                <p class="text-xs font-semibold text-text-muted">UGX {{ prescription.total_price }}</p>
+                                {% if prescription.dispensed %}
+                                    <span class="inline-flex items-center rounded-full bg-green-100 px-2 py-1 text-xs font-semibold text-green-700 mt-2">Dispensed</span>
+                                {% else %}
+                                    <form method="post" action="{% url 'reception_dispense_prescription' visit.pk prescription.pk %}" class="mt-2">
+                                        {% csrf_token %}
+                                        <button type="submit" class="btn btn-secondary btn-sm">Dispense Now</button>
+                                    </form>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                {% empty %}
+                    <p id="prescription-empty" class="text-sm text-text-muted italic">No prescriptions recorded for this visit yet.</p>
+                {% endfor %}
+            </div>
+            {% if prescriptions %}
+                <p id="prescription-empty" class="hidden text-sm text-text-muted italic">No prescriptions recorded for this visit yet.</p>
+            {% endif %}
+        </div>
     </div>
 
     <div class="card h-fit">
@@ -139,5 +233,208 @@
         updateVisibility();
     }
 })();
+
+(function () {
+    const wrapper = document.querySelector('[data-add-prescription-url]');
+    if (!wrapper) return;
+
+    const addUrl = wrapper.dataset.addPrescriptionUrl;
+    const csrfToken = wrapper.dataset.csrfToken || document.querySelector('input[name="csrfmiddlewaretoken"]')?.value || '';
+    const dispenseUrlTemplate = wrapper.dataset.dispenseUrlTemplate || '';
+    const drugSelect = wrapper.querySelector('#drug-select');
+    const dosageInput = wrapper.querySelector('#dosage-mg');
+    const dosageLabel = wrapper.querySelector('#dosage-label');
+    const frequencyInput = wrapper.querySelector('#frequency-per-day');
+    const durationInput = wrapper.querySelector('#duration-days');
+    const prescriptionNotes = wrapper.querySelector('#prescription-notes');
+    const prescriptionPreview = wrapper.querySelector('#prescription-preview');
+    const prescriptionMessage = wrapper.querySelector('#prescription-message');
+    const prescriptionList = wrapper.querySelector('#prescription-list');
+    const prescriptionEmpty = document.querySelector('#prescription-empty');
+    const addPrescriptionButton = wrapper.querySelector('#add-prescription-btn');
+
+    function showMessage(container, message, level) {
+        if (!container) return;
+        container.textContent = message;
+        container.classList.remove('hidden', 'border-red-200', 'bg-red-50', 'text-red-700', 'border-green-200', 'bg-green-50', 'text-green-700');
+        if (level === 'error') {
+            container.classList.add('border-red-200', 'bg-red-50', 'text-red-700');
+        } else {
+            container.classList.add('border-green-200', 'bg-green-50', 'text-green-700');
+        }
+    }
+
+    function currentDrugData() {
+        const option = drugSelect?.selectedOptions?.[0];
+        if (!option || !option.value) return null;
+        return {
+            id: option.value,
+            name: option.textContent,
+            category: option.dataset.category || '',
+            unit: option.dataset.unit || '',
+            baseUnit: option.dataset.baseUnit || '',
+            unitsPerPack: parseFloat(option.dataset.unitsPerPack || '0') || 0,
+            strength: parseFloat(option.dataset.strength || '0') || 0,
+            sellingPrice: parseFloat(option.dataset.price || '0') || 0,
+            daysCovered: parseFloat(option.dataset.daysCovered || '0') || 0,
+        };
+    }
+
+    function previewValues() {
+        const drug = currentDrugData();
+        if (!drug) return null;
+
+        const dosage = parseFloat(dosageInput?.value || '0') || 0;
+        const frequency = parseInt(frequencyInput?.value || '0', 10) || 0;
+        const days = parseInt(durationInput?.value || '0', 10) || 0;
+        if (dosage <= 0 || frequency <= 0 || days <= 0) return null;
+
+        let quantity = 0;
+        let totalPrice = 0;
+        let label = '';
+
+        if (['syrup', 'iv', 'im'].includes(drug.category)) {
+            const totalMl = dosage * frequency * days;
+            const packs = drug.unitsPerPack > 0 ? Math.ceil(totalMl / drug.unitsPerPack) : 0;
+            quantity = packs;
+            totalPrice = packs * drug.sellingPrice;
+            label = `${packs} ${drug.unit}(s) covering ${Number.isInteger(totalMl) ? totalMl : totalMl.toFixed(2)} ml`;
+        } else if (drug.category === 'tube') {
+            const coverage = drug.daysCovered > 0 ? drug.daysCovered : 1;
+            const packs = Math.ceil(days / coverage);
+            quantity = packs;
+            totalPrice = packs * drug.sellingPrice;
+            label = `${packs} tube(s)`;
+        } else {
+            const units = drug.strength > 0 ? Math.ceil((dosage / drug.strength) * frequency * days) : Math.ceil(frequency * days);
+            quantity = units;
+            const unitPrice = drug.unitsPerPack > 0 ? (drug.sellingPrice / drug.unitsPerPack) : 0;
+            totalPrice = units * unitPrice;
+            label = `${units} ${drug.baseUnit}(s)`;
+        }
+
+        return { quantity, totalPrice, label };
+    }
+
+    function updatePreview() {
+        const drug = currentDrugData();
+        const values = previewValues();
+        if (!drug) {
+            prescriptionPreview.textContent = 'Choose a drug and enter the regimen to preview quantity and price.';
+            return;
+        }
+        if (!values) {
+            prescriptionPreview.textContent = 'Enter dosage, frequency, and duration to preview the dispense quantity.';
+            return;
+        }
+        prescriptionPreview.textContent = `${drug.name}: dispense ${values.label} for this regimen. Estimated charge: UGX ${values.totalPrice.toFixed(2)}.`;
+    }
+
+    function createDispenseForm(prescriptionId) {
+        const actionUrl = dispenseUrlTemplate.replace('__PRESCRIPTION_ID__', String(prescriptionId));
+        return `
+            <form method="post" action="${actionUrl}" class="mt-2">
+                <input type="hidden" name="csrfmiddlewaretoken" value="${csrfToken || ''}">
+                <button type="submit" class="btn btn-secondary btn-sm">Dispense Now</button>
+            </form>
+        `;
+    }
+
+    function createPrescriptionCard(prescription) {
+        const card = document.createElement('div');
+        card.className = prescription.dispensed
+            ? 'rounded-xl border border-green-200 bg-green-50 p-3'
+            : 'rounded-xl border border-blue-200 bg-blue-50 p-3';
+        card.innerHTML = `
+            <div class="flex items-start justify-between gap-3 flex-wrap">
+                <div>
+                    <p class="font-semibold text-text-main">${prescription.drug_name}</p>
+                    <p class="text-xs text-text-muted mt-1">${prescription.regimen}</p>
+                    <p class="text-xs text-text-muted mt-1">Dispense ${prescription.quantity_display}</p>
+                </div>
+                <div class="text-right">
+                    <p class="text-xs font-semibold text-text-muted">UGX ${prescription.total_price}</p>
+                    ${prescription.dispensed
+                        ? '<span class="inline-flex items-center rounded-full bg-green-100 px-2 py-1 text-xs font-semibold text-green-700 mt-2">Dispensed</span>'
+                        : createDispenseForm(prescription.id)}
+                </div>
+            </div>
+        `;
+        return card;
+    }
+
+    [drugSelect, dosageInput, frequencyInput, durationInput].forEach(field => {
+        field?.addEventListener('input', updatePreview);
+        field?.addEventListener('change', updatePreview);
+    });
+    drugSelect?.addEventListener('change', updateDosageLabel);
+
+    addPrescriptionButton?.addEventListener('click', async () => {
+        const drug = currentDrugData();
+        if (!drug) {
+            showMessage(prescriptionMessage, 'Select a medication first.', 'error');
+            return;
+        }
+
+        const dosage = dosageInput?.value || '';
+        const frequency = frequencyInput?.value || '';
+        const duration = durationInput?.value || '';
+        if (!dosage || !frequency || !duration) {
+            showMessage(prescriptionMessage, 'Enter dosage, frequency, and duration first.', 'error');
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append('drug_id', drug.id);
+        formData.append('dosage_mg', dosage);
+        formData.append('frequency_per_day', frequency);
+        formData.append('duration_days', duration);
+        formData.append('notes', prescriptionNotes?.value || '');
+
+        try {
+            const response = await fetch(addUrl, {
+                method: 'POST',
+                headers: { 'X-CSRFToken': csrfToken || '', 'X-Requested-With': 'XMLHttpRequest' },
+                body: formData,
+            });
+            const payload = await response.json();
+            if (!response.ok) {
+                throw new Error(payload.error || 'Could not add prescription.');
+            }
+
+            prescriptionEmpty?.classList.add('hidden');
+            prescriptionList?.prepend(createPrescriptionCard(payload.prescription));
+            dosageInput.value = '';
+            durationInput.value = '1';
+            if (prescriptionNotes) prescriptionNotes.value = '';
+            updatePreview();
+            showMessage(prescriptionMessage, payload.message, 'success');
+        } catch (error) {
+            showMessage(prescriptionMessage, error.message, 'error');
+        }
+    });
+
+    updateDosageLabel();
+    updatePreview();
+})();
 </script>
 {% endblock %}
+    function updateDosageLabel() {
+        const drug = currentDrugData();
+        if (!dosageLabel) return;
+        if (!drug) {
+            dosageLabel.textContent = 'Dosage';
+            dosageInput.placeholder = '500';
+            return;
+        }
+        if (['syrup', 'iv', 'im'].includes(drug.category)) {
+            dosageLabel.textContent = 'Dose / Intake (ml)';
+            dosageInput.placeholder = '10';
+        } else if (drug.category === 'tube') {
+            dosageLabel.textContent = 'Amount / Intake';
+            dosageInput.placeholder = '1';
+        } else {
+            dosageLabel.textContent = 'Dose / Intake (mg)';
+            dosageInput.placeholder = '500';
+        }
+    }

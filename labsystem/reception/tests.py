@@ -12,9 +12,12 @@ from admin_dashboard.models import (
     BankTransaction,
     CashDrawer,
     CashTransaction,
+    InventoryItem,
+    InventoryTransaction,
     MobileMoneyAccount,
     MobileMoneyTransaction,
 )
+from doctor.models import Prescription
 from lab.models import LabReport
 from lab.views import send_report_results_to_doctor
 from reception.models import Patient, Payment, QueueEntry, Service, Visit, VisitService
@@ -387,3 +390,97 @@ class EndToEndPatientJourneyTests(TestCase):
         self.assertIsNotNone(payment)
         self.assertEqual(payment.status, Payment.STATUS_PAID)
         self.assertIsNotNone(CashTransaction.objects.filter(payment=payment).first())
+
+
+class ReceptionPharmacyWorkflowTests(TestCase):
+    def setUp(self):
+        plan = SubscriptionPlan.objects.create(
+            name="Standard",
+            price_monthly=Decimal("0.00"),
+            price_yearly=Decimal("0.00"),
+        )
+        self.hospital = Hospital.objects.create(
+            name="Lumina Test Hospital",
+            subdomain="lumina-pharmacy",
+            subscription_plan=plan,
+        )
+        self.receptionist = User.objects.create_user(
+            username="pharmacy-reception",
+            password="pass12345",
+            role=User.ROLE_RECEPTIONIST,
+            hospital=self.hospital,
+            is_active=True,
+        )
+        self.patient = Patient.objects.create(
+            hospital=self.hospital,
+            name="Pharmacy Patient",
+            registration_date=timezone.localdate(),
+            age="30YRS",
+            sex="F",
+        )
+        self.service = Service.objects.create(
+            hospital=self.hospital,
+            name="Consultation",
+            category=Service.CATEGORY_CONSULTATION,
+            price=Decimal("20.00"),
+            is_active=True,
+        )
+        self.visit = Visit.objects.create(
+            patient=self.patient,
+            hospital=self.hospital,
+            total_amount=Decimal("20.00"),
+            status=Visit.STATUS_READY_FOR_BILLING,
+            created_by=self.receptionist,
+        )
+        VisitService.objects.create(
+            visit=self.visit,
+            service=self.service,
+            price_at_time=self.service.price,
+        )
+        self.drug = InventoryItem.objects.create(
+            hospital=self.hospital,
+            name="Amoxicillin Capsules",
+            category=InventoryItem.CATEGORY_DRUG,
+            unit="strip",
+            base_unit="capsule",
+            units_per_pack=Decimal("10"),
+            strength_mg_per_unit=Decimal("500"),
+            current_quantity=Decimal("5"),
+            unit_cost=Decimal("800"),
+            selling_price=Decimal("3000"),
+            reorder_level=Decimal("1"),
+            is_active=True,
+        )
+        self.client.force_login(self.receptionist)
+
+    def test_receptionist_can_add_and_dispense_prescription(self):
+        add_response = self.client.post(
+            reverse("add_prescription_api", args=[self.visit.pk]),
+            {
+                "drug_id": self.drug.pk,
+                "dosage_mg": "500",
+                "frequency_per_day": "2",
+                "duration_days": "5",
+            },
+        )
+        self.assertEqual(add_response.status_code, 200)
+        self.visit.refresh_from_db()
+        prescription = Prescription.objects.get(visit=self.visit, drug=self.drug)
+        self.assertEqual(prescription.total_quantity, Decimal("10"))
+        self.assertEqual(prescription.total_price, Decimal("3000"))
+        self.assertEqual(self.visit.total_amount, Decimal("3020.00"))
+
+        dispense_response = self.client.post(
+            reverse("reception_dispense_prescription", args=[self.visit.pk, prescription.pk]),
+        )
+        self.assertEqual(dispense_response.status_code, 302)
+        prescription.refresh_from_db()
+        self.drug.refresh_from_db()
+        self.assertTrue(prescription.dispensed)
+        self.assertEqual(self.drug.current_quantity, Decimal("4"))
+        self.assertTrue(
+            InventoryTransaction.objects.filter(
+                prescription=prescription,
+                transaction_type=InventoryTransaction.TYPE_CONSUME,
+            ).exists()
+        )

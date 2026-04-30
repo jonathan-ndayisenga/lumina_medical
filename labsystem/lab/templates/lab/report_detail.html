@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-{% load static %}
+{% load static lab_extras %}
 
 {% block title %}Laboratory Report - Lumina Medical Services{% endblock %}
 {% block print_header %}{% endblock %}
@@ -145,6 +145,18 @@
     <div class="flex gap-3 flex-wrap">
         <button type="button" class="btn btn-primary" onclick="window.print()">Print Report</button>
         <a href="{% url 'report_edit' report.pk %}" class="btn btn-secondary">Edit</a>
+        {% if can_route_direct_lab %}
+            <form method="post" action="{% url 'route_lab_report' report.pk %}" class="inline">
+                {% csrf_token %}
+                <input type="hidden" name="destination" value="reception">
+                <button type="submit" class="btn btn-secondary">Send to Reception</button>
+            </form>
+            <form method="post" action="{% url 'route_lab_report' report.pk %}" class="inline">
+                {% csrf_token %}
+                <input type="hidden" name="destination" value="doctor">
+                <button type="submit" class="btn btn-secondary">Send to Doctor Review</button>
+            </form>
+        {% endif %}
         <a href="{% url 'report_list' %}" class="btn btn-secondary">Back to Dashboard</a>
     </div>
 </div>
@@ -215,6 +227,7 @@
                         <th class="text-left px-3 py-2 text-xs font-semibold uppercase w-32">Test</th>
                         <th class="text-left px-3 py-2 text-xs font-semibold uppercase w-16">Result</th>
                         <th class="text-left px-3 py-2 text-xs font-semibold uppercase w-24">Reference Range</th>
+                        <th class="text-left px-3 py-2 text-xs font-semibold uppercase w-16">Flag</th>
                         <th class="text-left px-3 py-2 text-xs font-semibold uppercase w-16">Units</th>
                         <th class="text-left px-3 py-2 text-xs font-semibold uppercase">Comment</th>
                     </tr>
@@ -222,11 +235,24 @@
                 <tbody class="divide-y">
                     {% for result in group.results %}
                     <tr class="hover:bg-gray-50">
+                        {% with flag=result.result_value|range_flag:result.reference_range %}
                         <td class="px-3 py-2"><strong>{{ result.test.name }}</strong></td>
                         <td class="px-3 py-2">{{ result.result_value|default:"-" }}</td>
                         <td class="px-3 py-2">{{ result.reference_range|default:"-" }}</td>
+                        <td class="px-3 py-2">
+                            {% if flag == "HIGH" %}
+                                <span class="font-semibold text-red-600">{{ flag }}</span>
+                            {% elif flag == "LOW" %}
+                                <span class="font-semibold text-blue-600">{{ flag }}</span>
+                            {% elif flag == "NORMAL" %}
+                                <span class="font-semibold text-text-main">{{ flag }}</span>
+                            {% else %}
+                                -
+                            {% endif %}
+                        </td>
                         <td class="px-3 py-2">{{ result.unit|default:"-" }}</td>
                         <td class="px-3 py-2">{{ result.comment|default:"-" }}</td>
+                        {% endwith %}
                     </tr>
                     {% endfor %}
                 </tbody>

@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-{% load static %}
+{% load static lab_extras %}
 
 {% block title %}Print Report - Lumina Medical Services{% endblock %}
 {% block print_header %}{% endblock %}
@@ -133,19 +133,23 @@
                     <tr>
                         <th style="width: 32%; text-align: left; border-bottom: 1px solid #e6ecf3; padding: 0.22rem 0.35rem; vertical-align: top;">Test</th>
                         <th style="width: 16%; text-align: left; border-bottom: 1px solid #e6ecf3; padding: 0.22rem 0.35rem; vertical-align: top;">Result</th>
-                        <th style="width: 22%; text-align: left; border-bottom: 1px solid #e6ecf3; padding: 0.22rem 0.35rem; vertical-align: top;">Reference Range</th>
-                        <th style="width: 12%; text-align: left; border-bottom: 1px solid #e6ecf3; padding: 0.22rem 0.35rem; vertical-align: top;">Units</th>
+                        <th style="width: 18%; text-align: left; border-bottom: 1px solid #e6ecf3; padding: 0.22rem 0.35rem; vertical-align: top;">Reference Range</th>
+                        <th style="width: 10%; text-align: left; border-bottom: 1px solid #e6ecf3; padding: 0.22rem 0.35rem; vertical-align: top;">Flag</th>
+                        <th style="width: 10%; text-align: left; border-bottom: 1px solid #e6ecf3; padding: 0.22rem 0.35rem; vertical-align: top;">Units</th>
                         <th style="width: 18%; text-align: left; border-bottom: 1px solid #e6ecf3; padding: 0.22rem 0.35rem; vertical-align: top; padding-right: 0;">Comment</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for result in group.results %}
                     <tr>
+                        {% with flag=result.result_value|range_flag:result.reference_range %}
                         <td style="border-bottom: 1px solid #e6ecf3; padding: 0.22rem 0.35rem; vertical-align: top; text-align: left;">{{ result.test.name }}</td>
                         <td style="border-bottom: 1px solid #e6ecf3; padding: 0.22rem 0.35rem; vertical-align: top; text-align: left;">{{ result.result_value|default:"-" }}</td>
                         <td style="border-bottom: 1px solid #e6ecf3; padding: 0.22rem 0.35rem; vertical-align: top; text-align: left;">{{ result.reference_range|default:"-" }}</td>
+                        <td style="border-bottom: 1px solid #e6ecf3; padding: 0.22rem 0.35rem; vertical-align: top; text-align: left;{% if flag == 'HIGH' %} color: #dc2626; font-weight: 700;{% elif flag == 'LOW' %} color: #2563eb; font-weight: 700;{% elif flag == 'NORMAL' %} font-weight: 700;{% endif %}">{% if flag %}{{ flag }}{% else %}-{% endif %}</td>
                         <td style="border-bottom: 1px solid #e6ecf3; padding: 0.22rem 0.35rem; vertical-align: top; text-align: left;">{{ result.unit|default:"-" }}</td>
                         <td style="border-bottom: 1px solid #e6ecf3; padding: 0.22rem 0.35rem; vertical-align: top; text-align: left; padding-right: 0;">{{ result.comment|default:"-" }}</td>
+                        {% endwith %}
                     </tr>
                     {% endfor %}
                 </tbody>

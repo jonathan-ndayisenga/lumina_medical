@@ -2,7 +2,7 @@
 
 {% block title %}Laboratory Dashboard - Lumina Medical Services{% endblock %}
 {% block page_title %}Laboratory Dashboard{% endblock %}
-{% block page_subtitle %}Review reports, track printing, and jump into new CBC or urinalysis entries from one screen.{% endblock %}
+{% block page_subtitle %}Review completed reports, track printing, and return to the live lab queue whenever a new patient arrives.{% endblock %}
 
 {% block content %}
 <div class="space-y-6">
@@ -40,7 +40,7 @@
             <button type="button"
                     class="btn {% if request.GET.filter == 'draft' %}bg-brand-dark text-white{% else %}btn-secondary{% endif %}"
                     onclick="filterReports('draft')">Draft</button>
-            <a href="{% url 'report_create' %}" class="btn btn-primary ml-auto">New Lab Report</a>
+            <a href="{% url 'lab_queue' %}" class="btn btn-primary ml-auto">Open Live Lab Queue</a>
         </div>
     </div>
 
@@ -112,8 +112,8 @@
     {% else %}
     <div class="card text-center py-12 border-2 border-dashed border-gray-300">
         <h3 class="text-lg font-semibold text-text-main mb-2">No reports found</h3>
-        <p class="text-text-muted mb-4">Start by creating a new CBC, urinalysis, or manual laboratory report.</p>
-        <a href="{% url 'report_create' %}" class="btn btn-primary inline-block">Create New Lab Report</a>
+        <p class="text-text-muted mb-4">New reports now start from the live lab queue so every result stays tied to a real patient request.</p>
+        <a href="{% url 'lab_queue' %}" class="btn btn-primary inline-block">Go to Lab Queue</a>
     </div>
     {% endif %}
 

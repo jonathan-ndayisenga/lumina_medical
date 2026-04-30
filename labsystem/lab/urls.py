@@ -13,5 +13,6 @@ urlpatterns = [
     path('<int:pk>/print/', views.report_print, name='report_print'),
     path('<int:pk>/delete/', views.report_delete, name='report_delete'),
     path('<int:report_id>/send-to-doctor/', views.send_lab_result_to_doctor, name='send_lab_result_to_doctor'),
+    path('<int:report_id>/route/', views.route_lab_report, name='route_lab_report'),
     path('api/default-range/', views.default_range, name='default_range'),
 ]

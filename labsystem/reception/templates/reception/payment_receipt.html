@@ -8,16 +8,38 @@
 
 {% block extra_css %}
 <style>
-@page { size: A4 portrait; margin: 8mm; }
+@page { size: 58mm auto; margin: 3mm; }
+
+.thermal-receipt {
+    width: 58mm;
+    max-width: 58mm;
+    margin: 0 auto;
+    background: #fff;
+    color: #111827;
+    font-size: 10px;
+    line-height: 1.25;
+}
+
+.thermal-table th,
+.thermal-table td {
+    padding: 0.18rem 0;
+    vertical-align: top;
+}
+
 @media print {
     .no-print { display: none !important; }
     .content { padding: 0 !important; }
+    .thermal-receipt {
+        width: 100%;
+        max-width: none;
+        margin: 0;
+    }
 }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="space-y-4 print-shell" style="background: #fff; color: #111827; font-size: 12px; line-height: 1.2;">
+<div class="space-y-4 print-shell thermal-receipt">
     <div class="flex justify-end gap-3 no-print">
         <a href="{% url 'patient_visits' visit.patient.pk %}" class="btn btn-secondary">Back to Visits</a>
         <button type="button" class="btn btn-primary" onclick="window.print()">Print Receipt</button>
@@ -25,14 +47,14 @@
 
     {% include "partials/print_header.html" with hospital=hospital print_title="PAYMENT RECEIPT" print_subtitle=payment.receipt_number %}
 
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-3 p-3 border border-gray-200 rounded-lg bg-white" style="font-size: 0.78rem;">
+    <div class="space-y-2 border border-gray-200 rounded-lg p-3 bg-white">
         <div class="space-y-1">
             <div><strong>Patient:</strong> {{ visit.patient.name }}</div>
             <div><strong>Age/Sex:</strong> {{ visit.patient.age }} / {{ visit.patient.get_sex_display }}</div>
             <div><strong>Visit ID:</strong> #{{ visit.id }}</div>
             <div><strong>Visit Date:</strong> {{ visit.visit_date|date:"Y-m-d H:i" }}</div>
         </div>
-        <div class="space-y-1">
+        <div class="space-y-1 border-t border-dashed border-gray-300 pt-2">
             <div><strong>Receipt Date:</strong> {% if payment.paid_at %}{{ payment.paid_at|date:"Y-m-d H:i" }}{% else %}-{% endif %}</div>
             <div><strong>Mode:</strong> {{ payment.get_mode_display }}</div>
             <div>
@@ -47,7 +69,7 @@
 
     <div class="border border-gray-200 rounded-lg overflow-hidden">
         <div class="px-3 py-2 bg-brand-soft text-text-main font-bold uppercase text-xs" style="letter-spacing: 0.08em;">Billing Summary</div>
-        <div class="p-3 grid grid-cols-1 md:grid-cols-4 gap-3" style="font-size: 0.78rem;">
+        <div class="p-3 grid grid-cols-2 gap-3">
             <div>
                 <div class="text-xs text-text-muted uppercase font-semibold">Total Bill</div>
                 <div class="font-semibold">{{ visit.total_amount }}</div>
@@ -69,25 +91,25 @@
 
     <div class="border border-gray-200 rounded-lg overflow-hidden">
         <div class="px-3 py-2 bg-brand-soft text-text-main font-bold uppercase text-xs" style="letter-spacing: 0.08em;">Services</div>
-        <div class="overflow-x-auto">
-            <table class="w-full" style="border-collapse: collapse; font-size: 0.75rem;">
+        <div>
+            <table class="w-full thermal-table" style="border-collapse: collapse;">
                 <thead>
                     <tr>
-                        <th style="text-align:left; border-bottom: 1px solid #e6ecf3; padding: 0.35rem 0.45rem;">Service</th>
-                        <th style="text-align:left; border-bottom: 1px solid #e6ecf3; padding: 0.35rem 0.45rem;">Category</th>
-                        <th style="text-align:right; border-bottom: 1px solid #e6ecf3; padding: 0.35rem 0.45rem;">Price</th>
+                        <th style="text-align:left; border-bottom: 1px solid #e6ecf3;">Service</th>
+                        <th style="text-align:left; border-bottom: 1px solid #e6ecf3;">Category</th>
+                        <th style="text-align:right; border-bottom: 1px solid #e6ecf3;">Price</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for item in visit.visit_services.all %}
                         <tr>
-                            <td style="border-bottom: 1px solid #e6ecf3; padding: 0.35rem 0.45rem;">{{ item.service.name }}</td>
-                            <td style="border-bottom: 1px solid #e6ecf3; padding: 0.35rem 0.45rem;">{{ item.service.get_category_display }}</td>
-                            <td style="border-bottom: 1px solid #e6ecf3; padding: 0.35rem 0.45rem; text-align:right;">{{ item.price_at_time }}</td>
+                            <td style="border-bottom: 1px solid #e6ecf3;">{{ item.service.name }}</td>
+                            <td style="border-bottom: 1px solid #e6ecf3;">{{ item.service.get_category_display }}</td>
+                            <td style="border-bottom: 1px solid #e6ecf3; text-align:right;">{{ item.price_at_time }}</td>
                         </tr>
                     {% empty %}
                         <tr>
-                            <td colspan="3" style="padding: 0.75rem; text-align:center; color:#6b7280;">No services attached to this visit.</td>
+                            <td colspan="3" style="padding: 0.5rem 0; text-align:center; color:#6b7280;">No services attached to this visit.</td>
                         </tr>
                     {% endfor %}
                 </tbody>

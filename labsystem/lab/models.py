@@ -130,11 +130,11 @@ class TestCatalog(models.Model):
 
 class ReferenceRangeDefault(models.Model):
     AGE_CATEGORIES = [
-        ('neonate', 'Neonate (0-30 days)'),
-        ('infant', 'Infant (1-6 months)'),
-        ('child_1_5', 'Child (1-5 years)'),
-        ('child_6_11', 'Child (6-12 years)'),
-        ('adult', 'Adult (13+ years)'),
+        ('neonate', 'Neonate'),
+        ('child', 'Child'),
+        ('woman', 'Woman'),
+        ('man', 'Man'),
+        ('general', 'General'),
     ]
     test = models.ForeignKey(TestCatalog, on_delete=models.CASCADE, related_name='default_ranges')
     age_category = models.CharField(max_length=20, choices=AGE_CATEGORIES)
