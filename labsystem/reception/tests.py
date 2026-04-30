@@ -487,6 +487,14 @@ class ReceptionPharmacyWorkflowTests(TestCase):
             ).exists()
         )
 
+    def test_complete_visit_page_renders_searchable_prescription_picker(self):
+        response = self.client.get(reverse("complete_visit", args=[self.visit.pk]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'id="drug-search-input"', html=False)
+        self.assertContains(response, "Type at least 3 letters to search stocked drugs")
+        self.assertContains(response, 'id="drug-search-results"', html=False)
+
     def test_dashboard_surfaces_walk_in_dispense_link(self):
         Prescription.objects.create(
             visit=self.visit,

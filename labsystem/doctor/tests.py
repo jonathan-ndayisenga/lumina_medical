@@ -146,6 +146,14 @@ class DoctorWorkflowTests(TestCase):
         data.update(overrides)
         return data
 
+    def test_consultation_page_renders_searchable_prescription_picker(self):
+        response = self.client.get(reverse("consultation", args=[self.visit.pk]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'id="drug-search-input"', html=False)
+        self.assertContains(response, "Type at least 3 letters to search stocked drugs")
+        self.assertContains(response, 'id="drug-search-results"', html=False)
+
     def test_doctor_can_save_consultation_without_creating_duplicate_lab_requests(self):
         response = self.client.post(
             reverse("consultation", args=[self.visit.pk]),

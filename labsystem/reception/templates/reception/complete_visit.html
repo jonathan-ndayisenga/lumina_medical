@@ -64,12 +64,15 @@
 
             <div class="grid grid-cols-1 lg:grid-cols-5 gap-3">
                 <div class="lg:col-span-2">
-                    <label for="drug-select" class="block text-sm font-semibold text-text-main mb-1">Drug</label>
-                    <select id="drug-select" class="form-control w-full">
+                    <label for="drug-search-input" class="block text-sm font-semibold text-text-main mb-1">Drug</label>
+                    <input id="drug-search-input" type="text" class="form-control w-full" placeholder="Type at least 3 letters to search stocked drugs">
+                    <div id="drug-search-results" class="hidden mt-2 rounded-lg border border-gray-200 bg-white shadow-sm max-h-56 overflow-y-auto"></div>
+                    <select id="drug-select" class="form-control w-full hidden">
                         <option value="">Select a stocked drug</option>
                         {% for drug in available_drugs %}
                             <option
                                 value="{{ drug.id }}"
+                                data-drug-name="{{ drug.name }}"
                                 data-category="{{ drug.category }}"
                                 data-unit="{{ drug.unit }}"
                                 data-base-unit="{{ drug.base_unit }}"
@@ -83,6 +86,7 @@
                             </option>
                         {% endfor %}
                     </select>
+                    <p class="mt-2 text-xs text-text-muted">Search by the first 3 letters, choose the drug, add the prescription, then search again for the next one.</p>
                 </div>
                 <div>
                     <label for="dosage-mg" id="dosage-label" class="block text-sm font-semibold text-text-main mb-1">Dosage</label>
@@ -241,6 +245,8 @@
     const addUrl = wrapper.dataset.addPrescriptionUrl;
     const csrfToken = wrapper.dataset.csrfToken || document.querySelector('input[name="csrfmiddlewaretoken"]')?.value || '';
     const dispenseUrlTemplate = wrapper.dataset.dispenseUrlTemplate || '';
+    const drugSearchInput = wrapper.querySelector('#drug-search-input');
+    const drugSearchResults = wrapper.querySelector('#drug-search-results');
     const drugSelect = wrapper.querySelector('#drug-select');
     const dosageInput = wrapper.querySelector('#dosage-mg');
     const dosageLabel = wrapper.querySelector('#dosage-label');
@@ -264,12 +270,118 @@
         }
     }
 
+    function searchableDrugOptions() {
+        return Array.from(drugSelect?.options || []).filter(option => option.value);
+    }
+
+    function drugDisplayName(option) {
+        return option?.dataset?.drugName || option?.textContent?.trim() || 'Selected drug';
+    }
+
+    function clearSelectedDrug() {
+        if (drugSelect) {
+            drugSelect.value = '';
+        }
+        if (drugSearchInput) {
+            delete drugSearchInput.dataset.selectedValue;
+            delete drugSearchInput.dataset.selectedLabel;
+        }
+    }
+
+    function hideDrugSearchResults() {
+        if (!drugSearchResults) return;
+        drugSearchResults.classList.add('hidden');
+        drugSearchResults.innerHTML = '';
+    }
+
+    function selectDrugOption(value) {
+        if (!drugSelect) return;
+        drugSelect.value = String(value);
+        const option = drugSelect.selectedOptions?.[0];
+        if (drugSearchInput && option) {
+            const label = drugDisplayName(option);
+            drugSearchInput.value = label;
+            drugSearchInput.dataset.selectedValue = String(value);
+            drugSearchInput.dataset.selectedLabel = label;
+        }
+        hideDrugSearchResults();
+        updateDosageLabel();
+        updatePreview();
+    }
+
+    function renderDrugSearchResults() {
+        if (!drugSearchInput || !drugSearchResults) return;
+
+        const currentValue = drugSearchInput.value;
+        const query = currentValue.trim().toLowerCase();
+        if (drugSearchInput.dataset.selectedLabel && currentValue !== drugSearchInput.dataset.selectedLabel) {
+            clearSelectedDrug();
+            drugSearchInput.value = currentValue;
+        }
+
+        if (query.length < 3) {
+            hideDrugSearchResults();
+            return;
+        }
+
+        const matches = searchableDrugOptions()
+            .map(option => ({
+                option,
+                label: drugDisplayName(option),
+                category: option.dataset.category || '',
+                stock: option.dataset.stock || '',
+                price: option.dataset.price || '0',
+            }))
+            .filter(item => item.label.toLowerCase().includes(query))
+            .sort((left, right) => {
+                const leftStarts = left.label.toLowerCase().startsWith(query) ? 0 : 1;
+                const rightStarts = right.label.toLowerCase().startsWith(query) ? 0 : 1;
+                if (leftStarts !== rightStarts) {
+                    return leftStarts - rightStarts;
+                }
+                return left.label.localeCompare(right.label);
+            })
+            .slice(0, 8);
+
+        if (!matches.length) {
+            drugSearchResults.innerHTML = '<p class="px-3 py-2 text-sm text-text-muted">No stocked drug matches those letters yet.</p>';
+            drugSearchResults.classList.remove('hidden');
+            return;
+        }
+
+        drugSearchResults.innerHTML = matches.map(item => `
+            <button
+                type="button"
+                class="flex w-full items-start justify-between gap-3 border-b border-gray-100 px-3 py-2 text-left last:border-b-0 hover:bg-gray-50"
+                data-drug-option-value="${item.option.value}"
+            >
+                <span>
+                    <span class="block font-semibold text-text-main">${item.label}</span>
+                    <span class="block text-xs text-text-muted">${item.category} - Stock ${item.stock}</span>
+                </span>
+                <span class="text-xs font-semibold text-text-muted">UGX ${item.price}</span>
+            </button>
+        `).join('');
+        drugSearchResults.classList.remove('hidden');
+    }
+
+    function resetPrescriptionPicker() {
+        clearSelectedDrug();
+        if (drugSearchInput) {
+            drugSearchInput.value = '';
+            drugSearchInput.focus();
+        }
+        hideDrugSearchResults();
+        updateDosageLabel();
+        updatePreview();
+    }
+
     function currentDrugData() {
         const option = drugSelect?.selectedOptions?.[0];
         if (!option || !option.value) return null;
         return {
             id: option.value,
-            name: option.textContent,
+            name: drugDisplayName(option),
             category: option.dataset.category || '',
             unit: option.dataset.unit || '',
             baseUnit: option.dataset.baseUnit || '',
@@ -363,11 +475,57 @@
         return card;
     }
 
+    function updateDosageLabel() {
+        const drug = currentDrugData();
+        if (!dosageLabel) return;
+        if (!drug) {
+            dosageLabel.textContent = 'Dosage';
+            dosageInput.placeholder = '500';
+            return;
+        }
+        if (['syrup', 'iv', 'im'].includes(drug.category)) {
+            dosageLabel.textContent = 'Dose / Intake (ml)';
+            dosageInput.placeholder = '10';
+        } else if (drug.category === 'tube') {
+            dosageLabel.textContent = 'Amount / Intake';
+            dosageInput.placeholder = '1';
+        } else {
+            dosageLabel.textContent = 'Dose / Intake (mg)';
+            dosageInput.placeholder = '500';
+        }
+    }
+
     [drugSelect, dosageInput, frequencyInput, durationInput].forEach(field => {
         field?.addEventListener('input', updatePreview);
         field?.addEventListener('change', updatePreview);
     });
+    drugSearchInput?.addEventListener('input', renderDrugSearchResults);
+    drugSearchInput?.addEventListener('focus', renderDrugSearchResults);
+    drugSearchInput?.addEventListener('keydown', event => {
+        if (event.key === 'Enter') {
+            const firstResult = drugSearchResults?.querySelector('[data-drug-option-value]');
+            if (firstResult) {
+                event.preventDefault();
+                selectDrugOption(firstResult.dataset.drugOptionValue);
+            }
+        }
+        if (event.key === 'Escape') {
+            hideDrugSearchResults();
+        }
+    });
+    drugSearchResults?.addEventListener('click', event => {
+        const button = event.target.closest('[data-drug-option-value]');
+        if (!button) return;
+        selectDrugOption(button.dataset.drugOptionValue);
+    });
     drugSelect?.addEventListener('change', updateDosageLabel);
+    document.addEventListener('click', event => {
+        if (!drugSearchInput || !drugSearchResults) return;
+        if (drugSearchInput.contains(event.target) || drugSearchResults.contains(event.target)) {
+            return;
+        }
+        hideDrugSearchResults();
+    });
 
     addPrescriptionButton?.addEventListener('click', async () => {
         const drug = currentDrugData();
@@ -406,8 +564,9 @@
             prescriptionList?.prepend(createPrescriptionCard(payload.prescription));
             dosageInput.value = '';
             durationInput.value = '1';
+            frequencyInput.value = '2';
             if (prescriptionNotes) prescriptionNotes.value = '';
-            updatePreview();
+            resetPrescriptionPicker();
             showMessage(prescriptionMessage, payload.message, 'success');
         } catch (error) {
             showMessage(prescriptionMessage, error.message, 'error');
@@ -419,22 +578,3 @@
 })();
 </script>
 {% endblock %}
-    function updateDosageLabel() {
-        const drug = currentDrugData();
-        if (!dosageLabel) return;
-        if (!drug) {
-            dosageLabel.textContent = 'Dosage';
-            dosageInput.placeholder = '500';
-            return;
-        }
-        if (['syrup', 'iv', 'im'].includes(drug.category)) {
-            dosageLabel.textContent = 'Dose / Intake (ml)';
-            dosageInput.placeholder = '10';
-        } else if (drug.category === 'tube') {
-            dosageLabel.textContent = 'Amount / Intake';
-            dosageInput.placeholder = '1';
-        } else {
-            dosageLabel.textContent = 'Dose / Intake (mg)';
-            dosageInput.placeholder = '500';
-        }
-    }
