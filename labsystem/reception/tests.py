@@ -503,6 +503,7 @@ class ReceptionPharmacyWorkflowTests(TestCase):
         self.assertContains(response, "Walk-In Dispense Desk")
         self.assertContains(response, "Dispense / Bill")
         self.assertContains(response, "Dispense")
+        self.assertContains(response, "Register New Patient")
 
     def test_quick_dispense_start_creates_walk_in_visit(self):
         response = self.client.post(
