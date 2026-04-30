@@ -80,9 +80,17 @@ def reception_dashboard(request):
     ready_for_billing = (
         Visit.objects.filter(hospital=hospital, status=Visit.STATUS_READY_FOR_BILLING)
         .select_related("patient")
+        .annotate(
+            undispensed_prescription_count=Count(
+                "prescriptions",
+                filter=Q(prescriptions__dispensed=False),
+                distinct=True,
+            )
+        )
         .order_by("-visit_date")[:6]
         if hospital else Visit.objects.none()
     )
+    ready_for_dispense = [visit for visit in ready_for_billing if getattr(visit, "undispensed_prescription_count", 0) > 0]
     context = {
         "active_nav": "reception",
         "dashboard_title": "Reception Dashboard",
@@ -93,9 +101,11 @@ def reception_dashboard(request):
         "queue_count": QueueEntry.objects.filter(hospital=hospital, processed=False).count() if hospital else 0,
         "completed_visit_count": Visit.objects.filter(hospital=hospital, status=Visit.STATUS_COMPLETED).count() if hospital else 0,
         "ready_for_billing_count": Visit.objects.filter(hospital=hospital, status=Visit.STATUS_READY_FOR_BILLING).count() if hospital else 0,
+        "ready_for_dispense_count": len(ready_for_dispense),
         "recent_patients": patients,
         "recent_visits": visits,
         "ready_for_billing_visits": ready_for_billing,
+        "ready_for_dispense_visits": ready_for_dispense,
     }
     return render(request, "reception/dashboard.html", context)
 

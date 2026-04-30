@@ -105,6 +105,8 @@ class ReceiptRenderingTests(TestCase):
         self.assertIsNotNone(cash_txn)
         self.assertEqual(cash_txn.cash_drawer_id, self.cash_drawer.id)
         self.assertEqual(cash_txn.amount, Decimal("50.00"))
+        self.assertContains(resp, "Lumina Medical Services")
+        self.assertContains(resp, "luminamedicalservices@gmail.com")
 
 
 class FinancialChannelSyncTests(TestCase):
@@ -484,3 +486,19 @@ class ReceptionPharmacyWorkflowTests(TestCase):
                 transaction_type=InventoryTransaction.TYPE_CONSUME,
             ).exists()
         )
+
+    def test_dashboard_surfaces_walk_in_dispense_link(self):
+        Prescription.objects.create(
+            visit=self.visit,
+            drug=self.drug,
+            dosage_mg=Decimal("500"),
+            frequency_per_day=2,
+            duration_days=5,
+            total_quantity=Decimal("10"),
+            total_price=Decimal("3000"),
+            prescribed_by=self.receptionist,
+        )
+        response = self.client.get(reverse("reception_dashboard"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Walk-In Dispense Desk")
+        self.assertContains(response, "Dispense / Bill")

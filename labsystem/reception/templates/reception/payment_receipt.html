@@ -45,7 +45,11 @@
         <button type="button" class="btn btn-primary" onclick="window.print()">Print Receipt</button>
     </div>
 
-    {% include "partials/print_header.html" with hospital=hospital print_title="PAYMENT RECEIPT" print_subtitle=payment.receipt_number %}
+    <div class="border border-gray-200 rounded-lg p-3 bg-white text-center space-y-1">
+        <div class="font-bold uppercase text-xs tracking-wide text-text-main">Lumina Medical Services</div>
+        <div class="text-[10px] text-text-muted">luminamedicalservices@gmail.com</div>
+        <div class="text-[10px] text-text-muted">Receipt No: {{ payment.receipt_number }}</div>
+    </div>
 
     <div class="space-y-2 border border-gray-200 rounded-lg p-3 bg-white">
         <div class="space-y-1">

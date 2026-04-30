@@ -11,7 +11,7 @@
         <a href="{% url 'patient_create' %}" class="btn btn-primary">Register New Patient</a>
     </div>
 
-    <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
+    <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-6 gap-4">
         <div class="card">
             <p class="text-text-muted text-sm font-medium mb-2">Patients Registered</p>
             <p class="text-3xl font-bold text-brand-dark">{{ patient_count }}</p>
@@ -32,6 +32,10 @@
             <p class="text-text-muted text-sm font-medium mb-2">Completed</p>
             <p class="text-3xl font-bold text-green-600">{{ completed_visit_count }}</p>
         </div>
+        <div class="card">
+            <p class="text-text-muted text-sm font-medium mb-2">Waiting Dispense</p>
+            <p class="text-3xl font-bold text-purple-600">{{ ready_for_dispense_count }}</p>
+        </div>
     </div>
 
     <div class="card bg-brand-soft border-l-4 border-brand-dark">
@@ -44,7 +48,7 @@
         {% endif %}
     </div>
 
-    <div class="grid grid-cols-1 xl:grid-cols-3 gap-4">
+    <div class="grid grid-cols-1 xl:grid-cols-4 gap-4">
         <div class="card xl:col-span-1">
             <h4 class="text-sm font-semibold text-text-main mb-4">Recent Patients</h4>
             <div class="space-y-3 max-h-72 overflow-y-auto">
@@ -79,6 +83,26 @@
         </div>
 
         <div class="card xl:col-span-1">
+            <h4 class="text-sm font-semibold text-text-main mb-4">Walk-In Dispense Desk</h4>
+            <div class="space-y-3 max-h-72 overflow-y-auto">
+                {% for visit in ready_for_dispense_visits %}
+                    <div class="rounded-lg border border-purple-200 bg-purple-50 p-3 text-sm">
+                        <div class="flex items-center justify-between gap-3">
+                            <div>
+                                <p class="font-medium text-text-main">{{ visit.patient.name }}</p>
+                                <p class="text-xs text-text-muted">{{ visit.visit_date|date:"M d, Y H:i" }}</p>
+                            </div>
+                            <a href="{% url 'complete_visit' visit.pk %}" class="btn btn-primary btn-sm">Dispense / Bill</a>
+                        </div>
+                        <p class="text-xs text-text-muted mt-2">{{ visit.undispensed_prescription_count }} medicine{{ visit.undispensed_prescription_count|pluralize }} still waiting to be dispensed.</p>
+                    </div>
+                {% empty %}
+                    <p class="text-sm text-text-muted text-center py-8">No walk-in prescriptions are waiting for dispensing right now.</p>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="card xl:col-span-1">
             <h4 class="text-sm font-semibold text-text-main mb-4">Ready for Billing</h4>
             <div class="space-y-3 max-h-72 overflow-y-auto">
                 {% for visit in ready_for_billing_visits %}
@@ -88,9 +112,12 @@
                                 <p class="font-medium text-text-main">{{ visit.patient.name }}</p>
                                 <p class="text-xs text-text-muted">{{ visit.visit_date|date:"M d, Y H:i" }}</p>
                             </div>
-                            <a href="{% url 'complete_visit' visit.pk %}" class="btn btn-primary btn-sm">Bill Visit</a>
+                            <a href="{% url 'complete_visit' visit.pk %}" class="btn btn-primary btn-sm">{% if visit.undispensed_prescription_count %}Dispense / Bill{% else %}Bill Visit{% endif %}</a>
                         </div>
                         <p class="text-xs text-text-muted mt-2">Outstanding total: {{ visit.total_amount }}</p>
+                        {% if visit.undispensed_prescription_count %}
+                            <p class="text-xs text-purple-700 font-medium mt-1">{{ visit.undispensed_prescription_count }} medicine{{ visit.undispensed_prescription_count|pluralize }} waiting for dispensing.</p>
+                        {% endif %}
                     </div>
                 {% empty %}
                     <p class="text-sm text-text-muted text-center py-8">No visits are waiting for billing yet.</p>
