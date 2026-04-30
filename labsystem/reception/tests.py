@@ -502,3 +502,34 @@ class ReceptionPharmacyWorkflowTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Walk-In Dispense Desk")
         self.assertContains(response, "Dispense / Bill")
+        self.assertContains(response, "Dispense")
+
+    def test_quick_dispense_start_creates_walk_in_visit(self):
+        response = self.client.post(
+            reverse("quick_dispense_start"),
+            {
+                "client_type": "walk_in",
+                "patient": "",
+                "notes": "Walk-in pain medicine",
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        visit = Visit.objects.exclude(pk=self.visit.pk).latest("id")
+        self.assertEqual(response.headers["Location"], reverse("complete_visit", args=[visit.pk]))
+        self.assertEqual(visit.status, Visit.STATUS_READY_FOR_BILLING)
+        self.assertEqual(visit.patient.name, "Walk-In Client")
+        self.assertEqual(visit.total_amount, Decimal("0.00"))
+
+    def test_quick_dispense_start_can_use_existing_patient(self):
+        response = self.client.post(
+            reverse("quick_dispense_start"),
+            {
+                "client_type": "existing",
+                "patient": str(self.patient.pk),
+                "notes": "Existing patient refill",
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        visit = Visit.objects.exclude(pk=self.visit.pk).latest("id")
+        self.assertEqual(response.headers["Location"], reverse("complete_visit", args=[visit.pk]))
+        self.assertEqual(visit.patient, self.patient)

@@ -166,6 +166,39 @@ class VisitCreateForm(forms.ModelForm):
             return Decimal("0")
         return sum((service.price for service in services), Decimal("0"))
 
+
+class QuickDispenseStartForm(forms.Form):
+    CLIENT_WALK_IN = "walk_in"
+    CLIENT_EXISTING = "existing"
+
+    CLIENT_CHOICES = [
+        (CLIENT_WALK_IN, "Walk-in client"),
+        (CLIENT_EXISTING, "Existing patient"),
+    ]
+
+    client_type = forms.ChoiceField(choices=CLIENT_CHOICES)
+    patient = forms.ModelChoiceField(queryset=Patient.objects.none(), required=False)
+    notes = forms.CharField(
+        required=False,
+        widget=forms.Textarea(attrs={"rows": 3, "class": "form-control", "placeholder": "Optional note for this dispense visit."}),
+    )
+
+    def __init__(self, *args, hospital=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["client_type"].widget.attrs.update({"class": "form-control"})
+        self.fields["patient"].widget.attrs.update({"class": "form-control"})
+        if hospital is not None:
+            self.fields["patient"].queryset = Patient.objects.filter(hospital=hospital).order_by("name")
+
+    def clean(self):
+        cleaned = super().clean()
+        client_type = cleaned.get("client_type")
+        patient = cleaned.get("patient")
+        if client_type == self.CLIENT_EXISTING and not patient:
+            self.add_error("patient", "Choose the patient you want to dispense for.")
+        return cleaned
+
+
 class CompleteVisitForm(forms.Form):
     amount_paid = forms.DecimalField(min_value=Decimal("0"), decimal_places=2, max_digits=10)
     payment_mode = forms.ChoiceField(choices=Payment.MODE_CHOICES)

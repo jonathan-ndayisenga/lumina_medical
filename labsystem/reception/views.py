@@ -11,7 +11,7 @@ from django.utils import timezone
 from accounts.models import User
 from admin_dashboard.models import InventoryItem, InventoryTransaction
 from doctor.models import Prescription
-from .forms import CompleteVisitForm, PatientForm, VisitCreateForm
+from .forms import CompleteVisitForm, PatientForm, QuickDispenseStartForm, VisitCreateForm
 from .models import Patient, Payment, QueueEntry, Visit, VisitService
 from .workflow import sync_visit_status
 
@@ -72,6 +72,25 @@ def available_drug_payload(item):
     }
 
 
+def get_or_create_walk_in_patient(hospital):
+    patient, created = Patient.objects.get_or_create(
+        hospital=hospital,
+        name="Walk-In Client",
+        age="0YRS",
+        sex="O",
+        defaults={
+            "registration_date": timezone.localdate(),
+            "contact": "",
+            "email": "",
+            "address": "",
+        },
+    )
+    if created and not patient.registration_date:
+        patient.registration_date = timezone.localdate()
+        patient.save(update_fields=["registration_date"])
+    return patient
+
+
 @reception_role_required
 def reception_dashboard(request):
     hospital = get_active_hospital(request)
@@ -108,6 +127,49 @@ def reception_dashboard(request):
         "ready_for_dispense_visits": ready_for_dispense,
     }
     return render(request, "reception/dashboard.html", context)
+
+
+@reception_role_required
+@transaction.atomic
+def quick_dispense_start(request):
+    hospital = get_active_hospital(request)
+    if request.method == "POST":
+        form = QuickDispenseStartForm(request.POST, hospital=hospital)
+        if form.is_valid():
+            client_type = form.cleaned_data["client_type"]
+            patient = (
+                form.cleaned_data["patient"]
+                if client_type == QuickDispenseStartForm.CLIENT_EXISTING
+                else get_or_create_walk_in_patient(hospital)
+            )
+            visit = Visit.objects.create(
+                patient=patient,
+                hospital=hospital,
+                status=Visit.STATUS_READY_FOR_BILLING,
+                total_amount=Decimal("0.00"),
+                created_by=request.user,
+                notes=form.cleaned_data.get("notes") or "Created from reception quick dispense desk.",
+            )
+            messages.success(
+                request,
+                f"Dispense visit started for {patient.name}. Add medicines, dispense them, then finish billing.",
+            )
+            return redirect("complete_visit", visit_id=visit.pk)
+        messages.error(request, "Please fix the quick dispense details below.")
+    else:
+        form = QuickDispenseStartForm(hospital=hospital, initial={"client_type": QuickDispenseStartForm.CLIENT_WALK_IN})
+
+    return render(
+        request,
+        "reception/quick_dispense_start.html",
+        {
+            "active_nav": "reception",
+            "dashboard_title": "Start Dispense",
+            "dashboard_intro": "Open a quick dispense visit for a walk-in client or an existing patient, then move straight into prescribing and billing.",
+            "hospital": hospital,
+            "form": form,
+        },
+    )
 
 
 @reception_role_required

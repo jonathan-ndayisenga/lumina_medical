@@ -1,0 +1,64 @@
+{% extends 'base.html' %}
+
+{% block title %}Start Dispense - Hospital EMR{% endblock %}
+{% block page_title %}Start Dispense{% endblock %}
+{% block page_subtitle %}Choose a walk-in client or an existing patient, then jump straight into the reception pharmacy and billing flow.{% endblock %}
+
+{% block content %}
+<div class="max-w-3xl">
+    <div class="card">
+        <h3 class="text-sm font-semibold text-text-main mb-4">Quick Dispense Visit</h3>
+        <p class="text-sm text-text-muted mb-4">Use this when you want to dispense medicines immediately from reception without going through the full patient registration flow first.</p>
+
+        <form method="post" class="space-y-5">
+            {% csrf_token %}
+            {% if form.non_field_errors %}
+                <div class="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{{ form.non_field_errors }}</div>
+            {% endif %}
+
+            <div>
+                <label for="{{ form.client_type.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">Dispense For</label>
+                {{ form.client_type }}
+                {% for error in form.client_type.errors %}<div class="text-xs text-red-600 mt-1">{{ error }}</div>{% endfor %}
+                <p class="mt-2 text-xs text-text-muted">Choose walk-in client if you do not want to capture a specific patient name first.</p>
+            </div>
+
+            <div id="patient-picker-wrap" class="space-y-2 hidden">
+                <label for="{{ form.patient.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">Existing Patient</label>
+                {{ form.patient }}
+                {% for error in form.patient.errors %}<div class="text-xs text-red-600 mt-1">{{ error }}</div>{% endfor %}
+                <p class="text-xs text-text-muted">Select the patient from your database. A fresh visit will be created just for this dispense/billing session.</p>
+            </div>
+
+            <div>
+                <label for="{{ form.notes.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">Visit Notes (optional)</label>
+                {{ form.notes }}
+                {% for error in form.notes.errors %}<div class="text-xs text-red-600 mt-1">{{ error }}</div>{% endfor %}
+            </div>
+
+            <div class="flex gap-3 flex-wrap">
+                <button type="submit" class="btn btn-primary">Open Dispense Desk</button>
+                <a href="{% url 'reception_dashboard' %}" class="btn btn-secondary">Back to Dashboard</a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    const clientType = document.getElementById('{{ form.client_type.id_for_label }}');
+    const patientWrap = document.getElementById('patient-picker-wrap');
+    if (!clientType || !patientWrap) return;
+
+    function syncPatientPicker() {
+        const isExisting = clientType.value === 'existing';
+        patientWrap.classList.toggle('hidden', !isExisting);
+    }
+
+    clientType.addEventListener('change', syncPatientPicker);
+    syncPatientPicker();
+})();
+</script>
+{% endblock %}
