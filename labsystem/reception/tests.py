@@ -487,6 +487,42 @@ class ReceptionPharmacyWorkflowTests(TestCase):
             ).exists()
         )
 
+    def test_receptionist_can_remove_dispensed_prescription_and_restore_stock(self):
+        self.client.post(
+            reverse("add_prescription_api", args=[self.visit.pk]),
+            {
+                "drug_id": self.drug.pk,
+                "dosage_mg": "500",
+                "frequency_per_day": "2",
+                "duration_days": "5",
+            },
+        )
+        prescription = Prescription.objects.get(visit=self.visit, drug=self.drug)
+
+        self.client.post(
+            reverse("reception_dispense_prescription", args=[self.visit.pk, prescription.pk]),
+        )
+        self.drug.refresh_from_db()
+        self.assertEqual(self.drug.current_quantity, Decimal("4"))
+
+        response = self.client.post(
+            reverse("remove_prescription_api", args=[self.visit.pk, prescription.pk]),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.visit.refresh_from_db()
+        self.drug.refresh_from_db()
+        self.assertFalse(Prescription.objects.filter(pk=prescription.pk).exists())
+        self.assertEqual(self.visit.total_amount, Decimal("20.00"))
+        self.assertEqual(self.drug.current_quantity, Decimal("5"))
+        self.assertTrue(
+            InventoryTransaction.objects.filter(
+                item=self.drug,
+                transaction_type=InventoryTransaction.TYPE_ADJUST,
+                notes__icontains=f"Prescription {prescription.pk} removed",
+            ).exists()
+        )
+
     def test_complete_visit_page_renders_searchable_prescription_picker(self):
         response = self.client.get(reverse("complete_visit", args=[self.visit.pk]))
 

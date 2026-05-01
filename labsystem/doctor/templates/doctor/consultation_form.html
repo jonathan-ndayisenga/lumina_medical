@@ -13,6 +13,7 @@
     data-send-lab-request-url="{% url 'send_lab_request_api' visit.pk %}"
     data-add-service-url="{% url 'add_billable_service_api' visit.pk %}"
     data-add-prescription-url="{% url 'add_prescription_api' visit.pk %}"
+    data-remove-prescription-url-template="/doctor/visit/{{ visit.pk }}/api/prescriptions/__PRESCRIPTION_ID__/remove/"
 >
     <div class="card">
         <h3 class="text-sm font-semibold text-text-main mb-3">Visit Summary</h3>
@@ -259,7 +260,7 @@
 
         <div class="mt-4 space-y-3" id="prescription-list">
             {% for prescription in prescriptions %}
-                <div class="rounded-xl border {% if prescription.dispensed %}border-green-200 bg-green-50{% else %}border-blue-200 bg-blue-50{% endif %} p-3">
+                <div class="rounded-xl border {% if prescription.dispensed %}border-green-200 bg-green-50{% else %}border-blue-200 bg-blue-50{% endif %} p-3" data-prescription-id="{{ prescription.pk }}">
                     <div class="flex items-start justify-between gap-3 flex-wrap">
                         <div>
                             <p class="font-semibold text-text-main">{{ prescription.drug.name }}</p>
@@ -270,8 +271,10 @@
                             <p class="text-xs font-semibold text-text-muted">UGX {{ prescription.total_price }}</p>
                             {% if prescription.dispensed %}
                                 <span class="inline-flex items-center rounded-full bg-green-100 px-2 py-1 text-xs font-semibold text-green-700 mt-2">Dispensed</span>
+                                <button type="button" class="mt-2 inline-flex items-center rounded-full border border-red-200 bg-white px-2 py-1 text-xs font-semibold text-red-700 hover:bg-red-50" data-remove-prescription="{{ prescription.pk }}">Undo &amp; Remove</button>
                             {% else %}
                                 <span class="inline-flex items-center rounded-full bg-blue-100 px-2 py-1 text-xs font-semibold text-blue-700 mt-2">Pending dispense</span>
+                                <button type="button" class="mt-2 inline-flex items-center rounded-full border border-red-200 bg-white px-2 py-1 text-xs font-semibold text-red-700 hover:bg-red-50" data-remove-prescription="{{ prescription.pk }}">Remove</button>
                             {% endif %}
                         </div>
                     </div>
@@ -510,6 +513,7 @@
     const drugSearchInput = document.getElementById('drug-search-input');
     const drugResultsSelect = document.getElementById('drug-results-select');
     const drugSelect = document.getElementById('drug-select');
+    const removePrescriptionUrlTemplate = page.dataset.removePrescriptionUrlTemplate || '';
     const dosageInput = document.getElementById('dosage-mg');
     const dosageLabel = document.getElementById('dosage-label');
     const frequencySelect = document.getElementById('frequency-per-day');
@@ -627,9 +631,17 @@
             <span class="inline-flex items-center rounded-full ${prescription.dispensed ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'} px-2 py-1 text-xs font-semibold mt-2">
               ${prescription.dispensed ? 'Dispensed' : 'Pending dispense'}
             </span>
+            <button
+              type="button"
+              class="mt-2 inline-flex items-center rounded-full border border-red-200 bg-white px-2 py-1 text-xs font-semibold text-red-700 hover:bg-red-50"
+              data-remove-prescription="${prescription.id}"
+            >
+              ${prescription.dispensed ? 'Undo & Remove' : 'Remove'}
+            </button>
           </div>
         </div>
       `;
+      card.dataset.prescriptionId = prescription.id;
       return card;
     }
 
@@ -1054,6 +1066,43 @@
       }
     }
 
+    async function removePrescription(prescriptionId) {
+      if (!removePrescriptionUrlTemplate) {
+        return;
+      }
+      const card = prescriptionList?.querySelector(`[data-prescription-id="${prescriptionId}"]`);
+      const removeButton = card?.querySelector(`[data-remove-prescription="${prescriptionId}"]`);
+      const prompt = removeButton?.textContent?.includes('Undo')
+        ? 'This prescription was already dispensed. Remove it and restore the stock?'
+        : 'Remove this prescription from the list?';
+      if (!window.confirm(prompt)) {
+        return;
+      }
+
+      if (removeButton) {
+        removeButton.disabled = true;
+      }
+
+      try {
+        const formData = new FormData();
+        const payload = await postForm(
+          removePrescriptionUrlTemplate.replace('__PRESCRIPTION_ID__', String(prescriptionId)),
+          formData,
+        );
+        card?.remove();
+        if (!prescriptionList?.querySelector('[data-prescription-id]')) {
+          prescriptionEmpty?.classList.remove('hidden');
+        }
+        updateTotalAmount(payload.visit_total_amount);
+        showMessage(prescriptionMessage, payload.message, 'success');
+      } catch (error) {
+        showMessage(prescriptionMessage, error.message, 'error');
+        if (removeButton) {
+          removeButton.disabled = false;
+        }
+      }
+    }
+
     function showModalMessage(text, type) {
       modalMessage.textContent = text;
       modalMessage.className = 'rounded-lg p-3 text-sm';
@@ -1106,6 +1155,13 @@
     drugSelect?.addEventListener('change', () => {
       syncPrescriptionLabels();
       calculatePrescriptionPreview();
+    });
+    prescriptionList?.addEventListener('click', event => {
+      const button = event.target.closest('[data-remove-prescription]');
+      if (!button) {
+        return;
+      }
+      removePrescription(button.dataset.removePrescription);
     });
     dosageInput?.addEventListener('input', calculatePrescriptionPreview);
     frequencySelect?.addEventListener('change', calculatePrescriptionPreview);

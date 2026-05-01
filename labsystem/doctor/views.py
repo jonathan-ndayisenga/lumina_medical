@@ -9,7 +9,7 @@ from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 
 from accounts.models import User
-from admin_dashboard.models import InventoryItem
+from admin_dashboard.models import InventoryItem, InventoryTransaction
 from lab.models import LabReport
 from nurse.models import NurseNote
 from reception.models import QueueEntry, Service, Triage, Visit, VisitService
@@ -111,6 +111,71 @@ def prescription_payload(prescription):
         "total_price": str(prescription.total_price),
         "dispensed": prescription.dispensed,
         "dispensed_at": prescription.dispensed_at.strftime("%Y-%m-%d %H:%M") if prescription.dispensed_at else "",
+    }
+
+
+def reverse_dispensed_stock(prescription, *, actor):
+    drug = prescription.drug
+    stock_quantity_to_restore = drug.to_stock_quantity(prescription.total_quantity)
+    if stock_quantity_to_restore <= 0:
+        return
+
+    if drug.has_batch_tracking:
+        reversal_batch_number = f"REVERSAL-RX-{prescription.pk}"
+        drug.add_or_update_batch(
+            reversal_batch_number,
+            stock_quantity_to_restore,
+            unit_cost=drug.unit_cost,
+        )
+    else:
+        drug.current_quantity = Decimal(drug.current_quantity or 0) + stock_quantity_to_restore
+        drug.quantity = int(Decimal(drug.current_quantity or 0))
+        drug.save(update_fields=["current_quantity", "quantity"])
+
+    InventoryTransaction.objects.create(
+        hospital=prescription.visit.hospital,
+        item=drug,
+        transaction_type=InventoryTransaction.TYPE_ADJUST,
+        quantity=prescription.total_quantity,
+        unit_cost=drug.unit_cost,
+        visit=prescription.visit,
+        performed_by=actor,
+        notes=f"Prescription {prescription.pk} removed after dispense; stock restored.",
+    )
+
+
+@transaction.atomic
+def remove_prescription_workflow(*, prescription, actor):
+    visit = prescription.visit
+    total_price = Decimal(prescription.total_price or 0)
+    removed_drug_name = prescription.drug.name
+    dispensed = prescription.dispensed
+
+    if dispensed:
+        reverse_dispensed_stock(prescription, actor=actor)
+
+    billing_line = prescription.billing_visit_service
+    prescription.delete()
+
+    if billing_line:
+        billing_line.delete()
+
+    visit.total_amount = max(Decimal(visit.total_amount or 0) - total_price, Decimal("0"))
+    update_fields = ["total_amount"]
+    if visit.status == Visit.STATUS_COMPLETED and not visit.is_fully_paid:
+        visit.status = Visit.STATUS_READY_FOR_BILLING
+        update_fields.append("status")
+    visit.save(update_fields=update_fields)
+
+    message = f"{removed_drug_name} removed from the prescription list."
+    if dispensed:
+        message = f"{removed_drug_name} removed and dispensed stock was restored."
+
+    return {
+        "message": message,
+        "visit_total_amount": str(visit.total_amount),
+        "removed_prescription_id": prescription.pk,
+        "prescriptions_remaining": visit.prescriptions.count(),
     }
 
 
@@ -479,6 +544,25 @@ def add_prescription_api(request, visit_id):
             "visit_total_amount": str(visit.total_amount),
         }
     )
+
+
+@prescribing_role_required
+@require_http_methods(["POST"])
+@transaction.atomic
+def remove_prescription_api(request, visit_id, prescription_id):
+    hospital = get_active_hospital(request)
+    visits = Visit.objects.select_related("hospital").all()
+    if hospital and getattr(request.user, "role", "") != User.ROLE_SUPERADMIN:
+        visits = visits.filter(hospital=hospital)
+    visit = get_object_or_404(visits, pk=visit_id)
+    prescription = get_object_or_404(
+        Prescription.objects.select_related("drug", "visit", "billing_visit_service"),
+        pk=prescription_id,
+        visit=visit,
+    )
+
+    payload = remove_prescription_workflow(prescription=prescription, actor=request.user)
+    return JsonResponse(payload)
 
 
 @doctor_role_required

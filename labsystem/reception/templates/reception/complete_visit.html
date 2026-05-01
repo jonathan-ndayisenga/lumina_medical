@@ -17,9 +17,9 @@
                 </div>
                 <div class="space-y-2">
                     <p><strong class="text-text-main">Current Status:</strong> <span class="text-text-muted">{{ visit.get_status_display }}</span></p>
-                    <p><strong class="text-text-main">Total Bill:</strong> <span class="text-text-muted">{{ visit.total_amount }}</span></p>
+                    <p><strong class="text-text-main">Total Bill:</strong> <span id="visit-total-amount" class="text-text-muted">{{ visit.total_amount }}</span></p>
                     <p><strong class="text-text-main">Total Paid:</strong> <span class="text-text-muted">{{ total_paid }}</span></p>
-                    <p><strong class="text-text-main">Balance Due:</strong> <span class="text-text-muted">{{ balance_due }}</span></p>
+                    <p><strong class="text-text-main">Balance Due:</strong> <span id="visit-balance-due" class="text-text-muted">{{ balance_due }}</span></p>
                 </div>
             </div>
         </div>
@@ -51,14 +51,14 @@
                     <tfoot>
                         <tr class="border-t border-gray-200">
                             <td colspan="2" class="pt-3 font-semibold text-text-main">Total</td>
-                            <td class="pt-3 text-right font-semibold text-text-main">{{ visit.total_amount }}</td>
+                            <td id="visit-services-total" class="pt-3 text-right font-semibold text-text-main">{{ visit.total_amount }}</td>
                         </tr>
                     </tfoot>
                 </table>
             </div>
         </div>
 
-        <div class="card" data-add-prescription-url="{% url 'add_prescription_api' visit.pk %}" data-dispense-url-template="/reception/complete/{{ visit.pk }}/prescriptions/__PRESCRIPTION_ID__/dispense/" data-csrf-token="{{ csrf_token }}">
+        <div class="card" data-add-prescription-url="{% url 'add_prescription_api' visit.pk %}" data-remove-prescription-url-template="/doctor/visit/{{ visit.pk }}/api/prescriptions/__PRESCRIPTION_ID__/remove/" data-dispense-url-template="/reception/complete/{{ visit.pk }}/prescriptions/__PRESCRIPTION_ID__/dispense/" data-csrf-token="{{ csrf_token }}">
             <h3 class="text-sm font-semibold text-text-main mb-4">Reception Pharmacy</h3>
             <p class="text-sm text-text-muted mb-4">Add medicines with the same dose calculation used by the doctor module, then dispense them here before final billing.</p>
 
@@ -128,7 +128,7 @@
 
             <div class="mt-4 space-y-3" id="prescription-list">
                 {% for prescription in prescriptions %}
-                    <div class="rounded-xl border {% if prescription.dispensed %}border-green-200 bg-green-50{% else %}border-blue-200 bg-blue-50{% endif %} p-3">
+                    <div class="rounded-xl border {% if prescription.dispensed %}border-green-200 bg-green-50{% else %}border-blue-200 bg-blue-50{% endif %} p-3" data-prescription-id="{{ prescription.pk }}">
                         <div class="flex items-start justify-between gap-3 flex-wrap">
                             <div>
                                 <p class="font-semibold text-text-main">{{ prescription.drug.name }}</p>
@@ -139,11 +139,13 @@
                                 <p class="text-xs font-semibold text-text-muted">UGX {{ prescription.total_price }}</p>
                                 {% if prescription.dispensed %}
                                     <span class="inline-flex items-center rounded-full bg-green-100 px-2 py-1 text-xs font-semibold text-green-700 mt-2">Dispensed</span>
+                                    <button type="button" class="mt-2 inline-flex items-center rounded-full border border-red-200 bg-white px-2 py-1 text-xs font-semibold text-red-700 hover:bg-red-50" data-remove-prescription="{{ prescription.pk }}">Undo &amp; Remove</button>
                                 {% else %}
                                     <form method="post" action="{% url 'reception_dispense_prescription' visit.pk prescription.pk %}" class="mt-2">
                                         {% csrf_token %}
                                         <button type="submit" class="btn btn-secondary btn-sm">Dispense Now</button>
                                     </form>
+                                    <button type="button" class="mt-2 inline-flex items-center rounded-full border border-red-200 bg-white px-2 py-1 text-xs font-semibold text-red-700 hover:bg-red-50" data-remove-prescription="{{ prescription.pk }}">Remove</button>
                                 {% endif %}
                             </div>
                         </div>
@@ -244,6 +246,7 @@
     if (!wrapper) return;
 
     const addUrl = wrapper.dataset.addPrescriptionUrl;
+    const removePrescriptionUrlTemplate = wrapper.dataset.removePrescriptionUrlTemplate || '';
     const csrfToken = wrapper.dataset.csrfToken || document.querySelector('input[name="csrfmiddlewaretoken"]')?.value || '';
     const dispenseUrlTemplate = wrapper.dataset.dispenseUrlTemplate || '';
     const drugSearchInput = wrapper.querySelector('#drug-search-input');
@@ -259,6 +262,9 @@
     const prescriptionList = wrapper.querySelector('#prescription-list');
     const prescriptionEmpty = document.querySelector('#prescription-empty');
     const addPrescriptionButton = wrapper.querySelector('#add-prescription-btn');
+    const visitTotalAmount = document.getElementById('visit-total-amount');
+    const visitServicesTotal = document.getElementById('visit-services-total');
+    const visitBalanceDue = document.getElementById('visit-balance-due');
 
     function showMessage(container, message, level) {
         if (!container) return;
@@ -268,6 +274,18 @@
             container.classList.add('border-red-200', 'bg-red-50', 'text-red-700');
         } else {
             container.classList.add('border-green-200', 'bg-green-50', 'text-green-700');
+        }
+    }
+
+    function updateTotals(totalAmountValue) {
+        if (visitTotalAmount) {
+            visitTotalAmount.textContent = totalAmountValue;
+        }
+        if (visitServicesTotal) {
+            visitServicesTotal.textContent = totalAmountValue;
+        }
+        if (visitBalanceDue) {
+            visitBalanceDue.textContent = totalAmountValue;
         }
     }
 
@@ -463,12 +481,66 @@
                 <div class="text-right">
                     <p class="text-xs font-semibold text-text-muted">UGX ${prescription.total_price}</p>
                     ${prescription.dispensed
-                        ? '<span class="inline-flex items-center rounded-full bg-green-100 px-2 py-1 text-xs font-semibold text-green-700 mt-2">Dispensed</span>'
+                        ? `
+                            <span class="inline-flex items-center rounded-full bg-green-100 px-2 py-1 text-xs font-semibold text-green-700 mt-2">Dispensed</span>
+                            <button type="button" class="mt-2 inline-flex items-center rounded-full border border-red-200 bg-white px-2 py-1 text-xs font-semibold text-red-700 hover:bg-red-50" data-remove-prescription="${prescription.id}">Undo & Remove</button>
+                        `
                         : createDispenseForm(prescription.id)}
                 </div>
             </div>
         `;
+        if (!prescription.dispensed) {
+            const actions = card.querySelector('.text-right');
+            actions?.insertAdjacentHTML(
+                'beforeend',
+                `<button type="button" class="mt-2 inline-flex items-center rounded-full border border-red-200 bg-white px-2 py-1 text-xs font-semibold text-red-700 hover:bg-red-50" data-remove-prescription="${prescription.id}">Remove</button>`
+            );
+        }
+        card.dataset.prescriptionId = prescription.id;
         return card;
+    }
+
+    async function removePrescription(prescriptionId) {
+        if (!removePrescriptionUrlTemplate) return;
+        const card = prescriptionList?.querySelector(`[data-prescription-id="${prescriptionId}"]`);
+        const removeButton = card?.querySelector(`[data-remove-prescription="${prescriptionId}"]`);
+        const prompt = removeButton?.textContent?.includes('Undo')
+            ? 'This prescription was already dispensed. Remove it and restore the stock?'
+            : 'Remove this prescription from the list?';
+        if (!window.confirm(prompt)) {
+            return;
+        }
+
+        if (removeButton) {
+            removeButton.disabled = true;
+        }
+
+        try {
+            const response = await fetch(
+                removePrescriptionUrlTemplate.replace('__PRESCRIPTION_ID__', String(prescriptionId)),
+                {
+                    method: 'POST',
+                    headers: { 'X-CSRFToken': csrfToken || '', 'X-Requested-With': 'XMLHttpRequest' },
+                    body: new FormData(),
+                },
+            );
+            const payload = await response.json();
+            if (!response.ok) {
+                throw new Error(payload.error || 'Could not remove prescription.');
+            }
+
+            card?.remove();
+            if (!prescriptionList?.querySelector('[data-prescription-id]')) {
+                prescriptionEmpty?.classList.remove('hidden');
+            }
+            updateTotals(payload.visit_total_amount);
+            showMessage(prescriptionMessage, payload.message, 'success');
+        } catch (error) {
+            showMessage(prescriptionMessage, error.message, 'error');
+            if (removeButton) {
+                removeButton.disabled = false;
+            }
+        }
     }
 
     function updateDosageLabel() {
@@ -515,6 +587,11 @@
         selectDrugOption(event.target.value);
     });
     drugSelect?.addEventListener('change', updateDosageLabel);
+    prescriptionList?.addEventListener('click', event => {
+        const button = event.target.closest('[data-remove-prescription]');
+        if (!button) return;
+        removePrescription(button.dataset.removePrescription);
+    });
 
     addPrescriptionButton?.addEventListener('click', async () => {
         const drug = currentDrugData();
@@ -551,6 +628,7 @@
 
             prescriptionEmpty?.classList.add('hidden');
             prescriptionList?.prepend(createPrescriptionCard(payload.prescription));
+            updateTotals(payload.visit_total_amount);
             dosageInput.value = '';
             durationInput.value = '1';
             frequencyInput.value = '2';

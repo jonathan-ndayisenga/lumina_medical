@@ -243,6 +243,29 @@ class DoctorWorkflowTests(TestCase):
         self.assertEqual(prescription.billing_visit_service.price_at_time, Decimal("30.00"))
         self.assertEqual(response.json()["prescription"]["quantity_display"], "15 tablet(s)")
 
+    def test_doctor_can_remove_pending_prescription_and_restore_visit_total(self):
+        self.client.post(
+            reverse("add_prescription_api", args=[self.visit.pk]),
+            {
+                "drug_id": self.tablet_drug.pk,
+                "dosage_mg": "500",
+                "frequency_per_day": "3",
+                "duration_days": "5",
+            },
+        )
+        prescription = Prescription.objects.get(visit=self.visit, drug=self.tablet_drug)
+        billing_line_id = prescription.billing_visit_service_id
+
+        response = self.client.post(
+            reverse("remove_prescription_api", args=[self.visit.pk, prescription.pk]),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.visit.refresh_from_db()
+        self.assertEqual(self.visit.total_amount, Decimal("25.00"))
+        self.assertFalse(Prescription.objects.filter(pk=prescription.pk).exists())
+        self.assertFalse(VisitService.objects.filter(pk=billing_line_id).exists())
+
     def test_doctor_can_add_liquid_prescription_and_calculate_bottles(self):
         response = self.client.post(
             reverse("add_prescription_api", args=[self.visit.pk]),
