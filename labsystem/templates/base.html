@@ -332,6 +332,12 @@
                                     </svg>
                                     Reception
                                 </a>
+                                <a href="{% url 'reception_queue' %}" class="sidebar-link {% if active_nav == 'reception_queue' %}active{% endif %}">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-5 h-5">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" />
+                                    </svg>
+                                    Reception Queue
+                                </a>
                                 <a href="{% url 'patient_list' %}" class="sidebar-link {% if active_nav == 'reception_patients' %}active{% endif %}">
                                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-5 h-5">
                                         <path stroke-linecap="round" stroke-linejoin="round" d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 7a4 4 0 1 0 0-8 4 4 0 0 0 0 8m11 14v-2a4 4 0 0 0-3-3.87m1-11.13a4 4 0 1 1 0 8" />

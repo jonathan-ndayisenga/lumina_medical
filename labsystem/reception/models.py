@@ -197,12 +197,14 @@ class QueueEntry(models.Model):
     TYPE_LAB_DOCTOR = "lab_doctor"
     TYPE_DOCTOR = "doctor"
     TYPE_NURSE = "nurse"
+    TYPE_RECEPTION = "reception"
 
     QUEUE_TYPE_CHOICES = [
         (TYPE_LAB_RECEPTION, "Lab Reception"),
         (TYPE_LAB_DOCTOR, "Lab Request From Doctor"),
         (TYPE_DOCTOR, "Doctor"),
         (TYPE_NURSE, "Nurse"),
+        (TYPE_RECEPTION, "Reception Queue"),
     ]
 
     hospital = models.ForeignKey(Hospital, on_delete=models.CASCADE, related_name="queue_entries")

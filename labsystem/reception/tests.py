@@ -629,3 +629,120 @@ class ReceptionVisitFormTests(TestCase):
         self.assertContains(response, 'id="service-results-select"', html=False)
         self.assertContains(response, 'id="add-service-btn"', html=False)
         self.assertContains(response, "Browse the full dropdown or type to narrow the services list")
+
+
+class ReceptionQueueWorkflowTests(TestCase):
+    def setUp(self):
+        plan = SubscriptionPlan.objects.create(
+            name="Standard",
+            price_monthly=Decimal("0.00"),
+            price_yearly=Decimal("0.00"),
+        )
+        self.hospital = Hospital.objects.create(
+            name="Lumina Queue Hospital",
+            subdomain="lumina-queue",
+            subscription_plan=plan,
+        )
+        self.receptionist = User.objects.create_user(
+            username="queue-reception",
+            password="pass12345",
+            role=User.ROLE_RECEPTIONIST,
+            hospital=self.hospital,
+            is_active=True,
+        )
+        self.patient = Patient.objects.create(
+            hospital=self.hospital,
+            name="Queue Patient",
+            registration_date=timezone.localdate(),
+            age="41YRS",
+            sex="F",
+        )
+        self.consult_service = Service.objects.create(
+            hospital=self.hospital,
+            name="Doctor Review Consultation",
+            category=Service.CATEGORY_CONSULTATION,
+            price=Decimal("25.00"),
+            is_active=True,
+        )
+        self.lab_service = Service.objects.create(
+            hospital=self.hospital,
+            name="CBC",
+            category=Service.CATEGORY_LAB,
+            price=Decimal("15.00"),
+            is_active=True,
+        )
+        self.visit = Visit.objects.create(
+            patient=self.patient,
+            hospital=self.hospital,
+            total_amount=Decimal("15.00"),
+            status=Visit.STATUS_IN_PROGRESS,
+            created_by=self.receptionist,
+        )
+        VisitService.objects.create(
+            visit=self.visit,
+            service=self.lab_service,
+            price_at_time=self.lab_service.price,
+            performed=True,
+        )
+        self.queue_entry = ensure_pending_queue_entry(
+            visit=self.visit,
+            hospital=self.hospital,
+            queue_type=QueueEntry.TYPE_RECEPTION,
+            reason="Returned from Lab: Lab completed: CBC",
+            notes="Source: Lab\nReception should decide billing or doctor review.",
+            requested_by=self.receptionist,
+        )
+        self.client.force_login(self.receptionist)
+
+    def test_reception_queue_page_lists_returned_patients(self):
+        response = self.client.get(reverse("reception_queue"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Queue Patient")
+        self.assertContains(response, "Returned from Lab")
+        self.assertContains(response, "Send to Doctor")
+        self.assertContains(response, "Finish Visit")
+
+    def test_reception_queue_finish_marks_visit_ready_for_billing(self):
+        response = self.client.post(reverse("reception_queue_finish", args=[self.queue_entry.pk]))
+
+        self.assertRedirects(response, reverse("reception_queue"))
+        self.visit.refresh_from_db()
+        self.queue_entry.refresh_from_db()
+        self.assertEqual(self.visit.status, Visit.STATUS_READY_FOR_BILLING)
+        self.assertTrue(self.queue_entry.processed)
+
+    def test_reception_queue_bill_opens_complete_visit(self):
+        response = self.client.post(reverse("reception_queue_bill", args=[self.queue_entry.pk]))
+
+        self.assertRedirects(response, reverse("complete_visit", args=[self.visit.pk]))
+        self.visit.refresh_from_db()
+        self.queue_entry.refresh_from_db()
+        self.assertEqual(self.visit.status, Visit.STATUS_READY_FOR_BILLING)
+        self.assertTrue(self.queue_entry.processed)
+
+    def test_reception_queue_send_to_doctor_adds_consultation_and_queue(self):
+        response = self.client.post(
+            reverse("reception_queue_send_to_doctor", args=[self.queue_entry.pk]),
+            {"consultation_service_id": str(self.consult_service.pk)},
+        )
+
+        self.assertRedirects(response, reverse("reception_queue"))
+        self.visit.refresh_from_db()
+        self.queue_entry.refresh_from_db()
+        self.assertEqual(self.visit.total_amount, Decimal("40.00"))
+        self.assertTrue(self.queue_entry.processed)
+        self.assertTrue(
+            VisitService.objects.filter(
+                visit=self.visit,
+                service=self.consult_service,
+                performed=False,
+            ).exists()
+        )
+        self.assertTrue(
+            QueueEntry.objects.filter(
+                visit=self.visit,
+                queue_type=QueueEntry.TYPE_DOCTOR,
+                processed=False,
+            ).exists()
+        )

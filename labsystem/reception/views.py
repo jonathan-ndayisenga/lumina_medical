@@ -6,14 +6,21 @@ from django.core.exceptions import PermissionDenied
 from django.db import transaction
 from django.db.models import Count, Max, Q
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.utils import timezone
 
 from accounts.models import User
 from admin_dashboard.models import InventoryItem, InventoryTransaction
 from doctor.models import Prescription
 from .forms import CompleteVisitForm, PatientForm, QuickDispenseStartForm, VisitCreateForm
-from .models import Patient, Payment, QueueEntry, Visit, VisitService
-from .workflow import sync_visit_status
+from .models import Patient, Payment, QueueEntry, Service, Visit, VisitService
+from .workflow import (
+    ensure_pending_queue_entry,
+    mark_queue_entries_processed,
+    reception_source_from_entry,
+    send_to_reception_queue,
+    sync_visit_status,
+)
 
 
 def reception_role_required(view_func):
@@ -91,6 +98,68 @@ def get_or_create_walk_in_patient(hospital):
     return patient
 
 
+def reception_queue_queryset(hospital):
+    return (
+        QueueEntry.objects.filter(
+            hospital=hospital,
+            queue_type=QueueEntry.TYPE_RECEPTION,
+            processed=False,
+        )
+        .select_related("visit__patient", "requested_by")
+        .prefetch_related("visit__visit_services__service", "visit__prescriptions__drug", "visit__queue_entries")
+        .order_by("created_at", "id")
+    )
+
+
+def consultation_services_queryset(hospital):
+    return Service.objects.filter(
+        hospital=hospital,
+        category=Service.CATEGORY_CONSULTATION,
+        is_active=True,
+    ).order_by("name")
+
+
+def reception_queue_other_open_work(visit):
+    return visit.queue_entries.exclude(queue_type=QueueEntry.TYPE_RECEPTION).filter(processed=False)
+
+
+def close_reception_queue_for_visit(visit):
+    return mark_queue_entries_processed(visit=visit, queue_type=QueueEntry.TYPE_RECEPTION)
+
+
+def reception_queue_status_payload(entry):
+    visit = entry.visit
+    pending_dispense_count = sum(1 for prescription in visit.prescriptions.all() if not prescription.dispensed)
+    other_open_work = reception_queue_other_open_work(visit)
+    if pending_dispense_count:
+        return {
+            "label": "Pending Dispense",
+            "badge_class": "bg-purple-100 text-purple-700",
+            "pending_dispense_count": pending_dispense_count,
+            "other_open_work": other_open_work.count(),
+        }
+    if visit.status == Visit.STATUS_READY_FOR_BILLING:
+        return {
+            "label": "Ready for Billing",
+            "badge_class": "bg-amber-100 text-amber-700",
+            "pending_dispense_count": pending_dispense_count,
+            "other_open_work": other_open_work.count(),
+        }
+    if other_open_work.exists():
+        return {
+            "label": "Awaiting Linked Work",
+            "badge_class": "bg-blue-100 text-blue-700",
+            "pending_dispense_count": pending_dispense_count,
+            "other_open_work": other_open_work.count(),
+        }
+    return {
+        "label": "Awaiting Action",
+        "badge_class": "bg-slate-100 text-slate-700",
+        "pending_dispense_count": pending_dispense_count,
+        "other_open_work": other_open_work.count(),
+    }
+
+
 @reception_role_required
 def reception_dashboard(request):
     hospital = get_active_hospital(request)
@@ -121,12 +190,165 @@ def reception_dashboard(request):
         "completed_visit_count": Visit.objects.filter(hospital=hospital, status=Visit.STATUS_COMPLETED).count() if hospital else 0,
         "ready_for_billing_count": Visit.objects.filter(hospital=hospital, status=Visit.STATUS_READY_FOR_BILLING).count() if hospital else 0,
         "ready_for_dispense_count": len(ready_for_dispense),
+        "reception_queue_count": reception_queue_queryset(hospital).count() if hospital else 0,
         "recent_patients": patients,
         "recent_visits": visits,
         "ready_for_billing_visits": ready_for_billing,
         "ready_for_dispense_visits": ready_for_dispense,
     }
     return render(request, "reception/dashboard.html", context)
+
+
+@reception_role_required
+def receptionist_queue(request):
+    hospital = get_active_hospital(request)
+    consultation_services = list(consultation_services_queryset(hospital)) if hospital else []
+    queue_entries = list(reception_queue_queryset(hospital)) if hospital else []
+    queue_rows = []
+
+    for entry in queue_entries:
+        visit = entry.visit
+        status_payload = reception_queue_status_payload(entry)
+        pending_consultation_line = next(
+            (
+                visit_service
+                for visit_service in visit.visit_services.all()
+                if visit_service.service.category == Service.CATEGORY_CONSULTATION and not visit_service.performed
+            ),
+            None,
+        )
+        queue_rows.append(
+            {
+                "entry": entry,
+                "visit": visit,
+                "source": reception_source_from_entry(entry),
+                "status": status_payload["label"],
+                "status_badge_class": status_payload["badge_class"],
+                "pending_dispense_count": status_payload["pending_dispense_count"],
+                "open_work_count": status_payload["other_open_work"],
+                "pending_consultation_line": pending_consultation_line,
+                "selected_consultation_service_id": (
+                    pending_consultation_line.service_id
+                    if pending_consultation_line
+                    else (consultation_services[0].pk if consultation_services else None)
+                ),
+            }
+        )
+
+    return render(
+        request,
+        "reception/reception_queue.html",
+        {
+            "active_nav": "reception_queue",
+            "dashboard_title": "Receptionist Queue",
+            "dashboard_intro": "Receive patients back from lab, doctor, and nurse, then decide the final billing, dispensing, or doctor-review step.",
+            "hospital": hospital,
+            "queue_rows": queue_rows,
+            "queue_count": len(queue_rows),
+            "pending_dispense_count": sum(row["pending_dispense_count"] for row in queue_rows),
+            "consultation_services": consultation_services,
+        },
+    )
+
+
+@reception_role_required
+@transaction.atomic
+def receptionist_queue_finish(request, queue_entry_id):
+    if request.method != "POST":
+        raise PermissionDenied("Finishing a receptionist queue task requires a POST request.")
+
+    hospital = get_active_hospital(request)
+    queue_entry = get_object_or_404(reception_queue_queryset(hospital), pk=queue_entry_id)
+    visit = queue_entry.visit
+
+    if reception_queue_other_open_work(visit).exists():
+        messages.error(request, "This visit still has other open queue work and cannot be finished for billing yet.")
+        return redirect("reception_queue")
+
+    close_reception_queue_for_visit(visit)
+    visit.status = Visit.STATUS_READY_FOR_BILLING
+    visit.save(update_fields=["status"])
+    sync_visit_status(visit)
+    messages.success(request, f"{visit.patient.name} is now ready for billing.")
+    return redirect("reception_queue")
+
+
+@reception_role_required
+@transaction.atomic
+def receptionist_queue_bill(request, queue_entry_id):
+    if request.method != "POST":
+        raise PermissionDenied("Opening billing from the receptionist queue requires a POST request.")
+
+    hospital = get_active_hospital(request)
+    queue_entry = get_object_or_404(reception_queue_queryset(hospital), pk=queue_entry_id)
+    visit = queue_entry.visit
+
+    if reception_queue_other_open_work(visit).exists():
+        messages.error(request, "This visit still has other open queue work and cannot move to billing yet.")
+        return redirect("reception_queue")
+
+    close_reception_queue_for_visit(visit)
+    visit.status = Visit.STATUS_READY_FOR_BILLING
+    visit.save(update_fields=["status"])
+    sync_visit_status(visit)
+    messages.success(
+        request,
+        "Visit opened for reception billing and dispensing."
+        if visit.prescriptions.filter(dispensed=False).exists()
+        else "Visit opened for reception billing.",
+    )
+    return redirect("complete_visit", visit_id=visit.pk)
+
+
+@reception_role_required
+@transaction.atomic
+def receptionist_queue_send_to_doctor(request, queue_entry_id):
+    if request.method != "POST":
+        raise PermissionDenied("Sending a patient to doctor from receptionist queue requires a POST request.")
+
+    hospital = get_active_hospital(request)
+    queue_entry = get_object_or_404(reception_queue_queryset(hospital), pk=queue_entry_id)
+    visit = queue_entry.visit
+
+    if reception_queue_other_open_work(visit).exists():
+        messages.error(request, "This visit still has other open queue work and cannot be routed to doctor yet.")
+        return redirect("reception_queue")
+
+    consultation_service_qs = consultation_services_queryset(hospital)
+    consultation_service = consultation_service_qs.filter(pk=request.POST.get("consultation_service_id")).first()
+    if consultation_service is None:
+        consultation_service = consultation_service_qs.first()
+    if consultation_service is None:
+        messages.error(request, "Create at least one active consultation service before sending patients to doctor.")
+        return redirect("reception_queue")
+
+    pending_consultation_line = visit.visit_services.filter(
+        service=consultation_service,
+        service__category=Service.CATEGORY_CONSULTATION,
+        performed=False,
+    ).first()
+    if pending_consultation_line is None:
+        VisitService.objects.create(
+            visit=visit,
+            service=consultation_service,
+            price_at_time=consultation_service.price,
+            notes=f"Added from receptionist queue after {reception_source_from_entry(queue_entry).lower()} handoff.",
+        )
+        visit.total_amount = (visit.total_amount or Decimal("0.00")) + consultation_service.price
+        visit.save(update_fields=["total_amount"])
+
+    close_reception_queue_for_visit(visit)
+    ensure_pending_queue_entry(
+        visit=visit,
+        hospital=visit.hospital,
+        queue_type=QueueEntry.TYPE_DOCTOR,
+        reason=f"Reception requested doctor review after {reception_source_from_entry(queue_entry).lower()} handoff.",
+        requested_by=request.user,
+        notes=f"Reception returned the patient to doctor review from receptionist queue. Previous handoff: {queue_entry.reason}",
+    )
+    sync_visit_status(visit)
+    messages.success(request, f"{visit.patient.name} sent to doctor queue.")
+    return redirect("reception_queue")
 
 
 @reception_role_required

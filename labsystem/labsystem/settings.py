@@ -133,6 +133,7 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "labsystem.middleware.SessionIdleTimeoutMiddleware",
     "labsystem.middleware.HospitalMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
@@ -217,6 +218,9 @@ if importlib.util.find_spec("whitenoise") is not None and not DEBUG:
 LOGIN_URL = "login"
 LOGIN_REDIRECT_URL = "app_home"  # Role-based router that checks user role
 LOGOUT_REDIRECT_URL = "login"
+SESSION_IDLE_TIMEOUT_SECONDS = int(env("DJANGO_SESSION_IDLE_TIMEOUT_SECONDS", "1800"))
+SESSION_COOKIE_AGE = SESSION_IDLE_TIMEOUT_SECONDS
+SESSION_SAVE_EVERY_REQUEST = True
 
 
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")

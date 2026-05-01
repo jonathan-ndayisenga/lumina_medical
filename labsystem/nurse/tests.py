@@ -160,7 +160,14 @@ class NurseWorkflowTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response.headers["Location"], reverse("nurse_queue"))
         self.visit.refresh_from_db()
-        self.assertEqual(self.visit.status, Visit.STATUS_READY_FOR_BILLING)
+        self.assertEqual(self.visit.status, Visit.STATUS_IN_PROGRESS)
+        self.assertTrue(
+            QueueEntry.objects.filter(
+                visit=self.visit,
+                queue_type=QueueEntry.TYPE_RECEPTION,
+                processed=False,
+            ).exists()
+        )
 
     def test_nurse_can_dispense_prescription_and_deduct_inventory(self):
         response = self.client.post(

@@ -13,7 +13,7 @@ from admin_dashboard.models import InventoryItem, InventoryTransaction
 from lab.models import LabReport
 from nurse.models import NurseNote
 from reception.models import QueueEntry, Service, Triage, Visit, VisitService
-from reception.workflow import ensure_pending_queue_entry, sync_visit_status
+from reception.workflow import ensure_pending_queue_entry, mark_queue_entries_processed, send_to_reception_queue, sync_visit_status
 
 from .forms import ConsultationForm
 from .models import Consultation, LabRequest, Prescription
@@ -735,17 +735,19 @@ def consultation(request, visit_id):
                 close_doctor_queue = False
 
             if form.cleaned_data.get("send_to_reception"):
-                visit.status = Visit.STATUS_READY_FOR_BILLING
-                visit.save(update_fields=["status"])
+                send_to_reception_queue(
+                    visit=visit,
+                    hospital=visit.hospital,
+                    source="Doctor",
+                    detail="Consultation completed and returned to reception.",
+                    notes="Doctor has completed consultation. Reception should finalize the next step.",
+                    requested_by=request.user,
+                )
                 close_doctor_queue = True
-                feedback.append("Patient marked ready for reception billing.")
+                feedback.append("Patient returned to receptionist queue.")
 
             if close_doctor_queue:
-                QueueEntry.objects.filter(
-                    visit=visit,
-                    queue_type=QueueEntry.TYPE_DOCTOR,
-                    processed=False,
-                ).update(processed=True, processed_at=timezone.now())
+                mark_queue_entries_processed(visit=visit, queue_type=QueueEntry.TYPE_DOCTOR)
 
             sync_visit_status(visit)
             messages.success(request, " ".join(feedback))

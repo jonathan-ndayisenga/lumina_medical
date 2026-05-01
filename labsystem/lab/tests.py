@@ -298,8 +298,16 @@ class LabWorkflowPolishTests(TestCase):
         self.assertRedirects(response, reverse("report_detail", args=[self.report.pk]))
         self.visit.refresh_from_db()
         self.lab_queue.refresh_from_db()
-        self.assertEqual(self.visit.status, Visit.STATUS_READY_FOR_BILLING)
+        self.assertEqual(self.visit.status, Visit.STATUS_IN_PROGRESS)
         self.assertTrue(self.lab_queue.processed)
+        self.assertTrue(
+            QueueEntry.objects.filter(
+                visit=self.visit,
+                queue_type=QueueEntry.TYPE_RECEPTION,
+                processed=False,
+                reason__icontains="Returned from Lab",
+            ).exists()
+        )
         self.assertFalse(
             QueueEntry.objects.filter(
                 visit=self.visit,

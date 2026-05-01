@@ -1,4 +1,11 @@
+from django.conf import settings
+from django.contrib.auth import logout
+from django.utils import timezone
+
 from accounts.models import Hospital
+
+
+SESSION_ACTIVITY_KEY = "_session_last_activity_ts"
 
 
 class HospitalMiddleware:
@@ -34,3 +41,27 @@ class HospitalMiddleware:
             ).first()
 
         return self.get_response(request)
+
+
+class SessionIdleTimeoutMiddleware:
+    """Log authenticated users out after a configurable period of inactivity."""
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        timeout_seconds = getattr(settings, "SESSION_IDLE_TIMEOUT_SECONDS", None)
+        if timeout_seconds and getattr(request, "user", None) and request.user.is_authenticated:
+            now_ts = int(timezone.now().timestamp())
+            last_activity = request.session.get(SESSION_ACTIVITY_KEY)
+            if last_activity is not None and now_ts - int(last_activity) > int(timeout_seconds):
+                logout(request)
+            else:
+                request.session[SESSION_ACTIVITY_KEY] = now_ts
+
+        response = self.get_response(request)
+
+        if getattr(request, "user", None) and request.user.is_authenticated and timeout_seconds:
+            request.session[SESSION_ACTIVITY_KEY] = int(timezone.now().timestamp())
+
+        return response

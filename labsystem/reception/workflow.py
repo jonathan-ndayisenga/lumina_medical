@@ -1,4 +1,9 @@
+from django.utils import timezone
+
 from reception.models import QueueEntry, Visit
+
+
+RECEPTION_SOURCE_PREFIX = "Source: "
 
 
 def sync_visit_status(visit: Visit) -> Visit:
@@ -49,4 +54,52 @@ def ensure_pending_queue_entry(
         notes=notes,
         reason=reason,
         requested_by=requested_by,
+    )
+
+
+def build_reception_queue_notes(source: str, notes: str = "") -> str:
+    prefix = f"{RECEPTION_SOURCE_PREFIX}{source}"
+    return f"{prefix}\n{notes}".strip() if notes else prefix
+
+
+def build_reception_queue_reason(source: str, detail: str = "") -> str:
+    source_label = (source or "Care").strip()
+    detail = (detail or "").strip()
+    return f"Returned from {source_label}: {detail}" if detail else f"Returned from {source_label}"
+
+
+def reception_source_from_entry(entry: QueueEntry) -> str:
+    first_line = (entry.notes or "").splitlines()[0].strip()
+    if first_line.startswith(RECEPTION_SOURCE_PREFIX):
+        return first_line.replace(RECEPTION_SOURCE_PREFIX, "", 1).strip() or "Reception"
+    reason = (entry.reason or "").strip()
+    if reason.lower().startswith("returned from "):
+        source = reason[14:].split(":", 1)[0].strip()
+        return source or "Reception"
+    return "Reception"
+
+
+def send_to_reception_queue(
+    *,
+    visit: Visit,
+    hospital,
+    source: str,
+    detail: str = "",
+    notes: str = "",
+    requested_by=None,
+) -> QueueEntry:
+    return ensure_pending_queue_entry(
+        visit=visit,
+        hospital=hospital,
+        queue_type=QueueEntry.TYPE_RECEPTION,
+        reason=build_reception_queue_reason(source, detail),
+        notes=build_reception_queue_notes(source, notes),
+        requested_by=requested_by,
+    )
+
+
+def mark_queue_entries_processed(*, visit: Visit, queue_type: str) -> int:
+    return visit.queue_entries.filter(queue_type=queue_type, processed=False).update(
+        processed=True,
+        processed_at=timezone.now(),
     )

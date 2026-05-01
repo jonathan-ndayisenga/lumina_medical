@@ -7,12 +7,13 @@
 {% block content %}
 <div class="space-y-6">
     <div class="flex flex-col sm:flex-row gap-3 justify-end">
+        <a href="{% url 'reception_queue' %}" class="btn btn-secondary">Reception Queue</a>
         <a href="{% url 'patient_list' %}" class="btn btn-secondary">View All Patients</a>
         <a href="{% url 'patient_create' %}" class="btn btn-secondary">Register New Patient</a>
         <a href="{% url 'quick_dispense_start' %}" class="btn btn-primary">Dispense</a>
     </div>
 
-    <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-6 gap-4">
+    <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-7 gap-4">
         <div class="card">
             <p class="text-text-muted text-sm font-medium mb-2">Patients Registered</p>
             <p class="text-3xl font-bold text-brand-dark">{{ patient_count }}</p>
@@ -24,6 +25,10 @@
         <div class="card">
             <p class="text-text-muted text-sm font-medium mb-2">Queue Items</p>
             <p class="text-3xl font-bold text-brand-dark">{{ queue_count }}</p>
+        </div>
+        <div class="card">
+            <p class="text-text-muted text-sm font-medium mb-2">Reception Queue</p>
+            <p class="text-3xl font-bold text-sky-600">{{ reception_queue_count }}</p>
         </div>
         <div class="card">
             <p class="text-text-muted text-sm font-medium mb-2">Ready for Billing</p>

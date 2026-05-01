@@ -10,7 +10,7 @@ from admin_dashboard.models import InventoryTransaction
 from doctor.models import Consultation, Prescription
 from lab.models import LabReport
 from reception.models import QueueEntry, Triage, Visit
-from reception.workflow import ensure_pending_queue_entry, sync_visit_status
+from reception.workflow import ensure_pending_queue_entry, send_to_reception_queue, sync_visit_status
 
 from .forms import NurseNoteForm, TriageForm
 from .models import NurseNote
@@ -110,7 +110,15 @@ def perform_nursing(request, queue_entry_id):
                     notes="Patient routed to doctor after triage.",
                 )
             elif action == "triage_to_reception":
-                messages.info(request, "Triage saved. Patient handed back to reception.")
+                send_to_reception_queue(
+                    visit=visit,
+                    hospital=visit.hospital,
+                    source="Nurse",
+                    detail="Triage completed and returned to reception.",
+                    notes="Reception should decide the next action after triage.",
+                    requested_by=request.user,
+                )
+                messages.info(request, "Triage saved. Patient handed back to receptionist queue.")
             elif action == "back_to_doctor":
                 ensure_pending_queue_entry(
                     visit=visit,
@@ -121,8 +129,14 @@ def perform_nursing(request, queue_entry_id):
                     notes="Patient sent back to doctor after nursing care.",
                 )
             elif action == "to_billing":
-                visit.status = Visit.STATUS_READY_FOR_BILLING
-                visit.save(update_fields=["status"])
+                send_to_reception_queue(
+                    visit=visit,
+                    hospital=visit.hospital,
+                    source="Nurse",
+                    detail="Nursing care complete and ready for billing review.",
+                    notes="Reception should confirm billing and any final dispense needs.",
+                    requested_by=request.user,
+                )
             else:
                 messages.error(request, "Choose where the patient should go after nursing care.")
                 consultation = Consultation.objects.filter(visit=visit).select_related("created_by").first()

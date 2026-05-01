@@ -12,7 +12,7 @@ from django.utils import timezone
 
 from accounts.models import User
 from reception.models import QueueEntry, Service, Visit, VisitService
-from reception.workflow import ensure_pending_queue_entry, sync_visit_status
+from reception.workflow import ensure_pending_queue_entry, send_to_reception_queue, sync_visit_status
 from doctor.models import LabRequest, Notification
 
 from .forms import LabReportForm, TestResultFormSet
@@ -223,6 +223,8 @@ def direct_lab_can_route(report: LabReport) -> bool:
         return False
     if report.sent_to_doctor:
         return False
+    if report.visit.queue_entries.filter(queue_type=QueueEntry.TYPE_RECEPTION, processed=False).exists():
+        return False
     if pending_lab_doctor_entry(report):
         return False
     reconcile_lab_visit_services(report.visit)
@@ -262,7 +264,11 @@ def cleanup_stale_lab_queue_entries(*, visit=None, hospital=None) -> int:
             already_routed = has_results_ready_for_doctor or current_visit.status in {
                 Visit.STATUS_READY_FOR_BILLING,
                 Visit.STATUS_COMPLETED,
-            }
+            } or QueueEntry.objects.filter(
+                visit=current_visit,
+                queue_type=QueueEntry.TYPE_RECEPTION,
+                processed=False,
+            ).exists()
             if not has_any_report or not already_routed:
                 continue
 
@@ -313,6 +319,15 @@ def mark_lab_queue_complete(report: LabReport) -> bool:
             reason=f"Lab results ready for: {report_test_summary(report)}",
             requested_by=doctor_request_entry.requested_by,
             notes="Laboratory work completed and ready for doctor review.",
+        )
+    else:
+        send_to_reception_queue(
+            visit=report.visit,
+            hospital=report.visit.hospital,
+            source="Lab",
+            detail=f"Lab completed: {report_test_summary(report)}",
+            notes="Lab work completed from a reception referral. Reception should review billing, dispensing, or doctor follow-up.",
+            requested_by=report.attendant,
         )
     sync_visit_status(report.visit)
     return doctor_request_entry is not None
@@ -1016,9 +1031,15 @@ def route_lab_report(request, report_id):
             report.save(update_fields=["sent_to_doctor", "sent_to_doctor_at"])
         message = "Patient sent to doctor for review."
     else:
-        report.visit.status = Visit.STATUS_READY_FOR_BILLING
-        report.visit.save(update_fields=["status"])
-        message = "Patient sent back to reception for billing."
+        send_to_reception_queue(
+            visit=report.visit,
+            hospital=report.visit.hospital,
+            source="Lab",
+            detail=f"Lab completed: {report_test_summary(report)}",
+            notes="Reception should decide whether to bill, dispense drugs, or send the patient to doctor review.",
+            requested_by=request.user,
+        )
+        message = "Patient sent back to receptionist queue."
 
     mark_open_lab_queue_entries_processed(report.visit)
     sync_visit_status(report.visit)

@@ -347,5 +347,6 @@ class DoctorWorkflowTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response.headers["Location"], reverse("consultation_detail", args=[self.visit.pk]))
         self.visit.refresh_from_db()
-        self.assertEqual(self.visit.status, Visit.STATUS_READY_FOR_BILLING)
+        self.assertEqual(self.visit.status, Visit.STATUS_IN_PROGRESS)
         self.assertFalse(QueueEntry.objects.filter(visit=self.visit, queue_type=QueueEntry.TYPE_DOCTOR, processed=False).exists())
+        self.assertTrue(QueueEntry.objects.filter(visit=self.visit, queue_type=QueueEntry.TYPE_RECEPTION, processed=False).exists())

@@ -1,0 +1,145 @@
+{% extends 'base.html' %}
+
+{% block title %}Receptionist Queue - Hospital EMR{% endblock %}
+{% block page_title %}Receptionist Queue{% endblock %}
+{% block page_subtitle %}Receive patients back from lab, nurse, and doctor, then decide the final billing, dispensing, or doctor-review step.{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div class="card">
+            <p class="text-text-muted text-sm font-medium mb-2">Patients Waiting</p>
+            <p class="text-3xl font-bold text-brand-dark">{{ queue_count }}</p>
+        </div>
+        <div class="card">
+            <p class="text-text-muted text-sm font-medium mb-2">Pending Dispense</p>
+            <p class="text-3xl font-bold text-purple-600">{{ pending_dispense_count }}</p>
+        </div>
+        <div class="card">
+            <p class="text-text-muted text-sm font-medium mb-2">Hospital</p>
+            <p class="text-lg font-semibold text-text-main">{{ hospital.name|default:"No active hospital" }}</p>
+        </div>
+    </div>
+
+    <div class="card bg-brand-soft border-l-4 border-brand-dark">
+        <h4 class="text-sm font-semibold text-brand-dark mb-2">How this queue works</h4>
+        <p class="text-sm text-text-muted">
+            Patients return here from lab, nurse, or doctor. Reception decides whether to finish the visit for billing, open dispensing and payment, or add a doctor consultation and send the patient back for review.
+        </p>
+    </div>
+
+    <div class="card">
+        <div class="flex items-center justify-between gap-3 flex-wrap mb-4">
+            <div>
+                <h3 class="text-lg font-semibold text-text-main">Patients back at reception</h3>
+                <p class="text-sm text-text-muted">Only open receptionist handoffs appear here.</p>
+            </div>
+            <a href="{% url 'reception_dashboard' %}" class="btn btn-secondary btn-sm">Back to Dashboard</a>
+        </div>
+
+        {% if queue_rows %}
+            <div class="overflow-x-auto">
+                <table class="w-full min-w-[1100px] text-sm">
+                    <thead>
+                        <tr class="text-left text-text-muted border-b border-gray-200">
+                            <th class="py-3 pr-4 font-semibold">Patient</th>
+                            <th class="py-3 pr-4 font-semibold">Source</th>
+                            <th class="py-3 pr-4 font-semibold">Status</th>
+                            <th class="py-3 pr-4 font-semibold">Reason</th>
+                            <th class="py-3 pr-4 font-semibold">Bill</th>
+                            <th class="py-3 font-semibold">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in queue_rows %}
+                            <tr class="border-b border-gray-100 align-top">
+                                <td class="py-4 pr-4">
+                                    <p class="font-semibold text-text-main">{{ row.visit.patient.name }}</p>
+                                    <p class="text-xs text-text-muted">Visit #{{ row.visit.pk }} · {{ row.visit.visit_date|date:"M d, Y H:i" }}</p>
+                                    <p class="text-xs text-text-muted">Age: {{ row.visit.patient.age }} · {{ row.visit.patient.get_sex_display }}</p>
+                                </td>
+                                <td class="py-4 pr-4">
+                                    <span class="inline-flex px-2 py-1 rounded-full text-xs font-semibold bg-sky-100 text-sky-700">
+                                        {{ row.source }}
+                                    </span>
+                                </td>
+                                <td class="py-4 pr-4">
+                                    <span class="inline-flex px-2 py-1 rounded-full text-xs font-semibold {{ row.status_badge_class }}">
+                                        {{ row.status }}
+                                    </span>
+                                    {% if row.pending_dispense_count %}
+                                        <p class="text-xs text-purple-700 font-medium mt-2">
+                                            {{ row.pending_dispense_count }} medicine{{ row.pending_dispense_count|pluralize }} waiting
+                                        </p>
+                                    {% endif %}
+                                    {% if row.open_work_count %}
+                                        <p class="text-xs text-amber-700 mt-2">
+                                            {{ row.open_work_count }} linked queue item{{ row.open_work_count|pluralize }} still open
+                                        </p>
+                                    {% endif %}
+                                </td>
+                                <td class="py-4 pr-4">
+                                    <p class="text-text-main">{{ row.entry.reason|default:"No reason captured." }}</p>
+                                    {% if row.entry.notes %}
+                                        <p class="text-xs text-text-muted mt-2 whitespace-pre-line">{{ row.entry.notes }}</p>
+                                    {% endif %}
+                                </td>
+                                <td class="py-4 pr-4">
+                                    <p class="font-semibold text-text-main">{{ row.visit.total_amount }}</p>
+                                    <p class="text-xs text-text-muted">Balance due: {{ row.visit.balance_due }}</p>
+                                </td>
+                                <td class="py-4">
+                                    <div class="space-y-3 min-w-[300px]">
+                                        <div class="flex gap-2 flex-wrap">
+                                            <form method="post" action="{% url 'reception_queue_bill' row.entry.pk %}">
+                                                {% csrf_token %}
+                                                <button type="submit" class="btn btn-primary btn-sm">Bill Patient</button>
+                                            </form>
+                                            {% if row.pending_dispense_count %}
+                                                <form method="post" action="{% url 'reception_queue_bill' row.entry.pk %}">
+                                                    {% csrf_token %}
+                                                    <button type="submit" class="btn btn-secondary btn-sm">Dispense</button>
+                                                </form>
+                                            {% endif %}
+                                            <form method="post" action="{% url 'reception_queue_finish' row.entry.pk %}">
+                                                {% csrf_token %}
+                                                <button type="submit" class="btn btn-secondary btn-sm">Finish Visit</button>
+                                            </form>
+                                            <a href="{% url 'view_visit_report' row.visit.pk %}" class="btn btn-secondary btn-sm">Visit Report</a>
+                                        </div>
+
+                                        <form method="post" action="{% url 'reception_queue_send_to_doctor' row.entry.pk %}" class="flex flex-col sm:flex-row gap-2">
+                                            {% csrf_token %}
+                                            <select name="consultation_service_id" class="form-control text-sm">
+                                                {% if consultation_services %}
+                                                    {% for service in consultation_services %}
+                                                        <option value="{{ service.pk }}" {% if row.selected_consultation_service_id == service.pk %}selected{% endif %}>
+                                                            {{ service.name }} - {{ service.price }}
+                                                        </option>
+                                                    {% endfor %}
+                                                {% else %}
+                                                    <option value="">No active consultation services</option>
+                                                {% endif %}
+                                            </select>
+                                            <button type="submit" class="btn btn-secondary btn-sm" {% if not consultation_services %}disabled{% endif %}>
+                                                Send to Doctor
+                                            </button>
+                                        </form>
+                                    </div>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <div class="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-10 text-center">
+                <p class="text-lg font-semibold text-text-main mb-2">Reception queue is clear.</p>
+                <p class="text-sm text-text-muted">
+                    Patients sent back from lab, nurse, or doctor will appear here for billing, dispensing, or another doctor review.
+                </p>
+            </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
