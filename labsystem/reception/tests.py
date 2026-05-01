@@ -492,8 +492,8 @@ class ReceptionPharmacyWorkflowTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'id="drug-search-input"', html=False)
-        self.assertContains(response, "Type at least 3 letters to search stocked drugs")
-        self.assertContains(response, 'id="drug-search-results"', html=False)
+        self.assertContains(response, 'id="drug-results-select"', html=False)
+        self.assertContains(response, "Click into the search field to browse all stocked drugs")
 
     def test_dashboard_surfaces_walk_in_dispense_link(self):
         Prescription.objects.create(
@@ -542,3 +542,54 @@ class ReceptionPharmacyWorkflowTests(TestCase):
         visit = Visit.objects.exclude(pk=self.visit.pk).latest("id")
         self.assertEqual(response.headers["Location"], reverse("complete_visit", args=[visit.pk]))
         self.assertEqual(visit.patient, self.patient)
+
+
+class ReceptionVisitFormTests(TestCase):
+    def setUp(self):
+        plan = SubscriptionPlan.objects.create(
+            name="Standard",
+            price_monthly=Decimal("0.00"),
+            price_yearly=Decimal("0.00"),
+        )
+        self.hospital = Hospital.objects.create(
+            name="Lumina Visit Hospital",
+            subdomain="lumina-visit",
+            subscription_plan=plan,
+        )
+        self.receptionist = User.objects.create_user(
+            username="visit-reception",
+            password="pass12345",
+            role=User.ROLE_RECEPTIONIST,
+            hospital=self.hospital,
+            is_active=True,
+        )
+        self.patient = Patient.objects.create(
+            hospital=self.hospital,
+            name="Visit Patient",
+            registration_date=timezone.localdate(),
+            age="22YRS",
+            sex="F",
+        )
+        Service.objects.create(
+            hospital=self.hospital,
+            name="Consultation",
+            category=Service.CATEGORY_CONSULTATION,
+            price=Decimal("20.00"),
+            is_active=True,
+        )
+        Service.objects.create(
+            hospital=self.hospital,
+            name="CBC",
+            category=Service.CATEGORY_LAB,
+            price=Decimal("30.00"),
+            is_active=True,
+        )
+        self.client.force_login(self.receptionist)
+
+    def test_visit_create_page_renders_service_dropdown_picker(self):
+        response = self.client.get(reverse("visit_create", args=[self.patient.pk]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'id="service-results-select"', html=False)
+        self.assertContains(response, 'id="add-service-btn"', html=False)
+        self.assertContains(response, "Browse the full dropdown or type to narrow the services list")

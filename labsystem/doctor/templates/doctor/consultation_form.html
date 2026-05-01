@@ -196,8 +196,9 @@
         <div class="grid grid-cols-1 lg:grid-cols-5 gap-3">
             <div class="lg:col-span-2">
                 <label for="drug-search-input" class="block text-sm font-semibold text-text-main mb-1">Drug</label>
-                <input id="drug-search-input" type="text" class="form-control w-full" placeholder="Type at least 3 letters to search stocked drugs">
-                <div id="drug-search-results" class="hidden mt-2 rounded-lg border border-gray-200 bg-white shadow-sm max-h-56 overflow-y-auto"></div>
+                <input id="drug-search-input" type="text" class="form-control w-full" placeholder="Search stocked drugs as you type">
+                <label for="drug-results-select" class="mt-2 block text-xs font-semibold uppercase tracking-wide text-text-muted">Available Drugs</label>
+                <select id="drug-results-select" class="form-control mt-2 w-full" size="6"></select>
                 <select id="drug-select" class="form-control w-full hidden">
                     <option value="">Select a stocked drug</option>
                     {% for drug in available_drugs %}
@@ -217,7 +218,7 @@
                         </option>
                     {% endfor %}
                 </select>
-                <p class="mt-2 text-xs text-text-muted">Search by the first 3 letters, choose the drug, add the prescription, then search again for the next one.</p>
+                <p class="mt-2 text-xs text-text-muted">Click into the search field to browse all stocked drugs, then keep typing to filter the dropdown instantly.</p>
             </div>
             <div>
                 <label for="dosage-mg" id="dosage-label" class="block text-sm font-semibold text-text-main mb-1">Dosage</label>
@@ -507,7 +508,7 @@
     const billableServicesList = document.getElementById('billable-services-list');
     const billableServicesEmpty = document.getElementById('billable-services-empty');
     const drugSearchInput = document.getElementById('drug-search-input');
-    const drugSearchResults = document.getElementById('drug-search-results');
+    const drugResultsSelect = document.getElementById('drug-results-select');
     const drugSelect = document.getElementById('drug-select');
     const dosageInput = document.getElementById('dosage-mg');
     const dosageLabel = document.getElementById('dosage-label');
@@ -656,16 +657,15 @@
       }
     }
 
-    function hideDrugSearchResults() {
-      if (!drugSearchResults) {
+    function clearDrugOptionsList() {
+      if (!drugResultsSelect) {
         return;
       }
-      drugSearchResults.classList.add('hidden');
-      drugSearchResults.innerHTML = '';
+      drugResultsSelect.innerHTML = '';
     }
 
     function selectDrugOption(value) {
-      if (!drugSelect) {
+      if (!drugSelect || !drugResultsSelect) {
         return;
       }
       drugSelect.value = String(value);
@@ -676,13 +676,13 @@
         drugSearchInput.dataset.selectedValue = String(value);
         drugSearchInput.dataset.selectedLabel = label;
       }
-      hideDrugSearchResults();
+      drugResultsSelect.value = String(value);
       syncPrescriptionLabels();
       calculatePrescriptionPreview();
     }
 
     function renderDrugSearchResults() {
-      if (!drugSearchInput || !drugSearchResults) {
+      if (!drugSearchInput || !drugResultsSelect) {
         return;
       }
 
@@ -693,10 +693,7 @@
         drugSearchInput.value = currentValue;
       }
 
-      if (query.length < 3) {
-        hideDrugSearchResults();
-        return;
-      }
+      const normalizedQuery = query;
 
       const matches = searchableDrugOptions()
         .map(option => ({
@@ -706,37 +703,36 @@
           stock: option.dataset.stock || '',
           price: option.dataset.price || '0',
         }))
-        .filter(item => item.label.toLowerCase().includes(query))
+        .filter(item => !normalizedQuery || item.label.toLowerCase().includes(normalizedQuery))
         .sort((left, right) => {
-          const leftStarts = left.label.toLowerCase().startsWith(query) ? 0 : 1;
-          const rightStarts = right.label.toLowerCase().startsWith(query) ? 0 : 1;
+          const leftStarts = normalizedQuery && left.label.toLowerCase().startsWith(normalizedQuery) ? 0 : 1;
+          const rightStarts = normalizedQuery && right.label.toLowerCase().startsWith(normalizedQuery) ? 0 : 1;
           if (leftStarts !== rightStarts) {
             return leftStarts - rightStarts;
           }
           return left.label.localeCompare(right.label);
-        })
-        .slice(0, 8);
+        });
 
-      if (!matches.length) {
-        drugSearchResults.innerHTML = '<p class="px-3 py-2 text-sm text-text-muted">No stocked drug matches those letters yet.</p>';
-        drugSearchResults.classList.remove('hidden');
-        return;
-      }
+      clearDrugOptionsList();
 
-      drugSearchResults.innerHTML = matches.map(item => `
-        <button
-          type="button"
-          class="flex w-full items-start justify-between gap-3 border-b border-gray-100 px-3 py-2 text-left last:border-b-0 hover:bg-gray-50"
-          data-drug-option-value="${item.option.value}"
-        >
-          <span>
-            <span class="block font-semibold text-text-main">${item.label}</span>
-            <span class="block text-xs text-text-muted">${item.category} - Stock ${item.stock}</span>
-          </span>
-          <span class="text-xs font-semibold text-text-muted">UGX ${item.price}</span>
-        </button>
-      `).join('');
-      drugSearchResults.classList.remove('hidden');
+      const placeholder = document.createElement('option');
+      placeholder.value = '';
+      placeholder.textContent = matches.length
+        ? (normalizedQuery ? 'Matching stocked drugs' : 'All stocked drugs')
+        : 'No stocked drug matches those letters yet.';
+      placeholder.disabled = true;
+      placeholder.selected = !drugSelect?.value;
+      drugResultsSelect.appendChild(placeholder);
+
+      matches.forEach(item => {
+        const option = document.createElement('option');
+        option.value = item.option.value;
+        option.textContent = item.option.textContent.trim();
+        if (drugSelect?.value === item.option.value) {
+          option.selected = true;
+        }
+        drugResultsSelect.appendChild(option);
+      });
     }
 
     function resetPrescriptionPicker() {
@@ -745,7 +741,7 @@
         drugSearchInput.value = '';
         drugSearchInput.focus();
       }
-      hideDrugSearchResults();
+      renderDrugSearchResults();
       syncPrescriptionLabels();
       calculatePrescriptionPreview();
     }
@@ -1088,22 +1084,24 @@
     drugSearchInput?.addEventListener('focus', renderDrugSearchResults);
     drugSearchInput?.addEventListener('keydown', event => {
       if (event.key === 'Enter') {
-        const firstResult = drugSearchResults?.querySelector('[data-drug-option-value]');
-        if (firstResult) {
+        const firstResult = drugResultsSelect?.querySelector('option[value]');
+        if (firstResult?.value) {
           event.preventDefault();
-          selectDrugOption(firstResult.dataset.drugOptionValue);
+          selectDrugOption(firstResult.value);
         }
       }
-      if (event.key === 'Escape') {
-        hideDrugSearchResults();
-      }
     });
-    drugSearchResults?.addEventListener('click', event => {
-      const button = event.target.closest('[data-drug-option-value]');
-      if (!button) {
+    drugResultsSelect?.addEventListener('change', event => {
+      if (!event.target.value) {
         return;
       }
-      selectDrugOption(button.dataset.drugOptionValue);
+      selectDrugOption(event.target.value);
+    });
+    drugResultsSelect?.addEventListener('dblclick', event => {
+      if (!event.target.value) {
+        return;
+      }
+      selectDrugOption(event.target.value);
     });
     drugSelect?.addEventListener('change', () => {
       syncPrescriptionLabels();
@@ -1112,15 +1110,6 @@
     dosageInput?.addEventListener('input', calculatePrescriptionPreview);
     frequencySelect?.addEventListener('change', calculatePrescriptionPreview);
     durationInput?.addEventListener('input', calculatePrescriptionPreview);
-    document.addEventListener('click', event => {
-      if (!drugSearchInput || !drugSearchResults) {
-        return;
-      }
-      if (drugSearchInput.contains(event.target) || drugSearchResults.contains(event.target)) {
-        return;
-      }
-      hideDrugSearchResults();
-    });
 
     modal.addEventListener('click', event => {
       if (event.target === modal) {
@@ -1153,6 +1142,7 @@
 
     populateLabSelect();
     renderSelectedLabServices();
+    renderDrugSearchResults();
     syncPrescriptionLabels();
     calculatePrescriptionPreview();
   });
