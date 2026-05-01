@@ -151,7 +151,7 @@ class DoctorWorkflowTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'id="drug-search-input"', html=False)
-        self.assertContains(response, 'id="drug-results-select"', html=False)
+        self.assertContains(response, 'id="drug-search-results"', html=False)
         self.assertContains(response, "Click into the search field to browse all stocked drugs")
 
     def test_doctor_can_save_consultation_without_creating_duplicate_lab_requests(self):

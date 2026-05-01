@@ -65,9 +65,10 @@
             <div class="grid grid-cols-1 lg:grid-cols-5 gap-3">
                 <div class="lg:col-span-2">
                     <label for="drug-search-input" class="block text-sm font-semibold text-text-main mb-1">Drug</label>
-                    <input id="drug-search-input" type="text" class="form-control w-full" placeholder="Search stocked drugs as you type">
-                    <label for="drug-results-select" class="mt-2 block text-xs font-semibold uppercase tracking-wide text-text-muted">Available Drugs</label>
-                    <select id="drug-results-select" class="form-control mt-2 w-full" size="6"></select>
+                    <div class="relative">
+                        <input id="drug-search-input" type="text" class="form-control w-full" placeholder="Search stocked drugs as you type" autocomplete="off">
+                        <div id="drug-search-results" class="hidden absolute z-20 mt-2 w-full rounded-lg border border-gray-200 bg-white shadow-lg max-h-64 overflow-y-auto"></div>
+                    </div>
                     <select id="drug-select" class="form-control w-full hidden">
                         <option value="">Select a stocked drug</option>
                         {% for drug in available_drugs %}
@@ -87,7 +88,7 @@
                             </option>
                         {% endfor %}
                     </select>
-                    <p class="mt-2 text-xs text-text-muted">Click into the search field to browse all stocked drugs, then keep typing to filter the dropdown instantly.</p>
+                    <p class="mt-2 text-xs text-text-muted">Click into the search field to browse all stocked drugs, then keep typing to filter the list instantly.</p>
                 </div>
                 <div>
                     <label for="dosage-mg" id="dosage-label" class="block text-sm font-semibold text-text-main mb-1">Dosage</label>
@@ -250,7 +251,7 @@
     const csrfToken = wrapper.dataset.csrfToken || document.querySelector('input[name="csrfmiddlewaretoken"]')?.value || '';
     const dispenseUrlTemplate = wrapper.dataset.dispenseUrlTemplate || '';
     const drugSearchInput = wrapper.querySelector('#drug-search-input');
-    const drugResultsSelect = wrapper.querySelector('#drug-results-select');
+    const drugSearchResults = wrapper.querySelector('#drug-search-results');
     const drugSelect = wrapper.querySelector('#drug-select');
     const dosageInput = wrapper.querySelector('#dosage-mg');
     const dosageLabel = wrapper.querySelector('#dosage-label');
@@ -308,12 +309,22 @@
     }
 
     function clearDrugOptionsList() {
-        if (!drugResultsSelect) return;
-        drugResultsSelect.innerHTML = '';
+        if (!drugSearchResults) return;
+        drugSearchResults.innerHTML = '';
+    }
+
+    function showDrugResults() {
+        if (!drugSearchResults) return;
+        drugSearchResults.classList.remove('hidden');
+    }
+
+    function hideDrugResults() {
+        if (!drugSearchResults) return;
+        drugSearchResults.classList.add('hidden');
     }
 
     function selectDrugOption(value) {
-        if (!drugSelect || !drugResultsSelect) return;
+        if (!drugSelect) return;
         drugSelect.value = String(value);
         const option = drugSelect.selectedOptions?.[0];
         if (drugSearchInput && option) {
@@ -322,13 +333,13 @@
             drugSearchInput.dataset.selectedValue = String(value);
             drugSearchInput.dataset.selectedLabel = label;
         }
-        drugResultsSelect.value = String(value);
+        hideDrugResults();
         updateDosageLabel();
         updatePreview();
     }
 
     function renderDrugSearchResults() {
-        if (!drugSearchInput || !drugResultsSelect) return;
+        if (!drugSearchInput || !drugSearchResults) return;
 
         const currentValue = drugSearchInput.value;
         const query = currentValue.trim().toLowerCase();
@@ -359,24 +370,26 @@
 
         clearDrugOptionsList();
 
-        const placeholder = document.createElement('option');
-        placeholder.value = '';
-        placeholder.textContent = matches.length
-            ? (normalizedQuery ? 'Matching stocked drugs' : 'All stocked drugs')
-            : 'No stocked drug matches those letters yet.';
-        placeholder.disabled = true;
-        placeholder.selected = !drugSelect?.value;
-        drugResultsSelect.appendChild(placeholder);
+        if (!matches.length) {
+            drugSearchResults.innerHTML = '<p class="px-3 py-2 text-sm text-text-muted">No stocked drug matches that search yet.</p>';
+            showDrugResults();
+            return;
+        }
 
-        matches.forEach(item => {
-            const option = document.createElement('option');
-            option.value = item.option.value;
-            option.textContent = item.option.textContent.trim();
-            if (drugSelect?.value === item.option.value) {
-                option.selected = true;
-            }
-            drugResultsSelect.appendChild(option);
-        });
+        drugSearchResults.innerHTML = matches.map(item => `
+            <button
+                type="button"
+                class="flex w-full items-start justify-between gap-3 border-b border-gray-100 px-3 py-2 text-left last:border-b-0 hover:bg-gray-50"
+                data-drug-option-value="${item.option.value}"
+            >
+                <span class="min-w-0">
+                    <span class="block font-semibold text-text-main">${item.label}</span>
+                    <span class="block text-xs text-text-muted">${item.category} - Stock ${item.stock}</span>
+                </span>
+                <span class="text-xs font-semibold text-text-muted whitespace-nowrap">UGX ${item.price}</span>
+            </button>
+        `).join('');
+        showDrugResults();
     }
 
     function resetPrescriptionPicker() {
@@ -571,22 +584,29 @@
     drugSearchInput?.addEventListener('focus', renderDrugSearchResults);
     drugSearchInput?.addEventListener('keydown', event => {
         if (event.key === 'Enter') {
-            const firstResult = drugResultsSelect?.querySelector('option[value]');
-            if (firstResult?.value) {
+            const firstResult = drugSearchResults?.querySelector('[data-drug-option-value]');
+            if (firstResult?.dataset.drugOptionValue) {
                 event.preventDefault();
-                selectDrugOption(firstResult.value);
+                selectDrugOption(firstResult.dataset.drugOptionValue);
             }
         }
+        if (event.key === 'Escape') {
+            hideDrugResults();
+        }
     });
-    drugResultsSelect?.addEventListener('change', event => {
-        if (!event.target.value) return;
-        selectDrugOption(event.target.value);
-    });
-    drugResultsSelect?.addEventListener('dblclick', event => {
-        if (!event.target.value) return;
-        selectDrugOption(event.target.value);
+    drugSearchResults?.addEventListener('click', event => {
+        const button = event.target.closest('[data-drug-option-value]');
+        if (!button) return;
+        selectDrugOption(button.dataset.drugOptionValue);
     });
     drugSelect?.addEventListener('change', updateDosageLabel);
+    document.addEventListener('click', event => {
+        if (!drugSearchInput || !drugSearchResults) return;
+        if (drugSearchInput.contains(event.target) || drugSearchResults.contains(event.target)) {
+            return;
+        }
+        hideDrugResults();
+    });
     prescriptionList?.addEventListener('click', event => {
         const button = event.target.closest('[data-remove-prescription]');
         if (!button) return;
@@ -640,7 +660,6 @@
         }
     });
 
-    renderDrugSearchResults();
     updateDosageLabel();
     updatePreview();
 })();

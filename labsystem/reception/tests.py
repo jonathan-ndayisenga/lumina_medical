@@ -528,7 +528,7 @@ class ReceptionPharmacyWorkflowTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'id="drug-search-input"', html=False)
-        self.assertContains(response, 'id="drug-results-select"', html=False)
+        self.assertContains(response, 'id="drug-search-results"', html=False)
         self.assertContains(response, "Click into the search field to browse all stocked drugs")
 
     def test_dashboard_surfaces_walk_in_dispense_link(self):
