@@ -58,6 +58,7 @@
                     <div>
                         <h4 class="text-sm font-semibold text-text-main">{{ row.visit.visit_date|date:"M d, Y" }}</h4>
                         <p class="text-xs text-text-muted">{{ row.visit.visit_date|date:"H:i" }}</p>
+                        <p class="text-xs text-text-muted mt-1">{{ row.visit.get_visit_type_display }}</p>
                     </div>
                     {% with status=row.visit.status %}
                         {% if status == "completed" %}
@@ -142,6 +143,7 @@
                         <td class="px-4 py-3 text-text-main">
                             <div class="font-medium">{{ row.visit.visit_date|date:"M d, Y" }}</div>
                             <div class="text-xs text-text-muted">{{ row.visit.visit_date|date:"H:i" }}</div>
+                            <div class="text-xs text-text-muted mt-1">{{ row.visit.get_visit_type_display }}</div>
                         </td>
                         <td class="px-4 py-3">
                             {% with status=row.visit.status %}

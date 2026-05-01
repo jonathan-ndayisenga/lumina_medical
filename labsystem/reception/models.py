@@ -41,6 +41,16 @@ class Patient(models.Model):
 
 
 class Visit(models.Model):
+    TYPE_NORMAL = "normal"
+    TYPE_FOLLOW_UP = "follow_up"
+    TYPE_ADJUSTMENT = "adjustment"
+
+    VISIT_TYPE_CHOICES = [
+        (TYPE_NORMAL, "Normal Visit"),
+        (TYPE_FOLLOW_UP, "Follow-up"),
+        (TYPE_ADJUSTMENT, "Adjustment Visit (Medication Swap)"),
+    ]
+
     STATUS_IN_PROGRESS = "in_progress"
     STATUS_READY_FOR_BILLING = "ready_for_billing"
     STATUS_COMPLETED = "completed"
@@ -56,8 +66,26 @@ class Visit(models.Model):
     patient = models.ForeignKey(Patient, on_delete=models.CASCADE, related_name="visits")
     hospital = models.ForeignKey(Hospital, on_delete=models.CASCADE, related_name="visits")
     visit_date = models.DateTimeField(auto_now_add=True)
+    visit_type = models.CharField(max_length=20, choices=VISIT_TYPE_CHOICES, default=TYPE_NORMAL)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_IN_PROGRESS)
     total_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    parent_visit = models.ForeignKey(
+        "self",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="follow_up_visits",
+    )
+    adjustment_origin_prescription = models.ForeignKey(
+        "doctor.Prescription",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="adjustment_visits",
+    )
+    adjustment_days_used = models.PositiveIntegerField(default=0)
+    adjustment_remaining_days = models.PositiveIntegerField(default=0)
+    adjustment_reason = models.CharField(max_length=255, blank=True)
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
@@ -86,6 +114,10 @@ class Visit(models.Model):
     @property
     def is_fully_paid(self):
         return self.balance_due <= 0
+
+    @property
+    def is_adjustment_visit(self):
+        return self.visit_type == self.TYPE_ADJUSTMENT
 
 
 class Triage(models.Model):

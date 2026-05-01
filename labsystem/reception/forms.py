@@ -4,6 +4,8 @@ import re
 from django import forms
 from django.utils import timezone
 
+from doctor.models import Prescription
+
 from .models import Patient, Payment, Service, Visit
 
 
@@ -136,31 +138,173 @@ class VisitCreateForm(forms.ModelForm):
     services = forms.ModelMultipleChoiceField(
         queryset=Service.objects.none(),
         widget=forms.SelectMultiple(attrs={"class": "hidden", "id": "service-select-hidden"}),
-        required=True,
+        required=False,
     )
+    adjustment_origin_prescription = forms.ModelChoiceField(
+        queryset=Prescription.objects.none(),
+        required=False,
+        empty_label="Select the original prescription",
+    )
+    adjustment_days_used = forms.IntegerField(min_value=1, required=False, label="Days Already Used")
+    follow_up_parent_visit = forms.ModelChoiceField(
+        queryset=Visit.objects.none(),
+        required=False,
+        empty_label="Select the completed visit being followed up",
+        label="Previous Visit",
+    )
+    adjustment_reason = forms.CharField(
+        required=False,
+        label="Reason for Adjustment",
+        widget=forms.Textarea(
+            attrs={
+                "rows": 2,
+                "class": "form-control",
+                "placeholder": "Example: Side effects, ineffective response, or change of diagnosis.",
+            }
+        ),
+    )
+
     class Meta:
         model = Visit
-        fields = ["notes"]
+        fields = ["visit_type", "notes"]
         widgets = {
+            "visit_type": forms.Select(attrs={"class": "form-control"}),
             "notes": forms.Textarea(attrs={"rows": 3, "class": "form-control"}),
         }
 
     def __init__(self, *args, **kwargs):
         hospital = kwargs.pop("hospital", None)
+        patient = kwargs.pop("patient", None)
         super().__init__(*args, **kwargs)
+        self.hospital = hospital
+        self.patient = patient or getattr(self.instance, "patient", None)
         if hospital is not None:
             self.fields["services"].queryset = Service.objects.filter(hospital=hospital, is_active=True)
         self.fields["services"].label_from_instance = lambda service: f"{service.name} - {service.price:.2f}"
+        self.fields["visit_type"].help_text = "Use Adjustment Visit when the doctor is swapping medication already paid for on a previous visit."
+        self.fields["follow_up_parent_visit"].widget.attrs.update({"class": "form-control"})
+        self.fields["adjustment_origin_prescription"].widget.attrs.update({"class": "form-control"})
+        self.fields["adjustment_days_used"].widget.attrs.update({"class": "form-control", "placeholder": "3"})
+        follow_up_queryset = Visit.objects.none()
+        origin_queryset = Prescription.objects.none()
+        if hospital is not None and self.patient is not None:
+            follow_up_queryset = (
+                Visit.objects.filter(
+                    hospital=hospital,
+                    patient=self.patient,
+                    status=Visit.STATUS_COMPLETED,
+                )
+                .order_by("-visit_date")
+            )
+            if self.instance.pk:
+                follow_up_queryset = follow_up_queryset.exclude(pk=self.instance.pk)
+            origin_queryset = (
+                Prescription.objects.filter(
+                    visit__hospital=hospital,
+                    visit__patient=self.patient,
+                    covered_by_previous=False,
+                    dispensed=True,
+                    visit__status=Visit.STATUS_COMPLETED,
+                )
+                .select_related("drug", "visit")
+                .order_by("-prescribed_at", "-id")
+            )
+        self.fields["follow_up_parent_visit"].queryset = follow_up_queryset
+        self.fields["follow_up_parent_visit"].label_from_instance = (
+            lambda visit: f"{visit.visit_date:%Y-%m-%d} - {visit.get_status_display()} - {visit.total_amount}"
+        )
+        self.fields["adjustment_origin_prescription"].queryset = origin_queryset
+        self.fields["adjustment_origin_prescription"].label_from_instance = (
+            lambda prescription: (
+                f"{prescription.drug.name} - {prescription.duration_days} day(s) "
+                f"from {prescription.visit.visit_date:%Y-%m-%d}"
+            )
+        )
         if self.instance.pk and not self.is_bound:
             self.initial["services"] = self.instance.visit_services.values_list("service_id", flat=True)
+            self.initial["follow_up_parent_visit"] = self.instance.parent_visit_id
+            self.initial["adjustment_origin_prescription"] = self.instance.adjustment_origin_prescription_id
+            self.initial["adjustment_days_used"] = self.instance.adjustment_days_used
+            self.initial["adjustment_reason"] = self.instance.adjustment_reason
+
+    def _clean_follow_up_visit(self, cleaned_data):
+        parent_visit = cleaned_data.get("follow_up_parent_visit")
+        services = cleaned_data.get("services")
+
+        if parent_visit is None:
+            self.add_error("follow_up_parent_visit", "Choose the completed visit this follow-up is linked to.")
+            return cleaned_data
+        if self.patient is not None and parent_visit.patient_id != self.patient.pk:
+            self.add_error("follow_up_parent_visit", "The selected follow-up visit does not belong to this patient.")
+        if parent_visit.status != Visit.STATUS_COMPLETED:
+            self.add_error("follow_up_parent_visit", "Follow-up visits must point to a completed and paid previous visit.")
+
+        has_consultation = any(service.category == Service.CATEGORY_CONSULTATION for service in services)
+        if not has_consultation:
+            self.add_error("services", "Follow-up visits must include a doctor consultation service.")
+        return cleaned_data
+
+    def _clean_adjustment_visit(self, cleaned_data):
+        origin = cleaned_data.get("adjustment_origin_prescription")
+        days_used = cleaned_data.get("adjustment_days_used")
+        reason = (cleaned_data.get("adjustment_reason") or "").strip()
+        services = cleaned_data.get("services")
+
+        if origin is None:
+            self.add_error("adjustment_origin_prescription", "Choose the prescription being adjusted.")
+            return cleaned_data
+        if self.patient is not None and origin.visit.patient_id != self.patient.pk:
+            self.add_error("adjustment_origin_prescription", "The selected prescription does not belong to this patient.")
+        if not origin.dispensed:
+            self.add_error("adjustment_origin_prescription", "Only already-dispensed prescriptions can be swapped without new billing.")
+        if origin.visit.status != Visit.STATUS_COMPLETED or not origin.visit.is_fully_paid:
+            self.add_error("adjustment_origin_prescription", "The original prescription must come from a fully paid and completed visit.")
+        if days_used is None:
+            self.add_error("adjustment_days_used", "Enter how many days the original medicine was already used.")
+            return cleaned_data
+        if days_used >= origin.duration_days:
+            self.add_error(
+                "adjustment_days_used",
+                f"Days already used must be less than the original {origin.duration_days}-day prescription.",
+            )
+            return cleaned_data
+        if services:
+            self.add_error("services", "Adjustment visits do not allow new billable services. The replacement is covered by the previous payment.")
+
+        cleaned_data["adjustment_reason"] = reason
+        cleaned_data["adjustment_remaining_days"] = origin.duration_days - days_used
+        return cleaned_data
 
     def clean_services(self):
         services = self.cleaned_data["services"]
-        if not services:
+        visit_type = self.cleaned_data.get("visit_type") or getattr(self.instance, "visit_type", Visit.TYPE_NORMAL)
+        if visit_type != Visit.TYPE_ADJUSTMENT and not services:
             raise forms.ValidationError("Select at least one service.")
         return services
 
+    def clean(self):
+        cleaned_data = super().clean()
+        visit_type = cleaned_data.get("visit_type") or Visit.TYPE_NORMAL
+        if visit_type == Visit.TYPE_ADJUSTMENT:
+            cleaned_data = self._clean_adjustment_visit(cleaned_data)
+            cleaned_data["follow_up_parent_visit"] = None
+        elif visit_type == Visit.TYPE_FOLLOW_UP:
+            cleaned_data = self._clean_follow_up_visit(cleaned_data)
+            cleaned_data["adjustment_origin_prescription"] = None
+            cleaned_data["adjustment_days_used"] = 0
+            cleaned_data["adjustment_remaining_days"] = 0
+            cleaned_data["adjustment_reason"] = ""
+        else:
+            cleaned_data["follow_up_parent_visit"] = None
+            cleaned_data["adjustment_origin_prescription"] = None
+            cleaned_data["adjustment_days_used"] = 0
+            cleaned_data["adjustment_remaining_days"] = 0
+            cleaned_data["adjustment_reason"] = ""
+        return cleaned_data
+
     def calculate_total(self):
+        if self.cleaned_data.get("visit_type") == Visit.TYPE_ADJUSTMENT:
+            return Decimal("0")
         services = self.cleaned_data.get("services")
         if not services:
             return Decimal("0")

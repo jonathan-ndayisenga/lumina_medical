@@ -133,6 +133,20 @@ class Prescription(models.Model):
     total_quantity = models.DecimalField(max_digits=10, decimal_places=2, editable=False, default=0)
     number_of_packs = models.PositiveIntegerField(default=0, editable=False)
     total_price = models.DecimalField(max_digits=10, decimal_places=2, editable=False, default=0)
+    is_adjustment = models.BooleanField(default=False)
+    parent_prescription = models.ForeignKey(
+        "self",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="replacement_prescriptions",
+    )
+    covered_by_previous = models.BooleanField(default=False)
+    adjustment_reason = models.CharField(max_length=255, blank=True)
+    days_used_before_adjustment = models.PositiveIntegerField(default=0)
+    remaining_days_covered = models.PositiveIntegerField(default=0)
+    discontinued_early = models.BooleanField(default=False)
+    discontinued_at = models.DateTimeField(null=True, blank=True)
     notes = models.TextField(blank=True)
     prescribed_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -198,6 +212,12 @@ class Prescription(models.Model):
         elif self.is_tube:
             dose_unit = "application unit(s)"
         return f"{self.dosage_mg} {dose_unit} x {self.frequency_per_day}/day for {self.duration_days} day(s)"
+
+    @property
+    def billing_label(self):
+        if self.covered_by_previous:
+            return "Covered by previous payment"
+        return f"UGX {self.total_price}"
 
     def calculate_totals(self):
         frequency = Decimal(self.frequency_per_day or 0)

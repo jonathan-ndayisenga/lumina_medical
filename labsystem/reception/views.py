@@ -483,32 +483,74 @@ def visit_create(request, patient_id):
     patient = get_object_or_404(Patient, pk=patient_id, hospital=hospital)
 
     if request.method == "POST":
-        form = VisitCreateForm(request.POST, hospital=hospital)
+        form = VisitCreateForm(request.POST, hospital=hospital, patient=patient)
         if form.is_valid():
             visit = form.save(commit=False)
             visit.patient = patient
             visit.hospital = hospital
             visit.created_by = request.user
             visit.total_amount = form.calculate_total()
+            if visit.visit_type == Visit.TYPE_FOLLOW_UP:
+                visit.parent_visit = form.cleaned_data["follow_up_parent_visit"]
+                visit.adjustment_origin_prescription = None
+                visit.adjustment_days_used = 0
+                visit.adjustment_remaining_days = 0
+                visit.adjustment_reason = ""
+            elif visit.visit_type == Visit.TYPE_ADJUSTMENT:
+                origin = form.cleaned_data["adjustment_origin_prescription"]
+                visit.parent_visit = origin.visit
+                visit.adjustment_origin_prescription = origin
+                visit.adjustment_days_used = form.cleaned_data.get("adjustment_days_used") or 0
+                visit.adjustment_remaining_days = form.cleaned_data.get("adjustment_remaining_days") or 0
+                visit.adjustment_reason = form.cleaned_data.get("adjustment_reason") or ""
+            else:
+                visit.parent_visit = None
+                visit.adjustment_origin_prescription = None
+                visit.adjustment_days_used = 0
+                visit.adjustment_remaining_days = 0
+                visit.adjustment_reason = ""
             visit.save()
 
             services = list(form.cleaned_data["services"])
-            for service in services:
-                VisitService.objects.create(
+            if visit.visit_type == Visit.TYPE_ADJUSTMENT:
+                ensure_pending_queue_entry(
                     visit=visit,
-                    service=service,
-                    price_at_time=service.price,
+                    hospital=hospital,
+                    queue_type=QueueEntry.TYPE_DOCTOR,
+                    reason=f"Medication adjustment review for {visit.adjustment_origin_prescription.drug.name}.",
+                    requested_by=request.user,
+                    notes=(
+                        f"Adjustment visit linked to prescription {visit.adjustment_origin_prescription_id}. "
+                        f"Days already used: {visit.adjustment_days_used}. Remaining days: {visit.adjustment_remaining_days}."
+                    ),
                 )
-                for queue_type in queue_types_for_service(service):
-                    QueueEntry.objects.create(
-                        hospital=hospital,
+            else:
+                for service in services:
+                    VisitService.objects.create(
                         visit=visit,
-                        queue_type=queue_type,
-                        reason=queue_reason_for_service(service),
-                        requested_by=request.user,
+                        service=service,
+                        price_at_time=service.price,
                     )
+                    for queue_type in queue_types_for_service(service):
+                        QueueEntry.objects.create(
+                            hospital=hospital,
+                            visit=visit,
+                            queue_type=queue_type,
+                            reason=queue_reason_for_service(service),
+                            requested_by=request.user,
+                        )
 
             sync_visit_status(visit)
+            if visit.visit_type == Visit.TYPE_ADJUSTMENT:
+                messages.success(
+                    request,
+                    (
+                        f"Adjustment visit created for {patient.name}. "
+                        f"Doctor can now replace {visit.adjustment_origin_prescription.drug.name} "
+                        f"for the remaining {visit.adjustment_remaining_days} day(s) without re-billing."
+                    ),
+                )
+                return redirect("patient_visits", patient_id=patient.pk)
             messages.success(
                 request,
                 f"Visit created. Total bill: {visit.total_amount}. No payment collected yet.",
@@ -516,7 +558,7 @@ def visit_create(request, patient_id):
             return redirect("reception_dashboard")
         messages.error(request, "Please fix the visit details below.")
     else:
-        form = VisitCreateForm(hospital=hospital)
+        form = VisitCreateForm(hospital=hospital, patient=patient)
 
     return render(
         request,
@@ -546,12 +588,15 @@ def visit_edit(request, visit_id):
     if visit.status == Visit.STATUS_COMPLETED:
         messages.error(request, "Completed visits cannot be edited from reception.")
         return redirect("reception_dashboard")
+    if visit.is_adjustment_visit:
+        messages.error(request, "Adjustment visits are doctor-led and cannot be edited from reception.")
+        return redirect("patient_visits", patient_id=visit.patient_id)
     if visit.queue_entries.filter(processed=True).exists():
         messages.error(request, "This visit already has processed workflow activity and can no longer be edited safely.")
         return redirect("patient_list")
 
     if request.method == "POST":
-        form = VisitCreateForm(request.POST, instance=visit, hospital=hospital)
+        form = VisitCreateForm(request.POST, instance=visit, hospital=hospital, patient=visit.patient)
         if form.is_valid():
             visit = form.save(commit=False)
             visit.total_amount = form.calculate_total()
@@ -581,7 +626,7 @@ def visit_edit(request, visit_id):
             return redirect("patient_list")
         messages.error(request, "Please fix the visit details below.")
     else:
-        form = VisitCreateForm(instance=visit, hospital=hospital)
+        form = VisitCreateForm(instance=visit, hospital=hospital, patient=visit.patient)
 
     return render(
         request,
@@ -612,6 +657,9 @@ def visit_delete(request, visit_id):
     if visit.status == Visit.STATUS_COMPLETED:
         messages.error(request, "Completed visits cannot be deleted from reception.")
         return redirect("reception_dashboard")
+    if visit.is_adjustment_visit:
+        messages.error(request, "Adjustment visits are linked to prior treatment and cannot be deleted from reception.")
+        return redirect("patient_visits", patient_id=visit.patient_id)
     if visit.queue_entries.filter(processed=True).exists():
         messages.error(request, "This visit already has processed workflow activity and can no longer be deleted safely.")
         return redirect("patient_list")
@@ -651,6 +699,20 @@ def complete_visit(request, visit_id):
         if latest_payment:
             return redirect("print_payment_receipt", payment_id=latest_payment.pk)
         return redirect("print_receipt", visit_id=visit.pk)
+
+    if request.method == "POST" and request.POST.get("finish_adjustment_visit"):
+        if not visit.is_adjustment_visit:
+            raise PermissionDenied("Only adjustment visits can be closed without payment from this action.")
+        if visit.balance_due > 0:
+            messages.error(request, "This adjustment visit still has a balance and cannot be closed without payment.")
+            return redirect("complete_visit", visit_id=visit.pk)
+        if visit.prescriptions.filter(dispensed=False).exists():
+            messages.error(request, "Dispense the replacement medicine before finishing this adjustment visit.")
+            return redirect("complete_visit", visit_id=visit.pk)
+        visit.status = Visit.STATUS_COMPLETED
+        visit.save(update_fields=["status"])
+        messages.success(request, "Adjustment visit finished. No extra billing was applied because the replacement is covered by the previous payment.")
+        return redirect("patient_visits", patient_id=visit.patient_id)
 
     if request.method == "POST":
         form = CompleteVisitForm(request.POST, remaining_balance=visit.balance_due, hospital=hospital)
@@ -704,7 +766,7 @@ def complete_visit(request, visit_id):
     bank_count = bank_qs.count() if bank_qs is not None else 0
     mobile_count = mobile_qs.count() if mobile_qs is not None else 0
     prescriptions = list(
-        visit.prescriptions.select_related("drug", "dispensed_by").order_by("-dispensed", "-prescribed_at", "-id")
+        visit.prescriptions.select_related("drug", "dispensed_by", "parent_prescription__drug").order_by("-dispensed", "-prescribed_at", "-id")
     )
     available_drugs = list(
         InventoryItem.objects.filter(
@@ -738,6 +800,8 @@ def complete_visit(request, visit_id):
             "single_mobile_account": mobile_qs.first() if mobile_count == 1 else None,
             "prescriptions": prescriptions,
             "available_drugs": available_drugs,
+            "allow_reception_prescribing": not visit.is_adjustment_visit,
+            "adjustment_origin_prescription": visit.adjustment_origin_prescription,
         },
     )
 
@@ -870,10 +934,11 @@ def patient_visits(request, patient_id):
     visit_rows = []
     for visit in visits:
         can_edit = (
-            visit.status != Visit.STATUS_COMPLETED 
+            visit.status != Visit.STATUS_COMPLETED
+            and not visit.is_adjustment_visit
             and not visit.queue_entries.filter(processed=True).exists()
         )
-        can_delete = can_edit  # Same conditions as edit
+        can_delete = can_edit
         
         payments = list(visit.payments.all())
         # Prefer the most recent receipt for labels/badges.

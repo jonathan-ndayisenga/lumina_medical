@@ -350,3 +350,76 @@ class DoctorWorkflowTests(TestCase):
         self.assertEqual(self.visit.status, Visit.STATUS_IN_PROGRESS)
         self.assertFalse(QueueEntry.objects.filter(visit=self.visit, queue_type=QueueEntry.TYPE_DOCTOR, processed=False).exists())
         self.assertTrue(QueueEntry.objects.filter(visit=self.visit, queue_type=QueueEntry.TYPE_RECEPTION, processed=False).exists())
+
+    def test_adjustment_visit_prescription_is_covered_without_new_billing(self):
+        original_prescription = Prescription.objects.create(
+            visit=self.visit,
+            drug=self.tablet_drug,
+            dosage_mg=Decimal("500"),
+            frequency_per_day=2,
+            duration_days=5,
+            prescribed_by=self.doctor,
+        )
+        adjustment_visit = Visit.objects.create(
+            patient=self.patient,
+            hospital=self.hospital,
+            visit_type=Visit.TYPE_ADJUSTMENT,
+            parent_visit=self.visit,
+            adjustment_origin_prescription=original_prescription,
+            adjustment_days_used=3,
+            adjustment_remaining_days=2,
+            adjustment_reason="Side effects",
+            created_by=self.doctor,
+            total_amount=Decimal("0.00"),
+        )
+
+        response = self.client.post(
+            reverse("add_prescription_api", args=[adjustment_visit.pk]),
+            {
+                "drug_id": self.syrup_drug.pk,
+                "dosage_mg": "10",
+                "frequency_per_day": "2",
+                "duration_days": "2",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        adjustment_visit.refresh_from_db()
+        original_prescription.refresh_from_db()
+        replacement = Prescription.objects.get(visit=adjustment_visit, drug=self.syrup_drug)
+        self.assertTrue(replacement.is_adjustment)
+        self.assertTrue(replacement.covered_by_previous)
+        self.assertEqual(replacement.parent_prescription, original_prescription)
+        self.assertEqual(replacement.remaining_days_covered, 2)
+        self.assertIsNone(replacement.billing_visit_service)
+        self.assertEqual(adjustment_visit.total_amount, Decimal("0.00"))
+        self.assertTrue(original_prescription.discontinued_early)
+        self.assertIn("No new billing was added", response.json()["message"])
+
+    def test_adjustment_visit_consultation_page_shows_swap_summary(self):
+        original_prescription = Prescription.objects.create(
+            visit=self.visit,
+            drug=self.tablet_drug,
+            dosage_mg=Decimal("500"),
+            frequency_per_day=2,
+            duration_days=5,
+            prescribed_by=self.doctor,
+        )
+        adjustment_visit = Visit.objects.create(
+            patient=self.patient,
+            hospital=self.hospital,
+            visit_type=Visit.TYPE_ADJUSTMENT,
+            parent_visit=self.visit,
+            adjustment_origin_prescription=original_prescription,
+            adjustment_days_used=3,
+            adjustment_remaining_days=2,
+            adjustment_reason="Ineffective response",
+            created_by=self.doctor,
+        )
+
+        response = self.client.get(reverse("consultation", args=[adjustment_visit.pk]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Medication Adjustment Visit")
+        self.assertContains(response, "Remaining days")
+        self.assertContains(response, "Ineffective response")

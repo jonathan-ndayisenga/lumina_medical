@@ -109,9 +109,33 @@ def prescription_payload(prescription):
         "regimen": prescription.regimen_display,
         "quantity_display": prescription.quantity_display,
         "total_price": str(prescription.total_price),
+        "billing_label": prescription.billing_label,
         "dispensed": prescription.dispensed,
+        "covered_by_previous": prescription.covered_by_previous,
+        "is_adjustment": prescription.is_adjustment,
+        "parent_drug_name": prescription.parent_prescription.drug.name if prescription.parent_prescription_id else "",
+        "remaining_days_covered": prescription.remaining_days_covered,
         "dispensed_at": prescription.dispensed_at.strftime("%Y-%m-%d %H:%M") if prescription.dispensed_at else "",
     }
+
+
+def refresh_parent_adjustment_state(parent_prescription):
+    if not parent_prescription:
+        return
+
+    has_replacements = parent_prescription.replacement_prescriptions.exists()
+    update_fields = []
+    if parent_prescription.discontinued_early != has_replacements:
+        parent_prescription.discontinued_early = has_replacements
+        update_fields.append("discontinued_early")
+    if has_replacements and not parent_prescription.discontinued_at:
+        parent_prescription.discontinued_at = timezone.now()
+        update_fields.append("discontinued_at")
+    if not has_replacements and parent_prescription.discontinued_at is not None:
+        parent_prescription.discontinued_at = None
+        update_fields.append("discontinued_at")
+    if update_fields:
+        parent_prescription.save(update_fields=update_fields)
 
 
 def reverse_dispensed_stock(prescription, *, actor):
@@ -150,6 +174,8 @@ def remove_prescription_workflow(*, prescription, actor):
     total_price = Decimal(prescription.total_price or 0)
     removed_drug_name = prescription.drug.name
     dispensed = prescription.dispensed
+    covered_by_previous = prescription.covered_by_previous
+    parent_prescription = prescription.parent_prescription
 
     if dispensed:
         reverse_dispensed_stock(prescription, actor=actor)
@@ -160,16 +186,22 @@ def remove_prescription_workflow(*, prescription, actor):
     if billing_line:
         billing_line.delete()
 
-    visit.total_amount = max(Decimal(visit.total_amount or 0) - total_price, Decimal("0"))
+    if not covered_by_previous:
+        visit.total_amount = max(Decimal(visit.total_amount or 0) - total_price, Decimal("0"))
     update_fields = ["total_amount"]
     if visit.status == Visit.STATUS_COMPLETED and not visit.is_fully_paid:
         visit.status = Visit.STATUS_READY_FOR_BILLING
         update_fields.append("status")
     visit.save(update_fields=update_fields)
+    refresh_parent_adjustment_state(parent_prescription)
 
     message = f"{removed_drug_name} removed from the prescription list."
     if dispensed:
         message = f"{removed_drug_name} removed and dispensed stock was restored."
+    if covered_by_previous:
+        message = f"{removed_drug_name} adjustment removed."
+        if dispensed:
+            message = f"{removed_drug_name} adjustment removed and replacement stock was restored."
 
     return {
         "message": message,
@@ -473,6 +505,13 @@ def add_prescription_api(request, visit_id):
         visits = visits.filter(hospital=hospital)
     visit = get_object_or_404(visits, pk=visit_id)
 
+    if visit.is_adjustment_visit and getattr(request.user, "role", "") not in {
+        User.ROLE_SUPERADMIN,
+        User.ROLE_HOSPITAL_ADMIN,
+        User.ROLE_DOCTOR,
+    } and not request.user.groups.filter(name="Doctor").exists():
+        return JsonResponse({"error": "Only a doctor can prescribe the replacement medicine on an adjustment visit."}, status=403)
+
     drug_id = request.POST.get("drug_id", "").strip()
     dosage_value = request.POST.get("dosage_mg", "").strip()
     frequency_value = request.POST.get("frequency_per_day", "").strip()
@@ -514,32 +553,48 @@ def add_prescription_api(request, visit_id):
         duration_days=duration,
         notes=notes,
         prescribed_by=request.user,
+        is_adjustment=visit.is_adjustment_visit,
+        parent_prescription=visit.adjustment_origin_prescription if visit.is_adjustment_visit else None,
+        covered_by_previous=visit.is_adjustment_visit,
+        adjustment_reason=visit.adjustment_reason if visit.is_adjustment_visit else "",
+        days_used_before_adjustment=visit.adjustment_days_used if visit.is_adjustment_visit else 0,
+        remaining_days_covered=duration if visit.is_adjustment_visit else 0,
     )
 
-    service, _ = Service.objects.get_or_create(
-        hospital=visit.hospital,
-        name=f"Pharmacy Item: {drug.name}",
-        defaults={
-            "category": Service.CATEGORY_PHARMACY,
-            "price": drug.selling_price or Decimal("0"),
-            "is_active": True,
-        },
-    )
-    billing_line = VisitService.objects.create(
-        visit=visit,
-        service=service,
-        price_at_time=prescription.total_price,
-        notes=f"Prescription: {prescription.regimen_display}",
-    )
-    prescription.billing_visit_service = billing_line
-    prescription.save(update_fields=["billing_visit_service"])
+    if visit.is_adjustment_visit:
+        refresh_parent_adjustment_state(visit.adjustment_origin_prescription)
+    else:
+        service, _ = Service.objects.get_or_create(
+            hospital=visit.hospital,
+            name=f"Pharmacy Item: {drug.name}",
+            defaults={
+                "category": Service.CATEGORY_PHARMACY,
+                "price": drug.selling_price or Decimal("0"),
+                "is_active": True,
+            },
+        )
+        billing_line = VisitService.objects.create(
+            visit=visit,
+            service=service,
+            price_at_time=prescription.total_price,
+            notes=f"Prescription: {prescription.regimen_display}",
+        )
+        prescription.billing_visit_service = billing_line
+        prescription.save(update_fields=["billing_visit_service"])
 
-    visit.total_amount += prescription.total_price
-    visit.save(update_fields=["total_amount"])
+        visit.total_amount += prescription.total_price
+        visit.save(update_fields=["total_amount"])
+
+    message = f"{drug.name} added to the prescription list."
+    if visit.is_adjustment_visit:
+        message = (
+            f"{drug.name} added as the replacement drug for the remaining "
+            f"{duration} day(s). No new billing was added."
+        )
 
     return JsonResponse(
         {
-            "message": f"{drug.name} added to the prescription list.",
+            "message": message,
             "prescription": prescription_payload(prescription),
             "visit_total_amount": str(visit.total_amount),
         }
@@ -634,7 +689,7 @@ def consultation(request, visit_id):
     nurse_queue_entries = visit.queue_entries.filter(queue_type=QueueEntry.TYPE_NURSE).order_by("-created_at")
     nurse_notes = NurseNote.objects.filter(visit=visit).select_related("created_by")
     prescriptions = list(
-        visit.prescriptions.select_related("drug", "dispensed_by").order_by("-prescribed_at", "-id")
+        visit.prescriptions.select_related("drug", "dispensed_by", "parent_prescription__drug").order_by("-prescribed_at", "-id")
     )
     existing_lab_service_ids = list(
         VisitService.objects.filter(
@@ -685,6 +740,7 @@ def consultation(request, visit_id):
     )
     pending_lab_services = list(lab_visit_services(visit, performed=False))
     completed_lab_services = list(lab_visit_services(visit, performed=True))
+    adjustment_origin_prescription = visit.adjustment_origin_prescription
 
     if request.method == "POST":
         form = ConsultationForm(
@@ -774,6 +830,8 @@ def consultation(request, visit_id):
             "completed_lab_services": completed_lab_services,
             "added_non_lab_visit_services": added_non_lab_visit_services,
             "prescriptions": prescriptions,
+            "adjustment_origin_prescription": adjustment_origin_prescription,
+            "adjustment_default_duration": visit.adjustment_remaining_days or 1,
         },
     )
 

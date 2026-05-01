@@ -531,6 +531,96 @@ class ReceptionPharmacyWorkflowTests(TestCase):
         self.assertContains(response, 'id="drug-search-results"', html=False)
         self.assertContains(response, "Click into the search field to browse all stocked drugs")
 
+    def test_adjustment_visit_can_finish_without_collecting_payment(self):
+        original_prescription = Prescription.objects.create(
+            visit=self.visit,
+            drug=self.drug,
+            dosage_mg=Decimal("500"),
+            frequency_per_day=2,
+            duration_days=5,
+            prescribed_by=self.receptionist,
+        )
+        adjustment_visit = Visit.objects.create(
+            patient=self.patient,
+            hospital=self.hospital,
+            visit_type=Visit.TYPE_ADJUSTMENT,
+            parent_visit=self.visit,
+            adjustment_origin_prescription=original_prescription,
+            adjustment_days_used=3,
+            adjustment_remaining_days=2,
+            adjustment_reason="Side effects",
+            status=Visit.STATUS_READY_FOR_BILLING,
+            total_amount=Decimal("0.00"),
+            created_by=self.receptionist,
+        )
+        Prescription.objects.create(
+            visit=adjustment_visit,
+            drug=self.drug,
+            dosage_mg=Decimal("500"),
+            frequency_per_day=2,
+            duration_days=2,
+            prescribed_by=self.receptionist,
+            is_adjustment=True,
+            parent_prescription=original_prescription,
+            covered_by_previous=True,
+            adjustment_reason="Side effects",
+            days_used_before_adjustment=3,
+            remaining_days_covered=2,
+            dispensed=True,
+            dispensed_by=self.receptionist,
+            dispensed_at=timezone.now(),
+        )
+
+        response = self.client.post(
+            reverse("complete_visit", args=[adjustment_visit.pk]),
+            {"finish_adjustment_visit": "1"},
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        adjustment_visit.refresh_from_db()
+        self.assertEqual(adjustment_visit.status, Visit.STATUS_COMPLETED)
+        self.assertContains(response, "Adjustment visit finished")
+
+    def test_receptionist_cannot_prescribe_adjustment_replacement_directly(self):
+        original_prescription = Prescription.objects.create(
+            visit=self.visit,
+            drug=self.drug,
+            dosage_mg=Decimal("500"),
+            frequency_per_day=2,
+            duration_days=5,
+            prescribed_by=self.receptionist,
+            dispensed=True,
+            dispensed_by=self.receptionist,
+            dispensed_at=timezone.now(),
+        )
+        adjustment_visit = Visit.objects.create(
+            patient=self.patient,
+            hospital=self.hospital,
+            visit_type=Visit.TYPE_ADJUSTMENT,
+            parent_visit=self.visit,
+            adjustment_origin_prescription=original_prescription,
+            adjustment_days_used=3,
+            adjustment_remaining_days=2,
+            adjustment_reason="Side effects",
+            status=Visit.STATUS_READY_FOR_BILLING,
+            total_amount=Decimal("0.00"),
+            created_by=self.receptionist,
+        )
+
+        response = self.client.post(
+            reverse("add_prescription_api", args=[adjustment_visit.pk]),
+            {
+                "drug_id": self.drug.pk,
+                "dosage_mg": "500",
+                "frequency_per_day": "2",
+                "duration_days": "2",
+            },
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertIn("Only a doctor can prescribe the replacement medicine", response.json()["error"])
+
     def test_dashboard_surfaces_walk_in_dispense_link(self):
         Prescription.objects.create(
             visit=self.visit,
@@ -629,6 +719,176 @@ class ReceptionVisitFormTests(TestCase):
         self.assertContains(response, 'id="service-results-select"', html=False)
         self.assertContains(response, 'id="add-service-btn"', html=False)
         self.assertContains(response, "Browse the full dropdown or type to narrow the services list")
+
+    def test_reception_can_create_adjustment_visit_without_billable_services(self):
+        original_visit = Visit.objects.create(
+            patient=self.patient,
+            hospital=self.hospital,
+            total_amount=Decimal("0.00"),
+            status=Visit.STATUS_COMPLETED,
+            created_by=self.receptionist,
+        )
+        original_prescription = Prescription.objects.create(
+            visit=original_visit,
+            drug=InventoryItem.objects.create(
+                hospital=self.hospital,
+                name="Swap Drug",
+                category=InventoryItem.CATEGORY_DRUG,
+                unit="strip",
+                base_unit="tablet",
+                units_per_pack=Decimal("10"),
+                strength_mg_per_unit=Decimal("500"),
+                current_quantity=Decimal("5"),
+                unit_cost=Decimal("800"),
+                selling_price=Decimal("3000"),
+                reorder_level=Decimal("1"),
+                is_active=True,
+            ),
+            dosage_mg=Decimal("500"),
+            frequency_per_day=2,
+            duration_days=5,
+            prescribed_by=self.receptionist,
+            dispensed=True,
+            dispensed_by=self.receptionist,
+            dispensed_at=timezone.now(),
+        )
+
+        response = self.client.post(
+            reverse("visit_create", args=[self.patient.pk]),
+            {
+                "visit_type": Visit.TYPE_ADJUSTMENT,
+                "services": [],
+                "adjustment_origin_prescription": str(original_prescription.pk),
+                "adjustment_days_used": "3",
+                "adjustment_reason": "Side effects",
+                "notes": "Medication swap requested.",
+            },
+        )
+
+        adjustment_visit = Visit.objects.exclude(pk=original_visit.pk).latest("id")
+        self.assertRedirects(response, reverse("patient_visits", args=[self.patient.pk]))
+        self.assertEqual(adjustment_visit.visit_type, Visit.TYPE_ADJUSTMENT)
+        self.assertEqual(adjustment_visit.total_amount, Decimal("0.00"))
+        self.assertEqual(adjustment_visit.parent_visit, original_visit)
+        self.assertEqual(adjustment_visit.adjustment_origin_prescription, original_prescription)
+        self.assertEqual(adjustment_visit.adjustment_remaining_days, 2)
+        self.assertFalse(adjustment_visit.visit_services.exists())
+        self.assertTrue(
+            QueueEntry.objects.filter(
+                visit=adjustment_visit,
+                queue_type=QueueEntry.TYPE_DOCTOR,
+                processed=False,
+            ).exists()
+        )
+
+    def test_adjustment_visit_requires_paid_and_dispensed_original_prescription(self):
+        original_visit = Visit.objects.create(
+            patient=self.patient,
+            hospital=self.hospital,
+            total_amount=Decimal("20.00"),
+            status=Visit.STATUS_READY_FOR_BILLING,
+            created_by=self.receptionist,
+        )
+        original_prescription = Prescription.objects.create(
+            visit=original_visit,
+            drug=InventoryItem.objects.create(
+                hospital=self.hospital,
+                name="Unpaid Swap Drug",
+                category=InventoryItem.CATEGORY_DRUG,
+                unit="strip",
+                base_unit="tablet",
+                units_per_pack=Decimal("10"),
+                strength_mg_per_unit=Decimal("500"),
+                current_quantity=Decimal("5"),
+                unit_cost=Decimal("800"),
+                selling_price=Decimal("3000"),
+                reorder_level=Decimal("1"),
+                is_active=True,
+            ),
+            dosage_mg=Decimal("500"),
+            frequency_per_day=2,
+            duration_days=5,
+            prescribed_by=self.receptionist,
+            dispensed=False,
+        )
+
+        response = self.client.post(
+            reverse("visit_create", args=[self.patient.pk]),
+            {
+                "visit_type": Visit.TYPE_ADJUSTMENT,
+                "services": [],
+                "adjustment_origin_prescription": str(original_prescription.pk),
+                "adjustment_days_used": "3",
+                "adjustment_reason": "Not working",
+                "notes": "Try to swap unpaid medicine.",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Select a valid choice.")
+
+    def test_follow_up_visit_requires_linked_completed_previous_visit(self):
+        response = self.client.post(
+            reverse("visit_create", args=[self.patient.pk]),
+            {
+                "visit_type": Visit.TYPE_FOLLOW_UP,
+                "services": [],
+                "follow_up_parent_visit": "",
+                "notes": "Follow-up attempt.",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Choose the completed visit this follow-up is linked to.")
+
+    def test_follow_up_visit_requires_consultation_service(self):
+        previous_visit = Visit.objects.create(
+            patient=self.patient,
+            hospital=self.hospital,
+            total_amount=Decimal("20.00"),
+            status=Visit.STATUS_COMPLETED,
+            created_by=self.receptionist,
+        )
+        lab_service = Service.objects.get(name="CBC")
+        response = self.client.post(
+            reverse("visit_create", args=[self.patient.pk]),
+            {
+                "visit_type": Visit.TYPE_FOLLOW_UP,
+                "services": [str(lab_service.pk)],
+                "follow_up_parent_visit": str(previous_visit.pk),
+                "notes": "Follow-up without consultation.",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Follow-up visits must include a doctor consultation service.")
+
+    def test_follow_up_visit_can_be_created_with_completed_parent_and_consultation(self):
+        previous_visit = Visit.objects.create(
+            patient=self.patient,
+            hospital=self.hospital,
+            total_amount=Decimal("20.00"),
+            status=Visit.STATUS_COMPLETED,
+            created_by=self.receptionist,
+        )
+        consult_service = Service.objects.get(name="Consultation")
+
+        response = self.client.post(
+            reverse("visit_create", args=[self.patient.pk]),
+            {
+                "visit_type": Visit.TYPE_FOLLOW_UP,
+                "services": [str(consult_service.pk)],
+                "follow_up_parent_visit": str(previous_visit.pk),
+                "notes": "Follow-up review.",
+            },
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        follow_up_visit = Visit.objects.exclude(pk=previous_visit.pk).latest("id")
+        self.assertEqual(follow_up_visit.visit_type, Visit.TYPE_FOLLOW_UP)
+        self.assertEqual(follow_up_visit.parent_visit, previous_visit)
+        self.assertEqual(follow_up_visit.total_amount, consult_service.price)
 
 
 class ReceptionQueueWorkflowTests(TestCase):

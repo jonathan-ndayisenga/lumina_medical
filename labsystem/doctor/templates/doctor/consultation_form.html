@@ -14,6 +14,8 @@
     data-add-service-url="{% url 'add_billable_service_api' visit.pk %}"
     data-add-prescription-url="{% url 'add_prescription_api' visit.pk %}"
     data-remove-prescription-url-template="/doctor/visit/{{ visit.pk }}/api/prescriptions/__PRESCRIPTION_ID__/remove/"
+    data-default-duration="{{ adjustment_default_duration }}"
+    data-is-adjustment-visit="{% if visit.is_adjustment_visit %}true{% else %}false{% endif %}"
 >
     <div class="card">
         <h3 class="text-sm font-semibold text-text-main mb-3">Visit Summary</h3>
@@ -186,11 +188,38 @@
         </div>
     </div>
 
+    {% if visit.is_adjustment_visit and adjustment_origin_prescription %}
+    <div class="card border-2 border-amber-200 bg-amber-50">
+        <h3 class="text-sm font-semibold text-text-main mb-2">Medication Adjustment Visit</h3>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+            <div class="space-y-2">
+                <p><strong class="text-text-main">Original drug:</strong> <span class="text-text-muted">{{ adjustment_origin_prescription.drug.name }}</span></p>
+                <p><strong class="text-text-main">Original duration:</strong> <span class="text-text-muted">{{ adjustment_origin_prescription.duration_days }} day(s)</span></p>
+                <p><strong class="text-text-main">Days already used:</strong> <span class="text-text-muted">{{ visit.adjustment_days_used }}</span></p>
+                <p><strong class="text-text-main">Remaining days:</strong> <span class="text-amber-700 font-semibold">{{ visit.adjustment_remaining_days }}</span></p>
+            </div>
+            <div class="space-y-2">
+                <p><strong class="text-text-main">Original regimen:</strong> <span class="text-text-muted">{{ adjustment_origin_prescription.regimen_display }}</span></p>
+                {% if visit.adjustment_reason %}
+                    <p><strong class="text-text-main">Reason:</strong> <span class="text-text-muted">{{ visit.adjustment_reason }}</span></p>
+                {% endif %}
+                <p class="text-xs text-text-muted">Replacement medicines on this visit are covered by the previous payment. Inventory still deducts normally when reception dispenses them.</p>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
     <div class="card">
         <div class="flex items-start justify-between gap-3 flex-wrap mb-4">
             <div>
                 <h3 class="text-sm font-semibold text-text-main">Prescribe Medication</h3>
-                <p class="text-xs text-text-muted mt-1">Pick a stocked drug, enter the regimen, and we will calculate the quantity, bottles, and bill instantly.</p>
+                <p class="text-xs text-text-muted mt-1">
+                    {% if visit.is_adjustment_visit %}
+                        Pick the replacement drug. The remaining days are already loaded, and the system will keep this covered by the previous payment.
+                    {% else %}
+                        Pick a stocked drug, enter the regimen, and we will calculate the quantity, bottles, and bill instantly.
+                    {% endif %}
+                </p>
             </div>
         </div>
 
@@ -238,7 +267,7 @@
             </div>
             <div>
                 <label for="duration-days" id="duration-label" class="block text-sm font-semibold text-text-main mb-1">Days</label>
-                <input id="duration-days" type="number" step="1" min="1" value="1" class="form-control w-full" placeholder="1">
+                <input id="duration-days" type="number" step="1" min="1" value="{{ adjustment_default_duration }}" class="form-control w-full" placeholder="1">
             </div>
         </div>
 
@@ -269,12 +298,15 @@
                             <p class="text-xs text-text-muted mt-1">Dispense {{ prescription.quantity_display }}</p>
                         </div>
                         <div class="text-right">
-                            <p class="text-xs font-semibold text-text-muted">UGX {{ prescription.total_price }}</p>
+                            <p class="text-xs font-semibold text-text-muted">{{ prescription.billing_label }}</p>
+                            {% if prescription.covered_by_previous and prescription.parent_prescription %}
+                                <p class="text-xs text-amber-700 mt-1">Adjustment from {{ prescription.parent_prescription.drug.name }}</p>
+                            {% endif %}
                             {% if prescription.dispensed %}
                                 <span class="inline-flex items-center rounded-full bg-green-100 px-2 py-1 text-xs font-semibold text-green-700 mt-2">Dispensed</span>
                                 <button type="button" class="mt-2 inline-flex items-center rounded-full border border-red-200 bg-white px-2 py-1 text-xs font-semibold text-red-700 hover:bg-red-50" data-remove-prescription="{{ prescription.pk }}">Undo &amp; Remove</button>
                             {% else %}
-                                <span class="inline-flex items-center rounded-full bg-blue-100 px-2 py-1 text-xs font-semibold text-blue-700 mt-2">Pending dispense</span>
+                                <span class="inline-flex items-center rounded-full {% if prescription.covered_by_previous %}bg-amber-100 text-amber-700{% else %}bg-blue-100 text-blue-700{% endif %} px-2 py-1 text-xs font-semibold mt-2">{% if prescription.covered_by_previous %}Adjustment pending dispense{% else %}Pending dispense{% endif %}</span>
                                 <button type="button" class="mt-2 inline-flex items-center rounded-full border border-red-200 bg-white px-2 py-1 text-xs font-semibold text-red-700 hover:bg-red-50" data-remove-prescription="{{ prescription.pk }}">Remove</button>
                             {% endif %}
                         </div>
@@ -532,6 +564,8 @@
     const addServiceForm = document.getElementById('add-service-form');
     const modalMessage = document.getElementById('modal-message');
     const saveServiceButton = document.getElementById('save-service-btn');
+    const defaultDuration = parseInt(page.dataset.defaultDuration || '1', 10) || 1;
+    const isAdjustmentVisit = page.dataset.isAdjustmentVisit === 'true';
 
     if (!select || !sendLabRequestButton || !modal || !addServiceForm || !modalMessage) {
       return;
@@ -628,9 +662,10 @@
             <p class="text-xs text-text-muted mt-1">Dispense ${prescription.quantity_display}</p>
           </div>
           <div class="text-right">
-            <p class="text-xs font-semibold text-text-muted">UGX ${prescription.total_price}</p>
-            <span class="inline-flex items-center rounded-full ${prescription.dispensed ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'} px-2 py-1 text-xs font-semibold mt-2">
-              ${prescription.dispensed ? 'Dispensed' : 'Pending dispense'}
+            <p class="text-xs font-semibold text-text-muted">${prescription.billing_label || `UGX ${prescription.total_price}`}</p>
+            ${prescription.covered_by_previous && prescription.parent_drug_name ? `<p class="text-xs text-amber-700 mt-1">Adjustment from ${prescription.parent_drug_name}</p>` : ''}
+            <span class="inline-flex items-center rounded-full ${prescription.dispensed ? 'bg-green-100 text-green-700' : (prescription.covered_by_previous ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700')} px-2 py-1 text-xs font-semibold mt-2">
+              ${prescription.dispensed ? 'Dispensed' : (prescription.covered_by_previous ? 'Adjustment pending dispense' : 'Pending dispense')}
             </span>
             <button
               type="button"
@@ -857,7 +892,10 @@
         totalPrice = quantity * pricePerBaseUnit;
       }
 
-      prescriptionPreview.textContent = `${drugName}: dispense ${label} for this regimen. Estimated charge: UGX ${totalPrice.toFixed(2)}.`;
+      const chargeLabel = isAdjustmentVisit
+        ? 'Covered by previous payment.'
+        : `Estimated charge: UGX ${totalPrice.toFixed(2)}.`;
+      prescriptionPreview.textContent = `${drugName}: dispense ${label} for this regimen. ${chargeLabel}`;
       return { quantity, packs, totalPrice };
     }
 
@@ -1071,7 +1109,7 @@
         prescriptionList?.prepend(createPrescriptionCard(payload.prescription));
         updateTotalAmount(payload.visit_total_amount);
         if (dosageInput) dosageInput.value = '';
-        if (durationInput) durationInput.value = '1';
+        if (durationInput) durationInput.value = String(defaultDuration);
         if (frequencySelect) frequencySelect.value = '2';
         if (prescriptionNotes) prescriptionNotes.value = '';
         resetPrescriptionPicker();

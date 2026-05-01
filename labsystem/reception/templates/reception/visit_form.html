@@ -18,7 +18,53 @@
     <form method="post" class="space-y-6">
         {% csrf_token %}
 
-        <fieldset class="card border-2 border-gray-200">
+        <div class="card">
+            <label for="{{ form.visit_type.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">Visit Type</label>
+            {{ form.visit_type }}
+            <p class="mt-1 text-xs text-text-muted">{{ form.visit_type.help_text }}</p>
+            {% for error in form.visit_type.errors %}<div class="text-xs text-red-600 mt-1">{{ error }}</div>{% endfor %}
+        </div>
+
+        <div id="follow-up-visit-panel" class="card hidden border-2 border-blue-200 bg-blue-50">
+            <h3 class="text-sm font-semibold text-text-main mb-3">Follow-Up Details</h3>
+            <p class="text-sm text-text-muted mb-4">Follow-up is only allowed for patients who already have a completed previous visit. A doctor consultation service is still required so this path cannot be used to skip review billing.</p>
+            <div>
+                <label for="{{ form.follow_up_parent_visit.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">Previous Completed Visit</label>
+                {{ form.follow_up_parent_visit }}
+                <p class="mt-1 text-xs text-text-muted">Link this follow-up to the completed visit it refers to.</p>
+                {% for error in form.follow_up_parent_visit.errors %}<div class="text-xs text-red-600 mt-1">{{ error }}</div>{% endfor %}
+            </div>
+        </div>
+
+        <div id="adjustment-visit-panel" class="card hidden border-2 border-amber-200 bg-amber-50">
+            <h3 class="text-sm font-semibold text-text-main mb-3">Medication Swap Details</h3>
+            <p class="text-sm text-text-muted mb-4">Link this visit to the already-paid prescription so the replacement medicine can be dispensed without billing the patient again.</p>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label for="{{ form.adjustment_origin_prescription.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">Original Prescription</label>
+                    {{ form.adjustment_origin_prescription }}
+                    <p class="mt-1 text-xs text-text-muted">Choose the medicine being stopped early.</p>
+                    {% for error in form.adjustment_origin_prescription.errors %}<div class="text-xs text-red-600 mt-1">{{ error }}</div>{% endfor %}
+                </div>
+                <div>
+                    <label for="{{ form.adjustment_days_used.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">Days Already Used</label>
+                    {{ form.adjustment_days_used }}
+                    <p class="mt-1 text-xs text-text-muted">Enter how many days of the original treatment the patient already completed.</p>
+                    {% for error in form.adjustment_days_used.errors %}<div class="text-xs text-red-600 mt-1">{{ error }}</div>{% endfor %}
+                </div>
+            </div>
+            <div class="mt-4">
+                <label for="{{ form.adjustment_reason.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">Reason for Adjustment</label>
+                {{ form.adjustment_reason }}
+                <p class="mt-1 text-xs text-text-muted">Optional, but helpful for audit trail and follow-up.</p>
+                {% for error in form.adjustment_reason.errors %}<div class="text-xs text-red-600 mt-1">{{ error }}</div>{% endfor %}
+            </div>
+            <div id="adjustment-summary" class="mt-4 rounded-lg border border-amber-200 bg-white p-3 text-sm text-text-muted">
+                Choose the original prescription and days already used to preview the remaining treatment period.
+            </div>
+        </div>
+
+        <fieldset id="services-fieldset" class="card border-2 border-gray-200">
             <legend class="text-sm font-semibold text-text-main mb-3 px-2">Select Services</legend>
             <p class="text-sm text-text-muted mb-4">Each selected service is added to the visit bill now. Payment will be collected later when the visit is completed.</p>
             <div class="space-y-4">
@@ -66,7 +112,7 @@
         </div>
 
         <div class="flex gap-3 flex-wrap pt-4">
-            <button type="submit" class="btn btn-primary">{% if edit_mode %}Save Visit Changes{% else %}Create Visit and Queue{% endif %}</button>
+            <button id="visit-submit-button" type="submit" class="btn btn-primary">{% if edit_mode %}Save Visit Changes{% else %}Create Visit and Queue{% endif %}</button>
             <a href="{% url 'patient_list' %}" class="btn btn-secondary">Back to Patients</a>
         </div>
     </form>
@@ -198,6 +244,68 @@
 
     renderSelectedServices();
     renderSearchResults('');
+})();
+
+(function () {
+    const visitTypeSelect = document.getElementById('{{ form.visit_type.id_for_label }}');
+    const followUpPanel = document.getElementById('follow-up-visit-panel');
+    const adjustmentPanel = document.getElementById('adjustment-visit-panel');
+    const servicesFieldset = document.getElementById('services-fieldset');
+    const submitButton = document.getElementById('visit-submit-button');
+    const originSelect = document.getElementById('{{ form.adjustment_origin_prescription.id_for_label }}');
+    const daysUsedInput = document.getElementById('{{ form.adjustment_days_used.id_for_label }}');
+    const summaryBox = document.getElementById('adjustment-summary');
+    const adjustmentVisitType = 'adjustment';
+    const prescriptionMeta = {
+        {% for prescription in form.fields.adjustment_origin_prescription.queryset %}
+            "{{ prescription.pk }}": {
+                drug_name: "{{ prescription.drug.name|escapejs }}",
+                duration_days: {{ prescription.duration_days }},
+                regimen: "{{ prescription.regimen_display|escapejs }}",
+                visit_date: "{{ prescription.visit.visit_date|date:'Y-m-d' }}",
+            },
+        {% endfor %}
+    };
+
+    if (!visitTypeSelect || !adjustmentPanel || !servicesFieldset || !summaryBox || !followUpPanel) {
+        return;
+    }
+
+    function updateAdjustmentSummary() {
+        const selected = prescriptionMeta[originSelect?.value || ''];
+        const daysUsed = parseInt(daysUsedInput?.value || '0', 10) || 0;
+        if (!selected) {
+            summaryBox.textContent = 'Choose the original prescription and days already used to preview the remaining treatment period.';
+            return;
+        }
+
+        const remaining = Math.max(selected.duration_days - daysUsed, 0);
+        summaryBox.innerHTML = `
+            <p class="font-semibold text-text-main">${selected.drug_name}</p>
+            <p class="mt-1">Original regimen: ${selected.regimen}</p>
+            <p class="mt-1">Original duration: ${selected.duration_days} day(s)</p>
+            <p class="mt-1">Days already used: ${daysUsed}</p>
+            <p class="mt-1 font-semibold ${remaining > 0 ? 'text-amber-700' : 'text-red-600'}">Remaining days to cover: ${remaining}</p>
+            <p class="mt-2 text-xs text-text-muted">This replacement visit will be sent to doctor and marked as covered by the previous payment.</p>
+        `;
+    }
+
+    function toggleVisitTypePanels() {
+        const isAdjustment = visitTypeSelect.value === adjustmentVisitType;
+        const isFollowUp = visitTypeSelect.value === 'follow_up';
+        followUpPanel.classList.toggle('hidden', !isFollowUp);
+        adjustmentPanel.classList.toggle('hidden', !isAdjustment);
+        servicesFieldset.classList.toggle('hidden', isAdjustment);
+        if (submitButton && !{{ edit_mode|yesno:"true,false" }}) {
+            submitButton.textContent = isAdjustment ? 'Create Adjustment Visit' : (isFollowUp ? 'Create Follow-Up Visit' : 'Create Visit and Queue');
+        }
+        updateAdjustmentSummary();
+    }
+
+    visitTypeSelect.addEventListener('change', toggleVisitTypePanels);
+    originSelect?.addEventListener('change', updateAdjustmentSummary);
+    daysUsedInput?.addEventListener('input', updateAdjustmentSummary);
+    toggleVisitTypePanels();
 })();
 </script>
 {% endblock %}
