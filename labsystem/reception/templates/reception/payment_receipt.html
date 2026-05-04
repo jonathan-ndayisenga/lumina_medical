@@ -18,10 +18,10 @@
         body {
             width: 48mm;
             margin: 0;
-            padding: 1mm 0.5mm;
+            padding: 0.5mm;
             font-family: monospace;
             font-size: 12px;
-            line-height: 1.15;
+            line-height: 1.0;          /* minimal line spacing – no gaps */
             color: #000;
             background: white;
         }
@@ -32,21 +32,20 @@
 
         .line {
             border-top: 1px dashed #000;
-            margin: 2px 0;
+            margin: 1px 0;
         }
 
         .section {
-            margin-bottom: 3px;
+            margin-bottom: 2px;
         }
 
-        /* Service table – two columns */
         table {
             width: 100%;
             border-collapse: collapse;
             table-layout: fixed;
         }
         td {
-            padding: 1px 0;
+            padding: 0;
             vertical-align: top;
         }
         .service-name {
@@ -58,7 +57,6 @@
             text-align: right;
             white-space: nowrap;
         }
-
         .summary-table td:first-child {
             text-align: left;
             font-weight: bold;
@@ -69,8 +67,8 @@
 
         button {
             width: 100%;
-            padding: 4px;
-            margin-top: 6px;
+            padding: 2px;
+            margin-top: 4px;
             font-size: 12px;
         }
 
@@ -81,13 +79,11 @@
 </head>
 <body>
 
-    <!-- Header – each line ≤32 characters -->
     <div class="center bold">LUMINA MEDICAL SERVICES</div>
     <div class="center">Receipt #{{ payment.receipt_number }}</div>
     <div class="center">{{ payment.paid_at|date:"Y-m-d H:i" }}</div>
     <div class="line"></div>
 
-    <!-- Patient info -->
     <div class="section">
         <div><span class="bold">Patient:</span> {{ visit.patient.name|truncatechars:25 }}</div>
         <div><span class="bold">Age/Sex:</span> {{ visit.patient.age }} / {{ visit.patient.get_sex_display|slice:":1" }}</div>
@@ -95,7 +91,6 @@
     </div>
     <div class="line"></div>
 
-    <!-- Services -->
     <div class="section">
         <div class="bold">Services</div>
         <table>
@@ -111,7 +106,6 @@
     </div>
     <div class="line"></div>
 
-    <!-- Bill summary -->
     <div class="section">
         <table class="summary-table">
             <tr><td>Total</td><td class="right">{{ visit.total_amount }}</td></tr>
@@ -121,7 +115,6 @@
     </div>
     <div class="line"></div>
 
-    <!-- Payment info -->
     <div class="section">
         <div><span class="bold">Mode:</span> {{ payment.get_mode_display|slice:":10" }}</div>
         <div><span class="bold">By:</span> {{ payment.recorded_by.get_full_name|default:payment.recorded_by.username|truncatechars:20 }}</div>
@@ -136,8 +129,6 @@
     {% endif %}
 
     <div class="line"></div>
-
-    <!-- Footer -->
     <div class="center">Thank you</div>
     <div class="center">Get well soon</div>
 
