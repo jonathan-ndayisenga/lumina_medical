@@ -5,78 +5,90 @@
     <title>Receipt</title>
 
     <style>
+        /* Reset all margins, force pure black */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
         @page {
             size: 58mm auto;
-            margin: 2mm;
+            margin: 0mm;         /* No extra page margins */
         }
 
         body {
             width: 58mm;
             margin: 0;
-            padding: 0;
-            font-family: monospace;
-            font-size: 10px;
-            line-height: 1.3;
-            color: #000;
-
-            /* Prevent overflow */
-            word-wrap: break-word;
-            overflow-wrap: break-word;
+            padding: 2mm 1mm;    /* Small safe inner padding */
+            font-family: 'Courier New', monospace;
+            font-size: 12px;     /* Larger = clearer */
+            line-height: 1.2;
+            color: #000;         /* Pure black for contrast */
+            background: white;
         }
 
+        /* Utility classes */
         .center {
             text-align: center;
-            word-break: break-word;
         }
-
         .right {
             text-align: right;
         }
-
         .bold {
             font-weight: bold;
         }
-
         .line {
             border-top: 1px dashed #000;
             margin: 4px 0;
         }
-
         .section {
             margin-bottom: 6px;
         }
 
-        table {
+        /* Simple two‑column table for services */
+        .services-table {
             width: 100%;
             border-collapse: collapse;
-            table-layout: fixed; /* CRITICAL */
+            margin: 2px 0;
         }
-
-        td {
+        .services-table td {
             padding: 2px 0;
             vertical-align: top;
-
-            /* Force wrapping */
-            word-break: break-word;
-            overflow-wrap: break-word;
         }
-
         .service-name {
+            text-align: left;
             width: 70%;
         }
-
-        .price {
+        .service-price {
+            text-align: right;
             width: 30%;
+        }
+
+        /* Summary table (total, paid, balance) */
+        .summary-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 2px 0;
+        }
+        .summary-table td {
+            padding: 2px 0;
+        }
+        .summary-table td:first-child {
+            text-align: left;
+            font-weight: bold;
+        }
+        .summary-table td:last-child {
             text-align: right;
         }
 
+        /* Hide button when printing */
         button {
             width: 100%;
             padding: 6px;
-            margin-top: 6px;
+            margin-top: 8px;
             font-size: 12px;
         }
-
         @media print {
             button {
                 display: none;
@@ -84,71 +96,60 @@
         }
     </style>
 </head>
-
 <body>
 
-    <!-- HEADER -->
+    <!-- Header -->
     <div class="center bold">LUMINA MEDICAL SERVICES</div>
     <div class="center">Receipt #{{ payment.receipt_number }}</div>
     <div class="center">{{ payment.paid_at|date:"Y-m-d H:i" }}</div>
-
     <div class="line"></div>
 
-    <!-- PATIENT INFO -->
+    <!-- Patient info -->
     <div class="section">
         <div><span class="bold">Patient:</span> {{ visit.patient.name }}</div>
         <div><span class="bold">Age/Sex:</span> {{ visit.patient.age }} / {{ visit.patient.get_sex_display }}</div>
         <div><span class="bold">Visit ID:</span> #{{ visit.id }}</div>
     </div>
-
     <div class="line"></div>
 
-    <!-- SERVICES -->
+    <!-- Services -->
     <div class="section">
         <div class="bold">Services</div>
-
-        <table>
+        <table class="services-table">
             {% for item in visit.visit_services.all %}
-                <!-- Service Name on its own line (prevents overflow completely) -->
-                <tr>
-                    <td colspan="2">{{ item.service.name }}</td>
-                </tr>
-                <!-- Price aligned right -->
-                <tr>
-                    <td></td>
-                    <td class="price">{{ item.price_at_time }}</td>
-                </tr>
+            <tr>
+                <td class="service-name">{{ item.service.name }}</td>
+                <td class="service-price">{{ item.price_at_time }}</td>
+            </tr>
             {% empty %}
-                <tr>
-                    <td colspan="2" class="center">No services</td>
-                </tr>
+            <tr>
+                <td colspan="2" class="center">No services</td>
+            </tr>
             {% endfor %}
         </table>
     </div>
-
     <div class="line"></div>
 
-    <!-- BILL SUMMARY -->
+    <!-- Bill summary -->
     <div class="section">
-        <table>
+        <table class="summary-table">
             <tr>
                 <td>Total</td>
-                <td class="price">{{ visit.total_amount }}</td>
+                <td>{{ visit.total_amount }}</td>
             </tr>
             <tr>
                 <td>Paid</td>
-                <td class="price">{{ payment.amount_paid }}</td>
+                <td>{{ payment.amount_paid }}</td>
             </tr>
             <tr>
                 <td>Balance</td>
-                <td class="price">{{ balance_due }}</td>
+                <td>{{ balance_due }}</td>
             </tr>
         </table>
     </div>
-
     <div class="line"></div>
 
-    <!-- PAYMENT INFO -->
+    <!-- Payment info -->
     <div class="section">
         <div><span class="bold">Mode:</span> {{ payment.get_mode_display }}</div>
         <div><span class="bold">By:</span> {{ payment.recorded_by.get_full_name|default:payment.recorded_by.username }}</div>
@@ -164,11 +165,11 @@
 
     <div class="line"></div>
 
-    <!-- FOOTER -->
+    <!-- Footer -->
     <div class="center">Thank you for your visit</div>
     <div class="center">Get well soon</div>
 
-    <!-- PRINT BUTTON -->
+    <!-- Print button (hidden when printed) -->
     <button onclick="window.print()">Print Receipt</button>
 
 </body>
