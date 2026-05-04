@@ -9,10 +9,17 @@ from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.http import url_has_allowed_host_and_scheme
 
 from accounts.models import User
 from reception.models import QueueEntry, Service, Visit, VisitService
-from reception.workflow import ensure_pending_queue_entry, send_to_reception_queue, sync_visit_status
+from reception.workflow import (
+    ensure_pending_queue_entry,
+    record_admin_override,
+    require_admin_override,
+    send_to_reception_queue,
+    sync_visit_status,
+)
 from doctor.models import LabRequest, Notification
 
 from .forms import LabReportForm, TestResultFormSet
@@ -48,6 +55,17 @@ staff_required = user_passes_test(_lab_access_ok)
 
 def get_active_hospital(request):
     return getattr(request, 'hospital', None) or getattr(request.user, 'hospital', None)
+
+
+def resolve_next_url(request, fallback_url):
+    candidate = request.POST.get("next") or request.GET.get("next")
+    if candidate and url_has_allowed_host_and_scheme(
+        candidate,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        return candidate
+    return fallback_url
 
 
 def scoped_reports_queryset(request):
@@ -855,6 +873,12 @@ def perform_lab_test(request, queue_entry_id):
         queue_entries = queue_entries.filter(hospital=hospital)
     queue_entry = get_object_or_404(queue_entries)
     visit = queue_entry.visit
+    if visit.status == Visit.STATUS_CANCELLED:
+        messages.error(request, "This visit was terminated by an administrator and cannot continue in the lab queue.")
+        queue_entry.processed = True
+        queue_entry.processed_at = timezone.now()
+        queue_entry.save(update_fields=['processed', 'processed_at'])
+        return redirect('lab_queue')
     pending_services = list(lab_visit_services(visit, performed=False))
     if pending_services:
         requested_service_id = (request.GET.get("requested_service_id") or "").strip()
@@ -887,6 +911,9 @@ def perform_lab_test(request, queue_entry_id):
 @staff_required
 def report_edit(request, pk):
     report = get_object_or_404(scoped_reports_queryset(request), pk=pk)
+    if report.visit_id and report.visit and report.visit.status == Visit.STATUS_CANCELLED:
+        messages.error(request, "This visit was terminated by an administrator and the lab report can no longer be edited.")
+        return redirect('report_detail', pk=report.pk)
     return handle_report_form(request, report=report)
 
 
@@ -938,14 +965,50 @@ def report_print(request, pk):
 @staff_required
 def report_delete(request, pk):
     report = get_object_or_404(scoped_reports_queryset(request), pk=pk)
-    if getattr(request.user, "role", "") not in {"superadmin", "hospital_admin"}:
-        messages.error(request, "You do not have permission to delete lab reports.")
-        return redirect("report_detail", pk=report.pk)
+    require_admin_override(request.user)
+    fallback_url = reverse('report_detail', args=[report.pk])
+    cancel_url = resolve_next_url(request, fallback_url)
     if request.method == 'POST':
-        report.delete()
-        messages.success(request, 'Report deleted.')
-        return redirect('report_list')
-    return render(request, 'lab/report_confirm_delete.html', {'report': report, 'active_nav': 'dashboard'})
+        reason = (request.POST.get('admin_reason') or '').strip()
+        if not reason:
+            messages.error(request, "Enter the reason for deleting this lab report.")
+        else:
+            details = {
+                'patient_name': report.patient_name,
+                'visit_id': report.visit_id,
+                'requested_visit_service_id': report.requested_visit_service_id,
+                'reason': reason,
+            }
+            if report.requested_visit_service_id:
+                report.requested_visit_service.performed = False
+                report.requested_visit_service.performed_at = None
+                report.requested_visit_service.save(update_fields=['performed', 'performed_at'])
+            report_id_value = report.pk
+            report.delete()
+            record_admin_override(
+                actor=request.user,
+                hospital=get_active_hospital(request),
+                action='delete_lab_report',
+                model_name='LabReport',
+                object_id=report_id_value,
+                details=details,
+            )
+            messages.success(request, 'Report deleted.')
+            return redirect(resolve_next_url(request, reverse('report_list')))
+    return render(
+        request,
+        'admin_override_confirm.html',
+        {
+            'dashboard_title': 'Delete Lab Report',
+            'dashboard_intro': 'Remove this saved lab report from the hospital records.',
+            'object_label': f'{report.patient_name} - Report #{report.pk}',
+            'object_type': 'lab report',
+            'danger_note': 'This permanently removes the saved report and reopens the linked lab service if one was attached.',
+            'confirm_label': 'Delete Lab Report',
+            'cancel_href': cancel_url,
+            'next_url': resolve_next_url(request, reverse('report_list')),
+        },
+    )
 
 
 @login_required
@@ -1005,6 +1068,9 @@ def route_lab_report(request, report_id):
     if hospital and getattr(request.user, "role", "") != "superadmin":
         reports = reports.filter(hospital=hospital)
     report = get_object_or_404(reports, pk=report_id)
+    if report.visit and report.visit.status == Visit.STATUS_CANCELLED:
+        messages.error(request, "This visit was terminated by an administrator and cannot be routed further.")
+        return redirect("report_detail", pk=report.pk)
 
     if not report.visit_id:
         messages.error(request, "This report is not linked to a visit, so it cannot be routed.")

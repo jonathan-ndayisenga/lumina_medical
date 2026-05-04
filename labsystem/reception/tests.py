@@ -6,7 +6,7 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from accounts.models import Hospital, SubscriptionPlan, User
+from accounts.models import AuditLog, Hospital, SubscriptionPlan, User
 from admin_dashboard.models import (
     BankAccount,
     BankTransaction,
@@ -17,7 +17,7 @@ from admin_dashboard.models import (
     MobileMoneyAccount,
     MobileMoneyTransaction,
 )
-from doctor.models import Prescription
+from doctor.models import Consultation, Prescription
 from lab.models import LabReport
 from lab.views import send_report_results_to_doctor
 from reception.models import Patient, Payment, QueueEntry, Service, Visit, VisitService
@@ -1004,5 +1004,145 @@ class ReceptionQueueWorkflowTests(TestCase):
                 visit=self.visit,
                 queue_type=QueueEntry.TYPE_DOCTOR,
                 processed=False,
+            ).exists()
+        )
+
+
+class AdminOverridePolicyTests(TestCase):
+    def setUp(self):
+        plan = SubscriptionPlan.objects.create(
+            name="Admin Policy",
+            price_monthly=Decimal("0.00"),
+            price_yearly=Decimal("0.00"),
+        )
+        self.hospital = Hospital.objects.create(
+            name="Policy Hospital",
+            subdomain="policy-hospital",
+            subscription_plan=plan,
+        )
+        self.admin_user = User.objects.create_user(
+            username="hospitaladmin",
+            password="pass12345",
+            role=User.ROLE_HOSPITAL_ADMIN,
+            hospital=self.hospital,
+            is_active=True,
+        )
+        self.receptionist = User.objects.create_user(
+            username="frontdesk",
+            password="pass12345",
+            role=User.ROLE_RECEPTIONIST,
+            hospital=self.hospital,
+            is_active=True,
+        )
+        self.patient = Patient.objects.create(
+            hospital=self.hospital,
+            name="Delete Me",
+            registration_date=timezone.localdate(),
+            age="27YRS",
+            sex="F",
+        )
+        self.service = Service.objects.create(
+            hospital=self.hospital,
+            name="Consultation",
+            category=Service.CATEGORY_CONSULTATION,
+            price=Decimal("25.00"),
+            is_active=True,
+        )
+        self.visit = Visit.objects.create(
+            patient=self.patient,
+            hospital=self.hospital,
+            total_amount=Decimal("25.00"),
+            status=Visit.STATUS_IN_PROGRESS,
+            created_by=self.receptionist,
+        )
+        VisitService.objects.create(
+            visit=self.visit,
+            service=self.service,
+            price_at_time=self.service.price,
+        )
+        Consultation.objects.create(
+            visit=self.visit,
+            created_by=self.admin_user,
+            signs_symptoms="Pain",
+            diagnosis="Test",
+            treatment="Observe",
+        )
+        self.report = LabReport.objects.create(
+            hospital=self.hospital,
+            visit=self.visit,
+            patient_name=self.patient.name,
+            patient_age=self.patient.age,
+            patient_sex=self.patient.sex,
+            sample_date=timezone.localdate(),
+            specimen_type="BLOOD",
+        )
+
+    def test_hospital_admin_can_delete_patient_and_linked_records(self):
+        self.client.force_login(self.admin_user)
+
+        response = self.client.post(
+            reverse("patient_delete", args=[self.patient.pk]),
+            {
+                "admin_reason": "Duplicate registration created in error.",
+                "next": reverse("patient_list"),
+            },
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(Patient.objects.filter(pk=self.patient.pk).exists())
+        self.assertFalse(Visit.objects.filter(pk=self.visit.pk).exists())
+        self.assertFalse(LabReport.objects.filter(pk=self.report.pk).exists())
+        self.assertTrue(
+            AuditLog.objects.filter(
+                action="delete_patient",
+                model_name="Patient",
+                object_id=str(self.patient.pk),
+            ).exists()
+        )
+
+    def test_non_admin_cannot_delete_patient(self):
+        self.client.force_login(self.receptionist)
+
+        response = self.client.get(reverse("patient_delete", args=[self.patient.pk]))
+
+        self.assertEqual(response.status_code, 403)
+        self.assertTrue(Patient.objects.filter(pk=self.patient.pk).exists())
+
+    def test_hospital_admin_can_terminate_visit_and_clear_open_queues(self):
+        QueueEntry.objects.create(
+            hospital=self.hospital,
+            visit=self.visit,
+            queue_type=QueueEntry.TYPE_DOCTOR,
+            reason="Waiting for doctor",
+            requested_by=self.receptionist,
+        )
+        QueueEntry.objects.create(
+            hospital=self.hospital,
+            visit=self.visit,
+            queue_type=QueueEntry.TYPE_LAB_RECEPTION,
+            reason="Waiting for lab",
+            requested_by=self.receptionist,
+        )
+        self.client.force_login(self.admin_user)
+
+        response = self.client.post(
+            reverse("visit_terminate", args=[self.visit.pk]),
+            {
+                "admin_reason": "Patient left before care was completed.",
+                "next": reverse("patient_visits", args=[self.patient.pk]),
+            },
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.visit.refresh_from_db()
+        self.assertEqual(self.visit.status, Visit.STATUS_CANCELLED)
+        self.assertFalse(self.visit.queue_entries.filter(processed=False).exists())
+        self.assertTrue(
+            AuditLog.objects.filter(
+                action="terminate_visit",
+                model_name="Visit",
+                object_id=str(self.visit.pk),
             ).exists()
         )

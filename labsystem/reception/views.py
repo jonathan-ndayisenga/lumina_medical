@@ -8,18 +8,23 @@ from django.db.models import Count, Max, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.http import url_has_allowed_host_and_scheme
 
 from accounts.models import User
 from admin_dashboard.models import InventoryItem, InventoryTransaction
-from doctor.models import Prescription
+from doctor.models import Consultation, Prescription
+from lab.models import LabReport
 from .forms import CompleteVisitForm, PatientForm, QuickDispenseStartForm, VisitCreateForm
 from .models import Patient, Payment, QueueEntry, Service, Visit, VisitService
 from .workflow import (
     ensure_pending_queue_entry,
     mark_queue_entries_processed,
+    record_admin_override,
     reception_source_from_entry,
+    require_admin_override,
     send_to_reception_queue,
     sync_visit_status,
+    terminate_visit_workflow,
 )
 
 
@@ -41,6 +46,21 @@ def reception_role_required(view_func):
 
 def get_active_hospital(request):
     return getattr(request, "hospital", None) or getattr(request.user, "hospital", None)
+
+
+def resolve_next_url(request, fallback_url):
+    candidate = request.POST.get("next") or request.GET.get("next")
+    if candidate and url_has_allowed_host_and_scheme(
+        candidate,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        return candidate
+    return fallback_url
+
+
+def admin_override_reason(request):
+    return (request.POST.get("admin_reason") or "").strip()
 
 
 def queue_types_for_service(service):
@@ -478,6 +498,67 @@ def patient_create(request):
 
 @reception_role_required
 @transaction.atomic
+def patient_delete(request, patient_id):
+    hospital = get_active_hospital(request)
+    patient = get_object_or_404(
+        Patient.objects.filter(hospital=hospital).prefetch_related("visits"),
+        pk=patient_id,
+    )
+    require_admin_override(request.user)
+
+    cancel_url = resolve_next_url(request, reverse("patient_visits", args=[patient.pk]))
+    linked_visits = Visit.objects.filter(patient=patient)
+    linked_reports = LabReport.objects.filter(visit__patient=patient)
+    linked_consultations = Consultation.objects.filter(visit__patient=patient)
+
+    if request.method == "POST":
+        reason = admin_override_reason(request)
+        if not reason:
+            messages.error(request, "Enter the reason for deleting this patient record.")
+        else:
+            details = {
+                "patient_name": patient.name,
+                "reason": reason,
+                "visit_count": linked_visits.count(),
+                "lab_report_count": linked_reports.count(),
+                "consultation_count": linked_consultations.count(),
+            }
+            linked_reports.delete()
+            patient_id_value = patient.pk
+            patient_name = patient.name
+            patient.delete()
+            record_admin_override(
+                actor=request.user,
+                hospital=hospital,
+                action="delete_patient",
+                model_name="Patient",
+                object_id=patient_id_value,
+                details=details,
+            )
+            messages.success(request, f"{patient_name} and the linked visit records were removed.")
+            return redirect(resolve_next_url(request, reverse("patient_list")))
+
+    return render(
+        request,
+        "admin_override_confirm.html",
+        {
+            "dashboard_title": "Delete Patient",
+            "dashboard_intro": "Remove this patient and the linked visit history from the hospital database.",
+            "object_label": patient.name,
+            "object_type": "patient",
+            "danger_note": (
+                f"This will remove {linked_visits.count()} visit(s), {linked_consultations.count()} consultation(s), "
+                f"and {linked_reports.count()} linked lab report(s)."
+            ),
+            "confirm_label": "Delete Patient",
+            "cancel_href": cancel_url,
+            "next_url": resolve_next_url(request, reverse("patient_list")),
+        },
+    )
+
+
+@reception_role_required
+@transaction.atomic
 def visit_create(request, patient_id):
     hospital = get_active_hospital(request)
     patient = get_object_or_404(Patient, pk=patient_id, hospital=hospital)
@@ -685,6 +766,58 @@ def visit_delete(request, visit_id):
 
 @reception_role_required
 @transaction.atomic
+def visit_terminate(request, visit_id):
+    hospital = get_active_hospital(request)
+    visit = get_object_or_404(
+        Visit.objects.select_related("patient", "hospital"),
+        pk=visit_id,
+        hospital=hospital,
+    )
+    require_admin_override(request.user)
+
+    fallback_url = reverse("patient_visits", args=[visit.patient_id])
+    cancel_url = resolve_next_url(request, fallback_url)
+    open_queue_count = visit.queue_entries.filter(processed=False).count()
+
+    if request.method == "POST":
+        reason = admin_override_reason(request)
+        if not reason:
+            messages.error(request, "Enter the reason for terminating this visit.")
+        elif visit.status == Visit.STATUS_COMPLETED:
+            messages.error(request, "Completed visits cannot be terminated.")
+            return redirect(cancel_url)
+        elif visit.status == Visit.STATUS_CANCELLED:
+            messages.info(request, "This visit has already been terminated.")
+            return redirect(cancel_url)
+        else:
+            closed_queue_count = terminate_visit_workflow(visit=visit, actor=request.user, reason=reason)
+            messages.success(
+                request,
+                f"Visit #{visit.pk} terminated. {closed_queue_count} open queue item(s) were closed.",
+            )
+            return redirect(resolve_next_url(request, fallback_url))
+
+    return render(
+        request,
+        "admin_override_confirm.html",
+        {
+            "dashboard_title": "Terminate Visit",
+            "dashboard_intro": "Stop this visit immediately and clear it out of every active queue.",
+            "object_label": f"{visit.patient.name} - Visit #{visit.pk}",
+            "object_type": "visit",
+            "danger_note": (
+                f"This visit is currently {visit.get_status_display().lower()} with {open_queue_count} open queue item(s). "
+                "Termination keeps the record for audit but prevents any further processing."
+            ),
+            "confirm_label": "Terminate Visit",
+            "cancel_href": cancel_url,
+            "next_url": resolve_next_url(request, fallback_url),
+        },
+    )
+
+
+@reception_role_required
+@transaction.atomic
 def complete_visit(request, visit_id):
     hospital = get_active_hospital(request)
     visit = get_object_or_404(
@@ -692,6 +825,9 @@ def complete_visit(request, visit_id):
         pk=visit_id,
         hospital=hospital,
     )
+    if visit.status == Visit.STATUS_CANCELLED:
+        messages.error(request, "This visit has been terminated and can no longer be billed or dispensed.")
+        return redirect("patient_visits", patient_id=visit.patient_id)
     # With partial payments, a visit is only "completed" when fully settled.
     if visit.status == Visit.STATUS_COMPLETED and visit.is_fully_paid:
         messages.error(request, "This visit has already been fully paid and completed.")
@@ -823,6 +959,8 @@ def dispense_prescription(request, visit_id, prescription_id):
 
     if request.method != "POST":
         raise PermissionDenied("Dispensing requires a POST request.")
+    if visit.status == Visit.STATUS_CANCELLED:
+        raise PermissionDenied("Cancelled visits cannot dispense medication.")
 
     if prescription.dispensed:
         messages.info(request, f"{prescription.drug.name} was already dispensed for this visit.")
@@ -935,6 +1073,7 @@ def patient_visits(request, patient_id):
     for visit in visits:
         can_edit = (
             visit.status != Visit.STATUS_COMPLETED
+            and visit.status != Visit.STATUS_CANCELLED
             and not visit.is_adjustment_visit
             and not visit.queue_entries.filter(processed=True).exists()
         )

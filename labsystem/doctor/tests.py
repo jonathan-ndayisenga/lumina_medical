@@ -4,7 +4,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 
-from accounts.models import Hospital
+from accounts.models import AuditLog, Hospital
 from admin_dashboard.models import InventoryItem
 from doctor.models import Consultation, Prescription
 from reception.models import Patient, QueueEntry, Service, Visit, VisitService
@@ -423,3 +423,70 @@ class DoctorWorkflowTests(TestCase):
         self.assertContains(response, "Medication Adjustment Visit")
         self.assertContains(response, "Remaining days")
         self.assertContains(response, "Ineffective response")
+
+
+class ConsultationAdminOverrideTests(TestCase):
+    def setUp(self):
+        self.User = get_user_model()
+        self.hospital = Hospital.objects.create(name="Lumina Admin Doctor", subdomain="lumina-admin-doctor")
+        self.doctor = self.User.objects.create_user(
+            username="doctor2",
+            password="StrongPass123!",
+            role=self.User.ROLE_DOCTOR,
+            hospital=self.hospital,
+        )
+        self.admin_user = self.User.objects.create_user(
+            username="doctoradmin",
+            password="StrongPass123!",
+            role=self.User.ROLE_HOSPITAL_ADMIN,
+            hospital=self.hospital,
+        )
+        self.patient = Patient.objects.create(
+            hospital=self.hospital,
+            name="Consult Delete",
+            age="29YRS",
+            sex="F",
+        )
+        self.visit = Visit.objects.create(
+            patient=self.patient,
+            hospital=self.hospital,
+            created_by=self.doctor,
+            total_amount="25.00",
+        )
+        self.consultation = Consultation.objects.create(
+            visit=self.visit,
+            created_by=self.doctor,
+            signs_symptoms="Headache",
+            diagnosis="Migraine",
+            treatment="Rest",
+        )
+
+    def test_hospital_admin_can_delete_consultation(self):
+        self.client.force_login(self.admin_user)
+
+        response = self.client.post(
+            reverse("consultation_delete", args=[self.visit.pk]),
+            {
+                "admin_reason": "Saved on the wrong visit.",
+                "next": reverse("doctor_queue"),
+            },
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(Consultation.objects.filter(pk=self.consultation.pk).exists())
+        self.assertTrue(
+            AuditLog.objects.filter(
+                action="delete_consultation",
+                model_name="Consultation",
+                object_id=str(self.consultation.pk),
+            ).exists()
+        )
+
+    def test_doctor_cannot_delete_consultation(self):
+        self.client.force_login(self.doctor)
+
+        response = self.client.get(reverse("consultation_delete", args=[self.visit.pk]))
+
+        self.assertEqual(response.status_code, 403)
+        self.assertTrue(Consultation.objects.filter(pk=self.consultation.pk).exists())

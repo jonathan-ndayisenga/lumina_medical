@@ -96,10 +96,7 @@
                                 <a href="{% url 'report_edit' report.pk %}" class="btn btn-secondary btn-sm">Edit</a>
                                 <a href="{% url 'report_print' report.pk %}" class="btn btn-secondary btn-sm" target="_blank">Print</a>
                                 {% if request.user.role == 'superadmin' or request.user.role == 'hospital_admin' %}
-                                <form method="post" action="{% url 'report_delete' report.pk %}" onsubmit="return confirm('Delete this report permanently?');" class="inline">
-                                    {% csrf_token %}
-                                    <button type="submit" class="btn btn-secondary btn-sm">Delete</button>
-                                </form>
+                                <a href="{% url 'report_delete' report.pk %}?next={{ request.get_full_path|urlencode }}" class="btn btn-danger btn-sm">Delete</a>
                                 {% endif %}
                             </div>
                         </td>

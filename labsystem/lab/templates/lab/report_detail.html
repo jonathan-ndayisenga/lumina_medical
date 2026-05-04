@@ -157,6 +157,12 @@
                 <button type="submit" class="btn btn-secondary">Send to Doctor Review</button>
             </form>
         {% endif %}
+        {% if request.user.can_access_hospital_admin %}
+            <a href="{% url 'report_delete' report.pk %}?next={{ request.get_full_path|urlencode }}" class="btn btn-danger">Delete Report</a>
+            {% if report.visit and report.visit.status != "completed" and report.visit.status != "cancelled" %}
+                <a href="{% url 'visit_terminate' report.visit.pk %}?next={{ request.get_full_path|urlencode }}" class="btn btn-danger">Terminate Visit</a>
+            {% endif %}
+        {% endif %}
         <a href="{% url 'report_list' %}" class="btn btn-secondary">Back to Dashboard</a>
     </div>
 </div>

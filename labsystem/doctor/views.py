@@ -5,7 +5,9 @@ from django.contrib.auth.decorators import login_required
 from django.db import transaction
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.utils import timezone
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_http_methods
 
 from accounts.models import User
@@ -13,7 +15,14 @@ from admin_dashboard.models import InventoryItem, InventoryTransaction
 from lab.models import LabReport
 from nurse.models import NurseNote
 from reception.models import QueueEntry, Service, Triage, Visit, VisitService
-from reception.workflow import ensure_pending_queue_entry, mark_queue_entries_processed, send_to_reception_queue, sync_visit_status
+from reception.workflow import (
+    ensure_pending_queue_entry,
+    mark_queue_entries_processed,
+    record_admin_override,
+    require_admin_override,
+    send_to_reception_queue,
+    sync_visit_status,
+)
 
 from .forms import ConsultationForm
 from .models import Consultation, LabRequest, Prescription
@@ -54,6 +63,17 @@ def prescribing_role_required(view_func):
 
 def get_active_hospital(request):
     return getattr(request, "hospital", None) or getattr(request.user, "hospital", None)
+
+
+def resolve_next_url(request, fallback_url):
+    candidate = request.POST.get("next") or request.GET.get("next")
+    if candidate and url_has_allowed_host_and_scheme(
+        candidate,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        return candidate
+    return fallback_url
 
 
 def lab_visit_services(visit, *, performed=None):
@@ -323,6 +343,8 @@ def send_lab_request_api(request, visit_id):
     if hospital and getattr(request.user, "role", "") != User.ROLE_SUPERADMIN:
         visits = visits.filter(hospital=hospital)
     visit = get_object_or_404(visits, pk=visit_id)
+    if visit.status == Visit.STATUS_CANCELLED:
+        return JsonResponse({"error": "This visit was terminated by an administrator."}, status=409)
 
     consultation = getattr(visit, "consultation", None)
     raw_service_ids = request.POST.getlist("service_ids[]") or request.POST.getlist("service_ids")
@@ -454,6 +476,8 @@ def add_billable_service_api(request, visit_id):
     if hospital and getattr(request.user, "role", "") != User.ROLE_SUPERADMIN:
         visits = visits.filter(hospital=hospital)
     visit = get_object_or_404(visits, pk=visit_id)
+    if visit.status == Visit.STATUS_CANCELLED:
+        return JsonResponse({"error": "This visit was terminated by an administrator."}, status=409)
 
     service_id = request.POST.get("service_id", "").strip()
     if not service_id:
@@ -504,6 +528,8 @@ def add_prescription_api(request, visit_id):
     if hospital and getattr(request.user, "role", "") != User.ROLE_SUPERADMIN:
         visits = visits.filter(hospital=hospital)
     visit = get_object_or_404(visits, pk=visit_id)
+    if visit.status == Visit.STATUS_CANCELLED:
+        return JsonResponse({"error": "This visit was terminated by an administrator."}, status=409)
 
     if visit.is_adjustment_visit and getattr(request.user, "role", "") not in {
         User.ROLE_SUPERADMIN,
@@ -610,6 +636,8 @@ def remove_prescription_api(request, visit_id, prescription_id):
     if hospital and getattr(request.user, "role", "") != User.ROLE_SUPERADMIN:
         visits = visits.filter(hospital=hospital)
     visit = get_object_or_404(visits, pk=visit_id)
+    if visit.status == Visit.STATUS_CANCELLED:
+        return JsonResponse({"error": "This visit was terminated by an administrator."}, status=409)
     prescription = get_object_or_404(
         Prescription.objects.select_related("drug", "visit", "billing_visit_service"),
         pk=prescription_id,
@@ -680,6 +708,9 @@ def consultation(request, visit_id):
     if hospital and getattr(request.user, "role", "") != User.ROLE_SUPERADMIN:
         visits = visits.filter(hospital=hospital)
     visit = get_object_or_404(visits, pk=visit_id)
+    if visit.status == Visit.STATUS_CANCELLED:
+        messages.error(request, "This visit was terminated by an administrator and can no longer be edited.")
+        return redirect("doctor_queue")
     consultation_instance = getattr(visit, "consultation", None)
     try:
         triage_instance = visit.triage
@@ -865,6 +896,60 @@ def consultation_detail(request, visit_id):
             "lab_reports": lab_reports,
             "nurse_queue_entries": nurse_queue_entries,
             "nurse_notes": nurse_notes,
+        },
+    )
+
+
+@doctor_role_required
+@transaction.atomic
+def consultation_delete(request, visit_id):
+    hospital = get_active_hospital(request)
+    consultations = Consultation.objects.select_related("visit__patient", "visit__hospital", "created_by")
+    if hospital and getattr(request.user, "role", "") != User.ROLE_SUPERADMIN:
+        consultations = consultations.filter(visit__hospital=hospital)
+    consultation_instance = get_object_or_404(consultations, visit_id=visit_id)
+    require_admin_override(request.user)
+
+    fallback_url = reverse("consultation_detail", args=[visit_id])
+    cancel_url = resolve_next_url(request, fallback_url)
+
+    if request.method == "POST":
+        reason = (request.POST.get("admin_reason") or "").strip()
+        if not reason:
+            messages.error(request, "Enter the reason for deleting this consultation.")
+        else:
+            visit = consultation_instance.visit
+            consultation_id = consultation_instance.pk
+            patient_name = visit.patient.name
+            record_admin_override(
+                actor=request.user,
+                hospital=visit.hospital,
+                action="delete_consultation",
+                model_name="Consultation",
+                object_id=consultation_id,
+                details={
+                    "visit_id": visit.pk,
+                    "patient_id": visit.patient_id,
+                    "patient_name": patient_name,
+                    "reason": reason,
+                },
+            )
+            consultation_instance.delete()
+            messages.success(request, f"Consultation for {patient_name} was deleted.")
+            return redirect(resolve_next_url(request, reverse("doctor_queue")))
+
+    return render(
+        request,
+        "admin_override_confirm.html",
+        {
+            "dashboard_title": "Delete Consultation",
+            "dashboard_intro": "Remove the saved consultation record for this visit.",
+            "object_label": f"{consultation_instance.visit.patient.name} - Visit #{consultation_instance.visit_id}",
+            "object_type": "consultation",
+            "danger_note": "This removes the doctor's saved clinical note from the visit history but leaves the visit itself in place.",
+            "confirm_label": "Delete Consultation",
+            "cancel_href": cancel_url,
+            "next_url": resolve_next_url(request, reverse("doctor_queue")),
         },
     )
 

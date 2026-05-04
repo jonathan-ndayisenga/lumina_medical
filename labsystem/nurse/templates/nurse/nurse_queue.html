@@ -37,7 +37,12 @@
                                 </dd>
                             </div>
                         </dl>
-                        <a class="btn btn-primary" href="{% url 'perform_nursing' entry.id %}">Open Care Form</a>
+                        <div class="flex flex-col gap-2">
+                            <a class="btn btn-primary" href="{% url 'perform_nursing' entry.id %}">Open Care Form</a>
+                            {% if request.user.can_access_hospital_admin %}
+                                <a class="btn btn-danger" href="{% url 'visit_terminate' entry.visit.pk %}?next={{ request.get_full_path|urlencode }}">Terminate Visit</a>
+                            {% endif %}
+                        </div>
                     </article>
                 {% endfor %}
             </div>
@@ -63,7 +68,12 @@
                                 <td class="px-4 py-3 text-sm text-text-muted">{{ entry.reason|default:"Nursing review requested" }}</td>
                                 <td class="px-4 py-3 text-sm text-text-muted">{% if entry.requested_by %}{{ entry.requested_by.get_full_name|default:entry.requested_by.username }}{% else %}System{% endif %}</td>
                                 <td class="px-4 py-3 text-sm">
-                                    <a class="btn btn-primary btn-sm" href="{% url 'perform_nursing' entry.id %}">Open Care Form</a>
+                                    <div class="flex gap-2 flex-wrap">
+                                        <a class="btn btn-primary btn-sm" href="{% url 'perform_nursing' entry.id %}">Open Care Form</a>
+                                        {% if request.user.can_access_hospital_admin %}
+                                            <a class="btn btn-danger btn-sm" href="{% url 'visit_terminate' entry.visit.pk %}?next={{ request.get_full_path|urlencode }}">Terminate</a>
+                                        {% endif %}
+                                    </div>
                                 </td>
                             </tr>
                         {% endfor %}

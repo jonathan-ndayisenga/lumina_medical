@@ -66,6 +66,12 @@ def perform_nursing(request, queue_entry_id):
         queue_entries = queue_entries.filter(hospital=hospital)
     queue_entry = get_object_or_404(queue_entries, pk=queue_entry_id)
     visit = queue_entry.visit
+    if visit.status == Visit.STATUS_CANCELLED:
+        messages.error(request, "This visit was terminated by an administrator and can no longer continue in nursing.")
+        queue_entry.processed = True
+        queue_entry.processed_at = timezone.now()
+        queue_entry.save(update_fields=["processed", "processed_at"])
+        return redirect("nurse_queue")
     prescriptions = list(
         visit.prescriptions.select_related("drug", "dispensed_by").order_by("-dispensed", "-prescribed_at", "-id")
     )
@@ -217,6 +223,8 @@ def dispense_prescription(request, queue_entry_id, prescription_id):
 
     if request.method != "POST":
         raise PermissionDenied("Dispensing requires a POST request.")
+    if queue_entry.visit.status == Visit.STATUS_CANCELLED:
+        raise PermissionDenied("Cancelled visits cannot dispense medication.")
 
     if prescription.dispensed:
         messages.info(request, f"{prescription.drug.name} was already dispensed for this visit.")

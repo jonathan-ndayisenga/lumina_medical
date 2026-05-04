@@ -8,13 +8,214 @@
 
 {% block extra_css %}
 <style>
+    .print-settings-note {
+        background-color: #f0f9ff;
+        border: 1px solid #bfdbfe;
+        color: #1e40af;
+        padding: 12px;
+        border-radius: 6px;
+        font-size: 13px;
+        line-height: 1.4;
+        margin-bottom: 16px;
+        display: none;
+    }
+    .print-settings-note.show {
+        display: block;
+    }
+
 @media print {
+    /* Hide all screen elements */
     .no-print {
         display: none !important;
+    }
+    .max-w-4xl {
+        max-width: 58mm !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+    body, html {
+        margin: 0 !important;
+        padding: 0 !important;
+        width: 58mm !important;
     }
     .receipt-card {
         box-shadow: none !important;
         border: none !important;
+        margin: 0 !important;
+        padding: 3mm !important;
+        background: white !important;
+        width: 58mm !important;
+    }
+    
+    /* Thermal printer receipt styles */
+    .receipt-container {
+        width: 58mm;
+        font-family: 'Courier New', monospace;
+        font-size: 9pt;
+        line-height: 1.2;
+        margin: 0;
+        padding: 0;
+        text-align: center;
+        color: #000;
+    }
+    
+    /* Hospital header */
+    .receipt-hospital-name {
+        font-weight: bold;
+        font-size: 11pt;
+        margin-bottom: 2mm;
+        padding-bottom: 2mm;
+        border-bottom: 1px dashed #000;
+        text-align: center;
+        word-wrap: break-word;
+        overflow-wrap: break-word;
+    }
+    
+    .receipt-hospital-logo {
+        max-width: 40mm;
+        margin: 0 auto 2mm;
+        display: block;
+    }
+    
+    /* Receipt number */
+    .receipt-number {
+        font-weight: bold;
+        margin: 2mm 0;
+        font-size: 9pt;
+    }
+    
+    /* Separator lines */
+    .receipt-separator {
+        border-bottom: 1px dashed #000;
+        margin: 2mm 0;
+    }
+    
+    /* Section titles */
+    .receipt-section-title {
+        font-weight: bold;
+        font-size: 8pt;
+        margin-top: 2mm;
+        margin-bottom: 1mm;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+    
+    /* Patient and payment info - simplified */
+    .receipt-info-row {
+        display: flex;
+        justify-content: space-between;
+        font-size: 8pt;
+        margin: 0.8mm 0;
+        text-align: left;
+    }
+    
+    .receipt-info-label {
+        font-weight: bold;
+        flex: 0 0 auto;
+    }
+    
+    .receipt-info-value {
+        flex: 1 1 auto;
+        text-align: right;
+        word-wrap: break-word;
+        overflow-wrap: break-word;
+    }
+    
+    /* Items table - simplified for thermal printer */
+    .receipt-items-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 1mm 0;
+        font-size: 8pt;
+    }
+    
+    .receipt-items-table td {
+        padding: 0.5mm 0;
+        text-align: left;
+        border: none;
+    }
+    
+    .receipt-items-table .item-name {
+        font-weight: normal;
+        max-width: 30mm;
+        word-wrap: break-word;
+        overflow-wrap: break-word;
+    }
+    
+    .receipt-items-table .item-price {
+        text-align: right;
+        font-weight: bold;
+        white-space: nowrap;
+        padding-left: 2mm;
+    }
+    
+    .receipt-items-separator {
+        border-bottom: 1px solid #000;
+        margin: 0.5mm 0;
+    }
+    
+    /* Total section */
+    .receipt-total {
+        font-weight: bold;
+        font-size: 10pt;
+        margin: 2mm 0;
+        text-align: right;
+        padding-top: 1mm;
+    }
+    
+    /* Payment method */
+    .receipt-payment-method {
+        font-size: 8pt;
+        margin: 1mm 0;
+        text-align: left;
+    }
+    
+    /* Thank you message */
+    .receipt-thank-you {
+        font-weight: bold;
+        font-size: 9pt;
+        margin-top: 2mm;
+        padding-top: 2mm;
+        border-top: 1px dashed #000;
+        text-align: center;
+    }
+    
+    /* Date/time */
+    .receipt-datetime {
+        font-size: 8pt;
+        margin: 1mm 0;
+        text-align: center;
+    }
+    
+    /* Hide elements not needed for print */
+    .grid {
+        display: block !important;
+    }
+    .md\:grid-cols-2 {
+        display: block !important;
+    }
+    .gap-6, .space-y-6, .space-y-1, .divide-y {
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+    .overflow-x-auto {
+        overflow: visible !important;
+    }
+    table thead {
+        display: none;
+    }
+    thead tr {
+        display: none !important;
+    }
+    .uppercase {
+        text-transform: uppercase;
+    }
+    
+    /* Page settings */
+    @page {
+        size: 58mm auto;
+        margin: 0;
+        padding: 0;
     }
 }
 </style>
@@ -22,12 +223,25 @@
 
 {% block content %}
 <div class="max-w-4xl mx-auto space-y-6">
+    <!-- Print Settings Note - Screen Only -->
+    <div class="print-settings-note show">
+        <strong>📋 Print Instructions:</strong>
+        <p style="margin: 8px 0 0 0;">
+            For best results on thermal printer:
+            1. Set browser print margins to <strong>None</strong>
+            2. Turn OFF headers and footers
+            3. Set scale to 100%
+            4. Use landscape orientation if needed
+        </p>
+    </div>
+
     <div class="flex justify-end gap-3 no-print">
         <a href="{% url 'reception_dashboard' %}" class="btn btn-secondary">Back to Reception</a>
         <button type="button" class="btn btn-primary" onclick="window.print()">Print Receipt</button>
     </div>
 
-    <div class="card receipt-card space-y-6">
+    <!-- SCREEN VIEW - Normal Card Layout -->
+    <div class="card receipt-card space-y-6 no-print">
         {% include "partials/print_header.html" with hospital=hospital print_title="VISIT BILLING SUMMARY" print_subtitle=visit.id %}
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm">
@@ -126,5 +340,98 @@
 
         {% include "partials/print_footer.html" with hospital=hospital %}
     </div>
+
+    <!-- PRINT VIEW - Thermal Printer Optimized Receipt -->
+    <div class="receipt-container" style="display: none;">
+        {% if hospital.name %}
+            <div class="receipt-hospital-name">
+                {% if hospital.logo %}
+                    <img src="{{ hospital.logo.url }}" alt="{{ hospital.name }}" class="receipt-hospital-logo">
+                {% endif %}
+                {{ hospital.name|truncatewords:8 }}
+            </div>
+        {% endif %}
+
+        <div class="receipt-number">
+            Receipt #{{ payment.receipt_number|default:"N/A" }}
+        </div>
+
+        <div class="receipt-datetime">
+            {% if payment.paid_at %}
+                {{ payment.paid_at|date:"Y-m-d H:i" }}
+            {% else %}
+                {{ "now"|date:"Y-m-d H:i" }}
+            {% endif %}
+        </div>
+
+        <div class="receipt-separator"></div>
+
+        <!-- Patient Info -->
+        <div class="receipt-section-title">Patient</div>
+        <div class="receipt-info-row">
+            <span class="receipt-info-label">Name:</span>
+            <span class="receipt-info-value">{{ visit.patient.name|truncatewords:5 }}</span>
+        </div>
+        <div class="receipt-info-row">
+            <span class="receipt-info-label">Age:</span>
+            <span class="receipt-info-value">{{ visit.patient.age }} {{ visit.patient.get_sex_display|slice:":1" }}</span>
+        </div>
+
+        <div class="receipt-separator"></div>
+
+        <!-- Services/Items -->
+        <div class="receipt-section-title">Services</div>
+        <table class="receipt-items-table">
+            {% for item in visit.visit_services.all %}
+                <tr>
+                    <td class="item-name">{{ item.service.name|truncatewords:4 }}</td>
+                    <td class="item-price">{{ item.price_at_time }}</td>
+                </tr>
+            {% endfor %}
+        </table>
+
+        <div class="receipt-items-separator"></div>
+
+        <!-- Total -->
+        <div class="receipt-info-row receipt-total">
+            <span>TOTAL:</span>
+            <span>{{ visit.total_amount }}</span>
+        </div>
+
+        <div class="receipt-separator"></div>
+
+        <!-- Payment Method -->
+        {% if payment %}
+            <div class="receipt-section-title">Payment</div>
+            <div class="receipt-payment-method">
+                Mode: {{ payment.get_mode_display }}
+            </div>
+            {% if payment.mode == "card" and payment.bank_account %}
+                <div class="receipt-payment-method">
+                    Card: {{ payment.bank_account|truncatewords:3 }}
+                </div>
+            {% elif payment.mode == "mobile_money" and payment.mobile_account %}
+                <div class="receipt-payment-method">
+                    Account: {{ payment.mobile_account|truncatewords:3 }}
+                </div>
+            {% endif %}
+        {% endif %}
+
+        <div class="receipt-separator"></div>
+
+        <!-- Thank You -->
+        <div class="receipt-thank-you">
+            THANK YOU!
+        </div>
+        <div style="text-align: center; font-size: 8pt; margin-top: 1mm;">
+            Please keep this receipt
+        </div>
+    </div>
 </div>
+
+<style media="print">
+    .receipt-container {
+        display: block !important;
+    }
+</style>
 {% endblock %}

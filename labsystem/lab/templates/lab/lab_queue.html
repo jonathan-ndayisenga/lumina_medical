@@ -51,9 +51,14 @@
                     </div>
 
                     <div class="mt-4">
-                        <a href="{% url 'perform_lab_test' entry.pk %}" class="btn btn-primary w-full">
-                            {% if entry.queue_type == 'lab_doctor' %}Continue Requested Test{% else %}Start Report{% endif %}
-                        </a>
+                        <div class="flex flex-col gap-2">
+                            <a href="{% url 'perform_lab_test' entry.pk %}" class="btn btn-primary w-full">
+                                {% if entry.queue_type == 'lab_doctor' %}Continue Requested Test{% else %}Start Report{% endif %}
+                            </a>
+                            {% if request.user.can_access_hospital_admin %}
+                                <a href="{% url 'visit_terminate' entry.visit.pk %}?next={{ request.get_full_path|urlencode }}" class="btn btn-danger w-full">Terminate Visit</a>
+                            {% endif %}
+                        </div>
                     </div>
                 </div>
             {% empty %}
@@ -117,9 +122,14 @@
                                 {% endif %}
                             </td>
                             <td class="px-4 py-3 text-sm">
-                                <a href="{% url 'perform_lab_test' entry.pk %}" class="btn btn-primary btn-sm">
-                                    {% if entry.queue_type == 'lab_doctor' %}Continue Requested Test{% else %}Start Report{% endif %}
-                                </a>
+                                <div class="flex gap-2 flex-wrap">
+                                    <a href="{% url 'perform_lab_test' entry.pk %}" class="btn btn-primary btn-sm">
+                                        {% if entry.queue_type == 'lab_doctor' %}Continue Requested Test{% else %}Start Report{% endif %}
+                                    </a>
+                                    {% if request.user.can_access_hospital_admin %}
+                                        <a href="{% url 'visit_terminate' entry.visit.pk %}?next={{ request.get_full_path|urlencode }}" class="btn btn-danger btn-sm">Terminate</a>
+                                    {% endif %}
+                                </div>
                             </td>
                         </tr>
                     {% empty %}

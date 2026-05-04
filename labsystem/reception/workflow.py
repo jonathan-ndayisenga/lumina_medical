@@ -1,9 +1,64 @@
+from django.core.exceptions import PermissionDenied
 from django.utils import timezone
+
+from accounts.models import AuditLog
 
 from reception.models import QueueEntry, Visit
 
 
 RECEPTION_SOURCE_PREFIX = "Source: "
+
+
+def user_can_admin_override(user) -> bool:
+    return bool(getattr(user, "can_access_hospital_admin", False))
+
+
+def require_admin_override(user) -> None:
+    if not user_can_admin_override(user):
+        raise PermissionDenied("Only a hospital administrator can perform this action.")
+
+
+def record_admin_override(*, actor, hospital, action: str, model_name: str, object_id, details=None) -> None:
+    AuditLog.objects.create(
+        user=actor,
+        hospital=hospital,
+        action=action,
+        model_name=model_name,
+        object_id=str(object_id),
+        details=details or {},
+    )
+
+
+def terminate_visit_workflow(*, visit: Visit, actor, reason: str) -> int:
+    if visit.status == Visit.STATUS_COMPLETED:
+        raise PermissionDenied("Completed visits cannot be terminated.")
+
+    previous_status = visit.status
+    processed_at = timezone.now()
+    open_queue_entries = visit.queue_entries.filter(processed=False)
+    closed_queue_count = open_queue_entries.count()
+    open_queue_entries.update(processed=True, processed_at=processed_at)
+
+    note_line = f"[Admin terminated {processed_at:%Y-%m-%d %H:%M}] {reason.strip()}"
+    visit.status = Visit.STATUS_CANCELLED
+    visit.notes = f"{visit.notes}\n{note_line}".strip() if visit.notes else note_line
+    visit.save(update_fields=["status", "notes"])
+
+    record_admin_override(
+        actor=actor,
+        hospital=visit.hospital,
+        action="terminate_visit",
+        model_name="Visit",
+        object_id=visit.pk,
+        details={
+            "patient_id": visit.patient_id,
+            "patient_name": visit.patient.name,
+            "reason": reason,
+            "closed_queue_count": closed_queue_count,
+            "previous_status": previous_status,
+        },
+    )
+    return closed_queue_count
 
 
 def sync_visit_status(visit: Visit) -> Visit:

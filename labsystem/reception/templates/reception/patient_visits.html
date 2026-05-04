@@ -47,6 +47,11 @@
                 </div>
             </div>
         </div>
+        {% if request.user.can_access_hospital_admin %}
+            <div class="mt-4 flex flex-wrap gap-2">
+                <a href="{% url 'patient_delete' patient.pk %}?next={{ request.get_full_path|urlencode }}" class="btn btn-danger btn-sm">Delete Patient</a>
+            </div>
+        {% endif %}
     </div>
 
     <div class="card">
@@ -114,6 +119,9 @@
                     {% endif %}
                     {% if row.can_delete %}
                         <a href="{% url 'visit_delete' row.visit.pk %}" class="btn btn-danger">Delete</a>
+                    {% endif %}
+                    {% if request.user.can_access_hospital_admin and row.visit.status != "completed" and row.visit.status != "cancelled" %}
+                        <a href="{% url 'visit_terminate' row.visit.pk %}?next={{ request.get_full_path|urlencode }}" class="btn btn-danger">Terminate</a>
                     {% endif %}
                     <a href="{% url 'complete_visit' row.visit.pk %}" class="btn btn-secondary">Record Payment</a>
                 </div>
@@ -194,6 +202,9 @@
                                 {% endif %}
                                 {% if row.can_delete %}
                                     <a href="{% url 'visit_delete' row.visit.pk %}" class="btn btn-danger btn-sm" title="Delete visit">Delete</a>
+                                {% endif %}
+                                {% if request.user.can_access_hospital_admin and row.visit.status != "completed" and row.visit.status != "cancelled" %}
+                                    <a href="{% url 'visit_terminate' row.visit.pk %}?next={{ request.get_full_path|urlencode }}" class="btn btn-danger btn-sm" title="Terminate visit">Terminate</a>
                                 {% endif %}
                                 <a href="{% url 'complete_visit' row.visit.pk %}" class="btn btn-secondary btn-sm" title="Record payment">Record Payment</a>
                             </div>

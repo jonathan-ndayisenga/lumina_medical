@@ -4,7 +4,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 
-from accounts.models import Hospital
+from accounts.models import AuditLog, Hospital
 from lab.models import LabReport, ReferenceRangeDefault, TestCatalog, TestProfile, TestResult
 from lab.templatetags.lab_extras import range_flag
 from lab.views import report_needs_doctor_send, send_report_results_to_doctor
@@ -340,3 +340,89 @@ class LabRangeFlagTests(TestCase):
         self.assertEqual(range_flag("10.4", "11.0-15.0"), "LOW")
         self.assertEqual(range_flag("13.3", "11.0-15.0"), "NORMAL")
         self.assertEqual(range_flag("Positive", "11.0-15.0"), "")
+
+
+class LabReportAdminOverrideTests(TestCase):
+    def setUp(self):
+        self.User = get_user_model()
+        self.hospital = Hospital.objects.create(name="Lumina Admin Lab", subdomain="lumina-admin-lab")
+        self.lab_user = self.User.objects.create_user(
+            username="labdelete",
+            password="StrongPass123!",
+            role=self.User.ROLE_LAB_ATTENDANT,
+            hospital=self.hospital,
+        )
+        self.admin_user = self.User.objects.create_user(
+            username="labadmin",
+            password="StrongPass123!",
+            role=self.User.ROLE_HOSPITAL_ADMIN,
+            hospital=self.hospital,
+        )
+        self.patient = Patient.objects.create(
+            hospital=self.hospital,
+            name="Report Delete",
+            age="35YRS",
+            sex="M",
+        )
+        self.visit = Visit.objects.create(
+            patient=self.patient,
+            hospital=self.hospital,
+            created_by=self.lab_user,
+            total_amount="15.00",
+        )
+        self.service = Service.objects.create(
+            hospital=self.hospital,
+            name="CBC Admin",
+            category=Service.CATEGORY_LAB,
+            price="15.00",
+        )
+        self.visit_service = VisitService.objects.create(
+            visit=self.visit,
+            service=self.service,
+            price_at_time="15.00",
+            performed=True,
+        )
+        self.report = LabReport.objects.create(
+            hospital=self.hospital,
+            visit=self.visit,
+            requested_visit_service=self.visit_service,
+            patient_name=self.patient.name,
+            patient_age=self.patient.age,
+            patient_sex=self.patient.sex,
+            sample_date=date.today(),
+            specimen_type="BLOOD",
+            attendant=self.lab_user,
+            attendant_name="Lab Delete",
+        )
+
+    def test_hospital_admin_can_delete_lab_report_and_reopen_service(self):
+        self.client.force_login(self.admin_user)
+
+        response = self.client.post(
+            reverse("report_delete", args=[self.report.pk]),
+            {
+                "admin_reason": "Attached to the wrong patient.",
+                "next": reverse("report_list"),
+            },
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(LabReport.objects.filter(pk=self.report.pk).exists())
+        self.visit_service.refresh_from_db()
+        self.assertFalse(self.visit_service.performed)
+        self.assertTrue(
+            AuditLog.objects.filter(
+                action="delete_lab_report",
+                model_name="LabReport",
+                object_id=str(self.report.pk),
+            ).exists()
+        )
+
+    def test_non_admin_cannot_delete_lab_report(self):
+        self.client.force_login(self.lab_user)
+
+        response = self.client.get(reverse("report_delete", args=[self.report.pk]))
+
+        self.assertEqual(response.status_code, 403)
+        self.assertTrue(LabReport.objects.filter(pk=self.report.pk).exists())
