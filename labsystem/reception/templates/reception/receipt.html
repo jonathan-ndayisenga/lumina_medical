@@ -42,17 +42,17 @@
         box-shadow: none !important;
         border: none !important;
         margin: 0 !important;
-        padding: 3mm !important;
+        padding: 1mm !important;
         background: white !important;
         width: 58mm !important;
     }
     
-    /* Thermal printer receipt styles */
+    /* Thermal printer receipt styles - ULTRA COMPACT */
     .receipt-container {
         width: 58mm;
         font-family: 'Courier New', monospace;
-        font-size: 9pt;
-        line-height: 1.2;
+        font-size: 8pt;
+        line-height: 1.0;
         margin: 0;
         padding: 0;
         text-align: center;
@@ -62,9 +62,9 @@
     /* Hospital header */
     .receipt-hospital-name {
         font-weight: bold;
-        font-size: 11pt;
-        margin-bottom: 2mm;
-        padding-bottom: 2mm;
+        font-size: 10pt;
+        margin: 0 0 0.5mm 0;
+        padding-bottom: 0.5mm;
         border-bottom: 1px dashed #000;
         text-align: center;
         word-wrap: break-word;
@@ -73,39 +73,38 @@
     
     .receipt-hospital-logo {
         max-width: 40mm;
-        margin: 0 auto 2mm;
+        margin: 0 auto 0.5mm;
         display: block;
     }
     
     /* Receipt number */
     .receipt-number {
         font-weight: bold;
-        margin: 2mm 0;
-        font-size: 9pt;
+        margin: 0.3mm 0;
+        font-size: 8pt;
     }
     
     /* Separator lines */
     .receipt-separator {
         border-bottom: 1px dashed #000;
-        margin: 2mm 0;
+        margin: 0.5mm 0;
     }
     
     /* Section titles */
     .receipt-section-title {
         font-weight: bold;
-        font-size: 8pt;
-        margin-top: 2mm;
-        margin-bottom: 1mm;
+        font-size: 7pt;
+        margin: 0.5mm 0 0.2mm 0;
         text-transform: uppercase;
-        letter-spacing: 0.5px;
+        letter-spacing: 0px;
     }
     
     /* Patient and payment info - simplified */
     .receipt-info-row {
         display: flex;
         justify-content: space-between;
-        font-size: 8pt;
-        margin: 0.8mm 0;
+        font-size: 7pt;
+        margin: 0.2mm 0;
         text-align: left;
     }
     
@@ -125,12 +124,12 @@
     .receipt-items-table {
         width: 100%;
         border-collapse: collapse;
-        margin: 1mm 0;
-        font-size: 8pt;
+        margin: 0.3mm 0;
+        font-size: 7pt;
     }
     
     .receipt-items-table td {
-        padding: 0.5mm 0;
+        padding: 0.1mm 0;
         text-align: left;
         border: none;
     }
@@ -151,39 +150,39 @@
     
     .receipt-items-separator {
         border-bottom: 1px solid #000;
-        margin: 0.5mm 0;
+        margin: 0.2mm 0;
     }
     
     /* Total section */
     .receipt-total {
         font-weight: bold;
-        font-size: 10pt;
-        margin: 2mm 0;
+        font-size: 9pt;
+        margin: 0.3mm 0;
         text-align: right;
-        padding-top: 1mm;
+        padding-top: 0.3mm;
     }
     
     /* Payment method */
     .receipt-payment-method {
-        font-size: 8pt;
-        margin: 1mm 0;
+        font-size: 7pt;
+        margin: 0.2mm 0;
         text-align: left;
     }
     
     /* Thank you message */
     .receipt-thank-you {
         font-weight: bold;
-        font-size: 9pt;
-        margin-top: 2mm;
-        padding-top: 2mm;
+        font-size: 8pt;
+        margin-top: 0.5mm;
+        padding-top: 0.5mm;
         border-top: 1px dashed #000;
         text-align: center;
     }
     
     /* Date/time */
     .receipt-datetime {
-        font-size: 8pt;
-        margin: 1mm 0;
+        font-size: 7pt;
+        margin: 0.2mm 0;
         text-align: center;
     }
     
@@ -343,89 +342,22 @@
 
     <!-- PRINT VIEW - Thermal Printer Optimized Receipt -->
     <div class="receipt-container" style="display: none;">
-        {% if hospital.name %}
-            <div class="receipt-hospital-name">
-                {% if hospital.logo %}
-                    <img src="{{ hospital.logo.url }}" alt="{{ hospital.name }}" class="receipt-hospital-logo">
-                {% endif %}
-                {{ hospital.name|truncatewords:8 }}
-            </div>
-        {% endif %}
-
-        <div class="receipt-number">
-            Receipt #{{ payment.receipt_number|default:"N/A" }}
-        </div>
-
-        <div class="receipt-datetime">
-            {% if payment.paid_at %}
-                {{ payment.paid_at|date:"Y-m-d H:i" }}
-            {% else %}
-                {{ "now"|date:"Y-m-d H:i" }}
-            {% endif %}
-        </div>
-
+        {% if hospital.name %}<div class="receipt-hospital-name">{% if hospital.logo %}<img src="{{ hospital.logo.url }}" alt="{{ hospital.name }}" class="receipt-hospital-logo">{% endif %}{{ hospital.name|truncatewords:6 }}</div>{% endif %}
+        <div class="receipt-number">Receipt #{{ payment.receipt_number|default:"N/A" }}</div>
+        <div class="receipt-datetime">{% if payment.paid_at %}{{ payment.paid_at|date:"Y-m-d H:i" }}{% else %}{{ "now"|date:"Y-m-d H:i" }}{% endif %}</div>
         <div class="receipt-separator"></div>
-
-        <!-- Patient Info -->
         <div class="receipt-section-title">Patient</div>
-        <div class="receipt-info-row">
-            <span class="receipt-info-label">Name:</span>
-            <span class="receipt-info-value">{{ visit.patient.name|truncatewords:5 }}</span>
-        </div>
-        <div class="receipt-info-row">
-            <span class="receipt-info-label">Age:</span>
-            <span class="receipt-info-value">{{ visit.patient.age }} {{ visit.patient.get_sex_display|slice:":1" }}</span>
-        </div>
-
+        <div class="receipt-info-row"><span class="receipt-info-label">Name:</span><span class="receipt-info-value">{{ visit.patient.name|truncatewords:4 }}</span></div>
+        <div class="receipt-info-row"><span class="receipt-info-label">Age:</span><span class="receipt-info-value">{{ visit.patient.age }}{{ visit.patient.get_sex_display|slice:":1" }}</span></div>
         <div class="receipt-separator"></div>
-
-        <!-- Services/Items -->
         <div class="receipt-section-title">Services</div>
-        <table class="receipt-items-table">
-            {% for item in visit.visit_services.all %}
-                <tr>
-                    <td class="item-name">{{ item.service.name|truncatewords:4 }}</td>
-                    <td class="item-price">{{ item.price_at_time }}</td>
-                </tr>
-            {% endfor %}
-        </table>
-
+        <table class="receipt-items-table">{% for item in visit.visit_services.all %}<tr><td class="item-name">{{ item.service.name|truncatewords:3 }}</td><td class="item-price">{{ item.price_at_time }}</td></tr>{% endfor %}</table>
         <div class="receipt-items-separator"></div>
-
-        <!-- Total -->
-        <div class="receipt-info-row receipt-total">
-            <span>TOTAL:</span>
-            <span>{{ visit.total_amount }}</span>
-        </div>
-
+        <div class="receipt-info-row receipt-total"><span>TOTAL:</span><span>{{ visit.total_amount }}</span></div>
         <div class="receipt-separator"></div>
-
-        <!-- Payment Method -->
-        {% if payment %}
-            <div class="receipt-section-title">Payment</div>
-            <div class="receipt-payment-method">
-                Mode: {{ payment.get_mode_display }}
-            </div>
-            {% if payment.mode == "card" and payment.bank_account %}
-                <div class="receipt-payment-method">
-                    Card: {{ payment.bank_account|truncatewords:3 }}
-                </div>
-            {% elif payment.mode == "mobile_money" and payment.mobile_account %}
-                <div class="receipt-payment-method">
-                    Account: {{ payment.mobile_account|truncatewords:3 }}
-                </div>
-            {% endif %}
-        {% endif %}
-
-        <div class="receipt-separator"></div>
-
-        <!-- Thank You -->
-        <div class="receipt-thank-you">
-            THANK YOU!
-        </div>
-        <div style="text-align: center; font-size: 8pt; margin-top: 1mm;">
-            Please keep this receipt
-        </div>
+        {% if payment %}<div class="receipt-section-title">Payment</div><div class="receipt-payment-method">Mode: {{ payment.get_mode_display }}</div>{% if payment.mode == "card" and payment.bank_account %}<div class="receipt-payment-method">Card: {{ payment.bank_account|truncatewords:3 }}</div>{% elif payment.mode == "mobile_money" and payment.mobile_account %}<div class="receipt-payment-method">Account: {{ payment.mobile_account|truncatewords:3 }}</div>{% endif %}<div class="receipt-separator"></div>{% endif %}
+        <div class="receipt-thank-you">THANK YOU!</div>
+        <div style="text-align: center; font-size: 7pt; margin-top: 0.3mm;">Please keep this receipt</div>
     </div>
 </div>
 
