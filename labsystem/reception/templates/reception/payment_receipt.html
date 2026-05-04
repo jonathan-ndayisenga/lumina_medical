@@ -18,11 +18,24 @@
             font-size: 10px;
             line-height: 1.3;
             color: #000;
+
+            /* Prevent overflow */
+            word-wrap: break-word;
+            overflow-wrap: break-word;
         }
 
-        .center { text-align: center; }
-        .right { text-align: right; }
-        .bold { font-weight: bold; }
+        .center {
+            text-align: center;
+            word-break: break-word;
+        }
+
+        .right {
+            text-align: right;
+        }
+
+        .bold {
+            font-weight: bold;
+        }
 
         .line {
             border-top: 1px dashed #000;
@@ -36,15 +49,25 @@
         table {
             width: 100%;
             border-collapse: collapse;
+            table-layout: fixed; /* CRITICAL */
         }
 
         td {
             padding: 2px 0;
             vertical-align: top;
+
+            /* Force wrapping */
+            word-break: break-word;
+            overflow-wrap: break-word;
         }
 
-        .totals td {
-            padding: 2px 0;
+        .service-name {
+            width: 70%;
+        }
+
+        .price {
+            width: 30%;
+            text-align: right;
         }
 
         button {
@@ -86,14 +109,19 @@
 
         <table>
             {% for item in visit.visit_services.all %}
-            <tr>
-                <td>{{ item.service.name }}</td>
-                <td class="right">{{ item.price_at_time }}</td>
-            </tr>
+                <!-- Service Name on its own line (prevents overflow completely) -->
+                <tr>
+                    <td colspan="2">{{ item.service.name }}</td>
+                </tr>
+                <!-- Price aligned right -->
+                <tr>
+                    <td></td>
+                    <td class="price">{{ item.price_at_time }}</td>
+                </tr>
             {% empty %}
-            <tr>
-                <td colspan="2" class="center">No services</td>
-            </tr>
+                <tr>
+                    <td colspan="2" class="center">No services</td>
+                </tr>
             {% endfor %}
         </table>
     </div>
@@ -102,18 +130,18 @@
 
     <!-- BILL SUMMARY -->
     <div class="section">
-        <table class="totals">
+        <table>
             <tr>
                 <td>Total</td>
-                <td class="right">{{ visit.total_amount }}</td>
+                <td class="price">{{ visit.total_amount }}</td>
             </tr>
             <tr>
                 <td>Paid</td>
-                <td class="right">{{ payment.amount_paid }}</td>
+                <td class="price">{{ payment.amount_paid }}</td>
             </tr>
             <tr>
                 <td>Balance</td>
-                <td class="right">{{ balance_due }}</td>
+                <td class="price">{{ balance_due }}</td>
             </tr>
         </table>
     </div>
@@ -138,7 +166,7 @@
 
     <!-- FOOTER -->
     <div class="center">Thank you for your visit</div>
-    <div class="center">Get well soon 🙏</div>
+    <div class="center">Get well soon</div>
 
     <!-- PRINT BUTTON -->
     <button onclick="window.print()">Print Receipt</button>
