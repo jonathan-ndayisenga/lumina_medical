@@ -37,12 +37,13 @@
         margin: 0 !important;
         padding: 0 !important;
         width: 58mm !important;
+        height: auto !important;
     }
     .receipt-card {
         box-shadow: none !important;
         border: none !important;
         margin: 0 !important;
-        padding: 1mm !important;
+        padding: 0.5mm !important;
         background: white !important;
         width: 58mm !important;
     }
@@ -52,51 +53,59 @@
         width: 58mm;
         font-family: 'Courier New', monospace;
         font-size: 8pt;
-        line-height: 1.0;
+        line-height: 0.95;
         margin: 0;
         padding: 0;
         text-align: center;
         color: #000;
+        word-spacing: -0.15em;
+        letter-spacing: -0.02em;
     }
     
     /* Hospital header */
     .receipt-hospital-name {
         font-weight: bold;
         font-size: 10pt;
-        margin: 0 0 0.5mm 0;
-        padding-bottom: 0.5mm;
+        margin: 0;
+        padding-bottom: 0.3mm;
         border-bottom: 1px dashed #000;
         text-align: center;
         word-wrap: break-word;
         overflow-wrap: break-word;
+        word-spacing: normal;
+        line-height: 1.0;
     }
     
     .receipt-hospital-logo {
-        max-width: 40mm;
-        margin: 0 auto 0.5mm;
+        max-width: 38mm;
+        margin: 0 auto 0.2mm;
         display: block;
     }
     
     /* Receipt number */
     .receipt-number {
         font-weight: bold;
-        margin: 0.3mm 0;
+        margin: 0.1mm 0;
         font-size: 8pt;
+        line-height: 0.95;
     }
     
     /* Separator lines */
     .receipt-separator {
         border-bottom: 1px dashed #000;
-        margin: 0.5mm 0;
+        margin: 0.2mm 0;
+        padding: 0;
     }
     
     /* Section titles */
     .receipt-section-title {
         font-weight: bold;
         font-size: 7pt;
-        margin: 0.5mm 0 0.2mm 0;
+        margin: 0.15mm 0 0.1mm 0;
+        padding: 0;
         text-transform: uppercase;
         letter-spacing: 0px;
+        line-height: 0.9;
     }
     
     /* Patient and payment info - simplified */
@@ -104,13 +113,17 @@
         display: flex;
         justify-content: space-between;
         font-size: 7pt;
-        margin: 0.2mm 0;
+        margin: 0.1mm 0;
+        padding: 0;
         text-align: left;
+        line-height: 0.95;
     }
     
     .receipt-info-label {
         font-weight: bold;
         flex: 0 0 auto;
+        padding: 0;
+        margin: 0;
     }
     
     .receipt-info-value {
@@ -118,20 +131,30 @@
         text-align: right;
         word-wrap: break-word;
         overflow-wrap: break-word;
+        padding: 0;
+        margin: 0 0 0 1mm;
     }
     
     /* Items table - simplified for thermal printer */
     .receipt-items-table {
         width: 100%;
         border-collapse: collapse;
-        margin: 0.3mm 0;
+        margin: 0.15mm 0;
+        padding: 0;
         font-size: 7pt;
     }
     
     .receipt-items-table td {
-        padding: 0.1mm 0;
+        padding: 0;
+        margin: 0;
         text-align: left;
         border: none;
+        line-height: 0.95;
+    }
+    
+    .receipt-items-table tr {
+        margin: 0;
+        padding: 0;
     }
     
     .receipt-items-table .item-name {
@@ -139,51 +162,59 @@
         max-width: 30mm;
         word-wrap: break-word;
         overflow-wrap: break-word;
+        padding: 0;
     }
     
     .receipt-items-table .item-price {
         text-align: right;
         font-weight: bold;
         white-space: nowrap;
-        padding-left: 2mm;
+        padding: 0 0 0 1mm;
     }
     
     .receipt-items-separator {
         border-bottom: 1px solid #000;
-        margin: 0.2mm 0;
+        margin: 0.1mm 0;
+        padding: 0;
     }
     
     /* Total section */
     .receipt-total {
         font-weight: bold;
         font-size: 9pt;
-        margin: 0.3mm 0;
+        margin: 0.15mm 0;
+        padding-top: 0.1mm;
         text-align: right;
-        padding-top: 0.3mm;
+        line-height: 0.95;
     }
     
     /* Payment method */
     .receipt-payment-method {
         font-size: 7pt;
-        margin: 0.2mm 0;
+        margin: 0.1mm 0;
+        padding: 0;
         text-align: left;
+        line-height: 0.95;
     }
     
     /* Thank you message */
     .receipt-thank-you {
         font-weight: bold;
         font-size: 8pt;
-        margin-top: 0.5mm;
-        padding-top: 0.5mm;
+        margin-top: 0.2mm;
+        padding-top: 0.2mm;
         border-top: 1px dashed #000;
         text-align: center;
+        line-height: 0.95;
     }
     
     /* Date/time */
     .receipt-datetime {
         font-size: 7pt;
-        margin: 0.2mm 0;
+        margin: 0.1mm 0;
+        padding: 0;
         text-align: center;
+        line-height: 0.95;
     }
     
     /* Hide elements not needed for print */
@@ -210,9 +241,9 @@
         text-transform: uppercase;
     }
     
-    /* Page settings */
+    /* Page settings - 58mm x 210mm */
     @page {
-        size: 58mm auto;
+        size: 58mm 210mm;
         margin: 0;
         padding: 0;
     }
