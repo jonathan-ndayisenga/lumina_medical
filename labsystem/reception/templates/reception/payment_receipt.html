@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <title>Receipt</title>
     <style>
+        /* Remove all spacing from every element */
         * {
             margin: 0;
             padding: 0;
@@ -18,12 +19,18 @@
         body {
             width: 48mm;
             margin: 0;
-            padding: 0.5mm;
+            padding: 0.2mm;           /* tiny safe margin */
             font-family: monospace;
             font-size: 12px;
-            line-height: 1.0;          /* minimal line spacing – no gaps */
+            line-height: 0.85;         /* minimal line spacing – lines nearly touch */
             color: #000;
             background: white;
+        }
+
+        /* Remove all extra spacing from block elements */
+        div, p, table, tr, td, .section, .line, .center, .right, .bold {
+            margin: 0;
+            padding: 0;
         }
 
         .center { text-align: center; }
@@ -32,11 +39,12 @@
 
         .line {
             border-top: 1px dashed #000;
-            margin: 1px 0;
+            margin: 0;                 /* no margin */
+            padding: 0;
         }
 
         .section {
-            margin-bottom: 2px;
+            margin-bottom: 0;          /* no bottom margin */
         }
 
         table {
@@ -45,7 +53,7 @@
             table-layout: fixed;
         }
         td {
-            padding: 0;
+            padding: 0;               /* no cell padding */
             vertical-align: top;
         }
         .service-name {
@@ -67,9 +75,10 @@
 
         button {
             width: 100%;
-            padding: 2px;
-            margin-top: 4px;
+            padding: 0;
+            margin-top: 2px;
             font-size: 12px;
+            line-height: 1.0;
         }
 
         @media print {
@@ -84,14 +93,14 @@
     <div class="center">{{ payment.paid_at|date:"Y-m-d H:i" }}</div>
     <div class="line"></div>
 
-    <div class="section">
+    <div>
         <div><span class="bold">Patient:</span> {{ visit.patient.name|truncatechars:25 }}</div>
         <div><span class="bold">Age/Sex:</span> {{ visit.patient.age }} / {{ visit.patient.get_sex_display|slice:":1" }}</div>
         <div><span class="bold">Visit ID:</span> #{{ visit.id }}</div>
     </div>
     <div class="line"></div>
 
-    <div class="section">
+    <div>
         <div class="bold">Services</div>
         <table>
             {% for item in visit.visit_services.all %}
@@ -102,11 +111,11 @@
             {% empty %}
             <tr><td colspan="2" class="center">No services</td></tr>
             {% endfor %}
-        </table>
+        </tr>
     </div>
     <div class="line"></div>
 
-    <div class="section">
+    <div>
         <table class="summary-table">
             <tr><td>Total</td><td class="right">{{ visit.total_amount }}</td></tr>
             <tr><td>Paid</td><td class="right">{{ payment.amount_paid }}</td></tr>
@@ -115,14 +124,14 @@
     </div>
     <div class="line"></div>
 
-    <div class="section">
+    <div>
         <div><span class="bold">Mode:</span> {{ payment.get_mode_display|slice:":10" }}</div>
         <div><span class="bold">By:</span> {{ payment.recorded_by.get_full_name|default:payment.recorded_by.username|truncatechars:20 }}</div>
     </div>
 
     {% if payment.notes %}
     <div class="line"></div>
-    <div class="section">
+    <div>
         <div class="bold">Notes:</div>
         <div>{{ payment.notes|truncatechars:30 }}</div>
     </div>
