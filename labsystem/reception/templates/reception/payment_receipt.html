@@ -3,9 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <title>Receipt</title>
-
     <style>
-        /* Reset all margins, force pure black */
         * {
             margin: 0;
             padding: 0;
@@ -13,67 +11,54 @@
         }
 
         @page {
-            size: 58mm auto;
-            margin: 0mm;         /* No extra page margins */
+            size: 48mm auto;
+            margin: 0mm;
         }
 
         body {
-            width: 58mm;
+            width: 48mm;
             margin: 0;
-            padding: 2mm 1mm;    /* Small safe inner padding */
-            font-family: 'Courier New', monospace;
-            font-size: 12px;     /* Larger = clearer */
-            line-height: 1.2;
-            color: #000;         /* Pure black for contrast */
+            padding: 1mm 0.5mm;
+            font-family: monospace;
+            font-size: 12px;
+            line-height: 1.15;
+            color: #000;
             background: white;
         }
 
-        /* Utility classes */
-        .center {
-            text-align: center;
-        }
-        .right {
-            text-align: right;
-        }
-        .bold {
-            font-weight: bold;
-        }
+        .center { text-align: center; }
+        .right { text-align: right; }
+        .bold { font-weight: bold; }
+
         .line {
             border-top: 1px dashed #000;
-            margin: 4px 0;
-        }
-        .section {
-            margin-bottom: 6px;
-        }
-
-        /* Simple two‑column table for services */
-        .services-table {
-            width: 100%;
-            border-collapse: collapse;
             margin: 2px 0;
         }
-        .services-table td {
-            padding: 2px 0;
+
+        .section {
+            margin-bottom: 3px;
+        }
+
+        /* Service table – two columns */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            table-layout: fixed;
+        }
+        td {
+            padding: 1px 0;
             vertical-align: top;
         }
         .service-name {
-            text-align: left;
             width: 70%;
+            word-break: break-word;
         }
         .service-price {
-            text-align: right;
             width: 30%;
+            text-align: right;
+            white-space: nowrap;
         }
 
-        /* Summary table (total, paid, balance) */
-        .summary-table {
-            width: 100%;
-            border-collapse: collapse;
-            margin: 2px 0;
-        }
-        .summary-table td {
-            padding: 2px 0;
-        }
         .summary-table td:first-child {
             text-align: left;
             font-weight: bold;
@@ -82,23 +67,21 @@
             text-align: right;
         }
 
-        /* Hide button when printing */
         button {
             width: 100%;
-            padding: 6px;
-            margin-top: 8px;
+            padding: 4px;
+            margin-top: 6px;
             font-size: 12px;
         }
+
         @media print {
-            button {
-                display: none;
-            }
+            button { display: none; }
         }
     </style>
 </head>
 <body>
 
-    <!-- Header -->
+    <!-- Header – each line ≤32 characters -->
     <div class="center bold">LUMINA MEDICAL SERVICES</div>
     <div class="center">Receipt #{{ payment.receipt_number }}</div>
     <div class="center">{{ payment.paid_at|date:"Y-m-d H:i" }}</div>
@@ -106,8 +89,8 @@
 
     <!-- Patient info -->
     <div class="section">
-        <div><span class="bold">Patient:</span> {{ visit.patient.name }}</div>
-        <div><span class="bold">Age/Sex:</span> {{ visit.patient.age }} / {{ visit.patient.get_sex_display }}</div>
+        <div><span class="bold">Patient:</span> {{ visit.patient.name|truncatechars:25 }}</div>
+        <div><span class="bold">Age/Sex:</span> {{ visit.patient.age }} / {{ visit.patient.get_sex_display|slice:":1" }}</div>
         <div><span class="bold">Visit ID:</span> #{{ visit.id }}</div>
     </div>
     <div class="line"></div>
@@ -115,16 +98,14 @@
     <!-- Services -->
     <div class="section">
         <div class="bold">Services</div>
-        <table class="services-table">
+        <table>
             {% for item in visit.visit_services.all %}
             <tr>
-                <td class="service-name">{{ item.service.name }}</td>
+                <td class="service-name">{{ item.service.name|truncatechars:28 }}</td>
                 <td class="service-price">{{ item.price_at_time }}</td>
             </tr>
             {% empty %}
-            <tr>
-                <td colspan="2" class="center">No services</td>
-            </tr>
+            <tr><td colspan="2" class="center">No services</td></tr>
             {% endfor %}
         </table>
     </div>
@@ -133,43 +114,33 @@
     <!-- Bill summary -->
     <div class="section">
         <table class="summary-table">
-            <tr>
-                <td>Total</td>
-                <td>{{ visit.total_amount }}</td>
-            </tr>
-            <tr>
-                <td>Paid</td>
-                <td>{{ payment.amount_paid }}</td>
-            </tr>
-            <tr>
-                <td>Balance</td>
-                <td>{{ balance_due }}</td>
-            </tr>
+            <tr><td>Total</td><td class="right">{{ visit.total_amount }}</td></tr>
+            <tr><td>Paid</td><td class="right">{{ payment.amount_paid }}</td></tr>
+            <tr><td>Balance</td><td class="right">{{ balance_due }}</td></tr>
         </table>
     </div>
     <div class="line"></div>
 
     <!-- Payment info -->
     <div class="section">
-        <div><span class="bold">Mode:</span> {{ payment.get_mode_display }}</div>
-        <div><span class="bold">By:</span> {{ payment.recorded_by.get_full_name|default:payment.recorded_by.username }}</div>
+        <div><span class="bold">Mode:</span> {{ payment.get_mode_display|slice:":10" }}</div>
+        <div><span class="bold">By:</span> {{ payment.recorded_by.get_full_name|default:payment.recorded_by.username|truncatechars:20 }}</div>
     </div>
 
     {% if payment.notes %}
     <div class="line"></div>
     <div class="section">
         <div class="bold">Notes:</div>
-        <div>{{ payment.notes }}</div>
+        <div>{{ payment.notes|truncatechars:30 }}</div>
     </div>
     {% endif %}
 
     <div class="line"></div>
 
     <!-- Footer -->
-    <div class="center">Thank you for your visit</div>
+    <div class="center">Thank you</div>
     <div class="center">Get well soon</div>
 
-    <!-- Print button (hidden when printed) -->
     <button onclick="window.print()">Print Receipt</button>
 
 </body>
