@@ -2,7 +2,7 @@ from decimal import Decimal
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.core.exceptions import PermissionDenied
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
 from django.db.models import Count, Max, Q
 from django.shortcuts import get_object_or_404, redirect, render
@@ -622,6 +622,18 @@ def visit_create(request, patient_id):
                         )
 
             sync_visit_status(visit)
+            
+            # SECURITY: Validate billing structure to prevent loopholes
+            try:
+                visit.validate_billing_structure()
+            except ValidationError as e:
+                # This should not happen if forms are working correctly, but catch it anyway
+                messages.warning(
+                    request,
+                    f"Visit was created but has a billing issue: {e.message}. "
+                    f"Please review and edit the visit if needed."
+                )
+            
             if visit.visit_type == Visit.TYPE_ADJUSTMENT:
                 messages.success(
                     request,
@@ -703,6 +715,17 @@ def visit_edit(request, visit_id):
                     )
 
             sync_visit_status(visit)
+            
+            # SECURITY: Validate billing structure to prevent loopholes
+            try:
+                visit.validate_billing_structure()
+            except ValidationError as e:
+                messages.warning(
+                    request,
+                    f"Visit was updated but has a billing issue: {e.message}. "
+                    f"Please review the visit services."
+                )
+            
             messages.success(request, f"Visit for {visit.patient.name} updated successfully.")
             return redirect("patient_list")
         messages.error(request, "Please fix the visit details below.")
@@ -828,6 +851,17 @@ def complete_visit(request, visit_id):
     if visit.status == Visit.STATUS_CANCELLED:
         messages.error(request, "This visit has been terminated and can no longer be billed or dispensed.")
         return redirect("patient_visits", patient_id=visit.patient_id)
+    
+    # SECURITY: Validate billing structure to prevent receptionist loopholes
+    try:
+        visit.validate_billing_structure()
+    except ValidationError as e:
+        messages.error(
+            request, 
+            f"Cannot proceed with billing: {e.message}. This visit may have been improperly created or modified."
+        )
+        return redirect("patient_visits", patient_id=visit.patient_id)
+    
     # With partial payments, a visit is only "completed" when fully settled.
     if visit.status == Visit.STATUS_COMPLETED and visit.is_fully_paid:
         messages.error(request, "This visit has already been fully paid and completed.")

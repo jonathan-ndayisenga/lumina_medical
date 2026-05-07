@@ -119,6 +119,74 @@ class Visit(models.Model):
     def is_adjustment_visit(self):
         return self.visit_type == self.TYPE_ADJUSTMENT
 
+    def validate_billing_structure(self):
+        """
+        Validate that the visit has proper billing structure.
+        Prevents receptionist loopholes (skipping services, faking follow-ups, etc.)
+        """
+        if self.visit_type == self.TYPE_NORMAL:
+            # Normal visits MUST have at least one service
+            service_count = self.visit_services.count()
+            if service_count == 0:
+                raise ValidationError(
+                    "Normal visits must have at least one billable service before billing can be completed."
+                )
+            if self.total_amount <= 0:
+                raise ValidationError(
+                    "Normal visits must have a positive total amount. Check that services have been properly added."
+                )
+
+        elif self.visit_type == self.TYPE_FOLLOW_UP:
+            # Follow-up visits MUST have a valid completed parent visit and a consultation
+            if not self.parent_visit:
+                raise ValidationError(
+                    "Follow-up visits must be linked to a completed previous visit."
+                )
+            if self.parent_visit.status != self.STATUS_COMPLETED:
+                raise ValidationError(
+                    "Follow-up visits must link to a completed previous visit."
+                )
+            if not self.parent_visit.is_fully_paid:
+                raise ValidationError(
+                    "Follow-up visits must link to a fully paid previous visit."
+                )
+            
+            # Follow-up MUST have services with at least one consultation
+            service_count = self.visit_services.count()
+            if service_count == 0:
+                raise ValidationError(
+                    "Follow-up visits must have at least one service selection."
+                )
+            
+            has_consultation = self.visit_services.filter(
+                service__category=Service.CATEGORY_CONSULTATION
+            ).exists()
+            if not has_consultation:
+                raise ValidationError(
+                    "Follow-up visits must include a doctor consultation service."
+                )
+
+        elif self.visit_type == self.TYPE_ADJUSTMENT:
+            # Adjustment visits MUST be linked to a valid dispensed prescription
+            if not self.adjustment_origin_prescription:
+                raise ValidationError(
+                    "Adjustment visits must be linked to the prescription being adjusted."
+                )
+            if not self.adjustment_origin_prescription.dispensed:
+                raise ValidationError(
+                    "Adjustment visits can only be created for already-dispensed prescriptions."
+                )
+            
+            origin_visit = self.adjustment_origin_prescription.visit
+            if origin_visit.status != self.STATUS_COMPLETED:
+                raise ValidationError(
+                    "The original prescription must come from a completed visit."
+                )
+            if not origin_visit.is_fully_paid:
+                raise ValidationError(
+                    "The original prescription must come from a fully paid visit."
+                )
+
 
 class Triage(models.Model):
     """

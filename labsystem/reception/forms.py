@@ -238,7 +238,12 @@ class VisitCreateForm(forms.ModelForm):
             self.add_error("follow_up_parent_visit", "The selected follow-up visit does not belong to this patient.")
         if parent_visit.status != Visit.STATUS_COMPLETED:
             self.add_error("follow_up_parent_visit", "Follow-up visits must point to a completed and paid previous visit.")
+        if not parent_visit.is_fully_paid:
+            self.add_error("follow_up_parent_visit", "The previous visit must be fully paid before a follow-up can be created.")
 
+        if not services:
+            self.add_error("services", "Follow-up visits require at least one service selection.")
+            return cleaned_data
         has_consultation = any(service.category == Service.CATEGORY_CONSULTATION for service in services)
         if not has_consultation:
             self.add_error("services", "Follow-up visits must include a doctor consultation service.")
@@ -278,8 +283,21 @@ class VisitCreateForm(forms.ModelForm):
     def clean_services(self):
         services = self.cleaned_data["services"]
         visit_type = self.cleaned_data.get("visit_type") or getattr(self.instance, "visit_type", Visit.TYPE_NORMAL)
-        if visit_type != Visit.TYPE_ADJUSTMENT and not services:
-            raise forms.ValidationError("Select at least one service.")
+        
+        # NORMAL and FOLLOW-UP visits require billable services
+        if visit_type in (Visit.TYPE_NORMAL, Visit.TYPE_FOLLOW_UP):
+            if not services:
+                raise forms.ValidationError(
+                    "You must select at least one billable service. This ensures the patient is properly billed and routed to the appropriate department."
+                )
+        
+        # ADJUSTMENT visits must NOT have services (they are already paid for)
+        if visit_type == Visit.TYPE_ADJUSTMENT:
+            if services:
+                raise forms.ValidationError(
+                    "Adjustment visits cannot include new services. The replacement is covered by the original payment."
+                )
+        
         return services
 
     def clean(self):
