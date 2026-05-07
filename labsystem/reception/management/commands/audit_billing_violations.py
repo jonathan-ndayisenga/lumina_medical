@@ -35,9 +35,21 @@ class Command(BaseCommand):
             visits_qs = visits_qs.filter(hospital_id=hospital_id)
 
         violations = []
+        skipped_quick_dispense = 0
         fixed_count = 0
 
         for visit in visits_qs.iterator():
+            # Skip quick dispense visits - these are allowed to have zero amount and no services
+            # They use a special workflow where drugs are added after the visit is created
+            if (
+                visit.status == Visit.STATUS_READY_FOR_BILLING
+                and visit.total_amount <= 0
+                and visit.visit_services.count() == 0
+                and visit.visit_type == Visit.TYPE_NORMAL
+            ):
+                skipped_quick_dispense += 1
+                continue
+            
             try:
                 visit.validate_billing_structure()
             except ValidationError as e:
@@ -61,9 +73,10 @@ class Command(BaseCommand):
                     )
 
         if not violations:
-            self.stdout.write(
-                self.style.SUCCESS("✓ No billing violations found. System is secure.")
-            )
+            msg = "✓ No billing violations found. System is secure."
+            if skipped_quick_dispense > 0:
+                msg += f" ({skipped_quick_dispense} quick dispense visit(s) skipped)"
+            self.stdout.write(self.style.SUCCESS(msg))
             return
 
         self.stdout.write(self.style.ERROR(f"\n✗ Found {len(violations)} billing violation(s):"))
@@ -79,6 +92,9 @@ class Command(BaseCommand):
             self.stdout.write(f"  Status: {v['status']}")
             self.stdout.write(f"  Total Amount: {v['total_amount']}")
             self.stdout.write(f"  Issue: {v['error']}")
+
+        if skipped_quick_dispense > 0:
+            self.stdout.write(self.style.WARNING(f"\nℹ Skipped {skipped_quick_dispense} quick dispense visit(s) (these are allowed exceptions)"))
 
         if fix_mode:
             self.stdout.write(

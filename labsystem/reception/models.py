@@ -123,7 +123,22 @@ class Visit(models.Model):
         """
         Validate that the visit has proper billing structure.
         Prevents receptionist loopholes (skipping services, faking follow-ups, etc.)
+        
+        EXCEPTION: Quick dispense visits (READY_FOR_BILLING with zero amount and no services)
+        are allowed to bypass this check because they use a special workflow where drugs are 
+        added and billed after dispensing.
         """
+        # EXCEPTION: Quick dispense workflow - allow zero amount with no services
+        # These visits will be populated with prescriptions and billed later
+        if (
+            self.status == self.STATUS_READY_FOR_BILLING
+            and self.total_amount <= 0
+            and self.visit_services.count() == 0
+            and self.visit_type == self.TYPE_NORMAL
+        ):
+            # This is likely a quick dispense visit - skip validation
+            return
+        
         if self.visit_type == self.TYPE_NORMAL:
             # Normal visits MUST have at least one service
             service_count = self.visit_services.count()
