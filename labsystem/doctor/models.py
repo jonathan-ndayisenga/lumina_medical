@@ -185,6 +185,7 @@ class Prescription(models.Model):
             "syrup",
             "iv",
             "im",
+            "reagent",
         }
 
     @property

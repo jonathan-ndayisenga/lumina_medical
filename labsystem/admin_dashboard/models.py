@@ -427,7 +427,7 @@ class InventoryItem(models.Model):
             self.units_per_pack = self.units_per_pack or Decimal("1")
             if self.unit == "unit":
                 self.unit = "tablet"
-        elif self.category == self.CATEGORY_SYRUP:
+        elif self.category in {self.CATEGORY_SYRUP, self.CATEGORY_REAGENT}:
             self.base_unit = "ml"
             if self.unit == "unit":
                 self.unit = "bottle"

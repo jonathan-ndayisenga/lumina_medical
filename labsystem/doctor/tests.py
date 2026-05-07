@@ -284,6 +284,36 @@ class DoctorWorkflowTests(TestCase):
         self.assertEqual(prescription.total_price, Decimal("20.00"))
         self.assertEqual(response.json()["prescription"]["quantity_display"], "2 bottle(s) covering 150 ml")
 
+    def test_doctor_can_add_reagent_prescription_and_calculate_bottles(self):
+        reagent_drug = InventoryItem.objects.create(
+            hospital=self.hospital,
+            name="Acetic Acid Reagent",
+            category=InventoryItem.CATEGORY_REAGENT,
+            unit="unit",
+            pack_size_ml="5",
+            current_quantity="12",
+            unit_cost="1000.00",
+            selling_price="1500.00",
+            reorder_level="2",
+        )
+
+        response = self.client.post(
+            reverse("add_prescription_api", args=[self.visit.pk]),
+            {
+                "drug_id": reagent_drug.pk,
+                "dosage_mg": "5",
+                "frequency_per_day": "1",
+                "duration_days": "2",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        prescription = Prescription.objects.get(visit=self.visit, drug=reagent_drug)
+        self.assertEqual(prescription.total_quantity, Decimal("2.00"))
+        self.assertEqual(prescription.number_of_packs, 2)
+        self.assertEqual(prescription.total_price, Decimal("3000.00"))
+        self.assertEqual(response.json()["prescription"]["quantity_display"], "2 bottle(s) covering 10 ml")
+
     def test_doctor_can_add_tube_prescription_and_calculate_whole_tubes(self):
         response = self.client.post(
             reverse("add_prescription_api", args=[self.visit.pk]),
