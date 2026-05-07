@@ -567,6 +567,7 @@ def add_prescription_api(request, visit_id):
             InventoryItem.CATEGORY_IV,
             InventoryItem.CATEGORY_IM,
             InventoryItem.CATEGORY_TUBE,
+            InventoryItem.CATEGORY_REAGENT,
         ],
         is_active=True,
     )
@@ -764,6 +765,7 @@ def consultation(request, visit_id):
                 InventoryItem.CATEGORY_IV,
                 InventoryItem.CATEGORY_IM,
                 InventoryItem.CATEGORY_TUBE,
+                InventoryItem.CATEGORY_REAGENT,
             ],
             is_active=True,
         )

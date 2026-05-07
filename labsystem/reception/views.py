@@ -947,6 +947,7 @@ def complete_visit(request, visit_id):
                 InventoryItem.CATEGORY_IV,
                 InventoryItem.CATEGORY_IM,
                 InventoryItem.CATEGORY_TUBE,
+                InventoryItem.CATEGORY_REAGENT,
             ],
             is_active=True,
         ).order_by("name")
