@@ -186,3 +186,105 @@ class NurseWorkflowTests(TestCase):
         self.assertEqual(batch.quantity, Decimal("11.40"))
         transaction = InventoryTransaction.objects.get(prescription=self.prescription)
         self.assertEqual(transaction.quantity, Decimal("6.00"))
+
+    def test_nurse_can_dispense_reagent_prescription_with_bottle_logic(self):
+        reagent_drug = InventoryItem.objects.create(
+            hospital=self.hospital,
+            name="Acetic Acid Reagent",
+            category=InventoryItem.CATEGORY_REAGENT,
+            unit="unit",
+            pack_size_ml="5",
+            current_quantity="10",
+            unit_cost="1000.00",
+            selling_price="1500.00",
+            reorder_level="2",
+        )
+        InventoryBatch.objects.create(
+            item=reagent_drug,
+            batch_number="REAG-001",
+            quantity="10",
+            expiry_date="2028-01-31",
+            unit_cost="1000.00",
+        )
+        reagent_drug.recalculate_current_quantity()
+
+        reagent_prescription = Prescription.objects.create(
+            visit=self.visit,
+            drug=reagent_drug,
+            dosage_mg="5",
+            frequency_per_day=1,
+            duration_days=1,
+            prescribed_by=self.nurse,
+            billing_visit_service=self.billing_line,
+        )
+
+        response = self.client.post(
+            reverse("dispense_prescription", args=[self.queue_entry.pk, reagent_prescription.pk]),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.headers["Location"], reverse("perform_nursing", args=[self.queue_entry.pk]))
+
+        reagent_prescription.refresh_from_db()
+        reagent_drug.refresh_from_db()
+        batch = InventoryBatch.objects.get(item=reagent_drug, batch_number="REAG-001")
+        transaction = InventoryTransaction.objects.get(prescription=reagent_prescription)
+
+        self.assertTrue(reagent_prescription.dispensed)
+        self.assertEqual(reagent_prescription.total_quantity, Decimal("1.00"))
+        self.assertEqual(reagent_prescription.number_of_packs, 1)
+        self.assertEqual(reagent_prescription.quantity_display, "1 bottle(s) covering 5 ml")
+        self.assertEqual(reagent_drug.current_quantity, Decimal("9.00"))
+        self.assertEqual(batch.quantity, Decimal("9.00"))
+        self.assertEqual(transaction.quantity, Decimal("1.00"))
+
+    def test_nurse_can_dispense_reagent_prescription_with_multiple_bottles(self):
+        reagent_drug = InventoryItem.objects.create(
+            hospital=self.hospital,
+            name="Larger Reagent",
+            category=InventoryItem.CATEGORY_REAGENT,
+            unit="unit",
+            pack_size_ml="5",
+            current_quantity="10",
+            unit_cost="1000.00",
+            selling_price="1500.00",
+            reorder_level="2",
+        )
+        InventoryBatch.objects.create(
+            item=reagent_drug,
+            batch_number="REAG-002",
+            quantity="10",
+            expiry_date="2028-01-31",
+            unit_cost="1000.00",
+        )
+        reagent_drug.recalculate_current_quantity()
+
+        reagent_prescription = Prescription.objects.create(
+            visit=self.visit,
+            drug=reagent_drug,
+            dosage_mg="10",  # 10 ml dosage
+            frequency_per_day=1,
+            duration_days=1,
+            prescribed_by=self.nurse,
+            billing_visit_service=self.billing_line,
+        )
+
+        response = self.client.post(
+            reverse("dispense_prescription", args=[self.queue_entry.pk, reagent_prescription.pk]),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.headers["Location"], reverse("perform_nursing", args=[self.queue_entry.pk]))
+
+        reagent_prescription.refresh_from_db()
+        reagent_drug.refresh_from_db()
+        batch = InventoryBatch.objects.get(item=reagent_drug, batch_number="REAG-002")
+        transaction = InventoryTransaction.objects.get(prescription=reagent_prescription)
+
+        self.assertTrue(reagent_prescription.dispensed)
+        self.assertEqual(reagent_prescription.total_quantity, Decimal("2.00"))  # 2 bottles
+        self.assertEqual(reagent_prescription.number_of_packs, 2)
+        self.assertEqual(reagent_prescription.quantity_display, "2 bottle(s) covering 10 ml")
+        self.assertEqual(reagent_drug.current_quantity, Decimal("8.00"))  # 10 - 2 = 8
+        self.assertEqual(batch.quantity, Decimal("8.00"))
+        self.assertEqual(transaction.quantity, Decimal("2.00"))
