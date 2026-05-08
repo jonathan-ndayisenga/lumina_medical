@@ -36,7 +36,7 @@
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-gray-100">
-                        {% for item in visit.visit_services.all %}
+                        {% for item in visit_services %}
                             <tr>
                                 <td class="py-3 pr-4 text-text-main">{{ item.service.name }}</td>
                                 <td class="py-3 pr-4 text-text-muted">{{ item.service.get_category_display }}</td>

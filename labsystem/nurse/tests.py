@@ -288,3 +288,30 @@ class NurseWorkflowTests(TestCase):
         self.assertEqual(reagent_drug.current_quantity, Decimal("8.00"))  # 10 - 2 = 8
         self.assertEqual(batch.quantity, Decimal("8.00"))
         self.assertEqual(transaction.quantity, Decimal("2.00"))
+
+    def test_nurse_cannot_dispense_when_insufficient_stock(self):
+        # Reduce stock to zero for this item
+        self.drug.current_quantity = Decimal("0")
+        self.drug.save(update_fields=["current_quantity", "quantity"])
+        batch = InventoryBatch.objects.get(item=self.drug)
+        batch.quantity = Decimal("0")
+        batch.save()
+
+        response = self.client.post(
+            reverse("dispense_prescription", args=[self.queue_entry.pk, self.prescription.pk]),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.headers["Location"], reverse("perform_nursing", args=[self.queue_entry.pk]))
+
+        # Check error message in response
+        messages_list = list(response.wsgi_request._messages)
+        self.assertEqual(len(messages_list), 1)
+        self.assertIn("Cannot dispense", str(messages_list[0]))
+        self.assertIn("insufficient stock", str(messages_list[0]))
+        self.assertIn("Current stock:", str(messages_list[0]))
+        self.assertIn("prescription requires: 6 tablet(s)", str(messages_list[0]))
+
+        # Prescription should not be dispensed
+        self.prescription.refresh_from_db()
+        self.assertFalse(self.prescription.dispensed)

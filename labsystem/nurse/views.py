@@ -237,7 +237,7 @@ def dispense_prescription(request, queue_entry_id, prescription_id):
     if available_dispense_quantity < quantity_to_deduct:
         messages.error(
             request,
-            f"Insufficient stock for {drug.name}. Available: {drug.quantity_label}. Needed: {prescription.quantity_display}.",
+            f"Cannot dispense {drug.name} - insufficient stock available. Current stock: {drug.quantity_label}, but prescription requires: {prescription.quantity_display}. Please restock the inventory or adjust the prescription.",
         )
         return redirect("perform_nursing", queue_entry_id=queue_entry.pk)
 

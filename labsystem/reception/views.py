@@ -938,6 +938,7 @@ def complete_visit(request, visit_id):
     prescriptions = list(
         visit.prescriptions.select_related("drug", "dispensed_by", "parent_prescription__drug").order_by("-dispensed", "-prescribed_at", "-id")
     )
+    visit_services = visit.visit_services.exclude(service__category=Service.CATEGORY_PHARMACY).select_related("service").order_by("created_at")
     available_drugs = list(
         InventoryItem.objects.filter(
             hospital=hospital,
@@ -970,6 +971,7 @@ def complete_visit(request, visit_id):
             "single_bank_account": bank_qs.first() if bank_count == 1 else None,
             "single_mobile_account": mobile_qs.first() if mobile_count == 1 else None,
             "prescriptions": prescriptions,
+            "visit_services": visit_services,
             "available_drugs": available_drugs,
             "allow_reception_prescribing": not visit.is_adjustment_visit,
             "adjustment_origin_prescription": visit.adjustment_origin_prescription,
@@ -1008,7 +1010,7 @@ def dispense_prescription(request, visit_id, prescription_id):
     if available_dispense_quantity < quantity_to_deduct:
         messages.error(
             request,
-            f"Insufficient stock for {drug.name}. Available: {drug.quantity_label}. Needed: {prescription.quantity_display}.",
+            f"Cannot dispense {drug.name} - insufficient stock available. Current stock: {drug.quantity_label}, but prescription requires: {prescription.quantity_display}. Please restock the inventory or adjust the prescription.",
         )
         return redirect("complete_visit", visit_id=visit.pk)
 
