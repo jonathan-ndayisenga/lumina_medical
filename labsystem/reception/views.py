@@ -65,7 +65,7 @@ def admin_override_reason(request):
 
 def queue_types_for_service(service):
     mapping = {
-        service.CATEGORY_LAB: [QueueEntry.TYPE_LAB_RECEPTION],
+        service.CATEGORY_LAB: [QueueEntry.TYPE_RECEPTION],
         service.CATEGORY_CONSULTATION: [QueueEntry.TYPE_DOCTOR],
         service.CATEGORY_TRIAGE: [QueueEntry.TYPE_NURSE],
     }
@@ -237,6 +237,10 @@ def receptionist_queue(request):
             ),
             None,
         )
+        has_pending_lab_approval = visit.visit_services.filter(
+            service__category=Service.CATEGORY_LAB,
+            is_approved=False
+        ).exists()
         queue_rows.append(
             {
                 "entry": entry,
@@ -247,6 +251,7 @@ def receptionist_queue(request):
                 "pending_dispense_count": status_payload["pending_dispense_count"],
                 "open_work_count": status_payload["other_open_work"],
                 "pending_consultation_line": pending_consultation_line,
+                "has_pending_lab_approval": has_pending_lab_approval,
                 "selected_consultation_service_id": (
                     pending_consultation_line.service_id
                     if pending_consultation_line
@@ -269,6 +274,51 @@ def receptionist_queue(request):
             "consultation_services": consultation_services,
         },
     )
+
+
+@reception_role_required
+@transaction.atomic
+def receptionist_queue_approve_lab(request, queue_entry_id):
+    if request.method != "POST":
+        raise PermissionDenied("Approving lab requests requires a POST request.")
+
+    hospital = get_active_hospital(request)
+    queue_entry = get_object_or_404(reception_queue_queryset(hospital), pk=queue_entry_id)
+    visit = queue_entry.visit
+
+    # 1. Mark all lab services as approved
+    lab_services = visit.visit_services.filter(
+        service__category=Service.CATEGORY_LAB,
+        is_approved=False
+    )
+    
+    if not lab_services.exists():
+        messages.info(request, "No pending lab services found for approval.")
+    else:
+        lab_services.update(is_approved=True)
+        
+        # 2. Create the lab queue entry
+        pending_names = list(lab_services.values_list("service__name", flat=True))
+        reason = f"Doctor requested: {', '.join(pending_names)}" if pending_names else "Laboratory follow-up approved."
+        
+        ensure_pending_queue_entry(
+            visit=visit,
+            hospital=visit.hospital,
+            queue_type=QueueEntry.TYPE_LAB_DOCTOR,
+            reason=reason,
+            requested_by=queue_entry.requested_by or request.user,
+            notes="Lab services approved by reception.",
+        )
+        
+        # 3. Mark the reception queue entry as processed
+        queue_entry.processed = True
+        queue_entry.processed_at = timezone.now()
+        queue_entry.save(update_fields=["processed", "processed_at"])
+        
+        sync_visit_status(visit)
+        messages.success(request, f"Lab requests for {visit.patient.name} have been approved and sent to the lab.")
+
+    return redirect("reception_queue")
 
 
 @reception_role_required

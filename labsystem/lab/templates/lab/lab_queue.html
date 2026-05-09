@@ -27,7 +27,7 @@
                         {% if entry.queue_type == 'lab_doctor' and entry.visit.visit_services.all %}
                             <div class="flex flex-wrap gap-2">
                                 {% for vs in entry.visit.visit_services.all %}
-                                    {% if not vs.performed and vs.service.category == 'lab' %}
+                                    {% if not vs.performed and vs.service.category == 'lab' and vs.is_approved %}
                                         <span class="inline-block px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs">{{ vs.service.name }}</span>
                                     {% endif %}
                                 {% endfor %}
@@ -99,7 +99,7 @@
                                         <div class="mt-2 text-xs space-y-1">
                                             <strong class="block text-text-main">Requested services:</strong>
                                             {% for vs in entry.visit.visit_services.all %}
-                                                {% if not vs.performed and vs.service.category == 'lab' %}
+                                                {% if not vs.performed and vs.service.category == 'lab' and vs.is_approved %}
                                                     <span class="inline-block px-2 py-1 bg-blue-100 text-blue-800 rounded-full">{{ vs.service.name }}</span>
                                                 {% endif %}
                                             {% endfor %}

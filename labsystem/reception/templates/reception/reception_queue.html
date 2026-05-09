@@ -91,6 +91,12 @@
                                 <td class="py-4">
                                     <div class="space-y-3 min-w-[300px]">
                                         <div class="flex gap-2 flex-wrap">
+                                            {% if row.has_pending_lab_approval %}
+                                                <form method="post" action="{% url 'reception_queue_approve_lab' row.entry.pk %}">
+                                                    {% csrf_token %}
+                                                    <button type="submit" class="btn btn-primary btn-sm bg-green-600 hover:bg-green-700 border-green-600">Approve Lab</button>
+                                                </form>
+                                            {% endif %}
                                             <form method="post" action="{% url 'reception_queue_bill' row.entry.pk %}">
                                                 {% csrf_token %}
                                                 <button type="submit" class="btn btn-primary btn-sm">Bill Patient</button>

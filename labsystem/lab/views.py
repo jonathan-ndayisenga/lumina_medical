@@ -736,7 +736,10 @@ def lab_queue(request):
     queue_entries = QueueEntry.objects.filter(
         queue_type__in=[QueueEntry.TYPE_LAB_RECEPTION, QueueEntry.TYPE_LAB_DOCTOR],
         processed=False,
-    ).select_related('visit__patient', 'hospital', 'requested_by').prefetch_related('visit__visit_services__service')
+        visit__visit_services__service__category=Service.CATEGORY_LAB,
+        visit__visit_services__is_approved=True,
+        visit__visit_services__performed=False,
+    ).select_related('visit__patient', 'hospital', 'requested_by').prefetch_related('visit__visit_services__service').distinct()
     if hospital and getattr(request.user, 'role', '') != 'superadmin':
         queue_entries = queue_entries.filter(hospital=hospital)
     return render(

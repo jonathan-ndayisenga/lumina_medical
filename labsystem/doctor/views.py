@@ -434,7 +434,15 @@ def send_lab_request_api(request, visit_id):
         consultation.lab_requests = consultation_request_ids
         consultation.save(update_fields=["lab_requests"])
 
-    ensure_doctor_lab_queue_entry(visit=visit, requested_by=request.user)
+    # Change: Send to reception queue for lab approval instead of directly to lab
+    send_to_reception_queue(
+        visit=visit,
+        hospital=visit.hospital,
+        source="Doctor",
+        detail="Lab approval required",
+        notes=f"Doctor {request.user.get_full_name() or request.user.username} requested: {', '.join(added_names)}",
+        requested_by=request.user,
+    )
     sync_visit_status(visit)
 
     pending_services = [
