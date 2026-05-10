@@ -434,6 +434,8 @@ def send_lab_request_api(request, visit_id):
         consultation.lab_requests = consultation_request_ids
         consultation.save(update_fields=["lab_requests"])
 
+    added_names = [visit_service.service.name for visit_service in created_visit_services]
+
     # Change: Send to reception queue for lab approval instead of directly to lab
     send_to_reception_queue(
         visit=visit,
@@ -450,7 +452,6 @@ def send_lab_request_api(request, visit_id):
         for item in lab_visit_services(visit, performed=False)
     ]
 
-    added_names = [visit_service.service.name for visit_service in created_visit_services]
     if len(added_names) == 1:
         message = f"{added_names[0]} sent to lab."
     else:
