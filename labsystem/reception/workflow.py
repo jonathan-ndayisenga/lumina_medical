@@ -124,9 +124,12 @@ def build_reception_queue_reason(source: str, detail: str = "") -> str:
 
 
 def reception_source_from_entry(entry: QueueEntry) -> str:
-    first_line = (entry.notes or "").splitlines()[0].strip()
-    if first_line.startswith(RECEPTION_SOURCE_PREFIX):
-        return first_line.replace(RECEPTION_SOURCE_PREFIX, "", 1).strip() or "Reception"
+    lines = (entry.notes or "").splitlines()
+    if lines:
+        first_line = lines[0].strip()
+        if first_line.startswith(RECEPTION_SOURCE_PREFIX):
+            return first_line.replace(RECEPTION_SOURCE_PREFIX, "", 1).strip() or "Reception"
+    
     reason = (entry.reason or "").strip()
     if reason.lower().startswith("returned from "):
         source = reason[14:].split(":", 1)[0].strip()
