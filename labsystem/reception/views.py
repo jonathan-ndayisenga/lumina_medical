@@ -301,10 +301,11 @@ def receptionist_queue_approve_lab(request, queue_entry_id):
         pending_names = list(lab_services.values_list("service__name", flat=True))
         reason = f"Doctor requested: {', '.join(pending_names)}" if pending_names else "Laboratory follow-up approved."
         
+        from reception.models import QueueEntry as QE
         ensure_pending_queue_entry(
             visit=visit,
             hospital=visit.hospital,
-            queue_type=QueueEntry.TYPE_LAB_DOCTOR,
+            queue_type=QE.TYPE_LAB_DOCTOR,
             reason=reason,
             requested_by=queue_entry.requested_by or request.user,
             notes="Lab services approved by reception.",
