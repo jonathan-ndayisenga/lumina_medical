@@ -1908,17 +1908,13 @@ def manage_inventory(request):
         if form.is_valid():
             item = form.save(commit=False)
             item.hospital = hospital
-            item.save()
-            opening_stock = form.cleaned_data.get("current_quantity") or Decimal("0")
-            opening_batch_number = form.cleaned_data.get("opening_batch_number")
-            opening_expiry_date = form.cleaned_data.get("opening_expiry_date")
-            if opening_stock > 0:
-                item.add_or_update_batch(
-                    opening_batch_number,
-                    opening_stock,
-                    expiry_date=opening_expiry_date,
-                    unit_cost=item.unit_cost,
-                )
+            item.save()  # This now handles batch creation/sync via form.save() or item.save()
+            # We must call form.save(commit=True) or similar to trigger the form's custom save logic.
+            # Actually, item.save() only calls InventoryItem.save().
+            # To trigger InventoryItemForm.save(commit=True), we should do:
+            form.instance = item
+            form.save()
+            
             messages.success(request, f"Inventory item '{item.name}' saved.")
             return redirect("manage_inventory")
         messages.error(request, "Please fix the inventory details below.")
@@ -2051,30 +2047,11 @@ def upload_inventory_bulk(request):
         expiry_date = cleaned.get("opening_expiry_date")
 
         if existing_item:
-            for field_name in (
-                "category",
-                "unit",
-                "base_unit",
-                "units_per_pack",
-                "strength_mg_per_unit",
-                "unit_cost",
-                "selling_price",
-                "reorder_level",
-                "concentration_mg_per_ml",
-                "pack_size_ml",
-                "days_covered_per_pack",
-                "is_active",
-            ):
-                setattr(existing_item, field_name, cleaned.get(field_name))
-            existing_item.save()
-
+            # Use the form to save changes to existing item so batch sync is triggered
+            validation_form.instance = existing_item
+            existing_item = validation_form.save()
+            
             if opening_stock > 0:
-                batch = existing_item.add_or_update_batch(
-                    batch_number,
-                    opening_stock,
-                    expiry_date=expiry_date,
-                    unit_cost=existing_item.unit_cost,
-                )
                 InventoryTransaction.objects.create(
                     hospital=hospital,
                     item=existing_item,
@@ -2082,21 +2059,15 @@ def upload_inventory_bulk(request):
                     quantity=opening_stock,
                     unit_cost=existing_item.unit_cost or Decimal("0"),
                     performed_by=request.user,
-                    notes=f"Imported batch {batch.batch_number} through bulk inventory upload.",
+                    notes=f"Imported stock adjustment through bulk inventory upload.",
                 )
             updated_count += 1
             continue
 
         item = validation_form.save(commit=False)
         item.hospital = hospital
-        item.save()
+        item = validation_form.save() # Uses custom form logic to handle batches
         if opening_stock > 0:
-            batch = item.add_or_update_batch(
-                batch_number,
-                opening_stock,
-                expiry_date=expiry_date,
-                unit_cost=item.unit_cost,
-            )
             InventoryTransaction.objects.create(
                 hospital=hospital,
                 item=item,
@@ -2104,7 +2075,7 @@ def upload_inventory_bulk(request):
                 quantity=opening_stock,
                 unit_cost=item.unit_cost or Decimal("0"),
                 performed_by=request.user,
-                notes=f"Imported opening batch {batch.batch_number} through bulk inventory upload.",
+                notes=f"Imported opening stock through bulk inventory upload.",
             )
         created_count += 1
 

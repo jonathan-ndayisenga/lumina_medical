@@ -403,6 +403,52 @@ class InventoryItemForm(forms.ModelForm):
 
         return cleaned_data
 
+    def save(self, commit=True):
+        item = super().save(commit=False)
+        if commit:
+            item.save()
+            
+            opening_stock = self.cleaned_data.get("current_quantity") or Decimal("0")
+            batch_number = (self.cleaned_data.get("opening_batch_number") or "").strip()
+            expiry_date = self.cleaned_data.get("opening_expiry_date")
+            
+            if opening_stock > 0:
+                # If we just created the item or changed its stock, sync_batches_to_stock
+                # might have created an "INITIAL" batch. We want to use the batch details
+                # provided in the form instead.
+                
+                # Check if an "INITIAL" batch exists that we should rename/update
+                initial_batch = item.batches.filter(batch_number="INITIAL").first()
+                
+                if initial_batch:
+                    if batch_number and batch_number != "INITIAL":
+                        # Rename INITIAL to the provided batch number
+                        # First check if the target batch number already exists
+                        existing = item.batches.filter(batch_number=batch_number).first()
+                        if existing:
+                            # Merge INITIAL into existing
+                            existing.quantity += initial_batch.quantity
+                            if expiry_date:
+                                existing.expiry_date = expiry_date
+                            existing.save()
+                            initial_batch.delete()
+                        else:
+                            initial_batch.batch_number = batch_number
+                            initial_batch.expiry_date = expiry_date
+                            initial_batch.save()
+                    else:
+                        initial_batch.expiry_date = expiry_date
+                        initial_batch.save()
+                else:
+                    # No INITIAL batch, maybe it was created through another batch name
+                    # or there were already batches. add_or_update_batch will handle it correctly.
+                    # Wait, if we are EDITING an existing item and changed current_quantity, 
+                    # sync_batches_to_stock already adjusted the latest batch.
+                    # We don't want to add stock again here.
+                    pass
+
+        return item
+
 
 class InventoryRestockForm(forms.Form):
     quantity_received = forms.DecimalField(

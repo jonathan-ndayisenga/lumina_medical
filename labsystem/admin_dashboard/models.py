@@ -354,18 +354,33 @@ class InventoryItem(models.Model):
     def recalculate_current_quantity(self, save=True):
         batch_total = self.batches.aggregate(total=Sum("quantity")).get("total")
         if batch_total is None:
+            # If no batches exist, ensure integer quantity matches current_quantity
+            self.quantity = int(self.current_quantity or 0)
+            if save:
+                super(InventoryItem, self).save(update_fields=["quantity"])
             return self.current_quantity
+        
         self.current_quantity = Decimal(batch_total or 0)
         self.quantity = int(self.current_quantity or 0)
         if save:
-            super().save(update_fields=["current_quantity", "quantity"])
+            super(InventoryItem, self).save(update_fields=["current_quantity", "quantity"])
         return self.current_quantity
 
     def add_or_update_batch(self, batch_number, quantity, expiry_date=None, unit_cost=None):
         batch_number = (batch_number or "").strip() or "UNSPECIFIED"
+        
+        # Migrate legacy stock to an INITIAL batch if no batches exist
+        if not self.batches.exists() and self.current_quantity > 0:
+            self.batches.create(
+                batch_number="INITIAL",
+                quantity=self.current_quantity,
+                expiry_date=None,
+                unit_cost=self.unit_cost or Decimal("0")
+            )
+
         defaults = {
             "expiry_date": expiry_date,
-            "unit_cost": unit_cost if unit_cost is not None else Decimal("0"),
+            "unit_cost": unit_cost if unit_cost is not None else (self.unit_cost or Decimal("0")),
         }
         batch, created = self.batches.get_or_create(batch_number=batch_number, defaults=defaults)
         if created:
@@ -374,10 +389,46 @@ class InventoryItem(models.Model):
             batch.expiry_date = expiry_date
         if unit_cost is not None:
             batch.unit_cost = unit_cost
+        
         batch.quantity = (batch.quantity or Decimal("0")) + Decimal(quantity or 0)
         batch.save()
         self.recalculate_current_quantity()
         return batch
+
+    def sync_batches_to_stock(self):
+        """
+        Ensures that batches sum up to current_quantity.
+        Called when current_quantity is manually edited.
+        """
+        batch_total = self.batches.aggregate(total=Sum("quantity")).get("total")
+        if batch_total is None:
+            # No batches exist, create one to hold the current_quantity
+            if self.current_quantity > 0:
+                self.batches.create(
+                    batch_number="INITIAL",
+                    quantity=self.current_quantity,
+                    unit_cost=self.unit_cost or Decimal("0")
+                )
+            return
+
+        diff = self.current_quantity - Decimal(batch_total or 0)
+        if diff == 0:
+            return
+
+        # Adjust the latest batch or create an adjustment batch
+        latest = self.batches.order_by("-expiry_date", "-id").first()
+        if latest:
+            latest.quantity += diff
+            # Allow batch quantity to go slightly negative if necessary for sync, 
+            # though usually current_quantity is >= 0
+            latest.save(update_fields=["quantity"])
+        else:
+            # This case shouldn't happen if batch_total was not None, but for safety:
+            self.batches.create(
+                batch_number="ADJUSTMENT",
+                quantity=self.current_quantity,
+                unit_cost=self.unit_cost or Decimal("0")
+            )
 
     def consume_stock(self, quantity_to_deduct):
         quantity_to_deduct = Decimal(quantity_to_deduct or 0)
@@ -422,6 +473,27 @@ class InventoryItem(models.Model):
             self.unit_cost = self.unit_price
         if not self.reorder_level and self.low_stock_threshold:
             self.reorder_level = Decimal(self.low_stock_threshold)
+        
+        # Track if current_quantity was changed manually (not through recalculate_current_quantity)
+        stock_manually_changed = False
+        if self.pk:
+            try:
+                # We fetch from DB to see the old value
+                old_item = InventoryItem.objects.get(pk=self.pk)
+                if old_item.current_quantity != self.current_quantity:
+                    # If the update_fields doesn't include current_quantity, it's likely a manual change 
+                    # from a form or direct attribute assignment.
+                    # recalculate_current_quantity uses super().save(update_fields=...)
+                    update_fields = kwargs.get("update_fields")
+                    if update_fields is None or "current_quantity" in update_fields:
+                        stock_manually_changed = True
+            except InventoryItem.DoesNotExist:
+                pass
+        else:
+            # New item with opening stock
+            if self.current_quantity > 0:
+                stock_manually_changed = True
+
         if self.category == self.CATEGORY_DRUG:
             self.base_unit = self.base_unit or "tablet"
             self.units_per_pack = self.units_per_pack or Decimal("1")
@@ -442,10 +514,15 @@ class InventoryItem(models.Model):
                 self.unit = "tube"
             if self.base_unit == "unit":
                 self.base_unit = "g"
+        
         self.quantity = int(self.current_quantity or 0)
         self.unit_price = self.unit_cost or Decimal("0")
         self.low_stock_threshold = int(self.reorder_level or 0)
+        
         super().save(*args, **kwargs)
+
+        if stock_manually_changed:
+            self.sync_batches_to_stock()
 
 
 class InventoryTransaction(models.Model):
