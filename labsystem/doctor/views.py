@@ -123,6 +123,14 @@ def available_drug_payload(item):
 
 
 def prescription_payload(prescription):
+    batches = []
+    for b in prescription.drug.available_batches:
+        batches.append({
+            "id": b.id,
+            "batch_number": b.batch_number,
+            "quantity": str(b.quantity),
+            "expiry_date": b.expiry_date.strftime("%Y-%m-%d") if b.expiry_date else "",
+        })
     return {
         "id": prescription.pk,
         "drug_name": prescription.drug.name,
@@ -136,6 +144,7 @@ def prescription_payload(prescription):
         "parent_drug_name": prescription.parent_prescription.drug.name if prescription.parent_prescription_id else "",
         "remaining_days_covered": prescription.remaining_days_covered,
         "dispensed_at": prescription.dispensed_at.strftime("%Y-%m-%d %H:%M") if prescription.dispensed_at else "",
+        "batches": batches,
     }
 
 

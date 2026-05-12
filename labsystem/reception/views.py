@@ -300,15 +300,22 @@ def receptionist_queue_approve_lab(request, queue_entry_id):
             
             # 2. Create the lab queue entry
             pending_names = list(lab_services.values_list("service__name", flat=True))
-            reason = f"Doctor requested: {', '.join(pending_names)}" if pending_names else "Laboratory follow-up approved."
+            source = reception_source_from_entry(queue_entry)
             
+            if source == "Doctor":
+                queue_type = QueueEntry.TYPE_LAB_DOCTOR
+                reason = f"Doctor requested: {', '.join(pending_names)}" if pending_names else "Laboratory follow-up approved."
+            else:
+                queue_type = QueueEntry.TYPE_LAB_RECEPTION
+                reason = f"Reception self-test: {', '.join(pending_names)}" if pending_names else "Self-test laboratory work."
+
             ensure_pending_queue_entry(
                 visit=visit,
                 hospital=visit.hospital,
-                queue_type=QueueEntry.TYPE_LAB_DOCTOR,
+                queue_type=queue_type,
                 reason=reason,
                 requested_by=queue_entry.requested_by or request.user,
-                notes="Lab services approved by reception.",
+                notes=f"Lab services approved by reception. Source: {source}",
             )
             
             # 3. Mark the reception queue entry as processed
@@ -1057,6 +1064,7 @@ def dispense_prescription(request, visit_id, prescription_id):
         return redirect("complete_visit", visit_id=visit.pk)
 
     drug = prescription.drug
+    batch_id = request.POST.get("batch_id")
     quantity_to_deduct = prescription.total_quantity
     stock_quantity_to_deduct = drug.to_stock_quantity(quantity_to_deduct)
     available_dispense_quantity = drug.available_dispense_quantity
@@ -1067,8 +1075,13 @@ def dispense_prescription(request, visit_id, prescription_id):
         )
         return redirect("complete_visit", visit_id=visit.pk)
 
-    drug.consume_stock(stock_quantity_to_deduct)
+    try:
+        consumption_log = drug.consume_stock(stock_quantity_to_deduct, preferred_batch_id=batch_id)
+    except ValueError as e:
+        messages.error(request, f"Dispensing failed: {str(e)}")
+        return redirect("complete_visit", visit_id=visit.pk)
 
+    batch_notes = ", ".join([f"{log['batch'].batch_number} ({log['quantity']})" for log in consumption_log])
     InventoryTransaction.objects.create(
         hospital=visit.hospital,
         item=drug,
@@ -1078,7 +1091,7 @@ def dispense_prescription(request, visit_id, prescription_id):
         visit=visit,
         prescription=prescription,
         performed_by=request.user,
-        notes=f"Dispensed via reception workflow for prescription {prescription.pk}",
+        notes=f"Dispensed for prescription {prescription.pk}. Batches: {batch_notes}",
     )
 
     prescription.dispensed = True

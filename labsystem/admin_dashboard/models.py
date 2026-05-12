@@ -17,7 +17,7 @@ def sync_hospital_account_balance(hospital):
     account, _ = HospitalAccount.objects.get_or_create(hospital=hospital)
 
     income = (
-        Payment.objects.filter(visit__hospital=hospital).aggregate(total=models.Sum("amount_paid"))["total"]
+        Payment.objects.filter(visit__hospital=hospital, visit__status="completed").aggregate(total=models.Sum("amount_paid"))["total"]
         or Decimal("0")
     )
     expenses = Expense.objects.filter(hospital=hospital).aggregate(total=models.Sum("amount"))["total"] or Decimal("0")
@@ -430,36 +430,56 @@ class InventoryItem(models.Model):
                 unit_cost=self.unit_cost or Decimal("0")
             )
 
-    def consume_stock(self, quantity_to_deduct):
+    @property
+    def available_batches(self):
+        return self.batches.filter(quantity__gt=0).order_by(
+            models.F("expiry_date").asc(nulls_last=True),
+            "created_at",
+            "id",
+        )
+
+    def consume_stock(self, quantity_to_deduct, preferred_batch_id=None):
         quantity_to_deduct = Decimal(quantity_to_deduct or 0)
         if quantity_to_deduct <= 0:
             return []
 
         consumption_log = []
-        positive_batches = list(
-            self.batches.filter(quantity__gt=0).order_by(
-                models.F("expiry_date").asc(nulls_last=True),
-                "created_at",
-                "id",
-            )
-        )
-        if not positive_batches:
-            self.current_quantity = (self.current_quantity or Decimal("0")) - quantity_to_deduct
-            self.save(update_fields=["current_quantity", "quantity", "unit_price", "low_stock_threshold"])
-            return consumption_log
-
         remaining = quantity_to_deduct
-        for batch in positive_batches:
-            if remaining <= 0:
-                break
-            available = Decimal(batch.quantity or 0)
-            if available <= 0:
-                continue
-            used = available if available <= remaining else remaining
-            batch.quantity = available - used
-            batch.save(update_fields=["quantity", "updated_at"])
-            consumption_log.append({"batch": batch, "quantity": used})
-            remaining -= used
+
+        # If a preferred batch is provided, try to use it first
+        if preferred_batch_id:
+            try:
+                batch = self.batches.get(pk=preferred_batch_id)
+                available = Decimal(batch.quantity or 0)
+                if available > 0:
+                    used = available if available <= remaining else remaining
+                    batch.quantity = available - used
+                    batch.save(update_fields=["quantity", "updated_at"])
+                    consumption_log.append({"batch": batch, "quantity": used})
+                    remaining -= used
+            except InventoryBatch.DoesNotExist:
+                pass
+
+        if remaining > 0:
+            positive_batches = list(
+                self.batches.filter(quantity__gt=0).exclude(id=preferred_batch_id).order_by(
+                    models.F("expiry_date").asc(nulls_last=True),
+                    "created_at",
+                    "id",
+                )
+            )
+            
+            for batch in positive_batches:
+                if remaining <= 0:
+                    break
+                available = Decimal(batch.quantity or 0)
+                if available <= 0:
+                    continue
+                used = available if available <= remaining else remaining
+                batch.quantity = available - used
+                batch.save(update_fields=["quantity", "updated_at"])
+                consumption_log.append({"batch": batch, "quantity": used})
+                remaining -= used
 
         self.recalculate_current_quantity()
         if remaining > 0:

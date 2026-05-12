@@ -130,7 +130,10 @@ def financial_metric_detail(request, metric):
     period_start = parse_date_param(request.GET.get("start_date"), month_start)
     period_end = parse_date_param(request.GET.get("end_date"), today)
 
-    payments = Payment.objects.filter(visit__hospital=hospital).select_related("visit__patient", "recorded_by")
+    payments = (
+        Payment.objects.filter(visit__hospital=hospital, visit__status=Visit.STATUS_COMPLETED)
+        .select_related("visit__patient", "recorded_by")
+    )
     expenses = Expense.objects.filter(hospital=hospital).select_related("bank_account", "mobile_money_account", "cash_drawer")
     salaries = Salary.objects.filter(hospital=hospital).select_related("employee")
 
@@ -167,8 +170,8 @@ def financial_metric_detail(request, metric):
         context.update(
             {
                 "dashboard_title": "Total Collected (Period)",
-                "definition": "Sum of actual cash received for the selected period (not billed totals).",
-                "formula": "SUM(Payment.amount_paid) for payments in period.",
+                "definition": "Sum of actual cash received for completed visits in the selected period.",
+                "formula": "SUM(Payment.amount_paid) where Visit.status='completed'.",
                 "source_models": "reception.Payment (amount_paid, paid_at, mode).",
                 "records_title": "Receipts in this period",
                 "records_kind": "payments",
@@ -314,8 +317,8 @@ def financial_metric_detail(request, metric):
         context.update(
             {
                 "dashboard_title": "Paid Income (All Time)",
-                "definition": "All money collected so far for this hospital.",
-                "formula": "SUM(Payment.amount_paid).",
+                "definition": "All money collected so far for completed visits in this hospital.",
+                "formula": "SUM(Payment.amount_paid) where Visit.status='completed'.",
                 "source_models": "reception.Payment (amount_paid).",
                 "records_title": "Recent receipts (all time)",
                 "records_kind": "payments",
@@ -935,6 +938,7 @@ def hospital_dashboard(request):
     queue_entries = QueueEntry.objects.filter(hospital=hospital) if hospital else QueueEntry.objects.none()
     users = hospital.users.all() if hospital else User.objects.none()
     payments = Payment.objects.filter(visit__hospital=hospital) if hospital else Payment.objects.none()
+    completed_visit_payments = payments.filter(visit__status=Visit.STATUS_COMPLETED)
     services = Service.objects.filter(hospital=hospital, is_active=True) if hospital else Service.objects.none()
     account = sync_hospital_account_balance(hospital) if hospital else None
     low_stock_items = InventoryItem.objects.filter(hospital=hospital, current_quantity__lte=models.F("reorder_level")) if hospital else InventoryItem.objects.none()
@@ -958,11 +962,11 @@ def hospital_dashboard(request):
         "report_count": reports.count(),
         "draft_reports": reports.filter(printed=False).count(),
         "service_count": services.count(),
-        "total_billed": payments.aggregate(total=Sum("amount"))["total"] or 0,
-        "realized_income": payments.aggregate(total=Sum("amount_paid"))["total"] or 0,
+        "total_billed": completed_visit_payments.aggregate(total=Sum("amount"))["total"] or 0,
+        "realized_income": completed_visit_payments.aggregate(total=Sum("amount_paid"))["total"] or 0,
         "account_balance": account.balance if account else 0,
-        "paid_visits": payments.filter(status=Payment.STATUS_PAID).count(),
-        "pending_payments": payments.exclude(status=Payment.STATUS_WAIVED).exclude(amount_paid=models.F("amount")).count(),
+        "paid_visits": completed_visit_payments.filter(status=Payment.STATUS_PAID).count(),
+        "pending_payments": completed_visit_payments.exclude(status=Payment.STATUS_WAIVED).exclude(amount_paid=models.F("amount")).count(),
         "expense_total": Expense.objects.filter(hospital=hospital).aggregate(total=Sum("amount"))["total"] or 0 if hospital else 0,
         "salary_total": Salary.objects.filter(hospital=hospital, paid=True).aggregate(total=Sum("amount"))["total"] or 0 if hospital else 0,
         "low_stock_count": low_stock_items.count() if hospital else 0,
@@ -981,7 +985,8 @@ def hospital_dashboard(request):
 def financial_report(request):
     hospital = active_hospital(request)
     payments = Payment.objects.filter(visit__hospital=hospital) if hospital else Payment.objects.none()
-    paid_income = payments.aggregate(total=Sum("amount_paid"))["total"] or 0
+    completed_visit_payments = payments.filter(visit__status=Visit.STATUS_COMPLETED)
+    paid_income = completed_visit_payments.aggregate(total=Sum("amount_paid"))["total"] or 0
     expense_total = Expense.objects.filter(hospital=hospital).aggregate(total=Sum("amount"))["total"] or 0 if hospital else 0
     salary_total = Salary.objects.filter(hospital=hospital, paid=True).aggregate(total=Sum("amount"))["total"] or 0 if hospital else 0
     account = sync_hospital_account_balance(hospital) if hospital else None
@@ -1000,9 +1005,9 @@ def financial_report(request):
     except ValueError:
         period_end = today
 
-    payments_today = payments.filter(paid_at__date=today)
-    payments_month = payments.filter(paid_at__date__gte=month_start, paid_at__date__lte=today)
-    payments_period = payments.filter(paid_at__date__gte=period_start, paid_at__date__lte=period_end)
+    payments_today = completed_visit_payments.filter(paid_at__date=today)
+    payments_month = completed_visit_payments.filter(paid_at__date__gte=month_start, paid_at__date__lte=today)
+    payments_period = completed_visit_payments.filter(paid_at__date__gte=period_start, paid_at__date__lte=period_end)
     income_period = payments_period.aggregate(total=Sum("amount_paid"))["total"] or 0
     expenses_period = (
         Expense.objects.filter(hospital=hospital, date__gte=period_start, date__lte=period_end).aggregate(total=Sum("amount"))["total"]
@@ -1032,7 +1037,7 @@ def financial_report(request):
     last_closed_drawer = CashDrawer.objects.filter(hospital=hospital, closed_at__isnull=False).order_by("-date", "-id").first() if hospital else None
 
     recent_receipts = (
-        payments.filter(paid_at__isnull=False)
+        completed_visit_payments.filter(paid_at__isnull=False)
         .select_related("visit__patient", "recorded_by")
         .order_by("-paid_at", "-id")[:8]
         if hospital
@@ -1153,7 +1158,7 @@ def financial_report(request):
     if hospital:
         if report_type in {"income_overview", "cash_collection", "card_payments", "mobile_money"}:
             payments_dash = (
-                payments.filter(paid_at__date__gte=period_start, paid_at__date__lte=period_end)
+                completed_visit_payments.filter(paid_at__date__gte=period_start, paid_at__date__lte=period_end)
                 .exclude(status=Payment.STATUS_WAIVED)
                 .exclude(paid_at__isnull=True)
             )
@@ -1256,7 +1261,7 @@ def financial_report(request):
             chart_kind = "bar"
 
             payments_dash = (
-                payments.filter(paid_at__date__gte=period_start, paid_at__date__lte=period_end)
+                completed_visit_payments.filter(paid_at__date__gte=period_start, paid_at__date__lte=period_end)
                 .exclude(status=Payment.STATUS_WAIVED)
                 .exclude(paid_at__isnull=True)
             )
@@ -2639,7 +2644,7 @@ def receipts_list(request):
         else MobileMoneyAccount.objects.none()
     )
     payments = (
-        Payment.objects.filter(visit__hospital=hospital)
+        Payment.objects.filter(visit__hospital=hospital, visit__status=Visit.STATUS_COMPLETED)
         .select_related("visit__patient", "recorded_by", "bank_account", "mobile_account")
         .prefetch_related("visit__visit_services__service", "bank_transactions", "mobile_money_transactions")
         .order_by("-paid_at", "-id")
