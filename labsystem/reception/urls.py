@@ -12,6 +12,7 @@ urlpatterns = [
     path("dispense/start/", views.quick_dispense_start, name="quick_dispense_start"),
     path("patients/", views.patient_list, name="patient_list"),
     path("patients/new/", views.patient_create, name="patient_create"),
+    path("patients/<int:patient_id>/edit/", views.patient_edit, name="patient_edit"),
     path("patients/<int:patient_id>/delete/", views.patient_delete, name="patient_delete"),
     path("patients/<int:patient_id>/visits/", views.patient_visits, name="patient_visits"),
     path("patients/<int:patient_id>/visit/new/", views.visit_create, name="visit_create"),

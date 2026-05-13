@@ -1,8 +1,14 @@
 {% extends 'base.html' %}
 
-{% block title %}Register Patient - Hospital EMR{% endblock %}
-{% block page_title %}Register Patient{% endblock %}
-{% block page_subtitle %}Capture patient biodata, including weight, before creating a visit and routing care.{% endblock %}
+{% block title %}{% if edit_mode %}Edit Patient{% else %}Register Patient{% endif %} - Hospital EMR{% endblock %}
+{% block page_title %}{% if edit_mode %}Edit Patient{% else %}Register Patient{% endif %}{% endblock %}
+{% block page_subtitle %}
+    {% if edit_mode %}
+        Update patient biodata to correct registration errors.
+    {% else %}
+        Capture patient biodata, including weight, before creating a visit and routing care.
+    {% endif %}
+{% endblock %}
 
 {% block content %}
 <div class="space-y-6 max-w-3xl">
@@ -71,7 +77,7 @@
             </div>
         </div>
 
-        <details class="rounded-lg border border-gray-200 bg-gray-50 p-4">
+        <details class="rounded-lg border border-gray-200 bg-gray-50 p-4" {% if edit_mode %}open{% endif %}>
             <summary class="cursor-pointer text-sm font-semibold text-text-main">Address & Emergency Contact</summary>
             <div class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div class="md:col-span-2">
@@ -92,7 +98,7 @@
             </div>
         </details>
 
-        <details class="rounded-lg border border-gray-200 bg-gray-50 p-4">
+        <details class="rounded-lg border border-gray-200 bg-gray-50 p-4" {% if edit_mode %}open{% endif %}>
             <summary class="cursor-pointer text-sm font-semibold text-text-main">Identification & Insurance</summary>
             <div class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
@@ -119,8 +125,14 @@
         </details>
 
         <div class="flex gap-3 flex-wrap pt-4">
-            <button type="submit" class="btn btn-primary">Save and Continue to Visit</button>
-            <a href="{% url 'patient_list' %}" class="btn btn-secondary">Back to Patients</a>
+            <button type="submit" class="btn btn-primary">
+                {% if edit_mode %}Save Changes{% else %}Save and Continue to Visit{% endif %}
+            </button>
+            {% if edit_mode %}
+                <a href="{% url 'patient_visits' patient.pk %}" class="btn btn-secondary">Cancel</a>
+            {% else %}
+                <a href="{% url 'patient_list' %}" class="btn btn-secondary">Back to Patients</a>
+            {% endif %}
         </div>
     </form>
 </div>

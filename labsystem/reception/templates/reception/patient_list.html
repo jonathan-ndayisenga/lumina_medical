@@ -85,6 +85,7 @@
                     <a href="{% url 'patient_visits' row.patient.pk %}" class="btn btn-secondary">Visits</a>
                     <a href="{% url 'visit_create' row.patient.pk %}" class="btn btn-secondary">+ New Visit</a>
                     {% if request.user.can_access_hospital_admin %}
+                        <a href="{% url 'patient_edit' row.patient.pk %}" class="btn btn-secondary">Edit Bio</a>
                         <a href="{% url 'patient_delete' row.patient.pk %}?next={{ request.get_full_path|urlencode }}" class="btn btn-danger">Delete Patient</a>
                     {% endif %}
                     {% if row.latest_editable_visit %}
@@ -158,6 +159,7 @@
                                 </a>
                                 <a href="{% url 'visit_create' row.patient.pk %}" class="btn btn-secondary btn-sm">+ New Visit</a>
                                 {% if request.user.can_access_hospital_admin %}
+                                    <a href="{% url 'patient_edit' row.patient.pk %}" class="btn btn-secondary btn-sm">Edit Bio</a>
                                     <a href="{% url 'patient_delete' row.patient.pk %}?next={{ request.get_full_path|urlencode }}" class="btn btn-danger btn-sm">Delete Patient</a>
                                 {% endif %}
                                 {% if row.latest_editable_visit %}

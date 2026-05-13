@@ -558,6 +558,55 @@ def patient_create(request):
 
 @reception_role_required
 @transaction.atomic
+def patient_edit(request, patient_id):
+    hospital = get_active_hospital(request)
+    patient = get_object_or_404(Patient, pk=patient_id, hospital=hospital)
+    
+    # Bio data editing is restricted to administrators to ensure clinical data integrity.
+    require_admin_override(request.user)
+
+    if request.method == "POST":
+        form = PatientForm(request.POST, instance=patient)
+        if form.is_valid():
+            changed_data = form.changed_data
+            patient = form.save()
+            
+            if changed_data:
+                record_admin_override(
+                    actor=request.user,
+                    hospital=hospital,
+                    action="edit_patient_bio",
+                    model_name="Patient",
+                    object_id=patient.pk,
+                    details={
+                        "patient_name": patient.name,
+                        "changed_fields": changed_data,
+                    },
+                )
+            
+            messages.success(request, f"Patient {patient.name} bio data updated successfully.")
+            return redirect("patient_visits", patient_id=patient.pk)
+        messages.error(request, "Please fix the patient details below.")
+    else:
+        form = PatientForm(instance=patient)
+    
+    return render(
+        request,
+        "reception/patient_form.html",
+        {
+            "active_nav": "reception_patients",
+            "dashboard_title": "Edit Patient Bio Data",
+            "dashboard_intro": f"Updating records for {patient.name}. Ensure accuracy as these changes affect clinical history.",
+            "hospital": hospital,
+            "form": form,
+            "patient": patient,
+            "edit_mode": True,
+        },
+    )
+
+
+@reception_role_required
+@transaction.atomic
 def patient_delete(request, patient_id):
     hospital = get_active_hospital(request)
     patient = get_object_or_404(

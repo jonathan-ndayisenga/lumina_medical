@@ -49,6 +49,7 @@
         </div>
         {% if request.user.can_access_hospital_admin %}
             <div class="mt-4 flex flex-wrap gap-2">
+                <a href="{% url 'patient_edit' patient.pk %}" class="btn btn-secondary btn-sm">Edit Bio Data</a>
                 <a href="{% url 'patient_delete' patient.pk %}?next={{ request.get_full_path|urlencode }}" class="btn btn-danger btn-sm">Delete Patient</a>
             </div>
         {% endif %}
