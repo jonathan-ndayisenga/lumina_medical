@@ -1,4 +1,4 @@
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 import re
 
 from django import forms
@@ -17,7 +17,8 @@ AGE_UNIT_CHOICES = [
 
 def split_age(age_text):
     raw = (age_text or "").strip().upper()
-    match = re.match(r"^\s*(\d+)\s*([A-Z]+)?\s*$", raw)
+    # Support decimals in age string (e.g. 1.5YRS)
+    match = re.match(r"^\s*(\d*\.?\d+)\s*([A-Z]+)?\s*$", raw)
     if not match:
         return "", "YRS"
     return match.group(1), (match.group(2) or "YRS")
@@ -34,7 +35,7 @@ class PatientForm(forms.ModelForm):
         widget=forms.DateInput(attrs={"type": "date", "class": "form-control"}),
         help_text="Optional. If you enter age instead, the system can approximate date of birth.",
     )
-    age_value = forms.IntegerField(min_value=0, label="Age", required=False)
+    age_value = forms.DecimalField(min_value=0, max_digits=5, decimal_places=2, label="Age", required=False)
     age_unit = forms.ChoiceField(choices=AGE_UNIT_CHOICES, label="Unit", required=False)
 
     class Meta:
@@ -98,12 +99,20 @@ class PatientForm(forms.ModelForm):
 
         today = timezone.localdate()
 
-        if dob:
+        # Prioritize manual age entry if it was explicitly changed in the form
+        # This allows users to keep "18 months" even if the system would prefer "1.5 years"
+        age_manually_entered = False
+        if "age_value" in self.changed_data or "age_unit" in self.changed_data:
+            age_manually_entered = True
+
+        if dob and not age_manually_entered:
             # Compute and store age string from DOB (years or months).
             years = today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day))
             if years >= 1:
+                # If it's a whole number of years, use YRS, otherwise use MTH for better precision if preferred
+                # But for DOB calculation, we usually default to YRS if >= 1
                 cleaned["age"] = f"{years}YRS"
-                cleaned["age_value"] = years
+                cleaned["age_value"] = Decimal(str(years))
                 cleaned["age_unit"] = "YRS"
             else:
                 months = (today.year - dob.year) * 12 + (today.month - dob.month)
@@ -111,17 +120,18 @@ class PatientForm(forms.ModelForm):
                     months -= 1
                 months = max(months, 0)
                 cleaned["age"] = f"{months}MTH"
-                cleaned["age_value"] = months
+                cleaned["age_value"] = Decimal(str(months))
                 cleaned["age_unit"] = "MTH"
         else:
-            # Age -> approximate DOB (Jan 1 for years, 1st of month for months).
+            # Age -> approximate DOB
             try:
-                age_value_int = int(age_value)
-            except (TypeError, ValueError):
-                age_value_int = None
-            if age_value_int is not None:
+                age_val_decimal = Decimal(str(age_value))
+            except (TypeError, ValueError, InvalidOperation):
+                age_val_decimal = None
+                
+            if age_val_decimal is not None:
                 if age_unit == "MTH":
-                    total_months = age_value_int
+                    total_months = int(age_val_decimal)
                     year = today.year
                     month = today.month - total_months
                     while month <= 0:
@@ -129,8 +139,19 @@ class PatientForm(forms.ModelForm):
                         year -= 1
                     cleaned["date_of_birth"] = timezone.datetime(year, month, 1).date()
                 else:
-                    cleaned["date_of_birth"] = timezone.datetime(today.year - age_value_int, 1, 1).date()
-                cleaned["age"] = f"{age_value_int}{age_unit}"
+                    # Handle decimal years (e.g. 1.5 years = 18 months)
+                    total_months = int(age_val_decimal * 12)
+                    year = today.year
+                    month = today.month - total_months
+                    while month <= 0:
+                        month += 12
+                        year -= 1
+                    cleaned["date_of_birth"] = timezone.datetime(year, month, 1).date()
+                
+                # Store the exact string as entered (e.g. 1.5YRS or 18MTH)
+                # Remove trailing zeros for clean display if it's a whole number
+                age_str = format(age_val_decimal.normalize(), 'f')
+                cleaned["age"] = f"{age_str}{age_unit}"
         return cleaned
 
 

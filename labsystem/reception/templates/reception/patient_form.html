@@ -150,15 +150,17 @@
 
     function updateDobFromAge() {
         if (!dob || !ageValue) return;
-        const val = parseInt(ageValue.value || "", 10);
+        const val = parseFloat(ageValue.value || "");
         if (Number.isNaN(val)) return;
         const unit = (ageUnit && ageUnit.value) ? ageUnit.value : "YRS";
         const today = new Date();
         if (unit === "MTH") {
-            const d = new Date(today.getFullYear(), today.getMonth() - val, 1);
+            const d = new Date(today.getFullYear(), today.getMonth() - Math.floor(val), 1);
             dob.value = fmtDate(d);
         } else {
-            const d = new Date(today.getFullYear() - val, 0, 1);
+            // Handle decimal years by converting to months
+            const totalMonths = Math.floor(val * 12);
+            const d = new Date(today.getFullYear(), today.getMonth() - totalMonths, 1);
             dob.value = fmtDate(d);
         }
     }
@@ -174,8 +176,17 @@
         const m = today.getMonth() - d.getMonth();
         if (m < 0 || (m === 0 && today.getDate() < d.getDate())) years--;
         if (years >= 1) {
-            ageValue.value = String(years);
-            ageUnit.value = "YRS";
+            // Only force-convert to YRS if the field is empty or already in YRS.
+            // This allows keeping "18 months" if the user has manually selected MTH.
+            if (!ageValue.value || ageUnit.value === "YRS") {
+                ageValue.value = String(years);
+                ageUnit.value = "YRS";
+            } else {
+                let months = (today.getFullYear() - d.getFullYear()) * 12 + (today.month - d.getMonth());
+                if (today.getDate() < d.getDate()) months--;
+                months = Math.max(months, 0);
+                ageValue.value = String(months);
+            }
         } else {
             let months = (today.getFullYear() - d.getFullYear()) * 12 + (today.getMonth() - d.getMonth());
             if (today.getDate() < d.getDate()) months--;
