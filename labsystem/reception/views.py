@@ -481,7 +481,7 @@ def patient_list(request):
         Patient.objects.filter(hospital=hospital)
         .annotate(visit_count=Count("visits"), last_visit_date=Max("visits__visit_date"))
         .prefetch_related("visits__queue_entries", "visits__visit_services__service")
-        .order_by("name")
+        .order_by("-created_at")
         if hospital
         else Patient.objects.none()
     )
