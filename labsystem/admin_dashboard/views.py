@@ -545,19 +545,19 @@ def inventory_dashboard_snapshot(hospital):
     )
     monthly_expense_rows = (
         Expense.objects.filter(hospital=hospital, date__gte=period_start)
-        .annotate(month=TruncMonth("date"))
-        .values("month")
+        .annotate(trunc_month=TruncMonth("date"))
+        .values("trunc_month")
         .annotate(total=Sum("amount"))
     )
     monthly_salary_rows = (
         Salary.objects.filter(hospital=hospital, paid=True, paid_at__gte=period_start)
-        .annotate(month=TruncMonth("paid_at"))
-        .values("month")
+        .annotate(trunc_month=TruncMonth("paid_at"))
+        .values("trunc_month")
         .annotate(total=Sum("amount"))
     )
 
     def _month_key(row):
-        m = row["month"]
+        m = row.get("trunc_month") or row.get("month")
         return m.date() if hasattr(m, "date") else m
 
     income_map = {_month_key(r): Decimal(r["total"] or 0) for r in monthly_income_rows}
@@ -1365,7 +1365,7 @@ def financial_report(request):
                     dispensed_at__date__gte=period_start,
                     dispensed_at__date__lte=period_end,
                 )
-                .select_related("visit__patient", "inventory_item")
+                .select_related("visit__patient", "drug")
             )
             daily = (
                 pharma_dash.annotate(day=TruncDate("dispensed_at"))
@@ -1381,7 +1381,7 @@ def financial_report(request):
                 day = rx.dispensed_at.date() if rx.dispensed_at else None
                 if not day:
                     continue
-                item_name = str(rx.inventory_item) if rx.inventory_item_id else "Unknown Drug"
+                item_name = str(rx.drug) if rx.drug_id else "Unknown Drug"
                 key = (day, "pharmacy", item_name)
                 grouped[key] = grouped.get(key, Decimal("0")) + (rx.total_price or Decimal("0"))
             for (day, mode_value, account_label), amount_value in sorted(grouped.items(), key=lambda item: item[0][0], reverse=True)[:200]:
