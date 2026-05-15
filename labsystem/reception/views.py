@@ -1003,6 +1003,12 @@ def complete_visit(request, visit_id):
             amount_paid = form.cleaned_data["amount_paid"]
             payment_mode = form.cleaned_data["payment_mode"]
 
+            # Save WhatsApp number to visit if provided (or cleared).
+            wa_number = (form.cleaned_data.get("whatsapp_number") or "").strip()
+            if wa_number != visit.whatsapp_number:
+                visit.whatsapp_number = wa_number
+                visit.save(update_fields=["whatsapp_number"])
+
             # Cash receipts are mirrored to the daily cash statement automatically in Payment.save().
 
             payment = Payment(
@@ -1188,6 +1194,9 @@ def print_receipt(request, visit_id):
 @reception_role_required
 def print_payment_receipt(request, payment_id):
     """Print a receipt for a specific payment (supports partial payments)."""
+    import re
+    from urllib.parse import quote
+
     hospital = get_active_hospital(request)
     payment = get_object_or_404(
         Payment.objects.select_related("visit__patient", "visit__hospital", "bank_account", "mobile_account", "recorded_by"),
@@ -1196,6 +1205,31 @@ def print_payment_receipt(request, payment_id):
     )
     visit = payment.visit
     payments = visit.payments.select_related("bank_account", "mobile_account", "recorded_by").order_by("-paid_at", "-id")
+
+    # Build WhatsApp deep-link if a number was collected.
+    wa_link = ""
+    raw_number = (visit.whatsapp_number or "").strip()
+    if raw_number:
+        clean_number = re.sub(r"[^\d+]", "", raw_number).lstrip("+")
+        services_lines = "\n".join(
+            f"  - {vs.service.name}: {vs.price_at_time}"
+            for vs in visit.visit_services.select_related("service").all()
+        )
+        hospital_name = visit.hospital.name if visit.hospital else "Lumina Medical"
+        receipt_text = (
+            f"*{hospital_name} Receipt*\n"
+            f"Receipt #: {payment.receipt_number}\n"
+            f"Date: {payment.paid_at.strftime('%Y-%m-%d %H:%M') if payment.paid_at else '-'}\n"
+            f"Patient: {visit.patient.name}\n\n"
+            f"*Services:*\n{services_lines}\n\n"
+            f"Total: {visit.total_amount}\n"
+            f"Paid: {payment.amount_paid}\n"
+            f"Balance: {visit.balance_due}\n\n"
+            f"Mode: {payment.get_mode_display()}\n"
+            f"Thank you! Get well soon."
+        )
+        wa_link = f"https://wa.me/{clean_number}?text={quote(receipt_text)}"
+
     return render(
         request,
         "reception/payment_receipt.html",
@@ -1206,6 +1240,7 @@ def print_payment_receipt(request, payment_id):
             "payments": payments,
             "total_paid": visit.total_paid,
             "balance_due": visit.balance_due,
+            "wa_link": wa_link,
         },
     )
 

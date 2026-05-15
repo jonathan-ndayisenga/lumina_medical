@@ -82,7 +82,7 @@
         }
 
         @media print {
-            button { display: none; }
+            button, a { display: none; }
         }
     </style>
 </head>
@@ -141,6 +141,11 @@
     <div class="center">Thank you</div>
     <div class="center">Get well soon</div>
 
+    {% if wa_link %}
+    <a href="{{ wa_link }}" target="_blank" rel="noopener noreferrer" style="display:block;width:100%;margin-top:4px;padding:4px 0;font-size:12px;line-height:1.2;text-align:center;background:#25d366;color:#fff;text-decoration:none;font-family:monospace;border:none;">
+        Send Receipt via WhatsApp
+    </a>
+    {% endif %}
     <button onclick="window.print()">Print Receipt</button>
 
 </body>

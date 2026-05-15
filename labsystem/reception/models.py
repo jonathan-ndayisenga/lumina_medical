@@ -94,6 +94,7 @@ class Visit(models.Model):
         related_name="created_visits",
     )
     notes = models.TextField(blank=True)
+    whatsapp_number = models.CharField(max_length=20, blank=True, default="")
 
     class Meta:
         ordering = ["-visit_date"]

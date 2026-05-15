@@ -253,6 +253,23 @@
                 {{ form.payment_notes }}
                 {% for error in form.payment_notes.errors %}<div class="text-xs text-red-600 mt-1">{{ error }}</div>{% endfor %}
             </div>
+            <div>
+                <label for="{{ form.whatsapp_number.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">
+                    WhatsApp Number
+                    <span class="ml-1 text-xs font-normal text-text-muted">(optional — receipt will be ready to send after payment)</span>
+                </label>
+                <input
+                    type="tel"
+                    id="{{ form.whatsapp_number.id_for_label }}"
+                    name="whatsapp_number"
+                    value="{{ visit.whatsapp_number|default:visit.patient.contact }}"
+                    class="form-control"
+                    placeholder="e.g. +256700000000"
+                    maxlength="20"
+                >
+                {% for error in form.whatsapp_number.errors %}<div class="text-xs text-red-600 mt-1">{{ error }}</div>{% endfor %}
+                <p class="mt-1 text-xs text-text-muted">Pre-filled from patient contact. Clear to skip WhatsApp delivery.</p>
+            </div>
             <div class="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-text-main">
                 Current balance due before this receipt: {{ balance_due }}
             </div>

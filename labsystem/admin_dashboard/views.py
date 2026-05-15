@@ -1717,7 +1717,7 @@ def deactivate_user(request, user_id):
 @role_required(User.ROLE_HOSPITAL_ADMIN)
 def manage_services(request):
     hospital = active_hospital(request)
-    services = Service.objects.filter(hospital=hospital).order_by("category", "name") if hospital else Service.objects.none()
+    services_qs = Service.objects.filter(hospital=hospital).order_by("category", "name") if hospital else Service.objects.none()
 
     if request.method == "POST":
         form = HospitalServiceForm(request.POST)
@@ -1731,13 +1731,16 @@ def manage_services(request):
     else:
         form = HospitalServiceForm()
 
+    paginator = Paginator(services_qs, 20)
+    page_obj = paginator.get_page(request.GET.get("page"))
+
     context = hospital_admin_context(
         request,
         "hospital_services",
         "Services and Prices",
         "Configure the services this hospital offers and what each one costs.",
     )
-    context.update({"services": services, "form": form})
+    context.update({"services": page_obj, "page_obj": page_obj, "form": form})
     return render(request, "admin_dashboard/manage_services.html", context)
 
 

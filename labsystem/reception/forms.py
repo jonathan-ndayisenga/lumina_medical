@@ -392,6 +392,12 @@ class CompleteVisitForm(forms.Form):
         label="Mobile money account",
     )
     payment_notes = forms.CharField(widget=forms.Textarea(attrs={"rows": 3, "class": "form-control"}), required=False)
+    whatsapp_number = forms.CharField(
+        max_length=20,
+        required=False,
+        label="WhatsApp Number (optional)",
+        widget=forms.TextInput(attrs={"class": "form-control", "placeholder": "e.g. +256700000000"}),
+    )
 
     def __init__(self, *args, remaining_balance=Decimal("0"), hospital=None, **kwargs):
         super().__init__(*args, **kwargs)
