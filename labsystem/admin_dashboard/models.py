@@ -49,6 +49,8 @@ class Expense(models.Model):
     CATEGORY_CONSUMABLES = "consumables"
     CATEGORY_MAINTENANCE = "maintenance"
     CATEGORY_LOGISTICS = "logistics"
+    CATEGORY_MEDICINE = "medicine"
+    CATEGORY_SALARY = "salary"
     CATEGORY_OTHER = "other"
 
     CATEGORY_CHOICES = [
@@ -57,6 +59,8 @@ class Expense(models.Model):
         (CATEGORY_CONSUMABLES, "Consumables"),
         (CATEGORY_MAINTENANCE, "Maintenance"),
         (CATEGORY_LOGISTICS, "Logistics"),
+        (CATEGORY_MEDICINE, "Medicine"),
+        (CATEGORY_SALARY, "Salary"),
         (CATEGORY_OTHER, "Other"),
     ]
 

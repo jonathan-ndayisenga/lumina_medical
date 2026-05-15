@@ -2,7 +2,7 @@
 
 {% block title %}Inventory Insights - Lumina{% endblock %}
 {% block page_title %}Inventory Insights{% endblock %}
-{% block page_subtitle %}Watch the restock list, sales trend, and category mix without crowding the stock-entry page.{% endblock %}
+{% block page_subtitle %}Watch the restock list, pharmacy income, and category mix without crowding the stock-entry page.{% endblock %}
 {% block content_container_classes %}max-w-[110rem] mx-auto px-4 lg:px-8 py-6{% endblock %}
 
 {% block content %}
@@ -32,24 +32,21 @@
 
     <div class="space-y-6">
         <div class="card border border-gray-100 shadow-none">
-            <h3 class="text-lg font-bold text-text-main">Inventory Sales Trend</h3>
-            <p class="mt-1 text-sm text-text-muted">A quick view of dispensed prescription value over the last few months.</p>
-            <div class="mt-4">
-                {% if monthly_sales %}
-                    <div class="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6 xl:gap-4">
-                        {% for month in monthly_sales %}
-                            <div class="rounded-xl border border-gray-100 bg-white px-4 py-5 text-center">
-                                <div class="mx-auto mb-4 flex h-36 w-full max-w-[5.5rem] items-end">
-                                    <div class="w-full rounded-t-lg bg-indigo-500" style="height: {% if month.height_pct %}{{ month.height_pct }}%{% else %}6%{% endif %}; min-height: 12px;"></div>
-                                </div>
-                                <p class="text-sm font-semibold text-text-main">{{ month.label }}</p>
-                                <p class="mt-2 text-sm font-bold text-text-main">UGX {{ month.amount }}</p>
-                            </div>
-                        {% endfor %}
-                    </div>
-                {% else %}
-                    <p class="text-sm text-text-muted italic">Sales bars will appear after prescriptions start being dispensed.</p>
-                {% endif %}
+            <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+                <div>
+                    <h3 class="text-lg font-bold text-text-main" id="incomeChartTitle">Pharmacy Income</h3>
+                    <p class="text-sm text-text-muted" id="incomeChartSubtitle">Monthly revenue from dispensed prescriptions over the last 6 months.</p>
+                </div>
+                <div>
+                    <label for="incomeChartFilter" class="text-xs font-semibold text-text-muted mr-2">View:</label>
+                    <select id="incomeChartFilter" class="form-control form-control-sm text-sm">
+                        <option value="pharmacy">Pharmacy Income</option>
+                        <option value="net_profit">Net Profit</option>
+                    </select>
+                </div>
+            </div>
+            <div class="h-72">
+                <canvas id="pharmacyIncomeChart" aria-label="Pharmacy income chart" role="img"></canvas>
             </div>
         </div>
 
@@ -125,4 +122,71 @@
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+<script>
+(function () {
+    const labels = {{ pharma_chart_labels_json|safe }};
+    const pharmacyValues = {{ pharma_chart_values_json|safe }}.map(Number);
+    const netProfitValues = {{ net_profit_chart_values_json|safe }}.map(Number);
+
+    const ctx = document.getElementById('pharmacyIncomeChart');
+    if (!ctx) return;
+
+    const chart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Pharmacy Income (UGX)',
+                data: pharmacyValues,
+                borderWidth: 2,
+                borderColor: '#0f3b5f',
+                backgroundColor: 'rgba(15, 59, 95, 0.18)',
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: true }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: { precision: 0 }
+                }
+            }
+        }
+    });
+
+    const filterEl = document.getElementById('incomeChartFilter');
+    const titleEl = document.getElementById('incomeChartTitle');
+    const subtitleEl = document.getElementById('incomeChartSubtitle');
+
+    if (filterEl) {
+        filterEl.addEventListener('change', function () {
+            const mode = this.value;
+            if (mode === 'net_profit') {
+                chart.data.datasets[0].label = 'Net Profit (UGX)';
+                chart.data.datasets[0].data = netProfitValues;
+                chart.data.datasets[0].backgroundColor = netProfitValues.map(v => v >= 0 ? 'rgba(15, 59, 95, 0.18)' : 'rgba(220,38,38,0.18)');
+                chart.data.datasets[0].borderColor = netProfitValues.map(v => v >= 0 ? '#0f3b5f' : '#dc2626');
+                titleEl.textContent = 'Net Profit';
+                subtitleEl.textContent = 'Monthly net profit (income − expenses − salaries) over the last 6 months.';
+            } else {
+                chart.data.datasets[0].label = 'Pharmacy Income (UGX)';
+                chart.data.datasets[0].data = pharmacyValues;
+                chart.data.datasets[0].backgroundColor = 'rgba(15, 59, 95, 0.18)';
+                chart.data.datasets[0].borderColor = '#0f3b5f';
+                titleEl.textContent = 'Pharmacy Income';
+                subtitleEl.textContent = 'Monthly revenue from dispensed prescriptions over the last 6 months.';
+            }
+            chart.update();
+        });
+    }
+})();
+</script>
 {% endblock %}

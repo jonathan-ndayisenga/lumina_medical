@@ -3,6 +3,7 @@ from decimal import Decimal
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied, ValidationError
+from django.core.paginator import Paginator
 from django.db import transaction
 from django.db.models import Count, Max, Q
 from django.shortcuts import get_object_or_404, redirect, render
@@ -477,7 +478,7 @@ def quick_dispense_start(request):
 @reception_role_required
 def patient_list(request):
     hospital = get_active_hospital(request)
-    patients = (
+    patients_qs = (
         Patient.objects.filter(hospital=hospital)
         .annotate(visit_count=Count("visits"), last_visit_date=Max("visits__visit_date"))
         .prefetch_related("visits__queue_entries", "visits__visit_services__service")
@@ -487,13 +488,15 @@ def patient_list(request):
     )
     query = (request.GET.get("q") or "").strip()
     if query:
-        patients = patients.filter(
+        patients_qs = patients_qs.filter(
             Q(name__icontains=query)
             | Q(contact__icontains=query)
             | Q(age__icontains=query)
         )
+    paginator = Paginator(patients_qs, 25)
+    page_obj = paginator.get_page(request.GET.get("page"))
     patient_rows = []
-    for patient in patients:
+    for patient in page_obj:
         visits = list(patient.visits.all())
         latest_editable_visit = next(
             (
@@ -519,6 +522,7 @@ def patient_list(request):
             "dashboard_intro": "Search returning patients, review prior visits, and start a new visit when they arrive.",
             "hospital": hospital,
             "patient_rows": patient_rows,
+            "page_obj": page_obj,
             "query": query,
         },
     )

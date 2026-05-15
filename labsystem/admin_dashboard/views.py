@@ -530,9 +530,61 @@ def inventory_dashboard_snapshot(hospital):
         monthly_sales.append({"label": cursor.strftime("%b %Y"), "amount": amount})
         next_month = (cursor.replace(day=28) + timedelta(days=4)).replace(day=1)
         cursor = next_month
-    sales_max = max((entry["amount"] for entry in monthly_sales), default=Decimal("0"))
-    for entry in monthly_sales:
-        entry["height_pct"] = float((entry["amount"] / sales_max) * 100) if sales_max else 0
+
+    # Net profit per month (pharmacy sales - expenses - salaries) for the same window
+    from reception.models import Payment as _Payment
+    monthly_income_rows = (
+        _Payment.objects.filter(
+            visit__hospital=hospital,
+            visit__status="completed",
+            paid_at__date__gte=period_start,
+        )
+        .annotate(month=TruncMonth("paid_at"))
+        .values("month")
+        .annotate(total=Sum("amount_paid"))
+    )
+    monthly_expense_rows = (
+        Expense.objects.filter(hospital=hospital, date__gte=period_start)
+        .annotate(month=TruncMonth("date"))
+        .values("month")
+        .annotate(total=Sum("amount"))
+    )
+    monthly_salary_rows = (
+        Salary.objects.filter(hospital=hospital, paid=True, paid_at__gte=period_start)
+        .annotate(month=TruncMonth("paid_at"))
+        .values("month")
+        .annotate(total=Sum("amount"))
+    )
+
+    def _month_key(row):
+        m = row["month"]
+        return m.date() if hasattr(m, "date") else m
+
+    income_map = {_month_key(r): Decimal(r["total"] or 0) for r in monthly_income_rows}
+    expense_map = {_month_key(r): Decimal(r["total"] or 0) for r in monthly_expense_rows}
+    salary_map = {_month_key(r): Decimal(r["total"] or 0) for r in monthly_salary_rows}
+
+    pharma_chart_labels = [m["label"] for m in monthly_sales]
+    pharma_chart_values = [str(m["amount"]) for m in monthly_sales]
+    net_profit_chart_values = []
+    for m in monthly_sales:
+        key = None
+        for ms in monthly_sales:
+            if ms["label"] == m["label"]:
+                break
+        # derive the date key for this label
+        from datetime import date as _date
+        import calendar as _calendar
+        for k in income_map.keys() | expense_map.keys() | salary_map.keys() | monthly_map.keys():
+            if k.strftime("%b %Y") == m["label"]:
+                key = k
+                break
+        if key is None:
+            for ms_entry in monthly_sales:
+                if ms_entry["label"] == m["label"]:
+                    break
+        net = income_map.get(key, Decimal("0")) - expense_map.get(key, Decimal("0")) - salary_map.get(key, Decimal("0")) if key else Decimal("0")
+        net_profit_chart_values.append(str(net))
 
     stats = {
         "total_items": total_items,
@@ -552,6 +604,9 @@ def inventory_dashboard_snapshot(hospital):
         "restock_items": out_of_stock_items[:8] or low_stock_items[:8],
         "out_of_stock_items": out_of_stock_items,
         "low_stock_items": low_stock_items,
+        "pharma_chart_labels_json": json.dumps(pharma_chart_labels),
+        "pharma_chart_values_json": json.dumps(pharma_chart_values),
+        "net_profit_chart_values_json": json.dumps(net_profit_chart_values),
     }
 
 
@@ -1122,6 +1177,7 @@ def financial_report(request):
         ("cash_collection", "Cash Collection"),
         ("card_payments", "Card Payments"),
         ("mobile_money", "Mobile Money Payments"),
+        ("pharmacy_income", "Pharmacy Income"),
         ("expenses", "Expenses"),
         ("salaries", "Salaries"),
         ("net_profit", "Net Profit"),
@@ -1296,6 +1352,40 @@ def financial_report(request):
                 append_summary(timezone.datetime.fromisoformat(label).date(), Decimal(value), "net_profit", "Income - Expenses - Salaries")
                 if len(summary_rows) >= 60:
                     break
+
+        elif report_type == "pharmacy_income":
+            from doctor.models import Prescription
+            chart_title = "Pharmacy Income"
+            chart_series_label = "Pharmacy sales (dispensed)"
+            chart_kind = "bar"
+            pharma_dash = (
+                Prescription.objects.filter(
+                    visit__hospital=hospital,
+                    dispensed=True,
+                    dispensed_at__date__gte=period_start,
+                    dispensed_at__date__lte=period_end,
+                )
+                .select_related("visit__patient", "inventory_item")
+            )
+            daily = (
+                pharma_dash.annotate(day=TruncDate("dispensed_at"))
+                .values("day")
+                .annotate(total=Sum("total_price"))
+                .order_by("day")
+            )
+            chart_labels = [row["day"].isoformat() for row in daily if row["day"]]
+            chart_values = [str(row["total"] or 0) for row in daily]
+
+            grouped = {}
+            for rx in pharma_dash.order_by("-dispensed_at", "-id")[:800]:
+                day = rx.dispensed_at.date() if rx.dispensed_at else None
+                if not day:
+                    continue
+                item_name = str(rx.inventory_item) if rx.inventory_item_id else "Unknown Drug"
+                key = (day, "pharmacy", item_name)
+                grouped[key] = grouped.get(key, Decimal("0")) + (rx.total_price or Decimal("0"))
+            for (day, mode_value, account_label), amount_value in sorted(grouped.items(), key=lambda item: item[0][0], reverse=True)[:200]:
+                append_summary(day, amount_value, mode_value, account_label)
 
     context = {
         "active_nav": "hospital_financials",
@@ -1701,7 +1791,7 @@ def delete_service(request, service_id):
 @hospital_admin_only
 def manage_expenses(request):
     hospital = active_hospital(request)
-    expenses = (
+    expenses_qs = (
         Expense.objects.filter(hospital=hospital)
         .select_related("bank_account", "mobile_money_account", "cash_drawer")
         .order_by("-date", "-id")
@@ -1721,13 +1811,34 @@ def manage_expenses(request):
     else:
         form = ExpenseForm(hospital=hospital)
 
+    category_totals_qs = (
+        Expense.objects.filter(hospital=hospital)
+        .values("category")
+        .annotate(total=Sum("amount"))
+        .order_by("-total")
+        if hospital
+        else []
+    )
+    category_label_map = dict(Expense.CATEGORY_CHOICES)
+    chart_labels = [category_label_map.get(row["category"], row["category"]) for row in category_totals_qs]
+    chart_values = [str(row["total"] or 0) for row in category_totals_qs]
+
+    paginator = Paginator(expenses_qs, 20)
+    page_obj = paginator.get_page(request.GET.get("page"))
+
     context = hospital_admin_context(
         request,
         "hospital_expenses",
         "Expenses",
         "Track operational costs such as rent, utilities, consumables, and other outflows.",
     )
-    context.update({"expenses": expenses[:20], "form": form})
+    context.update({
+        "expenses": page_obj,
+        "page_obj": page_obj,
+        "form": form,
+        "chart_labels_json": json.dumps(chart_labels),
+        "chart_values_json": json.dumps(chart_values),
+    })
     return render(request, "admin_dashboard/manage_expenses.html", context)
 
 
@@ -1781,7 +1892,7 @@ def delete_expense(request, expense_id):
 @role_required(User.ROLE_HOSPITAL_ADMIN)
 def manage_salaries(request):
     hospital = active_hospital(request)
-    salaries = Salary.objects.filter(hospital=hospital).select_related("employee").order_by("-month", "-id") if hospital else Salary.objects.none()
+    salaries_qs = Salary.objects.filter(hospital=hospital).select_related("employee").order_by("-month", "-id") if hospital else Salary.objects.none()
 
     if request.method == "POST":
         form = SalaryForm(request.POST, hospital=hospital)
@@ -1795,13 +1906,16 @@ def manage_salaries(request):
     else:
         form = SalaryForm(hospital=hospital)
 
+    paginator = Paginator(salaries_qs, 20)
+    page_obj = paginator.get_page(request.GET.get("page"))
+
     context = hospital_admin_context(
         request,
         "hospital_salaries",
         "Salaries",
         "Track payroll obligations and paid salary entries for hospital staff.",
     )
-    context.update({"salaries": salaries[:20], "form": form})
+    context.update({"salaries": page_obj, "page_obj": page_obj, "form": form})
     return render(request, "admin_dashboard/manage_salaries.html", context)
 
 

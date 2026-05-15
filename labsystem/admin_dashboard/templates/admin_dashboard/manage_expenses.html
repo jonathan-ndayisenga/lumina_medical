@@ -26,8 +26,18 @@
         </form>
     </div>
 
+    {% if chart_labels_json != '[]' %}
+    <div class="card border border-gray-100 shadow-none">
+        <h3 class="text-lg font-bold text-text-main mb-1">Spending by Category</h3>
+        <p class="text-sm text-text-muted mb-4">Total expenses grouped by category — see where most money is going.</p>
+        <div class="h-72">
+            <canvas id="expenseCategoryChart" aria-label="Expenses by category" role="img"></canvas>
+        </div>
+    </div>
+    {% endif %}
+
     <div class="card">
-        <h3 class="text-lg font-bold text-text-main mb-4">Recent Expenses</h3>
+        <h3 class="text-lg font-bold text-text-main mb-4">Expenses</h3>
         <div class="overflow-x-auto">
             <table class="w-full text-sm">
                 <thead class="bg-gray-50 border-b">
@@ -44,10 +54,18 @@
                 <tbody class="divide-y">
                     {% for expense in expenses %}
                         <tr class="hover:bg-gray-50">
-                            <td class="px-3 py-3 text-text-muted">{{ expense.date }} </td>
+                            <td class="px-3 py-3 text-text-muted">{{ expense.date }}</td>
                             <td class="px-3 py-3 text-text-main font-semibold">{{ expense.description }}</td>
                             <td class="px-3 py-3">
-                                <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-800">
+                                <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold
+                                    {% if expense.category == 'medicine' %}bg-blue-50 text-blue-700
+                                    {% elif expense.category == 'rent' %}bg-purple-50 text-purple-700
+                                    {% elif expense.category == 'utilities' %}bg-yellow-50 text-yellow-700
+                                    {% elif expense.category == 'consumables' %}bg-teal-50 text-teal-700
+                                    {% elif expense.category == 'maintenance' %}bg-orange-50 text-orange-700
+                                    {% elif expense.category == 'logistics' %}bg-indigo-50 text-indigo-700
+                                    {% elif expense.category == 'salary' %}bg-green-50 text-green-700
+                                    {% else %}bg-gray-100 text-gray-800{% endif %}">
                                     {{ expense.get_category_display }}
                                 </span>
                             </td>
@@ -73,6 +91,65 @@
                 </tbody>
             </table>
         </div>
+
+        {% if page_obj.paginator.num_pages > 1 %}
+        <div class="mt-4 flex items-center justify-between gap-3 flex-wrap">
+            <p class="text-xs text-text-muted">
+                Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }} &mdash; {{ page_obj.paginator.count }} total expense{{ page_obj.paginator.count|pluralize }}
+            </p>
+            <div class="flex gap-2 flex-wrap">
+                {% if page_obj.has_previous %}
+                    <a href="?page=1" class="btn btn-secondary btn-sm">First</a>
+                    <a href="?page={{ page_obj.previous_page_number }}" class="btn btn-secondary btn-sm">Previous</a>
+                {% endif %}
+                {% if page_obj.has_next %}
+                    <a href="?page={{ page_obj.next_page_number }}" class="btn btn-secondary btn-sm">Next</a>
+                    <a href="?page={{ page_obj.paginator.num_pages }}" class="btn btn-secondary btn-sm">Last</a>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
     </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+{% if chart_labels_json != '[]' %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+<script>
+(function () {
+    const labels = {{ chart_labels_json|safe }};
+    const values = {{ chart_values_json|safe }}.map(Number);
+    const ctx = document.getElementById('expenseCategoryChart');
+    if (!ctx) return;
+
+    new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Total Spent (UGX)',
+                data: values,
+                borderWidth: 2,
+                borderColor: '#0f3b5f',
+                backgroundColor: 'rgba(15, 59, 95, 0.18)',
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: true }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: { precision: 0 }
+                }
+            }
+        }
+    });
+})();
+</script>
+{% endif %}
 {% endblock %}
