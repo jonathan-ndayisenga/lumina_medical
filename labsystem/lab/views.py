@@ -182,7 +182,9 @@ def ensure_report_for_visit_service(visit_service, *, attendant=None):
         patient_sex=patient.sex,
         referred_by=referred_by,
         sample_date=timezone.now().date(),
-        specimen_type=(profile.default_specimen_type if profile and profile.default_specimen_type else "BLOOD"),
+        specimen_type=(profile.default_specimen_type if profile and profile.default_specimen_type else (
+            "" if (profile and profile.code == "manual_simple") else "BLOOD"
+        )),
         attendant=attendant,
         attendant_name=(attendant.get_full_name() or attendant.username) if attendant else "",
     )

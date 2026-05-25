@@ -120,6 +120,12 @@ class User(AbstractUser):
     def can_access_lab(self):
         return self.can_access_hospital_admin or self.role == self.ROLE_LAB_ATTENDANT or self.has_module_group("Lab")
 
+    def get_full_name(self):
+        full = f"{self.first_name} {self.last_name}".strip()
+        if self.role == self.ROLE_DOCTOR and full and not full.startswith("Dr."):
+            return f"Dr. {full}"
+        return full or self.username
+
     @property
     def navigation_role_labels(self):
         labels = []

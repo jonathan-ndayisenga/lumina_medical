@@ -50,6 +50,7 @@ from .models import (
     CashTransaction,
     Expense,
     HospitalAccount,
+    InventoryBatch,
     InventoryItem,
     InventoryTransaction,
     MobileMoneyAccount,
@@ -1200,6 +1201,7 @@ def financial_report(request):
     chart_labels = []
     chart_values = []
     summary_rows = []
+    pharma_sales_list = []
 
     def append_summary(date_value, amount_value, mode_value, account_value):
         summary_rows.append(
@@ -1377,6 +1379,7 @@ def financial_report(request):
             chart_values = [str(row["total"] or 0) for row in daily]
 
             grouped = {}
+            drug_totals = {}
             for rx in pharma_dash.order_by("-dispensed_at", "-id")[:800]:
                 day = rx.dispensed_at.date() if rx.dispensed_at else None
                 if not day:
@@ -1384,8 +1387,20 @@ def financial_report(request):
                 item_name = str(rx.drug) if rx.drug_id else "Unknown Drug"
                 key = (day, "pharmacy", item_name)
                 grouped[key] = grouped.get(key, Decimal("0")) + (rx.total_price or Decimal("0"))
+                # Accumulate per-drug totals for the sales list
+                drug_id = rx.drug_id or 0
+                if drug_id not in drug_totals:
+                    drug_totals[drug_id] = {
+                        "drug_name": item_name,
+                        "quantity_sold": Decimal("0"),
+                        "total_amount": Decimal("0"),
+                        "stock_remaining": rx.drug.current_quantity if rx.drug else Decimal("0"),
+                    }
+                drug_totals[drug_id]["quantity_sold"] += rx.total_quantity or Decimal("0")
+                drug_totals[drug_id]["total_amount"] += rx.total_price or Decimal("0")
             for (day, mode_value, account_label), amount_value in sorted(grouped.items(), key=lambda item: item[0][0], reverse=True)[:200]:
                 append_summary(day, amount_value, mode_value, account_label)
+            pharma_sales_list = sorted(drug_totals.values(), key=lambda x: x["total_amount"], reverse=True)
 
     context = {
         "active_nav": "hospital_financials",
@@ -1450,6 +1465,7 @@ def financial_report(request):
         "chart_labels_json": json.dumps(chart_labels),
         "chart_values_json": json.dumps(chart_values),
         "summary_rows": summary_rows,
+        "pharma_sales_list": pharma_sales_list,
     }
     return render(request, "admin_dashboard/financial_report.html", context)
 
@@ -1536,6 +1552,39 @@ def financial_statements(request):
     cash_total = cash_receipts.aggregate(total=Sum("amount_paid"))["total"] or Decimal("0")
     bank_total = bank_receipts.aggregate(total=Sum("amount_paid"))["total"] or Decimal("0")
     mobile_total = mobile_receipts.aggregate(total=Sum("amount_paid"))["total"] or Decimal("0")
+    total_income = cash_total + bank_total + mobile_total
+
+    cash_count = cash_receipts.count()
+    bank_count = bank_receipts.count()
+    mobile_count = mobile_receipts.count()
+
+    # Combined paginated receipts (all modes together, newest first)
+    all_receipts_qs = (
+        payments.filter(paid_at__date__gte=period_start, paid_at__date__lte=period_end)
+        .select_related("visit__patient", "bank_account", "mobile_account", "recorded_by")
+        .order_by("-paid_at", "-id")
+    )
+
+    # CSV export — return early before any further rendering
+    if request.GET.get("export") == "csv":
+        response = HttpResponse(content_type="text/csv")
+        response["Content-Disposition"] = (
+            f'attachment; filename="receipts_{period_start}_{period_end}.csv"'
+        )
+        writer = csv.writer(response)
+        writer.writerow(["Date", "Receipt #", "Patient", "Mode", "Amount (UGX)"])
+        for p in all_receipts_qs:
+            writer.writerow([
+                p.paid_at.strftime("%Y-%m-%d %H:%M") if p.paid_at else "",
+                p.receipt_number,
+                p.visit.patient.name,
+                p.get_mode_display(),
+                p.amount_paid,
+            ])
+        return response
+
+    all_receipts_paginator = Paginator(all_receipts_qs, 20)
+    all_receipts_page = all_receipts_paginator.get_page(request.GET.get("page", 1))
 
     # Daily cash statement numbers (expected vs actual)
     cash_day = cash_date
@@ -1619,6 +1668,11 @@ def financial_statements(request):
             "cash_total": cash_total,
             "bank_total": bank_total,
             "mobile_total": mobile_total,
+            "total_income": total_income,
+            "cash_count": cash_count,
+            "bank_count": bank_count,
+            "mobile_count": mobile_count,
+            "all_receipts_page": all_receipts_page,
             "cash_receipts": cash_receipts[:25],
             "bank_receipts": bank_receipts[:25],
             "mobile_receipts": mobile_receipts[:25],
@@ -1794,6 +1848,10 @@ def delete_service(request, service_id):
 @hospital_admin_only
 def manage_expenses(request):
     hospital = active_hospital(request)
+    search_term = (request.GET.get("search") or "").strip()
+    filter_category = (request.GET.get("category") or "").strip()
+    valid_categories = {c[0] for c in Expense.CATEGORY_CHOICES}
+
     expenses_qs = (
         Expense.objects.filter(hospital=hospital)
         .select_related("bank_account", "mobile_money_account", "cash_drawer")
@@ -1801,6 +1859,12 @@ def manage_expenses(request):
         if hospital
         else Expense.objects.none()
     )
+    if search_term:
+        expenses_qs = expenses_qs.filter(description__icontains=search_term)
+    if filter_category in valid_categories:
+        expenses_qs = expenses_qs.filter(category=filter_category)
+    else:
+        filter_category = ""
 
     if request.method == "POST":
         form = ExpenseForm(request.POST, hospital=hospital)
@@ -1841,6 +1905,9 @@ def manage_expenses(request):
         "form": form,
         "chart_labels_json": json.dumps(chart_labels),
         "chart_values_json": json.dumps(chart_values),
+        "search_term": search_term,
+        "filter_category": filter_category,
+        "category_choices": Expense.CATEGORY_CHOICES,
     })
     return render(request, "admin_dashboard/manage_expenses.html", context)
 
@@ -2018,7 +2085,7 @@ def manage_inventory(request):
 
     filtered_inventory_count = inventory_items.count()
     inventory_items = inventory_items.prefetch_related("transactions", "batches")
-    paginator = Paginator(inventory_items, 5)
+    paginator = Paginator(inventory_items, 20)
     page_number = request.GET.get("page")
     page_obj = paginator.get_page(page_number)
     inventory_items = page_obj.object_list
@@ -2304,6 +2371,47 @@ def restock_inventory_item(request, item_id):
         notes=notes or f"Restocked batch {batch.batch_number} through inventory dashboard by {request.user.get_full_name() or request.user.username}.",
     )
     messages.success(request, f"Restocked {item.name} batch {batch.batch_number} with {quantity_received} {item.unit}(s).")
+    return redirect("manage_inventory")
+
+
+@role_required(User.ROLE_HOSPITAL_ADMIN)
+def edit_inventory_batch(request, batch_id):
+    """Edit batch_number, expiry_date, and unit_cost of an existing inventory batch."""
+    batch = get_object_or_404(InventoryBatch, pk=batch_id, item__hospital=active_hospital(request))
+    if request.method != "POST":
+        return redirect("manage_inventory")
+
+    batch_number = (request.POST.get("batch_number") or "").strip()
+    expiry_date_raw = (request.POST.get("expiry_date") or "").strip()
+    unit_cost_raw = (request.POST.get("unit_cost") or "").strip()
+
+    if not batch_number:
+        messages.error(request, "Batch number cannot be empty.")
+        return redirect("manage_inventory")
+
+    # Enforce unique_together: (item, batch_number)
+    if InventoryBatch.objects.filter(item=batch.item, batch_number=batch_number).exclude(pk=batch.pk).exists():
+        messages.error(request, f"Batch number '{batch_number}' already exists for {batch.item.name}.")
+        return redirect("manage_inventory")
+
+    batch.batch_number = batch_number
+    if expiry_date_raw:
+        from datetime import date
+        try:
+            batch.expiry_date = date.fromisoformat(expiry_date_raw)
+        except ValueError:
+            messages.error(request, "Invalid expiry date format.")
+            return redirect("manage_inventory")
+    else:
+        batch.expiry_date = None
+    if unit_cost_raw:
+        try:
+            batch.unit_cost = Decimal(unit_cost_raw)
+        except Exception:
+            messages.error(request, "Invalid unit cost value.")
+            return redirect("manage_inventory")
+    batch.save()
+    messages.success(request, f"Batch {batch.batch_number} updated.")
     return redirect("manage_inventory")
 
 

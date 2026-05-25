@@ -57,4 +57,5 @@ urlpatterns = [
     path("hospital/inventory/<int:item_id>/restock/", views.restock_inventory_item, name="restock_inventory_item"),
     path("hospital/inventory/<int:item_id>/edit/", views.edit_inventory_item, name="edit_inventory_item"),
     path("hospital/inventory/<int:item_id>/delete/", views.delete_inventory_item, name="delete_inventory_item"),
+    path("hospital/inventory/batch/<int:batch_id>/edit/", views.edit_inventory_batch, name="edit_inventory_batch"),
 ]

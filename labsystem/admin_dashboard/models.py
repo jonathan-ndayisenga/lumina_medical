@@ -523,6 +523,9 @@ class InventoryItem(models.Model):
             self.units_per_pack = self.units_per_pack or Decimal("1")
             if self.unit == "unit":
                 self.unit = "tablet"
+            # New tablets/strips: lower the default reorder level from 10 → 5
+            if not self.pk and self.reorder_level == Decimal("10"):
+                self.reorder_level = Decimal("5")
         elif self.category in {self.CATEGORY_SYRUP, self.CATEGORY_REAGENT}:
             self.base_unit = "ml"
             if self.unit == "unit":

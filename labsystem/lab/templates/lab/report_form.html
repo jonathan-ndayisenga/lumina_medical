@@ -780,8 +780,13 @@ document.addEventListener('DOMContentLoaded', () => {
             bindRow(row);
         });
 
-        if (specimenInput && config.default_specimen_type) {
-            specimenInput.value = config.default_specimen_type;
+        if (specimenInput) {
+            if (config.default_specimen_type) {
+                specimenInput.value = config.default_specimen_type;
+            } else if (config.code === 'manual_simple') {
+                // Manual entry: leave specimen blank — user must select it
+                specimenInput.value = '';
+            }
         }
 
         updateFormIndices();
@@ -899,9 +904,22 @@ document.addEventListener('DOMContentLoaded', () => {
             const profileConfig = currentProfileConfig();
             const templateId = templateSelect?.value ? String(templateSelect.value) : '';
             const manualMode = Boolean(profileConfig && profileConfig.code === 'manual_simple');
+
+            // For structured profiles (e.g. Urinalysis), inherit section_name from the last
+            // visible row so new rows stay inside the correct section (e.g. Microscopy)
+            // instead of falling back to the template name as the section header.
+            let newSectionName = manualMode ? 'Manual Tests' : '';
+            if (!manualMode) {
+                const rows = visibleRows();
+                const lastRow = rows.length > 0 ? rows[rows.length - 1] : null;
+                if (lastRow) {
+                    newSectionName = lastRow.querySelector('[name$="section_name"]')?.value || '';
+                }
+            }
+
             const row = buildRow(index, {
                 test_name: '',
-                section_name: manualMode ? 'Manual Tests' : '',
+                section_name: newSectionName,
                 display_order: index + 1,
                 reference_range: '',
                 unit: '',

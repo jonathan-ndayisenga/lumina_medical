@@ -65,14 +65,37 @@
                 </select>
             </div>
 
-            <div class="lg:col-span-12 flex gap-3 flex-wrap">
+            <div class="lg:col-span-12 flex gap-3 flex-wrap items-center">
                 <button type="submit" class="btn btn-primary">Apply</button>
                 <a href="{% url 'financial_report' %}" class="btn btn-secondary">Reset</a>
+                <div class="flex gap-1 ml-2">
+                    <button type="button" onclick="setDatePreset('today')" class="btn btn-secondary btn-sm">Today</button>
+                    <button type="button" onclick="setDatePreset('week')" class="btn btn-secondary btn-sm">This Week</button>
+                    <button type="button" onclick="setDatePreset('month')" class="btn btn-secondary btn-sm">This Month</button>
+                </div>
                 <div class="ml-auto text-xs text-text-muted">
                     Showing: <strong class="text-text-main">{{ period_start }}</strong> to <strong class="text-text-main">{{ period_end }}</strong>
                 </div>
             </div>
         </form>
+        <script>
+        function setDatePreset(preset) {
+            const today = new Date();
+            const fmt = d => d.toISOString().slice(0, 10);
+            let start = today, end = today;
+            if (preset === 'week') {
+                const day = today.getDay();
+                start = new Date(today); start.setDate(today.getDate() - day);
+                end = new Date(today);
+            } else if (preset === 'month') {
+                start = new Date(today.getFullYear(), today.getMonth(), 1);
+                end = today;
+            }
+            document.getElementById('start_date').value = fmt(start);
+            document.getElementById('end_date').value = fmt(end);
+            document.getElementById('financialDashboardFilters').submit();
+        }
+        </script>
     </div>
 
     <div class="card">
@@ -129,6 +152,43 @@
             </table>
         </div>
     </div>
+
+    {% if report_type == 'pharmacy_income' %}
+    <div class="card overflow-hidden">
+        <div class="flex items-center justify-between gap-3 mb-4">
+            <div>
+                <h3 class="text-lg font-bold text-text-main">Drugs Sold — {{ period_start }} to {{ period_end }}</h3>
+                <p class="text-xs text-text-muted">Aggregated per drug: quantity dispensed, revenue, and current stock.</p>
+            </div>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full">
+                <thead class="bg-gray-50 border-b border-gray-200">
+                    <tr>
+                        <th class="text-left px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-widest">Drug</th>
+                        <th class="text-right px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-widest">Qty Sold</th>
+                        <th class="text-right px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-widest">Total Revenue</th>
+                        <th class="text-right px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-widest">Stock Remaining</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200">
+                    {% for item in pharma_sales_list %}
+                        <tr class="hover:bg-gray-50">
+                            <td class="px-4 py-3 text-sm font-medium text-text-main">{{ item.drug_name }}</td>
+                            <td class="px-4 py-3 text-sm text-right text-text-muted">{{ item.quantity_sold|floatformat:0 }}</td>
+                            <td class="px-4 py-3 text-sm text-right font-semibold text-text-main">UGX {{ item.total_amount|floatformat:0 }}</td>
+                            <td class="px-4 py-3 text-sm text-right {% if item.stock_remaining <= 5 %}text-red-600 font-semibold{% else %}text-text-muted{% endif %}">
+                                {{ item.stock_remaining|floatformat:0 }}
+                            </td>
+                        </tr>
+                    {% empty %}
+                        <tr><td colspan="4" class="px-4 py-8 text-center text-sm text-text-muted">No dispensed prescriptions in this period.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
 
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4">
         <a href="{% url 'financial_metric_detail' 'income_period' %}?start_date={{ period_start|date:'Y-m-d' }}&end_date={{ period_end|date:'Y-m-d' }}" class="card block hover:bg-surface-muted focus:outline-none focus:ring-2 focus:ring-brand-dark/30">

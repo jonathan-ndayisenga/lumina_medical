@@ -24,4 +24,6 @@ urlpatterns = [
     path("complete/<int:visit_id>/prescriptions/<int:prescription_id>/dispense/", views.dispense_prescription, name="reception_dispense_prescription"),
     path("receipt/<int:visit_id>/", views.print_receipt, name="print_receipt"),
     path("receipt/payment/<int:payment_id>/", views.print_payment_receipt, name="print_payment_receipt"),
+    # Twilio background-send URL (on hold):
+    # path("receipt/payment/<int:payment_id>/send-whatsapp/", views.send_whatsapp_receipt_view, name="send_whatsapp_receipt"),
 ]

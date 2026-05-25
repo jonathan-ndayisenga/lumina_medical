@@ -1194,9 +1194,6 @@ def print_receipt(request, visit_id):
 @reception_role_required
 def print_payment_receipt(request, payment_id):
     """Print a receipt for a specific payment (supports partial payments)."""
-    import re
-    from urllib.parse import quote
-
     hospital = get_active_hospital(request)
     payment = get_object_or_404(
         Payment.objects.select_related("visit__patient", "visit__hospital", "bank_account", "mobile_account", "recorded_by"),
@@ -1206,29 +1203,11 @@ def print_payment_receipt(request, payment_id):
     visit = payment.visit
     payments = visit.payments.select_related("bank_account", "mobile_account", "recorded_by").order_by("-paid_at", "-id")
 
-    # Build WhatsApp deep-link if a number was collected.
-    wa_link = ""
+    walink = ""
     raw_number = (visit.whatsapp_number or "").strip()
     if raw_number:
-        clean_number = re.sub(r"[^\d+]", "", raw_number).lstrip("+")
-        services_lines = "\n".join(
-            f"  - {vs.service.name}: {vs.price_at_time}"
-            for vs in visit.visit_services.select_related("service").all()
-        )
-        hospital_name = visit.hospital.name if visit.hospital else "Lumina Medical"
-        receipt_text = (
-            f"*{hospital_name} Receipt*\n"
-            f"Receipt #: {payment.receipt_number}\n"
-            f"Date: {payment.paid_at.strftime('%Y-%m-%d %H:%M') if payment.paid_at else '-'}\n"
-            f"Patient: {visit.patient.name}\n\n"
-            f"*Services:*\n{services_lines}\n\n"
-            f"Total: {visit.total_amount}\n"
-            f"Paid: {payment.amount_paid}\n"
-            f"Balance: {visit.balance_due}\n\n"
-            f"Mode: {payment.get_mode_display()}\n"
-            f"Thank you! Get well soon."
-        )
-        wa_link = f"https://wa.me/{clean_number}?text={quote(receipt_text)}"
+        from .whatsapp import build_receipt_message, build_walink
+        walink = build_walink(raw_number, build_receipt_message(payment, visit))
 
     return render(
         request,
@@ -1240,9 +1219,30 @@ def print_payment_receipt(request, payment_id):
             "payments": payments,
             "total_paid": visit.total_paid,
             "balance_due": visit.balance_due,
-            "wa_link": wa_link,
+            "walink": walink,
         },
     )
+
+
+# ── Twilio background-send view (on hold) ────────────────────────────────────
+# @reception_role_required
+# def send_whatsapp_receipt_view(request, payment_id):
+#     if request.method != "POST":
+#         return redirect("print_payment_receipt", payment_id=payment_id)
+#     hospital = get_active_hospital(request)
+#     payment = get_object_or_404(
+#         Payment.objects.select_related("visit__patient", "visit__hospital"),
+#         pk=payment_id, visit__hospital=hospital,
+#     )
+#     visit = payment.visit
+#     to_number = (visit.whatsapp_number or "").strip()
+#     if not to_number:
+#         messages.warning(request, "No WhatsApp number saved for this visit.")
+#         return redirect("print_payment_receipt", payment_id=payment_id)
+#     from .whatsapp import build_receipt_message, send_whatsapp_receipt as _send
+#     _send(to_number, build_receipt_message(payment, visit))
+#     messages.success(request, f"Receipt is being sent to {to_number} via WhatsApp.")
+#     return redirect("reception_dashboard")
 
 
 @reception_role_required
