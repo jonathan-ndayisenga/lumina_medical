@@ -2190,22 +2190,43 @@ def inventory_insights(request):
     except ValueError:
         period_end = today
 
-    # Daily pharmacy income (drug sales revenue) and gross profit (revenue - buying cost)
+    # Single pass: chart daily maps + per-drug table data
     pharma_income_map = {}
     pharma_profit_map = {}
+    drug_totals = {}
     for rx in Prescription.objects.filter(
         visit__hospital=hospital, dispensed=True,
         dispensed_at__date__gte=period_start,
         dispensed_at__date__lte=period_end,
-    ).select_related("drug"):
+    ).select_related("drug").order_by("dispensed_at"):
         d = rx.dispensed_at.date() if rx.dispensed_at else None
-        if d is None:
-            continue
         revenue = rx.total_price or Decimal("0")
         unit_cost = (rx.drug.unit_cost or Decimal("0")) if rx.drug else Decimal("0")
         qty = rx.total_quantity or Decimal("0")
-        pharma_income_map[d] = pharma_income_map.get(d, Decimal("0")) + revenue
-        pharma_profit_map[d] = pharma_profit_map.get(d, Decimal("0")) + (revenue - unit_cost * qty)
+        cost = unit_cost * qty
+
+        if d:
+            pharma_income_map[d] = pharma_income_map.get(d, Decimal("0")) + revenue
+            pharma_profit_map[d] = pharma_profit_map.get(d, Decimal("0")) + (revenue - cost)
+
+        did = rx.drug_id or 0
+        if did not in drug_totals:
+            drug_totals[did] = {
+                "name": str(rx.drug) if rx.drug else "Unknown",
+                "qty": Decimal("0"),
+                "revenue": Decimal("0"),
+                "cost": Decimal("0"),
+                "stock": rx.drug.current_quantity if rx.drug else Decimal("0"),
+                "last_dispensed": d,
+            }
+        drug_totals[did]["qty"] += qty
+        drug_totals[did]["revenue"] += revenue
+        drug_totals[did]["cost"] += cost
+        if d and (drug_totals[did]["last_dispensed"] is None or d > drug_totals[did]["last_dispensed"]):
+            drug_totals[did]["last_dispensed"] = d
+
+    for entry in drug_totals.values():
+        entry["net_profit"] = entry["revenue"] - entry["cost"]
 
     # Build daily series — Line 1: Pharmacy Income, Line 2: Pharmacy Gross Profit
     chart_labels, pharma_income_values, pharma_profit_values = [], [], []
@@ -2216,28 +2237,7 @@ def inventory_insights(request):
         pharma_profit_values.append(float(pharma_profit_map.get(cursor, Decimal("0"))))
         cursor += timedelta(days=1)
 
-    # Per-drug dispensed summary for the period
-    drug_totals = {}
-    for rx in Prescription.objects.filter(
-        visit__hospital=hospital, dispensed=True,
-        dispensed_at__date__gte=period_start,
-        dispensed_at__date__lte=period_end,
-    ).select_related("drug").order_by("dispensed_at")[:800]:
-        did = rx.drug_id or 0
-        dispensed_date = rx.dispensed_at.date() if rx.dispensed_at else None
-        if did not in drug_totals:
-            drug_totals[did] = {
-                "name": str(rx.drug) if rx.drug else "Unknown",
-                "qty": Decimal("0"),
-                "revenue": Decimal("0"),
-                "stock": rx.drug.current_quantity if rx.drug else Decimal("0"),
-                "last_dispensed": dispensed_date,
-            }
-        drug_totals[did]["qty"] += rx.total_quantity or Decimal("0")
-        drug_totals[did]["revenue"] += rx.total_price or Decimal("0")
-        if dispensed_date and (drug_totals[did]["last_dispensed"] is None or dispensed_date > drug_totals[did]["last_dispensed"]):
-            drug_totals[did]["last_dispensed"] = dispensed_date
-    dispensed_list = sorted(drug_totals.values(), key=lambda x: x["revenue"], reverse=True)
+    dispensed_list = sorted(drug_totals.values(), key=lambda x: (x["last_dispensed"] or _date.min), reverse=True)
     drugs_paginator = Paginator(dispensed_list, 10)
     drugs_page_obj = drugs_paginator.get_page(request.GET.get("drugs_page"))
 

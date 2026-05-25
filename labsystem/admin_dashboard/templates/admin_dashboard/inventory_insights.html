@@ -79,17 +79,35 @@
     </div>
 
     {# ── Drugs dispensed in period ── #}
-    <div class="card border border-gray-100 shadow-none">
-        <h3 class="text-lg font-bold text-text-main mb-1">Drugs Dispensed — {{ period_start }} to {{ period_end }}</h3>
-        <p class="text-sm text-text-muted mb-4">Aggregated per drug: quantity dispensed, revenue earned, current stock.</p>
+    <div id="drugsSection" class="card border border-gray-100 shadow-none">
+
+        {# print-only header — hidden on screen #}
+        <div id="printHeader" style="display:none;">
+            <div style="text-align:center;margin-bottom:16px;">
+                <p style="font-size:18px;font-weight:700;margin:0;">{{ hospital.name }}</p>
+                <p style="font-size:13px;margin:4px 0 0;">Pharmacy Dispensing Report</p>
+                <p style="font-size:12px;color:#555;margin:2px 0 0;">Period: {{ period_start }} to {{ period_end }}</p>
+            </div>
+            <hr style="margin-bottom:12px;">
+        </div>
+
+        <div class="flex items-center justify-between gap-3 mb-4 no-print">
+            <div>
+                <h3 class="text-lg font-bold text-text-main">Drugs Dispensed — {{ period_start }} to {{ period_end }}</h3>
+                <p class="text-sm text-text-muted">Aggregated per drug: quantity dispensed, revenue, net profit, current stock.</p>
+            </div>
+            <button onclick="printDrugsList()" class="btn btn-secondary btn-sm no-print">Print / Save PDF</button>
+        </div>
+
         <div class="overflow-x-auto">
             <table class="w-full text-sm">
                 <thead class="bg-gray-50 border-b border-gray-200">
                     <tr>
                         <th class="text-left px-4 py-3 text-xs font-semibold uppercase text-text-muted">Drug</th>
                         <th class="text-right px-4 py-3 text-xs font-semibold uppercase text-text-muted">Last Dispensed</th>
-                        <th class="text-right px-4 py-3 text-xs font-semibold uppercase text-text-muted">Qty Dispensed</th>
+                        <th class="text-right px-4 py-3 text-xs font-semibold uppercase text-text-muted">Qty</th>
                         <th class="text-right px-4 py-3 text-xs font-semibold uppercase text-text-muted">Revenue</th>
+                        <th class="text-right px-4 py-3 text-xs font-semibold uppercase text-text-muted">Net Profit</th>
                         <th class="text-right px-4 py-3 text-xs font-semibold uppercase text-text-muted">Stock Left</th>
                     </tr>
                 </thead>
@@ -100,19 +118,22 @@
                             <td class="px-4 py-3 text-sm text-right text-text-muted">{{ item.last_dispensed|default:"—" }}</td>
                             <td class="px-4 py-3 text-sm text-right text-text-muted">{{ item.qty|floatformat:0 }}</td>
                             <td class="px-4 py-3 text-sm text-right font-semibold text-text-main">UGX {{ item.revenue|floatformat:0 }}</td>
+                            <td class="px-4 py-3 text-sm text-right font-semibold {% if item.net_profit >= 0 %}text-green-700{% else %}text-red-600{% endif %}">
+                                UGX {{ item.net_profit|floatformat:0 }}
+                            </td>
                             <td class="px-4 py-3 text-sm text-right {% if item.stock <= 5 %}text-red-600 font-semibold{% else %}text-text-muted{% endif %}">
                                 {{ item.stock|floatformat:0 }}
                             </td>
                         </tr>
                     {% empty %}
-                        <tr><td colspan="5" class="px-4 py-8 text-center text-sm text-text-muted italic">No drugs dispensed in this period.</td></tr>
+                        <tr><td colspan="6" class="px-4 py-8 text-center text-sm text-text-muted italic">No drugs dispensed in this period.</td></tr>
                     {% endfor %}
                 </tbody>
             </table>
         </div>
 
         {% if drugs_page_obj.paginator.num_pages > 1 %}
-        <div class="mt-4 flex items-center justify-between gap-3 flex-wrap">
+        <div class="mt-4 flex items-center justify-between gap-3 flex-wrap no-print">
             <p class="text-xs text-text-muted">
                 Page {{ drugs_page_obj.number }} of {{ drugs_page_obj.paginator.num_pages }} &mdash; {{ drugs_page_obj.paginator.count }} drug{{ drugs_page_obj.paginator.count|pluralize }}
             </p>
@@ -298,5 +319,34 @@ document.addEventListener('DOMContentLoaded', function () {
     closeBtn.addEventListener('click', () => { modal.classList.add('hidden'); form.reset(); });
     modal.addEventListener('click', e => { if (e.target === modal) { modal.classList.add('hidden'); form.reset(); } });
 });
+
+// ── Print drugs list ───────────────────────────────────────────────────────────
+function printDrugsList() {
+    document.getElementById('printHeader').style.display = 'block';
+    window.print();
+    document.getElementById('printHeader').style.display = 'none';
+}
 </script>
+
+<style>
+@media print {
+    /* hide everything except the drugs section */
+    body > *,
+    body .sidebar, nav, header, footer,
+    .space-y-6 > *:not(#drugsSection) {
+        display: none !important;
+    }
+    #drugsSection {
+        display: block !important;
+        box-shadow: none !important;
+        border: none !important;
+        padding: 0 !important;
+    }
+    #printHeader { display: block !important; }
+    .no-print { display: none !important; }
+    table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    th, td { border: 1px solid #ddd; padding: 6px 10px; }
+    thead { background: #f3f4f6 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}
+</style>
 {% endblock %}
