@@ -1,147 +1,116 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Receipt</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+<meta charset="UTF-8">
+<title>Receipt</title>
+<style>
+@page { size: 58mm auto; margin: 2mm 3mm; }
 
-        @page {
-            size: 58mm auto;
-            margin: 1mm 2mm;
-        }
+* { margin: 0 !important; padding: 0 !important; box-sizing: border-box; }
 
-        body {
-            width: 54mm;
-            margin: 0 auto;
-            padding: 0;
-            font-family: 'Courier New', Courier, monospace;
-            font-size: 8.5px;
-            line-height: 1.2;
-            color: #000;
-            background: #fff;
-        }
+html, body {
+    width: 52mm;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 7pt;
+    line-height: 1.15;
+    color: #000;
+    background: #fff;
+}
 
-        .center { text-align: center; }
-        .right  { text-align: right; }
-        .bold   { font-weight: bold; }
+p { display: block; font-size: 7pt; line-height: 1.15; }
 
-        .divider {
-            border: none;
-            border-top: 1px dashed #000;
-            margin: 1.5mm 0;
-        }
+.c { text-align: center; }
+.b { font-weight: bold; }
+.r { text-align: right; }
 
-        /* services table */
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            table-layout: fixed;
-        }
-        td {
-            padding: 0;
-            vertical-align: top;
-        }
-        .col-name {
-            width: 72%;
-            word-break: break-word;
-        }
-        .col-price {
-            width: 28%;
-            text-align: right;
-            white-space: nowrap;
-        }
+.dash {
+    border: none;
+    border-top: 1px dashed #000;
+    display: block;
+    height: 0;
+    margin: 1.5mm 0 !important;
+}
 
-        /* summary totals */
-        .sum-table { width: 100%; border-collapse: collapse; }
-        .sum-table td { padding: 0; }
-        .sum-table td:first-child { font-weight: bold; }
-        .sum-table td:last-child  { text-align: right; }
+table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+    font-size: 7pt;
+    line-height: 1.15;
+}
+td { padding: 0 !important; vertical-align: top; font-size: 7pt; line-height: 1.15; }
+.td-name  { width: 66%; word-break: break-word; }
+.td-price { width: 34%; text-align: right; white-space: nowrap; }
+.td-label { width: 52%; font-weight: bold; }
+.td-val   { width: 48%; text-align: right; }
 
-        /* screen-only buttons */
-        .screen-only {
-            display: block;
-            width: 100%;
-            margin-top: 3mm;
-            padding: 2mm 0;
-            font-size: 9px;
-            font-family: 'Courier New', Courier, monospace;
-            cursor: pointer;
-            text-align: center;
-            text-decoration: none;
-            border: 1px solid #000;
-        }
-        .btn-whatsapp {
-            background: #25d366;
-            color: #fff;
-            border-color: #25d366;
-        }
-        .btn-print {
-            background: #fff;
-            color: #000;
-        }
+.btn {
+    display: block;
+    width: 100%;
+    margin-top: 3mm !important;
+    padding: 2mm 0 !important;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 7pt;
+    text-align: center;
+    text-decoration: none;
+    border: 1px solid #000;
+    cursor: pointer;
+    background: #fff;
+    color: #000;
+}
+.btn-wa { background: #25d366 !important; color: #fff; border-color: #25d366; }
 
-        @media print {
-            .screen-only { display: none !important; }
-            body { font-size: 8.5px; line-height: 1.2; }
-            * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-        }
-    </style>
+@media print { .btn { display: none !important; } }
+</style>
 </head>
 <body>
 
-    <div class="center bold">LUMINA MEDICAL SERVICES</div>
-    <div class="center">Receipt #{{ payment.receipt_number }}</div>
-    <div class="center">{{ payment.paid_at|date:"Y-m-d H:i" }}</div>
-    <hr class="divider">
+<p class="c b">LUMINA MEDICAL SERVICES</p>
+<p class="c">Receipt #{{ payment.receipt_number }}</p>
+<p class="c">{{ payment.paid_at|date:"Y-m-d H:i" }}</p>
+<hr class="dash">
 
-    <div><span class="bold">Patient:</span> {{ visit.patient.name|truncatechars:22 }}</div>
-    <div><span class="bold">Age/Sex:</span> {{ visit.patient.age }} / {{ visit.patient.get_sex_display|slice:":1" }}</div>
-    <div><span class="bold">Visit:</span> #{{ visit.id }}</div>
-    <hr class="divider">
+<p><b>Patient:</b> {{ visit.patient.name|truncatechars:21 }}</p>
+<p><b>Age/Sex:</b> {{ visit.patient.age }} / {{ visit.patient.get_sex_display|slice:":1" }}</p>
+<p><b>Visit:</b> #{{ visit.id }}</p>
+<hr class="dash">
 
-    <div class="bold">Services</div>
-    <table>
-        {% for item in visit.visit_services.all %}
-        <tr>
-            <td class="col-name">{{ item.service.name|truncatechars:24 }}</td>
-            <td class="col-price">{{ item.price_at_time }}</td>
-        </tr>
-        {% empty %}
-        <tr><td colspan="2" class="center">No services</td></tr>
-        {% endfor %}
-    </table>
-    <hr class="divider">
+<p class="b">Services</p>
+<table>
+{% for item in visit.visit_services.all %}
+<tr>
+    <td class="td-name">{{ item.service.name|truncatechars:22 }}</td>
+    <td class="td-price">{{ item.price_at_time }}</td>
+</tr>
+{% empty %}
+<tr><td colspan="2" class="c">(no services)</td></tr>
+{% endfor %}
+</table>
+<hr class="dash">
 
-    <table class="sum-table">
-        <tr><td>Total</td><td>{{ visit.total_amount }}</td></tr>
-        <tr><td>Paid</td><td>{{ payment.amount_paid }}</td></tr>
-        <tr><td>Balance</td><td>{{ balance_due }}</td></tr>
-    </table>
-    <hr class="divider">
+<table>
+<tr><td class="td-label">Total</td><td class="td-val">{{ visit.total_amount }}</td></tr>
+<tr><td class="td-label">Paid</td><td class="td-val">{{ payment.amount_paid }}</td></tr>
+<tr><td class="td-label">Balance</td><td class="td-val">{{ balance_due }}</td></tr>
+</table>
+<hr class="dash">
 
-    <div><span class="bold">Mode:</span> {{ payment.get_mode_display }}</div>
-    <div><span class="bold">By:</span> {{ payment.recorded_by.get_full_name|default:payment.recorded_by.username|truncatechars:18 }}</div>
+<p><b>Mode:</b> {{ payment.get_mode_display }}</p>
+<p><b>By:</b> {{ payment.recorded_by.get_full_name|default:payment.recorded_by.username|truncatechars:20 }}</p>
 
-    {% if payment.notes %}
-    <hr class="divider">
-    <div class="bold">Notes:</div>
-    <div>{{ payment.notes|truncatechars:60 }}</div>
-    {% endif %}
+{% if payment.notes %}
+<hr class="dash">
+<p><b>Notes:</b> {{ payment.notes|truncatechars:50 }}</p>
+{% endif %}
 
-    <hr class="divider">
-    <div class="center">Thank you</div>
-    <div class="center">Get well soon</div>
+<hr class="dash">
+<p class="c">Thank you</p>
+<p class="c">Get well soon</p>
 
-    {% if walink %}
-    <a href="{{ walink }}" target="_blank" class="screen-only btn-whatsapp">Send Receipt via WhatsApp</a>
-    {% endif %}
-    <button onclick="window.print()" class="screen-only btn-print">Print / Save as PDF</button>
+{% if walink %}
+<a href="{{ walink }}" target="_blank" class="btn btn-wa">Send Receipt via WhatsApp</a>
+{% endif %}
+<button onclick="window.print()" class="btn">Print / Save as PDF</button>
 
 </body>
 </html>
