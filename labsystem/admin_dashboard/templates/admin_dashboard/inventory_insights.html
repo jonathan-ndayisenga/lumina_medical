@@ -87,6 +87,7 @@
                 <thead class="bg-gray-50 border-b border-gray-200">
                     <tr>
                         <th class="text-left px-4 py-3 text-xs font-semibold uppercase text-text-muted">Drug</th>
+                        <th class="text-right px-4 py-3 text-xs font-semibold uppercase text-text-muted">Last Dispensed</th>
                         <th class="text-right px-4 py-3 text-xs font-semibold uppercase text-text-muted">Qty Dispensed</th>
                         <th class="text-right px-4 py-3 text-xs font-semibold uppercase text-text-muted">Revenue</th>
                         <th class="text-right px-4 py-3 text-xs font-semibold uppercase text-text-muted">Stock Left</th>
@@ -96,6 +97,7 @@
                     {% for item in dispensed_list %}
                         <tr class="hover:bg-gray-50">
                             <td class="px-4 py-3 text-sm font-medium text-text-main">{{ item.name }}</td>
+                            <td class="px-4 py-3 text-sm text-right text-text-muted">{{ item.last_dispensed|default:"—" }}</td>
                             <td class="px-4 py-3 text-sm text-right text-text-muted">{{ item.qty|floatformat:0 }}</td>
                             <td class="px-4 py-3 text-sm text-right font-semibold text-text-main">UGX {{ item.revenue|floatformat:0 }}</td>
                             <td class="px-4 py-3 text-sm text-right {% if item.stock <= 5 %}text-red-600 font-semibold{% else %}text-text-muted{% endif %}">
@@ -103,11 +105,29 @@
                             </td>
                         </tr>
                     {% empty %}
-                        <tr><td colspan="4" class="px-4 py-8 text-center text-sm text-text-muted italic">No drugs dispensed in this period.</td></tr>
+                        <tr><td colspan="5" class="px-4 py-8 text-center text-sm text-text-muted italic">No drugs dispensed in this period.</td></tr>
                     {% endfor %}
                 </tbody>
             </table>
         </div>
+
+        {% if drugs_page_obj.paginator.num_pages > 1 %}
+        <div class="mt-4 flex items-center justify-between gap-3 flex-wrap">
+            <p class="text-xs text-text-muted">
+                Page {{ drugs_page_obj.number }} of {{ drugs_page_obj.paginator.num_pages }} &mdash; {{ drugs_page_obj.paginator.count }} drug{{ drugs_page_obj.paginator.count|pluralize }}
+            </p>
+            <div class="flex gap-2 flex-wrap">
+                {% if drugs_page_obj.has_previous %}
+                    <a href="?{{ date_qs }}&drugs_page=1" class="btn btn-secondary btn-sm">First</a>
+                    <a href="?{{ date_qs }}&drugs_page={{ drugs_page_obj.previous_page_number }}" class="btn btn-secondary btn-sm">Prev</a>
+                {% endif %}
+                {% if drugs_page_obj.has_next %}
+                    <a href="?{{ date_qs }}&drugs_page={{ drugs_page_obj.next_page_number }}" class="btn btn-secondary btn-sm">Next</a>
+                    <a href="?{{ date_qs }}&drugs_page={{ drugs_page_obj.paginator.num_pages }}" class="btn btn-secondary btn-sm">Last</a>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
     </div>
 
     {# ── Restock priorities ── #}
@@ -208,9 +228,9 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
 <script>
 (function () {
-    const labels        = {{ chart_labels_json|safe }};
-    const pharmacyData  = {{ pharma_values_json|safe }};
-    const netProfitData = {{ net_profit_values_json|safe }};
+    const labels           = {{ chart_labels_json|safe }};
+    const incomeData       = {{ income_values_json|safe }};
+    const pharmaProfitData = {{ pharma_profit_values_json|safe }};
 
     const ctx = document.getElementById('insightsChart');
     if (!ctx) return;
@@ -221,8 +241,8 @@
             labels: labels,
             datasets: [
                 {
-                    label: 'Pharmacy Income (UGX)',
-                    data: pharmacyData,
+                    label: 'Total Income (UGX)',
+                    data: incomeData,
                     borderColor: '#0f3b5f',
                     backgroundColor: 'rgba(15, 59, 95, 0.10)',
                     borderWidth: 2,
@@ -231,8 +251,8 @@
                     fill: true,
                 },
                 {
-                    label: 'Net Profit (UGX)',
-                    data: netProfitData,
+                    label: 'Pharmacy Gross Profit (UGX)',
+                    data: pharmaProfitData,
                     borderColor: '#16a34a',
                     backgroundColor: 'rgba(22, 163, 74, 0.08)',
                     borderWidth: 2,
