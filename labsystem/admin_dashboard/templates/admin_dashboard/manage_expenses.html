@@ -37,22 +37,56 @@
     {% endif %}
 
     <div class="card">
-        <div class="flex flex-wrap items-end gap-3 mb-4">
-            <h3 class="text-lg font-bold text-text-main flex-1">Expenses</h3>
-            <form method="get" class="flex flex-wrap gap-2 items-end">
-                <input type="text" name="search" value="{{ search_term }}" placeholder="Search description…" class="form-control" style="max-width:200px;">
-                <select name="category" class="form-control" style="max-width:180px;">
+        <div class="flex flex-wrap items-center justify-between gap-2 mb-4">
+            <h3 class="text-lg font-bold text-text-main">Expenses</h3>
+        </div>
+        <form method="get" class="flex flex-wrap items-end gap-3 mb-4">
+            <div class="flex flex-col gap-1">
+                <label class="text-xs font-semibold uppercase text-text-muted">Search</label>
+                <input type="text" name="search" value="{{ search_term }}" placeholder="Description…" class="form-control" style="width:160px;">
+            </div>
+            <div class="flex flex-col gap-1">
+                <label class="text-xs font-semibold uppercase text-text-muted">Category</label>
+                <select name="category" class="form-control" style="width:150px;">
                     <option value="">All categories</option>
                     {% for val, label in category_choices %}
                         <option value="{{ val }}" {% if filter_category == val %}selected{% endif %}>{{ label }}</option>
                     {% endfor %}
                 </select>
-                <button type="submit" class="btn btn-secondary btn-sm">Filter</button>
-                {% if search_term or filter_category %}
+            </div>
+            <div class="flex flex-col gap-1">
+                <label class="text-xs font-semibold uppercase text-text-muted">From</label>
+                <input type="date" name="date_start" value="{{ date_start }}" class="form-control">
+            </div>
+            <div class="flex flex-col gap-1">
+                <label class="text-xs font-semibold uppercase text-text-muted">To</label>
+                <input type="date" name="date_end" value="{{ date_end }}" class="form-control">
+            </div>
+            <div class="flex items-end gap-2">
+                <button type="submit" class="btn btn-primary btn-sm">Apply</button>
+                <button type="button" onclick="expensePreset('today')" class="btn btn-secondary btn-sm">Today</button>
+                <button type="button" onclick="expensePreset('week')" class="btn btn-secondary btn-sm">This Week</button>
+                <button type="button" onclick="expensePreset('month')" class="btn btn-secondary btn-sm">This Month</button>
+                {% if search_term or filter_category or date_start or date_end %}
                     <a href="{% url 'manage_expenses' %}" class="btn btn-secondary btn-sm">Clear</a>
                 {% endif %}
-            </form>
-        </div>
+            </div>
+        </form>
+        <script>
+        function expensePreset(preset) {
+            const fmt = d => d.toISOString().slice(0, 10);
+            const today = new Date();
+            let s = today, e = today;
+            if (preset === 'week') {
+                s = new Date(today); s.setDate(today.getDate() - today.getDay());
+            } else if (preset === 'month') {
+                s = new Date(today.getFullYear(), today.getMonth(), 1);
+            }
+            document.querySelector('input[name="date_start"]').value = fmt(s);
+            document.querySelector('input[name="date_end"]').value = fmt(e);
+            document.querySelector('form[method="get"]').submit();
+        }
+        </script>
         <div class="overflow-x-auto">
             <table class="w-full text-sm">
                 <thead class="bg-gray-50 border-b">
@@ -114,12 +148,12 @@
             </p>
             <div class="flex gap-2 flex-wrap">
                 {% if page_obj.has_previous %}
-                    <a href="?page=1" class="btn btn-secondary btn-sm">First</a>
-                    <a href="?page={{ page_obj.previous_page_number }}" class="btn btn-secondary btn-sm">Previous</a>
+                    <a href="?{{ filter_qs }}&page=1" class="btn btn-secondary btn-sm">First</a>
+                    <a href="?{{ filter_qs }}&page={{ page_obj.previous_page_number }}" class="btn btn-secondary btn-sm">Previous</a>
                 {% endif %}
                 {% if page_obj.has_next %}
-                    <a href="?page={{ page_obj.next_page_number }}" class="btn btn-secondary btn-sm">Next</a>
-                    <a href="?page={{ page_obj.paginator.num_pages }}" class="btn btn-secondary btn-sm">Last</a>
+                    <a href="?{{ filter_qs }}&page={{ page_obj.next_page_number }}" class="btn btn-secondary btn-sm">Next</a>
+                    <a href="?{{ filter_qs }}&page={{ page_obj.paginator.num_pages }}" class="btn btn-secondary btn-sm">Last</a>
                 {% endif %}
             </div>
         </div>

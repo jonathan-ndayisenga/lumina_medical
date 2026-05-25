@@ -602,7 +602,7 @@ def inventory_dashboard_snapshot(hospital):
         "stats": stats,
         "category_breakdown": category_breakdown,
         "monthly_sales": monthly_sales,
-        "restock_items": out_of_stock_items[:8] or low_stock_items[:8],
+        "restock_items": (out_of_stock_items + low_stock_items)[:15],
         "out_of_stock_items": out_of_stock_items,
         "low_stock_items": low_stock_items,
         "pharma_chart_labels_json": json.dumps(pharma_chart_labels),
@@ -1847,10 +1847,22 @@ def delete_service(request, service_id):
 
 @hospital_admin_only
 def manage_expenses(request):
+    from datetime import date as _date
+    import urllib.parse as _urlparse
+
     hospital = active_hospital(request)
     search_term = (request.GET.get("search") or "").strip()
     filter_category = (request.GET.get("category") or "").strip()
     valid_categories = {c[0] for c in Expense.CATEGORY_CHOICES}
+
+    try:
+        date_start = _date.fromisoformat((request.GET.get("date_start") or "").strip())
+    except ValueError:
+        date_start = None
+    try:
+        date_end = _date.fromisoformat((request.GET.get("date_end") or "").strip())
+    except ValueError:
+        date_end = None
 
     expenses_qs = (
         Expense.objects.filter(hospital=hospital)
@@ -1865,6 +1877,10 @@ def manage_expenses(request):
         expenses_qs = expenses_qs.filter(category=filter_category)
     else:
         filter_category = ""
+    if date_start:
+        expenses_qs = expenses_qs.filter(date__gte=date_start)
+    if date_end:
+        expenses_qs = expenses_qs.filter(date__lte=date_end)
 
     if request.method == "POST":
         form = ExpenseForm(request.POST, hospital=hospital)
@@ -1878,20 +1894,29 @@ def manage_expenses(request):
     else:
         form = ExpenseForm(hospital=hospital)
 
-    category_totals_qs = (
-        Expense.objects.filter(hospital=hospital)
-        .values("category")
-        .annotate(total=Sum("amount"))
-        .order_by("-total")
-        if hospital
-        else []
-    )
+    chart_base_qs = Expense.objects.filter(hospital=hospital) if hospital else Expense.objects.none()
+    if date_start:
+        chart_base_qs = chart_base_qs.filter(date__gte=date_start)
+    if date_end:
+        chart_base_qs = chart_base_qs.filter(date__lte=date_end)
+    category_totals_qs = chart_base_qs.values("category").annotate(total=Sum("amount")).order_by("-total")
     category_label_map = dict(Expense.CATEGORY_CHOICES)
     chart_labels = [category_label_map.get(row["category"], row["category"]) for row in category_totals_qs]
     chart_values = [str(row["total"] or 0) for row in category_totals_qs]
 
     paginator = Paginator(expenses_qs, 20)
     page_obj = paginator.get_page(request.GET.get("page"))
+
+    filter_params = {}
+    if search_term:
+        filter_params["search"] = search_term
+    if filter_category:
+        filter_params["category"] = filter_category
+    if date_start:
+        filter_params["date_start"] = date_start.isoformat()
+    if date_end:
+        filter_params["date_end"] = date_end.isoformat()
+    filter_qs = _urlparse.urlencode(filter_params)
 
     context = hospital_admin_context(
         request,
@@ -1908,6 +1933,9 @@ def manage_expenses(request):
         "search_term": search_term,
         "filter_category": filter_category,
         "category_choices": Expense.CATEGORY_CHOICES,
+        "date_start": date_start.isoformat() if date_start else "",
+        "date_end": date_end.isoformat() if date_end else "",
+        "filter_qs": filter_qs,
     })
     return render(request, "admin_dashboard/manage_expenses.html", context)
 
@@ -2194,14 +2222,14 @@ def inventory_insights(request):
         ).values("date").annotate(total=Sum("amount"))
     }
 
-    # Daily salaries
+    # Daily salaries (paid_at is DateField — no __date transform)
     salary_map = {
-        row["day"]: Decimal(row["total"] or 0)
+        row["paid_at"]: Decimal(row["total"] or 0)
         for row in Salary.objects.filter(
             hospital=hospital, paid=True,
-            paid_at__date__gte=period_start,
-            paid_at__date__lte=period_end,
-        ).annotate(day=TruncDate("paid_at")).values("day").annotate(total=Sum("amount"))
+            paid_at__gte=period_start,
+            paid_at__lte=period_end,
+        ).values("paid_at").annotate(total=Sum("amount"))
     }
 
     # Build daily series

@@ -34,17 +34,17 @@
 
     {# ── Date filter ── #}
     <div class="card">
-        <form method="get" class="flex flex-wrap gap-3 items-end">
-            <div>
-                <label class="block text-xs font-semibold uppercase text-text-muted mb-1">Start Date</label>
+        <form method="get" class="flex flex-wrap items-end gap-3">
+            <div class="flex flex-col gap-1">
+                <label class="text-xs font-semibold uppercase text-text-muted">From</label>
                 <input type="date" name="start" value="{{ period_start }}" class="form-control">
             </div>
-            <div>
-                <label class="block text-xs font-semibold uppercase text-text-muted mb-1">End Date</label>
+            <div class="flex flex-col gap-1">
+                <label class="text-xs font-semibold uppercase text-text-muted">To</label>
                 <input type="date" name="end" value="{{ period_end }}" class="form-control">
             </div>
-            <div class="flex gap-2 items-end">
-                <button type="submit" class="btn btn-primary">Apply</button>
+            <div class="flex items-end gap-2">
+                <button type="submit" class="btn btn-primary btn-sm">Apply</button>
                 <button type="button" onclick="setPreset('today')" class="btn btn-secondary btn-sm">Today</button>
                 <button type="button" onclick="setPreset('week')" class="btn btn-secondary btn-sm">This Week</button>
                 <button type="button" onclick="setPreset('month')" class="btn btn-secondary btn-sm">This Month</button>
