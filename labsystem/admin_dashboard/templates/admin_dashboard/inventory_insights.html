@@ -2,11 +2,13 @@
 
 {% block title %}Inventory Insights - Lumina{% endblock %}
 {% block page_title %}Inventory Insights{% endblock %}
-{% block page_subtitle %}Watch the restock list, pharmacy income, and category mix without crowding the stock-entry page.{% endblock %}
+{% block page_subtitle %}Daily pharmacy income vs net profit, dispensed drugs, and restock priorities.{% endblock %}
 {% block content_container_classes %}max-w-[110rem] mx-auto px-4 lg:px-8 py-6{% endblock %}
 
 {% block content %}
 <div class="space-y-6">
+
+    {# ── Summary cards ── #}
     <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
         <div class="card">
             <p class="text-xs uppercase tracking-wide text-text-muted">Low Stock</p>
@@ -24,169 +26,257 @@
             <p class="mt-1 text-xs text-text-muted">Approximate supplier value still on shelf.</p>
         </div>
         <div class="card">
-            <p class="text-xs uppercase tracking-wide text-text-muted">This Month's Dispensed Sales</p>
-            <p class="mt-2 text-2xl font-bold text-green-700">UGX {{ stats.month_sales|default:0 }}</p>
-            <p class="mt-1 text-xs text-text-muted">Medication already issued to patients this month.</p>
+            <p class="text-xs uppercase tracking-wide text-text-muted">Dispensed Sales (Period)</p>
+            <p class="mt-2 text-2xl font-bold text-green-700">UGX {% for item in dispensed_list %}{% endfor %}{{ stats.month_sales|default:0 }}</p>
+            <p class="mt-1 text-xs text-text-muted">Medication issued to patients in selected period.</p>
         </div>
     </div>
 
-    <div class="space-y-6">
-        <div class="card border border-gray-100 shadow-none">
-            <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
-                <div>
-                    <h3 class="text-lg font-bold text-text-main" id="incomeChartTitle">Pharmacy Income</h3>
-                    <p class="text-sm text-text-muted" id="incomeChartSubtitle">Monthly revenue from dispensed prescriptions over the last 6 months.</p>
-                </div>
-                <div>
-                    <label for="incomeChartFilter" class="text-xs font-semibold text-text-muted mr-2">View:</label>
-                    <select id="incomeChartFilter" class="form-control form-control-sm text-sm">
-                        <option value="pharmacy">Pharmacy Income</option>
-                        <option value="net_profit">Net Profit</option>
-                    </select>
-                </div>
+    {# ── Date filter ── #}
+    <div class="card">
+        <form method="get" class="flex flex-wrap gap-3 items-end">
+            <div>
+                <label class="block text-xs font-semibold uppercase text-text-muted mb-1">Start Date</label>
+                <input type="date" name="start" value="{{ period_start }}" class="form-control">
             </div>
-            <div class="h-72">
-                <canvas id="pharmacyIncomeChart" aria-label="Pharmacy income chart" role="img"></canvas>
+            <div>
+                <label class="block text-xs font-semibold uppercase text-text-muted mb-1">End Date</label>
+                <input type="date" name="end" value="{{ period_end }}" class="form-control">
             </div>
-        </div>
+            <div class="flex gap-2 items-end">
+                <button type="submit" class="btn btn-primary">Apply</button>
+                <button type="button" onclick="setPreset('today')" class="btn btn-secondary btn-sm">Today</button>
+                <button type="button" onclick="setPreset('week')" class="btn btn-secondary btn-sm">This Week</button>
+                <button type="button" onclick="setPreset('month')" class="btn btn-secondary btn-sm">This Month</button>
+            </div>
+        </form>
+        <script>
+        function setPreset(preset) {
+            const fmt = d => d.toISOString().slice(0, 10);
+            const today = new Date();
+            let s = today, e = today;
+            if (preset === 'week') {
+                s = new Date(today); s.setDate(today.getDate() - today.getDay());
+            } else if (preset === 'month') {
+                s = new Date(today.getFullYear(), today.getMonth(), 1);
+            }
+            document.querySelector('input[name="start"]').value = fmt(s);
+            document.querySelector('input[name="end"]').value = fmt(e);
+            document.querySelector('form').submit();
+        }
+        </script>
+    </div>
 
-        <div class="card border border-gray-100 shadow-none">
-            <h3 class="text-lg font-bold text-text-main">Category Snapshot</h3>
-            <div class="mt-4 space-y-3">
-                {% for row in category_breakdown %}
-                    <div>
-                        <div class="flex items-center justify-between gap-3 text-sm">
-                            <span class="font-semibold text-text-main">{{ row.label }}</span>
-                            <span class="text-text-muted">{{ row.item_count }} item{{ row.item_count|pluralize }}</span>
-                        </div>
-                        <div class="mt-2 h-3 rounded-full bg-gray-100 overflow-hidden">
-                            <div class="h-full rounded-full bg-emerald-500" style="width: {{ row.width_pct }}%;"></div>
-                        </div>
-                        <p class="mt-1 text-xs text-text-muted">{{ row.stock_units }} stock unit{{ row.stock_units|pluralize }}</p>
-                    </div>
-                {% empty %}
-                    <p class="text-sm text-text-muted italic">Add stock items to start seeing category breakdowns.</p>
-                {% endfor %}
-            </div>
+    {# ── Dual-line chart: Pharmacy Income + Net Profit ── #}
+    <div class="card border border-gray-100 shadow-none">
+        <div class="mb-4">
+            <h3 class="text-lg font-bold text-text-main">Pharmacy Income vs Net Profit</h3>
+            <p class="text-sm text-text-muted">Daily view — {{ period_start }} to {{ period_end }}</p>
         </div>
-
-        <div class="card border border-gray-100 shadow-none">
-            <div class="flex items-start justify-between gap-3 flex-wrap">
-                <div>
-                    <h3 class="text-lg font-bold text-text-main">Quick Restock List</h3>
-                    <p class="mt-1 text-sm text-text-muted">Use this list when planning purchases or checking what should be replenished first.</p>
-                </div>
-                <a href="{% url 'manage_inventory' %}?stock=low" class="btn btn-secondary btn-sm">Open Inventory Filters</a>
-            </div>
-            <div class="mt-4 space-y-3">
-                {% for item in restock_items %}
-                    <div class="rounded-xl border {% if item.current_quantity <= 0 %}border-red-200 bg-red-50{% else %}border-amber-200 bg-amber-50{% endif %} p-4">
-                        <div class="flex items-start justify-between gap-3 flex-wrap">
-                            <div>
-                                <p class="font-semibold text-text-main">{{ item.name }}</p>
-                                <p class="text-xs text-text-muted mt-1">{{ item.get_category_display }} - {{ item.quantity_label }}</p>
-                            </div>
-                            {% if item.current_quantity <= 0 %}
-                                <span class="inline-flex items-center rounded-full bg-red-100 px-2 py-1 text-xs font-semibold text-red-700">Zero stock</span>
-                            {% else %}
-                                <span class="inline-flex items-center rounded-full bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-700">Low stock</span>
-                            {% endif %}
-                        </div>
-                        <form method="post" action="{% url 'restock_inventory_item' item.pk %}" class="mt-4 space-y-3">
-                            {% csrf_token %}
-                            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                <div>
-                                    <label class="block text-xs font-semibold text-text-main mb-1">Quantity Received</label>
-                                    <input type="number" name="quantity_received" min="0.01" step="0.01" class="form-control" placeholder="How many {{ item.unit }}s?">
-                                </div>
-                                <div>
-                                    <label class="block text-xs font-semibold text-text-main mb-1">Buying Price (optional)</label>
-                                    <input type="number" name="unit_cost" min="0" step="0.01" class="form-control" placeholder="Update supplier price if needed">
-                                </div>
-                                <div>
-                                    <label class="block text-xs font-semibold text-text-main mb-1">Batch Number</label>
-                                    <input type="text" name="batch_number" class="form-control" placeholder="Supplier batch code">
-                                </div>
-                                <div>
-                                    <label class="block text-xs font-semibold text-text-main mb-1">Expiry Date</label>
-                                    <input type="date" name="expiry_date" class="form-control">
-                                </div>
-                            </div>
-                            <button type="submit" class="btn btn-primary btn-sm">Add Batch / Restock {{ item.name }}</button>
-                        </form>
-                    </div>
-                {% empty %}
-                    <p class="text-sm text-text-muted italic">No urgent restock items right now.</p>
-                {% endfor %}
-            </div>
+        <div class="h-80">
+            <canvas id="insightsChart" aria-label="Pharmacy income and net profit chart" role="img"></canvas>
         </div>
     </div>
+
+    {# ── Drugs dispensed in period ── #}
+    <div class="card border border-gray-100 shadow-none">
+        <h3 class="text-lg font-bold text-text-main mb-1">Drugs Dispensed — {{ period_start }} to {{ period_end }}</h3>
+        <p class="text-sm text-text-muted mb-4">Aggregated per drug: quantity dispensed, revenue earned, current stock.</p>
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead class="bg-gray-50 border-b border-gray-200">
+                    <tr>
+                        <th class="text-left px-4 py-3 text-xs font-semibold uppercase text-text-muted">Drug</th>
+                        <th class="text-right px-4 py-3 text-xs font-semibold uppercase text-text-muted">Qty Dispensed</th>
+                        <th class="text-right px-4 py-3 text-xs font-semibold uppercase text-text-muted">Revenue</th>
+                        <th class="text-right px-4 py-3 text-xs font-semibold uppercase text-text-muted">Stock Left</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-100">
+                    {% for item in dispensed_list %}
+                        <tr class="hover:bg-gray-50">
+                            <td class="px-4 py-3 text-sm font-medium text-text-main">{{ item.name }}</td>
+                            <td class="px-4 py-3 text-sm text-right text-text-muted">{{ item.qty|floatformat:0 }}</td>
+                            <td class="px-4 py-3 text-sm text-right font-semibold text-text-main">UGX {{ item.revenue|floatformat:0 }}</td>
+                            <td class="px-4 py-3 text-sm text-right {% if item.stock <= 5 %}text-red-600 font-semibold{% else %}text-text-muted{% endif %}">
+                                {{ item.stock|floatformat:0 }}
+                            </td>
+                        </tr>
+                    {% empty %}
+                        <tr><td colspan="4" class="px-4 py-8 text-center text-sm text-text-muted italic">No drugs dispensed in this period.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    {# ── Restock priorities ── #}
+    <div class="card border border-gray-100 shadow-none">
+        <div class="flex items-start justify-between gap-3 flex-wrap mb-4">
+            <div>
+                <h3 class="text-lg font-bold text-text-main">Restock Priorities</h3>
+                <p class="text-sm text-text-muted">Out-of-stock and low-stock items. Click Restock to add stock immediately.</p>
+            </div>
+            <a href="{% url 'manage_inventory' %}?stock=low" class="btn btn-secondary btn-sm">View Full Inventory</a>
+        </div>
+
+        {% if restock_items %}
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead class="bg-gray-50 border-b border-gray-200">
+                    <tr>
+                        <th class="text-left px-4 py-3 text-xs font-semibold uppercase text-text-muted">Item</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold uppercase text-text-muted">Category</th>
+                        <th class="text-right px-4 py-3 text-xs font-semibold uppercase text-text-muted">Stock</th>
+                        <th class="text-right px-4 py-3 text-xs font-semibold uppercase text-text-muted">Min Level</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold uppercase text-text-muted">Status</th>
+                        <th class="px-4 py-3"></th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-100">
+                    {% for item in restock_items %}
+                        <tr class="hover:bg-gray-50">
+                            <td class="px-4 py-3 font-semibold text-text-main">{{ item.name }}</td>
+                            <td class="px-4 py-3 text-text-muted">{{ item.get_category_display }}</td>
+                            <td class="px-4 py-3 text-right font-semibold {% if item.current_quantity <= 0 %}text-red-600{% else %}text-amber-600{% endif %}">
+                                {{ item.quantity_label }}
+                            </td>
+                            <td class="px-4 py-3 text-right text-text-muted">{{ item.reorder_level|floatformat:0 }}</td>
+                            <td class="px-4 py-3">
+                                {% if item.current_quantity <= 0 %}
+                                    <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold bg-red-50 text-red-700">Zero stock</span>
+                                {% else %}
+                                    <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700">Low stock</span>
+                                {% endif %}
+                            </td>
+                            <td class="px-4 py-3 text-right">
+                                <button type="button"
+                                    class="btn btn-primary btn-sm restock-btn"
+                                    data-item-id="{{ item.pk }}"
+                                    data-item-name="{{ item.name }}">
+                                    Restock
+                                </button>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+            <p class="text-sm text-text-muted italic py-4">No urgent restock items right now. Stock levels are healthy.</p>
+        {% endif %}
+    </div>
+
 </div>
+
+{# ── Restock modal ── #}
+<div id="restockModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+  <div class="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+    <div class="flex items-center justify-between mb-4">
+      <h3 id="restockModalTitle" class="text-lg font-bold text-text-main">Restock Item</h3>
+      <button id="restockModalClose" type="button" class="text-text-muted hover:text-text-main text-xl leading-none">&times;</button>
+    </div>
+    <form id="restockForm" method="post" action="" class="space-y-3">
+      {% csrf_token %}
+      <div>
+        <label class="block text-xs font-semibold uppercase text-text-muted mb-1">Quantity Received <span class="text-red-500">*</span></label>
+        <input type="number" name="quantity_received" min="0.01" step="0.01" required class="form-control" placeholder="e.g. 100">
+      </div>
+      <div>
+        <label class="block text-xs font-semibold uppercase text-text-muted mb-1">Cost Price (optional)</label>
+        <input type="number" name="unit_cost" min="0" step="0.01" class="form-control" placeholder="Buying price per unit">
+      </div>
+      <div>
+        <label class="block text-xs font-semibold uppercase text-text-muted mb-1">Batch Number (optional)</label>
+        <input type="text" name="batch_number" class="form-control" placeholder="e.g. BATCH-2026-01">
+      </div>
+      <div>
+        <label class="block text-xs font-semibold uppercase text-text-muted mb-1">Expiry Date (optional)</label>
+        <input type="date" name="expiry_date" class="form-control">
+      </div>
+      <div class="flex gap-3 pt-2">
+        <button type="submit" class="btn btn-primary w-full">Add Stock</button>
+        <button type="button" onclick="document.getElementById('restockModal').classList.add('hidden')" class="btn btn-secondary w-full">Cancel</button>
+      </div>
+    </form>
+  </div>
+</div>
+
 {% endblock %}
 
 {% block extra_js %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
 <script>
 (function () {
-    const labels = {{ pharma_chart_labels_json|safe }};
-    const pharmacyValues = {{ pharma_chart_values_json|safe }}.map(Number);
-    const netProfitValues = {{ net_profit_chart_values_json|safe }}.map(Number);
+    const labels        = {{ chart_labels_json|safe }};
+    const pharmacyData  = {{ pharma_values_json|safe }};
+    const netProfitData = {{ net_profit_values_json|safe }};
 
-    const ctx = document.getElementById('pharmacyIncomeChart');
+    const ctx = document.getElementById('insightsChart');
     if (!ctx) return;
 
-    const chart = new Chart(ctx, {
-        type: 'bar',
+    new Chart(ctx, {
+        type: 'line',
         data: {
             labels: labels,
-            datasets: [{
-                label: 'Pharmacy Income (UGX)',
-                data: pharmacyValues,
-                borderWidth: 2,
-                borderColor: '#0f3b5f',
-                backgroundColor: 'rgba(15, 59, 95, 0.18)',
-            }]
+            datasets: [
+                {
+                    label: 'Pharmacy Income (UGX)',
+                    data: pharmacyData,
+                    borderColor: '#0f3b5f',
+                    backgroundColor: 'rgba(15, 59, 95, 0.10)',
+                    borderWidth: 2,
+                    pointRadius: labels.length > 60 ? 0 : 3,
+                    tension: 0.3,
+                    fill: true,
+                },
+                {
+                    label: 'Net Profit (UGX)',
+                    data: netProfitData,
+                    borderColor: '#16a34a',
+                    backgroundColor: 'rgba(22, 163, 74, 0.08)',
+                    borderWidth: 2,
+                    pointRadius: labels.length > 60 ? 0 : 3,
+                    tension: 0.3,
+                    fill: true,
+                }
+            ]
         },
         options: {
             responsive: true,
             maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
             plugins: {
-                legend: { display: true }
+                legend: { display: true, position: 'top' }
             },
             scales: {
                 y: {
-                    beginAtZero: true,
+                    beginAtZero: false,
                     ticks: { precision: 0 }
                 }
             }
         }
     });
-
-    const filterEl = document.getElementById('incomeChartFilter');
-    const titleEl = document.getElementById('incomeChartTitle');
-    const subtitleEl = document.getElementById('incomeChartSubtitle');
-
-    if (filterEl) {
-        filterEl.addEventListener('change', function () {
-            const mode = this.value;
-            if (mode === 'net_profit') {
-                chart.data.datasets[0].label = 'Net Profit (UGX)';
-                chart.data.datasets[0].data = netProfitValues;
-                chart.data.datasets[0].backgroundColor = netProfitValues.map(v => v >= 0 ? 'rgba(15, 59, 95, 0.18)' : 'rgba(220,38,38,0.18)');
-                chart.data.datasets[0].borderColor = netProfitValues.map(v => v >= 0 ? '#0f3b5f' : '#dc2626');
-                titleEl.textContent = 'Net Profit';
-                subtitleEl.textContent = 'Monthly net profit (income − expenses − salaries) over the last 6 months.';
-            } else {
-                chart.data.datasets[0].label = 'Pharmacy Income (UGX)';
-                chart.data.datasets[0].data = pharmacyValues;
-                chart.data.datasets[0].backgroundColor = 'rgba(15, 59, 95, 0.18)';
-                chart.data.datasets[0].borderColor = '#0f3b5f';
-                titleEl.textContent = 'Pharmacy Income';
-                subtitleEl.textContent = 'Monthly revenue from dispensed prescriptions over the last 6 months.';
-            }
-            chart.update();
-        });
-    }
 })();
+
+// ── Restock modal ─────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', function () {
+    const modal      = document.getElementById('restockModal');
+    const form       = document.getElementById('restockForm');
+    const titleEl    = document.getElementById('restockModalTitle');
+    const closeBtn   = document.getElementById('restockModalClose');
+
+    document.querySelectorAll('.restock-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            titleEl.textContent  = 'Restock: ' + btn.dataset.itemName;
+            form.action = `/platform/hospital/inventory/${btn.dataset.itemId}/restock/`;
+            modal.classList.remove('hidden');
+            form.querySelector('[name="quantity_received"]').focus();
+        });
+    });
+
+    closeBtn.addEventListener('click', () => { modal.classList.add('hidden'); form.reset(); });
+    modal.addEventListener('click', e => { if (e.target === modal) { modal.classList.add('hidden'); form.reset(); } });
+});
 </script>
 {% endblock %}

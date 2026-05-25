@@ -2145,14 +2145,111 @@ def manage_inventory(request):
 
 @role_required(User.ROLE_HOSPITAL_ADMIN)
 def inventory_insights(request):
+    from datetime import date as _date
+    from doctor.models import Prescription
+    from reception.models import Payment as _Payment
+
     hospital = active_hospital(request)
+    today = timezone.localdate()
+
+    period_start_raw = (request.GET.get("start") or "").strip()
+    period_end_raw   = (request.GET.get("end")   or "").strip()
+    try:
+        period_start = _date.fromisoformat(period_start_raw)
+    except ValueError:
+        period_start = today - timedelta(days=29)
+    try:
+        period_end = _date.fromisoformat(period_end_raw)
+    except ValueError:
+        period_end = today
+
+    # Daily pharmacy income
+    pharma_map = {
+        row["day"]: Decimal(row["total"] or 0)
+        for row in Prescription.objects.filter(
+            visit__hospital=hospital, dispensed=True,
+            dispensed_at__date__gte=period_start,
+            dispensed_at__date__lte=period_end,
+        ).annotate(day=TruncDate("dispensed_at")).values("day").annotate(total=Sum("total_price"))
+    }
+
+    # Daily total income (all payments)
+    income_map = {
+        row["day"]: Decimal(row["total"] or 0)
+        for row in _Payment.objects.filter(
+            visit__hospital=hospital,
+            paid_at__date__gte=period_start,
+            paid_at__date__lte=period_end,
+        ).exclude(status="waived")
+        .annotate(day=TruncDate("paid_at")).values("day").annotate(total=Sum("amount_paid"))
+    }
+
+    # Daily expenses
+    expense_map = {
+        row["date"]: Decimal(row["total"] or 0)
+        for row in Expense.objects.filter(
+            hospital=hospital,
+            date__gte=period_start,
+            date__lte=period_end,
+        ).values("date").annotate(total=Sum("amount"))
+    }
+
+    # Daily salaries
+    salary_map = {
+        row["day"]: Decimal(row["total"] or 0)
+        for row in Salary.objects.filter(
+            hospital=hospital, paid=True,
+            paid_at__date__gte=period_start,
+            paid_at__date__lte=period_end,
+        ).annotate(day=TruncDate("paid_at")).values("day").annotate(total=Sum("amount"))
+    }
+
+    # Build daily series
+    chart_labels, pharma_values, net_profit_values = [], [], []
+    cursor = period_start
+    while cursor <= period_end:
+        chart_labels.append(cursor.strftime("%d %b"))
+        p = pharma_map.get(cursor, Decimal("0"))
+        net = income_map.get(cursor, Decimal("0")) - expense_map.get(cursor, Decimal("0")) - salary_map.get(cursor, Decimal("0"))
+        pharma_values.append(float(p))
+        net_profit_values.append(float(net))
+        cursor += timedelta(days=1)
+
+    # Per-drug dispensed summary for the period
+    drug_totals = {}
+    for rx in Prescription.objects.filter(
+        visit__hospital=hospital, dispensed=True,
+        dispensed_at__date__gte=period_start,
+        dispensed_at__date__lte=period_end,
+    ).select_related("drug")[:800]:
+        did = rx.drug_id or 0
+        if did not in drug_totals:
+            drug_totals[did] = {
+                "name": str(rx.drug) if rx.drug else "Unknown",
+                "qty": Decimal("0"),
+                "revenue": Decimal("0"),
+                "stock": rx.drug.current_quantity if rx.drug else Decimal("0"),
+            }
+        drug_totals[did]["qty"] += rx.total_quantity or Decimal("0")
+        drug_totals[did]["revenue"] += rx.total_price or Decimal("0")
+    dispensed_list = sorted(drug_totals.values(), key=lambda x: x["revenue"], reverse=True)
+
+    snapshot = inventory_dashboard_snapshot(hospital)
     context = hospital_admin_context(
         request,
         "hospital_inventory_insights",
         "Inventory Insights",
-        "Review quick restock priorities, sales trend, and category mix without crowding the main stock page.",
+        "Daily pharmacy income vs net profit, restock priorities, and dispensed drugs.",
     )
-    context.update(inventory_dashboard_snapshot(hospital))
+    context.update(snapshot)
+    context.update({
+        "period_start": period_start.isoformat(),
+        "period_end": period_end.isoformat(),
+        "chart_labels_json": json.dumps(chart_labels),
+        "pharma_values_json": json.dumps(pharma_values),
+        "net_profit_values_json": json.dumps(net_profit_values),
+        "dispensed_list": dispensed_list,
+    })
     return render(request, "admin_dashboard/inventory_insights.html", context)
 
 
