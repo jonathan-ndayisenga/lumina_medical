@@ -2,9 +2,9 @@
 <html>
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Receipt</title>
     <style>
-        /* Remove all spacing from every element */
         * {
             margin: 0;
             padding: 0;
@@ -12,77 +12,84 @@
         }
 
         @page {
-            size: 48mm auto;
-            margin: 0mm;
+            size: 58mm auto;
+            margin: 1mm 2mm;
         }
 
         body {
-            width: 48mm;
-            margin: 0;
-            padding: 0.2mm;           /* tiny safe margin */
-            font-family: monospace;
-            font-size: 12px;
-            line-height: 0.85;         /* minimal line spacing – lines nearly touch */
-            color: #000;
-            background: white;
-        }
-
-        /* Remove all extra spacing from block elements */
-        div, p, table, tr, td, .section, .line, .center, .right, .bold {
-            margin: 0;
+            width: 54mm;
+            margin: 0 auto;
             padding: 0;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 8.5px;
+            line-height: 1.2;
+            color: #000;
+            background: #fff;
         }
 
         .center { text-align: center; }
-        .right { text-align: right; }
-        .bold { font-weight: bold; }
+        .right  { text-align: right; }
+        .bold   { font-weight: bold; }
 
-        .line {
+        .divider {
+            border: none;
             border-top: 1px dashed #000;
-            margin: 0;                 /* no margin */
-            padding: 0;
+            margin: 1.5mm 0;
         }
 
-        .section {
-            margin-bottom: 0;          /* no bottom margin */
-        }
-
+        /* services table */
         table {
             width: 100%;
             border-collapse: collapse;
             table-layout: fixed;
         }
         td {
-            padding: 0;               /* no cell padding */
+            padding: 0;
             vertical-align: top;
         }
-        .service-name {
-            width: 70%;
+        .col-name {
+            width: 72%;
             word-break: break-word;
         }
-        .service-price {
-            width: 30%;
+        .col-price {
+            width: 28%;
             text-align: right;
             white-space: nowrap;
         }
-        .summary-table td:first-child {
-            text-align: left;
-            font-weight: bold;
-        }
-        .summary-table td:last-child {
-            text-align: right;
-        }
 
-        button {
+        /* summary totals */
+        .sum-table { width: 100%; border-collapse: collapse; }
+        .sum-table td { padding: 0; }
+        .sum-table td:first-child { font-weight: bold; }
+        .sum-table td:last-child  { text-align: right; }
+
+        /* screen-only buttons */
+        .screen-only {
+            display: block;
             width: 100%;
-            padding: 0;
-            margin-top: 2px;
-            font-size: 12px;
-            line-height: 1.0;
+            margin-top: 3mm;
+            padding: 2mm 0;
+            font-size: 9px;
+            font-family: 'Courier New', Courier, monospace;
+            cursor: pointer;
+            text-align: center;
+            text-decoration: none;
+            border: 1px solid #000;
+        }
+        .btn-whatsapp {
+            background: #25d366;
+            color: #fff;
+            border-color: #25d366;
+        }
+        .btn-print {
+            background: #fff;
+            color: #000;
         }
 
         @media print {
-            button, a { display: none; }
+            .screen-only { display: none !important; }
+            body { font-size: 8.5px; line-height: 1.2; }
+            * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
         }
     </style>
 </head>
@@ -91,62 +98,50 @@
     <div class="center bold">LUMINA MEDICAL SERVICES</div>
     <div class="center">Receipt #{{ payment.receipt_number }}</div>
     <div class="center">{{ payment.paid_at|date:"Y-m-d H:i" }}</div>
-    <div class="line"></div>
+    <hr class="divider">
 
-    <div>
-        <div><span class="bold">Patient:</span> {{ visit.patient.name|truncatechars:25 }}</div>
-        <div><span class="bold">Age/Sex:</span> {{ visit.patient.age }} / {{ visit.patient.get_sex_display|slice:":1" }}</div>
-        <div><span class="bold">Visit ID:</span> #{{ visit.id }}</div>
-    </div>
-    <div class="line"></div>
+    <div><span class="bold">Patient:</span> {{ visit.patient.name|truncatechars:22 }}</div>
+    <div><span class="bold">Age/Sex:</span> {{ visit.patient.age }} / {{ visit.patient.get_sex_display|slice:":1" }}</div>
+    <div><span class="bold">Visit:</span> #{{ visit.id }}</div>
+    <hr class="divider">
 
-    <div>
-        <div class="bold">Services</div>
-        <table>
-            {% for item in visit.visit_services.all %}
-            <tr>
-                <td class="service-name">{{ item.service.name|truncatechars:28 }}</td>
-                <td class="service-price">{{ item.price_at_time }}</td>
-            </tr>
-            {% empty %}
-            <tr><td colspan="2" class="center">No services</td></tr>
-            {% endfor %}
+    <div class="bold">Services</div>
+    <table>
+        {% for item in visit.visit_services.all %}
+        <tr>
+            <td class="col-name">{{ item.service.name|truncatechars:24 }}</td>
+            <td class="col-price">{{ item.price_at_time }}</td>
         </tr>
-    </div>
-    <div class="line"></div>
+        {% empty %}
+        <tr><td colspan="2" class="center">No services</td></tr>
+        {% endfor %}
+    </table>
+    <hr class="divider">
 
-    <div>
-        <table class="summary-table">
-            <tr><td>Total</td><td class="right">{{ visit.total_amount }}</td></tr>
-            <tr><td>Paid</td><td class="right">{{ payment.amount_paid }}</td></tr>
-            <tr><td>Balance</td><td class="right">{{ balance_due }}</td></tr>
-        </table>
-    </div>
-    <div class="line"></div>
+    <table class="sum-table">
+        <tr><td>Total</td><td>{{ visit.total_amount }}</td></tr>
+        <tr><td>Paid</td><td>{{ payment.amount_paid }}</td></tr>
+        <tr><td>Balance</td><td>{{ balance_due }}</td></tr>
+    </table>
+    <hr class="divider">
 
-    <div>
-        <div><span class="bold">Mode:</span> {{ payment.get_mode_display|slice:":10" }}</div>
-        <div><span class="bold">By:</span> {{ payment.recorded_by.get_full_name|default:payment.recorded_by.username|truncatechars:20 }}</div>
-    </div>
+    <div><span class="bold">Mode:</span> {{ payment.get_mode_display }}</div>
+    <div><span class="bold">By:</span> {{ payment.recorded_by.get_full_name|default:payment.recorded_by.username|truncatechars:18 }}</div>
 
     {% if payment.notes %}
-    <div class="line"></div>
-    <div>
-        <div class="bold">Notes:</div>
-        <div>{{ payment.notes|truncatechars:30 }}</div>
-    </div>
+    <hr class="divider">
+    <div class="bold">Notes:</div>
+    <div>{{ payment.notes|truncatechars:60 }}</div>
     {% endif %}
 
-    <div class="line"></div>
+    <hr class="divider">
     <div class="center">Thank you</div>
     <div class="center">Get well soon</div>
 
     {% if walink %}
-    <a href="{{ walink }}" target="_blank" style="display:block;width:100%;padding:4px 0;margin-top:4px;font-size:12px;line-height:1.2;background:#25d366;color:#fff;border:none;font-family:monospace;cursor:pointer;text-align:center;text-decoration:none;">
-        Send Receipt via WhatsApp
-    </a>
+    <a href="{{ walink }}" target="_blank" class="screen-only btn-whatsapp">Send Receipt via WhatsApp</a>
     {% endif %}
-    <button onclick="window.print()">Print / Save as PDF</button>
+    <button onclick="window.print()" class="screen-only btn-print">Print / Save as PDF</button>
 
 </body>
 </html>
