@@ -2175,7 +2175,6 @@ def manage_inventory(request):
 def inventory_insights(request):
     from datetime import date as _date
     from doctor.models import Prescription
-    from reception.models import Payment as _Payment
 
     hospital = active_hospital(request)
     today = timezone.localdate()
@@ -2191,38 +2190,8 @@ def inventory_insights(request):
     except ValueError:
         period_end = today
 
-    # Daily total income (all payments)
-    income_map = {
-        row["day"]: Decimal(row["total"] or 0)
-        for row in _Payment.objects.filter(
-            visit__hospital=hospital,
-            paid_at__date__gte=period_start,
-            paid_at__date__lte=period_end,
-        ).exclude(status="waived")
-        .annotate(day=TruncDate("paid_at")).values("day").annotate(total=Sum("amount_paid"))
-    }
-
-    # Daily expenses
-    expense_map = {
-        row["date"]: Decimal(row["total"] or 0)
-        for row in Expense.objects.filter(
-            hospital=hospital,
-            date__gte=period_start,
-            date__lte=period_end,
-        ).values("date").annotate(total=Sum("amount"))
-    }
-
-    # Daily salaries (paid_at is DateField — no __date transform)
-    salary_map = {
-        row["paid_at"]: Decimal(row["total"] or 0)
-        for row in Salary.objects.filter(
-            hospital=hospital, paid=True,
-            paid_at__gte=period_start,
-            paid_at__lte=period_end,
-        ).values("paid_at").annotate(total=Sum("amount"))
-    }
-
-    # Daily pharmacy gross profit: revenue from drug sales minus buying cost
+    # Daily pharmacy income (drug sales revenue) and gross profit (revenue - buying cost)
+    pharma_income_map = {}
     pharma_profit_map = {}
     for rx in Prescription.objects.filter(
         visit__hospital=hospital, dispensed=True,
@@ -2235,16 +2204,15 @@ def inventory_insights(request):
         revenue = rx.total_price or Decimal("0")
         unit_cost = (rx.drug.unit_cost or Decimal("0")) if rx.drug else Decimal("0")
         qty = rx.total_quantity or Decimal("0")
-        profit = revenue - unit_cost * qty
-        pharma_profit_map[d] = pharma_profit_map.get(d, Decimal("0")) + profit
+        pharma_income_map[d] = pharma_income_map.get(d, Decimal("0")) + revenue
+        pharma_profit_map[d] = pharma_profit_map.get(d, Decimal("0")) + (revenue - unit_cost * qty)
 
-    # Build daily series — Line 1: Total Income, Line 2: Pharmacy Gross Profit
-    chart_labels, income_values, pharma_profit_values = [], [], []
+    # Build daily series — Line 1: Pharmacy Income, Line 2: Pharmacy Gross Profit
+    chart_labels, pharma_income_values, pharma_profit_values = [], [], []
     cursor = period_start
     while cursor <= period_end:
         chart_labels.append(cursor.strftime("%d %b"))
-        inc = income_map.get(cursor, Decimal("0"))
-        income_values.append(float(inc))
+        pharma_income_values.append(float(pharma_income_map.get(cursor, Decimal("0"))))
         pharma_profit_values.append(float(pharma_profit_map.get(cursor, Decimal("0"))))
         cursor += timedelta(days=1)
 
@@ -2285,7 +2253,7 @@ def inventory_insights(request):
         "period_start": period_start.isoformat(),
         "period_end": period_end.isoformat(),
         "chart_labels_json": json.dumps(chart_labels),
-        "income_values_json": json.dumps(income_values),
+        "pharma_income_values_json": json.dumps(pharma_income_values),
         "pharma_profit_values_json": json.dumps(pharma_profit_values),
         "dispensed_list": drugs_page_obj,
         "drugs_page_obj": drugs_page_obj,
