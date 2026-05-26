@@ -13,6 +13,7 @@
         padding: 2mm 1mm;
         font-family: 'Courier New', Courier, monospace;
         font-size: 11px;
+        font-weight: bold;
         line-height: 1.05;
         color: #000;
         background: #fff;
@@ -30,6 +31,11 @@
     }
     .row .n { flex: 1; }
     .row .p { white-space: nowrap; }
+
+    body, div, span {
+        page-break-inside: avoid;
+        break-inside: avoid;
+    }
 
     .sep {
         border-top: 1.5px solid #000;
