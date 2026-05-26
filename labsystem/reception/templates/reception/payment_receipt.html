@@ -4,36 +4,31 @@
 <meta charset="UTF-8">
 <title>Receipt</title>
 <style>
-    /* ── Paper: 48 mm, zero margin so printer fills the roll ── */
-    @page {
-        size: 48mm auto;
-        margin: 0mm;
-    }
+    @page { size: 48mm auto; margin: 0mm; }
 
     * { margin: 0; padding: 0; box-sizing: border-box; }
 
     body {
         width: 48mm;
-        padding: 1.5mm;
+        padding: 2mm 1.5mm;
         font-family: 'Courier New', Courier, monospace;
-        font-size: 10px;       /* visible at 48mm, ~30 chars/line */
-        line-height: 1.3;      /* compact but Chrome won't override it */
+        font-size: 10px;
+        line-height: 1.3;
         color: #000;
         background: #fff;
     }
 
-    .c  { text-align: center; }
-    .r  { text-align: right; }
-    .b  { font-weight: bold; }
-    hr  { border: none; border-top: 1px dashed #000; margin: 2px 0; }
+    .c   { text-align: center; }
+    .b   { font-weight: bold; }
+    .sep { letter-spacing: 0; }
 
-    table { width: 100%; border-collapse: collapse; }
-    td    { padding: 0; vertical-align: top; font-size: 10px; line-height: 1.3; }
-
-    .sn { width: 64%; word-break: break-word; }
-    .sp { width: 36%; text-align: right; white-space: nowrap; }
-    .tl { width: 48%; font-weight: bold; }
-    .tv { width: 52%; text-align: right; }
+    .row {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+    }
+    .row .n { flex: 1; word-break: break-word; padding-right: 4px; }
+    .row .p { white-space: nowrap; text-align: right; }
 
     .btn {
         display: block;
@@ -57,44 +52,40 @@
 <body>
 
 <div class="c b">LUMINA MEDICAL SERVICES</div>
-<div class="c">Receipt #{{ payment.receipt_number }}</div>
+<div class="c">{{ payment.receipt_number }}</div>
 <div class="c">{{ payment.paid_at|date:"Y-m-d H:i" }}</div>
-<hr>
+<div class="sep">================================</div>
 
-<div><b>Patient:</b> {{ visit.patient.name|truncatechars:20 }}</div>
-<div><b>Age/Sex:</b> {{ visit.patient.age }} / {{ visit.patient.get_sex_display|slice:":1" }}</div>
-<div><b>Visit:</b> #{{ visit.id }}</div>
-<hr>
+<div><b>Patient :</b> {{ visit.patient.name|truncatechars:18 }}</div>
+<div><b>Age/Sex :</b> {{ visit.patient.age }} / {{ visit.patient.get_sex_display|slice:":1" }}</div>
+<div><b>Visit   :</b> #{{ visit.id }}</div>
+<div class="sep">================================</div>
 
-<div class="b">Services</div>
-<table>
+<div class="b">SERVICES</div>
 {% for item in visit.visit_services.all %}
-<tr>
-    <td class="sn">{{ item.service.name|truncatechars:20 }}</td>
-    <td class="sp">{{ item.price_at_time }}</td>
-</tr>
+<div class="row">
+    <span class="n">{{ item.service.name|truncatechars:18 }}</span>
+    <span class="p">{{ item.price_at_time }}</span>
+</div>
 {% empty %}
-<tr><td colspan="2" class="c">(no services)</td></tr>
+<div class="c">(no services)</div>
 {% endfor %}
-</table>
-<hr>
+<div class="sep">================================</div>
 
-<table>
-    <tr><td class="tl">Total</td><td class="tv">{{ visit.total_amount }}</td></tr>
-    <tr><td class="tl">Paid</td><td class="tv">{{ payment.amount_paid }}</td></tr>
-    <tr><td class="tl">Balance</td><td class="tv">{{ balance_due }}</td></tr>
-</table>
-<hr>
+<div class="row"><span class="n"><b>Total</b></span><span class="p">{{ visit.total_amount }}</span></div>
+<div class="row"><span class="n"><b>Paid</b></span><span class="p">{{ payment.amount_paid }}</span></div>
+<div class="row"><span class="n"><b>Balance</b></span><span class="p">{{ balance_due }}</span></div>
+<div class="sep">================================</div>
 
-<div><b>Mode:</b> {{ payment.get_mode_display }}</div>
-<div><b>By:</b> {{ payment.recorded_by.get_full_name|default:payment.recorded_by.username|truncatechars:18 }}</div>
+<div><b>Mode :</b> {{ payment.get_mode_display }}</div>
+<div><b>By   :</b> {{ payment.recorded_by.get_full_name|default:payment.recorded_by.username|truncatechars:18 }}</div>
 
 {% if payment.notes %}
-<hr>
-<div><b>Notes:</b> {{ payment.notes|truncatechars:50 }}</div>
+<div class="sep">================================</div>
+<div>{{ payment.notes|truncatechars:60 }}</div>
 {% endif %}
 
-<hr>
+<div class="sep">================================</div>
 <div class="c">Thank you</div>
 <div class="c">Get well soon</div>
 
