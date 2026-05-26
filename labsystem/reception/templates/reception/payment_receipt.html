@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <title>Receipt</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap" rel="stylesheet">
 <style>
     @page { size: 48mm auto; margin: 0mm; }
 
@@ -12,35 +12,41 @@
 
     body {
         width: 48mm;
-        padding: 2mm 1.5mm;
-        font-family: 'VT323', 'Lucida Console', 'Courier New', monospace;
-        font-size: 13px;
-        line-height: 1.15;
+        padding: 2mm 1mm;
+        font-family: 'Share Tech Mono', 'Lucida Console', 'Courier New', monospace;
+        font-size: 11px;
+        font-weight: bold;
+        line-height: 1.0;
         color: #000;
         background: #fff;
-        -webkit-font-smoothing: none;
-        font-smooth: never;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
     }
 
     .c   { text-align: center; }
-    .b   { font-weight: bold; }
-    .sep { letter-spacing: 0; }
+    .lbl { display: inline-block; width: 52px; }
 
     .row {
         display: flex;
         justify-content: space-between;
-        align-items: flex-start;
+        align-items: baseline;
     }
-    .row .n { flex: 1; word-break: break-word; padding-right: 4px; }
-    .row .p { white-space: nowrap; text-align: right; }
+    .row .n { flex: 1; }
+    .row .p { white-space: nowrap; }
+
+    .sep {
+        border-top: 1.5px solid #000;
+        margin: 2px 0;
+        height: 0;
+    }
 
     .btn {
         display: block;
         width: 100%;
-        margin-top: 4px;
+        margin-top: 5px;
         padding: 3px 0;
-        font-family: 'Courier New', Courier, monospace;
-        font-size: 10px;
+        font-family: 'Share Tech Mono', 'Courier New', monospace;
+        font-size: 11px;
         text-align: center;
         cursor: pointer;
         border: 1px solid #000;
@@ -55,41 +61,41 @@
 </head>
 <body>
 
-<div class="c b">LUMINA MEDICAL SERVICES</div>
+<div class="c">LUMINA MEDICAL SERVICES</div>
 <div class="c">{{ payment.receipt_number }}</div>
 <div class="c">{{ payment.paid_at|date:"Y-m-d H:i" }}</div>
-<div class="sep">================================</div>
+<div class="sep"></div>
 
-<div><b>Patient :</b> {{ visit.patient.name|truncatechars:18 }}</div>
-<div><b>Age/Sex :</b> {{ visit.patient.age }} / {{ visit.patient.get_sex_display|slice:":1" }}</div>
-<div><b>Visit   :</b> #{{ visit.id }}</div>
-<div class="sep">================================</div>
+<div><span class="lbl">Patient:</span> {{ visit.patient.name|truncatechars:16 }}</div>
+<div><span class="lbl">Age/Sex:</span> {{ visit.patient.age }} / {{ visit.patient.get_sex_display|slice:":1" }}</div>
+<div><span class="lbl">Visit:</span> #{{ visit.id }}</div>
+<div class="sep"></div>
 
-<div class="b">SERVICES</div>
+<div>SERVICES</div>
 {% for item in visit.visit_services.all %}
 <div class="row">
-    <span class="n">{{ item.service.name|truncatechars:18 }}</span>
+    <span class="n">{{ item.service.name|truncatechars:16 }}</span>
     <span class="p">{{ item.price_at_time }}</span>
 </div>
 {% empty %}
 <div class="c">(no services)</div>
 {% endfor %}
-<div class="sep">================================</div>
+<div class="sep"></div>
 
-<div class="row"><span class="n"><b>Total</b></span><span class="p">{{ visit.total_amount }}</span></div>
-<div class="row"><span class="n"><b>Paid</b></span><span class="p">{{ payment.amount_paid }}</span></div>
-<div class="row"><span class="n"><b>Balance</b></span><span class="p">{{ balance_due }}</span></div>
-<div class="sep">================================</div>
+<div class="row"><span class="n">TOTAL</span><span class="p">{{ visit.total_amount }}</span></div>
+<div class="row"><span class="n">PAID</span><span class="p">{{ payment.amount_paid }}</span></div>
+<div class="row"><span class="n">BALANCE</span><span class="p">{{ balance_due }}</span></div>
+<div class="sep"></div>
 
-<div><b>Mode :</b> {{ payment.get_mode_display }}</div>
-<div><b>By   :</b> {{ payment.recorded_by.get_full_name|default:payment.recorded_by.username|truncatechars:18 }}</div>
+<div><span class="lbl">Mode:</span> {{ payment.get_mode_display }}</div>
+<div><span class="lbl">By:</span> {{ payment.recorded_by.get_full_name|default:payment.recorded_by.username|truncatechars:16 }}</div>
 
 {% if payment.notes %}
-<div class="sep">================================</div>
+<div class="sep"></div>
 <div>{{ payment.notes|truncatechars:60 }}</div>
 {% endif %}
 
-<div class="sep">================================</div>
+<div class="sep"></div>
 <div class="c">Thank you</div>
 <div class="c">Get well soon</div>
 
