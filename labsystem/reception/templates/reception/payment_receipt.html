@@ -4,63 +4,90 @@
 <meta charset="UTF-8">
 <title>Receipt</title>
 <style>
-    body {
-        font-family: 'Courier New', Courier, monospace;
-        font-size: 12px;
-        line-height: 1.4;
-        margin: 4px;
-        padding: 0;
-        color: #000;
+    /* ── Paper: 48 mm, zero margin so printer fills the roll ── */
+    @page {
+        size: 48mm auto;
+        margin: 0mm;
     }
-    .center { text-align: center; }
-    .right  { text-align: right; }
-    .bold   { font-weight: bold; }
-    hr      { border: none; border-top: 1px dashed #000; margin: 4px 0; }
-    table   { width: 100%; border-collapse: collapse; }
-    td      { padding: 1px 0; vertical-align: top; }
-    .name   { width: 65%; word-break: break-word; }
-    .price  { width: 35%; text-align: right; }
-    .lbl    { width: 45%; font-weight: bold; }
-    .val    { width: 55%; text-align: right; }
-    .btn    { display:block; width:100%; margin-top:6px; padding:4px; font-family:inherit; font-size:12px; text-align:center; cursor:pointer; border:1px solid #000; background:#fff; text-decoration:none; }
-    .wa     { background:#25d366; color:#fff; border-color:#25d366; }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+        width: 48mm;
+        padding: 1.5mm;
+        font-family: 'Courier New', Courier, monospace;
+        font-size: 10px;       /* visible at 48mm, ~30 chars/line */
+        line-height: 1.3;      /* compact but Chrome won't override it */
+        color: #000;
+        background: #fff;
+    }
+
+    .c  { text-align: center; }
+    .r  { text-align: right; }
+    .b  { font-weight: bold; }
+    hr  { border: none; border-top: 1px dashed #000; margin: 2px 0; }
+
+    table { width: 100%; border-collapse: collapse; }
+    td    { padding: 0; vertical-align: top; font-size: 10px; line-height: 1.3; }
+
+    .sn { width: 64%; word-break: break-word; }
+    .sp { width: 36%; text-align: right; white-space: nowrap; }
+    .tl { width: 48%; font-weight: bold; }
+    .tv { width: 52%; text-align: right; }
+
+    .btn {
+        display: block;
+        width: 100%;
+        margin-top: 4px;
+        padding: 3px 0;
+        font-family: 'Courier New', Courier, monospace;
+        font-size: 10px;
+        text-align: center;
+        cursor: pointer;
+        border: 1px solid #000;
+        background: #fff;
+        color: #000;
+        text-decoration: none;
+    }
+    .wa { background: #25d366; color: #fff; border-color: #25d366; }
+
     @media print { .btn { display: none !important; } }
 </style>
 </head>
 <body>
 
-<div class="center bold">LUMINA MEDICAL SERVICES</div>
-<div class="center">Receipt #{{ payment.receipt_number }}</div>
-<div class="center">{{ payment.paid_at|date:"Y-m-d H:i" }}</div>
+<div class="c b">LUMINA MEDICAL SERVICES</div>
+<div class="c">Receipt #{{ payment.receipt_number }}</div>
+<div class="c">{{ payment.paid_at|date:"Y-m-d H:i" }}</div>
 <hr>
 
-<div><b>Patient:</b> {{ visit.patient.name|truncatechars:22 }}</div>
+<div><b>Patient:</b> {{ visit.patient.name|truncatechars:20 }}</div>
 <div><b>Age/Sex:</b> {{ visit.patient.age }} / {{ visit.patient.get_sex_display|slice:":1" }}</div>
 <div><b>Visit:</b> #{{ visit.id }}</div>
 <hr>
 
-<div class="bold">Services</div>
+<div class="b">Services</div>
 <table>
 {% for item in visit.visit_services.all %}
 <tr>
-    <td class="name">{{ item.service.name|truncatechars:22 }}</td>
-    <td class="price">{{ item.price_at_time }}</td>
+    <td class="sn">{{ item.service.name|truncatechars:20 }}</td>
+    <td class="sp">{{ item.price_at_time }}</td>
 </tr>
 {% empty %}
-<tr><td colspan="2" class="center">(no services)</td></tr>
+<tr><td colspan="2" class="c">(no services)</td></tr>
 {% endfor %}
 </table>
 <hr>
 
 <table>
-    <tr><td class="lbl">Total</td><td class="val">{{ visit.total_amount }}</td></tr>
-    <tr><td class="lbl">Paid</td><td class="val">{{ payment.amount_paid }}</td></tr>
-    <tr><td class="lbl">Balance</td><td class="val">{{ balance_due }}</td></tr>
+    <tr><td class="tl">Total</td><td class="tv">{{ visit.total_amount }}</td></tr>
+    <tr><td class="tl">Paid</td><td class="tv">{{ payment.amount_paid }}</td></tr>
+    <tr><td class="tl">Balance</td><td class="tv">{{ balance_due }}</td></tr>
 </table>
 <hr>
 
 <div><b>Mode:</b> {{ payment.get_mode_display }}</div>
-<div><b>By:</b> {{ payment.recorded_by.get_full_name|default:payment.recorded_by.username|truncatechars:20 }}</div>
+<div><b>By:</b> {{ payment.recorded_by.get_full_name|default:payment.recorded_by.username|truncatechars:18 }}</div>
 
 {% if payment.notes %}
 <hr>
@@ -68,11 +95,11 @@
 {% endif %}
 
 <hr>
-<div class="center">Thank you</div>
-<div class="center">Get well soon</div>
+<div class="c">Thank you</div>
+<div class="c">Get well soon</div>
 
 {% if walink %}
-<a href="{{ walink }}" target="_blank" class="btn wa">Send Receipt via WhatsApp</a>
+<a href="{{ walink }}" target="_blank" class="btn wa">Send via WhatsApp</a>
 {% endif %}
 <button onclick="window.print()" class="btn">Print / Save as PDF</button>
 
