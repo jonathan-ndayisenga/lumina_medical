@@ -1,0 +1,31 @@
+{% extends 'base.html' %}
+{% block title %}Reports - Lumina{% endblock %}
+{% block page_title %}Reports{% endblock %}
+{% block page_subtitle %}Data insights and exports for clinical and financial analysis.{% endblock %}
+{% block content_container_classes %}max-w-[90rem] mx-auto px-4 lg:px-8 py-6{% endblock %}
+
+{% block content %}
+<div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">
+
+    <a href="{% url 'report_consultations' %}" class="card hover:shadow-md transition-shadow cursor-pointer group">
+        <div class="flex items-start gap-4">
+            <div class="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center flex-shrink-0">
+                <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                          d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
+                </svg>
+            </div>
+            <div>
+                <h3 class="text-base font-bold text-text-main group-hover:text-blue-600 transition-colors">Doctor Consultations</h3>
+                <p class="text-sm text-text-muted mt-1">All patients seen by doctors — filter by doctor and date range. Export to CSV.</p>
+            </div>
+        </div>
+    </a>
+
+    {# More reports will be added here #}
+    <div class="card border-dashed border-2 border-gray-200 bg-gray-50 flex items-center justify-center min-h-[100px]">
+        <p class="text-sm text-text-muted italic">More reports coming soon…</p>
+    </div>
+
+</div>
+{% endblock %}

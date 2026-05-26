@@ -2521,6 +2521,114 @@ def edit_inventory_batch(request, batch_id):
     return redirect("manage_inventory")
 
 
+# ── Reports hub ───────────────────────────────────────────────────────────────
+
+@role_required(User.ROLE_HOSPITAL_ADMIN)
+def hospital_reports(request):
+    context = hospital_admin_context(
+        request,
+        "hospital_reports",
+        "Reports",
+        "Data insights and exports for clinical and financial analysis.",
+    )
+    return render(request, "admin_dashboard/reports_index.html", context)
+
+
+@role_required(User.ROLE_HOSPITAL_ADMIN)
+def report_consultations(request):
+    from datetime import date as _date
+    from doctor.models import Consultation
+    import urllib.parse as _urlparse
+
+    hospital = active_hospital(request)
+    today = timezone.localdate()
+
+    try:
+        date_start = _date.fromisoformat((request.GET.get("start") or "").strip())
+    except ValueError:
+        date_start = today.replace(day=1)
+    try:
+        date_end = _date.fromisoformat((request.GET.get("end") or "").strip())
+    except ValueError:
+        date_end = today
+
+    doctor_id_raw = (request.GET.get("doctor") or "").strip()
+    try:
+        filter_doctor_id = int(doctor_id_raw)
+    except ValueError:
+        filter_doctor_id = None
+
+    qs = (
+        Consultation.objects.filter(
+            visit__hospital=hospital,
+            created_at__date__gte=date_start,
+            created_at__date__lte=date_end,
+        )
+        .select_related("visit__patient", "created_by")
+        .order_by("-created_at")
+    )
+    if filter_doctor_id:
+        qs = qs.filter(created_by_id=filter_doctor_id)
+
+    total_consultations = qs.count()
+    unique_patients = qs.values("visit__patient_id").distinct().count()
+
+    # CSV export
+    if request.GET.get("export") == "csv":
+        response = HttpResponse(content_type="text/csv")
+        response["Content-Disposition"] = (
+            f'attachment; filename="patients-seen-{date_start}-{date_end}.csv"'
+        )
+        writer = csv.writer(response)
+        writer.writerow(["#", "Date", "Patient", "Age", "Sex", "Doctor", "Follow-up Date"])
+        for i, c in enumerate(qs, 1):
+            writer.writerow([
+                i,
+                c.created_at.strftime("%Y-%m-%d %H:%M"),
+                c.visit.patient.name,
+                c.visit.patient.age,
+                c.visit.patient.get_sex_display(),
+                c.created_by.get_full_name() if c.created_by else "—",
+                c.follow_up_date or "",
+            ])
+        return response
+
+    doctors = (
+        User.objects.filter(
+            hospital=hospital,
+            role=User.ROLE_DOCTOR,
+            is_active=True,
+        ).order_by("first_name", "last_name")
+    )
+
+    paginator = Paginator(qs, 25)
+    page_obj = paginator.get_page(request.GET.get("page"))
+
+    filter_params = {"start": date_start.isoformat(), "end": date_end.isoformat()}
+    if filter_doctor_id:
+        filter_params["doctor"] = filter_doctor_id
+    filter_qs = _urlparse.urlencode(filter_params)
+
+    context = hospital_admin_context(
+        request,
+        "hospital_reports",
+        "Patients Seen Report",
+        "Patients seen by doctors within the selected period.",
+    )
+    context.update({
+        "consultations": page_obj,
+        "page_obj": page_obj,
+        "doctors": doctors,
+        "date_start": date_start.isoformat(),
+        "date_end": date_end.isoformat(),
+        "filter_doctor_id": filter_doctor_id or "",
+        "filter_qs": filter_qs,
+        "total_consultations": total_consultations,
+        "unique_patients": unique_patients,
+    })
+    return render(request, "admin_dashboard/report_consultations.html", context)
+
+
 @role_required(User.ROLE_HOSPITAL_ADMIN)
 def download_inventory_report(request):
     hospital = active_hospital(request)

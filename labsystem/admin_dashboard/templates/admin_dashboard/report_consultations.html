@@ -1,0 +1,142 @@
+{% extends 'base.html' %}
+{% block title %}Patients Seen - Lumina{% endblock %}
+{% block page_title %}Patients Seen Report{% endblock %}
+{% block page_subtitle %}Patients seen by doctors within the selected period.{% endblock %}
+{% block content_container_classes %}max-w-[100rem] mx-auto px-4 lg:px-8 py-6{% endblock %}
+
+{% block content %}
+<div class="space-y-5">
+
+    {# ── Filters ── #}
+    <div class="card">
+        <form method="get" class="flex flex-wrap items-end gap-3">
+            <div class="flex flex-col gap-1">
+                <label class="text-xs font-semibold uppercase text-text-muted">From</label>
+                <input type="date" name="start" value="{{ date_start }}" class="form-control">
+            </div>
+            <div class="flex flex-col gap-1">
+                <label class="text-xs font-semibold uppercase text-text-muted">To</label>
+                <input type="date" name="end" value="{{ date_end }}" class="form-control">
+            </div>
+            <div class="flex flex-col gap-1">
+                <label class="text-xs font-semibold uppercase text-text-muted">Doctor</label>
+                <select name="doctor" class="form-control" style="min-width:160px;">
+                    <option value="">All doctors</option>
+                    {% for doc in doctors %}
+                        <option value="{{ doc.pk }}" {% if filter_doctor_id == doc.pk %}selected{% endif %}>
+                            {{ doc.get_full_name|default:doc.username }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-end gap-2">
+                <button type="submit" class="btn btn-primary btn-sm">Apply</button>
+                <button type="button" onclick="rptPreset('today')" class="btn btn-secondary btn-sm">Today</button>
+                <button type="button" onclick="rptPreset('week')" class="btn btn-secondary btn-sm">This Week</button>
+                <button type="button" onclick="rptPreset('month')" class="btn btn-secondary btn-sm">This Month</button>
+            </div>
+        </form>
+    </div>
+
+    {# ── Stat cards ── #}
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div class="card">
+            <p class="text-xs uppercase tracking-wide text-text-muted">Total Consultations</p>
+            <p class="mt-2 text-3xl font-bold text-text-main">{{ total_consultations }}</p>
+            <p class="mt-1 text-xs text-text-muted">{{ date_start }} to {{ date_end }}</p>
+        </div>
+        <div class="card">
+            <p class="text-xs uppercase tracking-wide text-text-muted">Unique Patients</p>
+            <p class="mt-2 text-3xl font-bold text-blue-700">{{ unique_patients }}</p>
+            <p class="mt-1 text-xs text-text-muted">Distinct patients seen in this period.</p>
+        </div>
+    </div>
+
+    {# ── Patient list ── #}
+    <div class="card border border-gray-100 shadow-none">
+        <div class="flex items-center justify-between gap-3 mb-4 flex-wrap">
+            <div>
+                <h3 class="text-lg font-bold text-text-main">Patients Seen</h3>
+                <p class="text-sm text-text-muted">{{ date_start }} — {{ date_end }}{% if filter_doctor_id %} &middot; filtered by doctor{% endif %}</p>
+            </div>
+            <div class="flex gap-2">
+                <a href="?{{ filter_qs }}&export=csv" class="btn btn-secondary btn-sm">Export CSV</a>
+                <a href="{% url 'hospital_reports' %}" class="btn btn-secondary btn-sm">All Reports</a>
+            </div>
+        </div>
+
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead class="bg-gray-50 border-b border-gray-200">
+                    <tr>
+                        <th class="text-left px-4 py-3 text-xs font-semibold uppercase text-text-muted w-10">#</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold uppercase text-text-muted">Date &amp; Time</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold uppercase text-text-muted">Patient</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold uppercase text-text-muted">Age / Sex</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold uppercase text-text-muted">Doctor</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold uppercase text-text-muted">Follow-up</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-100">
+                    {% for c in consultations %}
+                    <tr class="hover:bg-gray-50">
+                        <td class="px-4 py-3 text-text-muted text-xs">
+                            {{ page_obj.start_index|add:forloop.counter0 }}
+                        </td>
+                        <td class="px-4 py-3 text-text-muted whitespace-nowrap">{{ c.created_at|date:"d M Y H:i" }}</td>
+                        <td class="px-4 py-3 font-semibold text-text-main">{{ c.visit.patient.name }}</td>
+                        <td class="px-4 py-3 text-text-muted">{{ c.visit.patient.age }} / {{ c.visit.patient.get_sex_display|slice:":1" }}</td>
+                        <td class="px-4 py-3 text-text-muted">{{ c.created_by.get_full_name|default:"—" }}</td>
+                        <td class="px-4 py-3 text-text-muted">
+                            {% if c.follow_up_date %}
+                                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-700">
+                                    {{ c.follow_up_date }}
+                                </span>
+                            {% else %}—{% endif %}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="6" class="px-4 py-12 text-center text-sm text-text-muted italic">
+                            No patients seen in this period.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        {% if page_obj.paginator.num_pages > 1 %}
+        <div class="mt-4 flex items-center justify-between gap-3 flex-wrap">
+            <p class="text-xs text-text-muted">
+                Showing {{ page_obj.start_index }}–{{ page_obj.end_index }} of {{ total_consultations }}
+            </p>
+            <div class="flex gap-2 flex-wrap">
+                {% if page_obj.has_previous %}
+                    <a href="?{{ filter_qs }}&page=1" class="btn btn-secondary btn-sm">First</a>
+                    <a href="?{{ filter_qs }}&page={{ page_obj.previous_page_number }}" class="btn btn-secondary btn-sm">Prev</a>
+                {% endif %}
+                {% if page_obj.has_next %}
+                    <a href="?{{ filter_qs }}&page={{ page_obj.next_page_number }}" class="btn btn-secondary btn-sm">Next</a>
+                    <a href="?{{ filter_qs }}&page={{ page_obj.paginator.num_pages }}" class="btn btn-secondary btn-sm">Last</a>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+</div>
+
+<script>
+function rptPreset(preset) {
+    const fmt = d => d.toISOString().slice(0, 10);
+    const today = new Date();
+    let s = today, e = today;
+    if (preset === 'week') { s = new Date(today); s.setDate(today.getDate() - today.getDay()); }
+    else if (preset === 'month') { s = new Date(today.getFullYear(), today.getMonth(), 1); }
+    document.querySelector('input[name="start"]').value = fmt(s);
+    document.querySelector('input[name="end"]').value = fmt(e);
+    document.querySelector('form').submit();
+}
+</script>
+{% endblock %}

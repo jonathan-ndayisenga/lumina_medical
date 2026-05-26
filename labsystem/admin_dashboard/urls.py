@@ -58,4 +58,6 @@ urlpatterns = [
     path("hospital/inventory/<int:item_id>/edit/", views.edit_inventory_item, name="edit_inventory_item"),
     path("hospital/inventory/<int:item_id>/delete/", views.delete_inventory_item, name="delete_inventory_item"),
     path("hospital/inventory/batch/<int:batch_id>/edit/", views.edit_inventory_batch, name="edit_inventory_batch"),
+    path("hospital/reports/", views.hospital_reports, name="hospital_reports"),
+    path("hospital/reports/consultations/", views.report_consultations, name="report_consultations"),
 ]

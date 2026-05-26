@@ -108,7 +108,6 @@
                         <th class="text-right px-4 py-3 text-xs font-semibold uppercase text-text-muted">Qty</th>
                         <th class="text-right px-4 py-3 text-xs font-semibold uppercase text-text-muted">Revenue</th>
                         <th class="text-right px-4 py-3 text-xs font-semibold uppercase text-text-muted">Net Profit</th>
-                        <th class="text-right px-4 py-3 text-xs font-semibold uppercase text-text-muted">Stock Left</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-gray-100">
@@ -121,12 +120,9 @@
                             <td class="px-4 py-3 text-sm text-right font-semibold {% if item.net_profit >= 0 %}text-green-700{% else %}text-red-600{% endif %}">
                                 UGX {{ item.net_profit|floatformat:0 }}
                             </td>
-                            <td class="px-4 py-3 text-sm text-right {% if item.stock <= 5 %}text-red-600 font-semibold{% else %}text-text-muted{% endif %}">
-                                {{ item.stock|floatformat:0 }}
-                            </td>
                         </tr>
                     {% empty %}
-                        <tr><td colspan="6" class="px-4 py-8 text-center text-sm text-text-muted italic">No drugs dispensed in this period.</td></tr>
+                        <tr><td colspan="5" class="px-4 py-8 text-center text-sm text-text-muted italic">No drugs dispensed in this period.</td></tr>
                     {% endfor %}
                 </tbody>
             </table>
