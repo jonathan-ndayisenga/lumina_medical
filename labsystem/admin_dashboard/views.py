@@ -1046,19 +1046,21 @@ def hospital_dashboard(request):
 @hospital_admin_only
 def financial_report(request):
     hospital = active_hospital(request)
-    payments = Payment.objects.filter(visit__hospital=hospital) if hospital else Payment.objects.none()
-    completed_visit_payments = (
-        payments.filter(paid_at__isnull=False, amount_paid__gt=0)
+
+    # Single source of truth: the Payment (receipts) table.
+    # A receipt exists when paid_at is set and amount_paid > 0. Waived payments are excluded.
+    receipts = (
+        Payment.objects.filter(visit__hospital=hospital, paid_at__isnull=False, amount_paid__gt=0)
         .exclude(status=Payment.STATUS_WAIVED)
     ) if hospital else Payment.objects.none()
-    paid_income = completed_visit_payments.aggregate(total=Sum("amount_paid"))["total"] or 0
+
+    paid_income = receipts.aggregate(total=Sum("amount_paid"))["total"] or 0
     expense_total = Expense.objects.filter(hospital=hospital).aggregate(total=Sum("amount"))["total"] or 0 if hospital else 0
     salary_total = Salary.objects.filter(hospital=hospital, paid=True).aggregate(total=Sum("amount"))["total"] or 0 if hospital else 0
     account = sync_hospital_account_balance(hospital) if hospital else None
     today = timezone.localdate()
     month_start = today.replace(day=1)
 
-    # Dashboard period (default: current month).
     period_start_raw = request.GET.get("start_date", "").strip() or str(month_start)
     period_end_raw = request.GET.get("end_date", "").strip() or str(today)
     try:
@@ -1070,43 +1072,38 @@ def financial_report(request):
     except ValueError:
         period_end = today
 
-    payments_today = completed_visit_payments.filter(paid_at__date=today)
-    payments_month = completed_visit_payments.filter(paid_at__date__gte=month_start, paid_at__date__lte=today)
-    payments_period = completed_visit_payments.filter(paid_at__date__gte=period_start, paid_at__date__lte=period_end)
-    income_period = payments_period.aggregate(total=Sum("amount_paid"))["total"] or 0
+    receipts_today  = receipts.filter(paid_at__date=today)
+    receipts_month  = receipts.filter(paid_at__date__gte=month_start, paid_at__date__lte=today)
+    receipts_period = receipts.filter(paid_at__date__gte=period_start, paid_at__date__lte=period_end)
+
+    income_period = receipts_period.aggregate(total=Sum("amount_paid"))["total"] or 0
     expenses_period = (
-        Expense.objects.filter(hospital=hospital, date__gte=period_start, date__lte=period_end).aggregate(total=Sum("amount"))["total"]
-        or 0
-        if hospital
-        else 0
+        Expense.objects.filter(hospital=hospital, date__gte=period_start, date__lte=period_end)
+        .aggregate(total=Sum("amount"))["total"] or 0
+        if hospital else 0
     )
     salaries_period = (
-        Salary.objects.filter(hospital=hospital, paid=True, paid_at__gte=period_start, paid_at__lte=period_end).aggregate(total=Sum("amount"))["total"]
-        or 0
-        if hospital
-        else 0
+        Salary.objects.filter(hospital=hospital, paid=True, paid_at__gte=period_start, paid_at__lte=period_end)
+        .aggregate(total=Sum("amount"))["total"] or 0
+        if hospital else 0
     )
 
     open_drawer = CashDrawer.objects.filter(hospital=hospital, closed_at__isnull=True).first() if hospital else None
     open_drawer_cash_in = (
         open_drawer.transactions.filter(transaction_type=CashTransaction.TYPE_CASH_IN).aggregate(total=Sum("amount"))["total"]
-        if open_drawer
-        else None
+        if open_drawer else None
     ) or 0
     open_drawer_cash_out = (
         open_drawer.transactions.filter(transaction_type=CashTransaction.TYPE_CASH_OUT).aggregate(total=Sum("amount"))["total"]
-        if open_drawer
-        else None
+        if open_drawer else None
     ) or 0
     open_drawer_expected = (open_drawer.opening_balance + open_drawer_cash_in - open_drawer_cash_out) if open_drawer else None
     last_closed_drawer = CashDrawer.objects.filter(hospital=hospital, closed_at__isnull=False).order_by("-date", "-id").first() if hospital else None
 
     recent_receipts = (
-        completed_visit_payments.filter(paid_at__isnull=False)
-        .select_related("visit__patient", "recorded_by")
+        receipts.select_related("visit__patient", "recorded_by")
         .order_by("-paid_at", "-id")[:8]
-        if hospital
-        else Payment.objects.none()
+        if hospital else Payment.objects.none()
     )
     recent_bank_statement = (
         ReconciliationStatement.objects.filter(hospital=hospital, statement_type=ReconciliationStatement.TYPE_BANK)
@@ -1223,37 +1220,34 @@ def financial_report(request):
         )
 
     if hospital:
-        if report_type in {"income_overview", "cash_collection", "card_payments", "mobile_money"}:
-            payments_dash = (
-                completed_visit_payments.filter(paid_at__date__gte=period_start, paid_at__date__lte=period_end)
-                .exclude(status=Payment.STATUS_WAIVED)
-                .exclude(paid_at__isnull=True)
-            )
+        # All income report types pull from receipts (Payment table).
+        receipts_dash = receipts_period
 
+        if report_type in {"income_overview", "cash_collection", "card_payments", "mobile_money"}:
             if report_type == "cash_collection":
-                payments_dash = payments_dash.filter(mode=Payment.MODE_CASH)
+                receipts_dash = receipts_dash.filter(mode=Payment.MODE_CASH)
                 chart_title = "Cash Collections"
                 chart_series_label = "Cash received"
             elif report_type == "card_payments":
-                payments_dash = payments_dash.filter(mode=Payment.MODE_CARD)
+                receipts_dash = receipts_dash.filter(mode=Payment.MODE_CARD)
                 chart_title = "Card Payments"
                 chart_series_label = "Card received"
                 if bank_account_id:
-                    payments_dash = payments_dash.filter(bank_account_id=bank_account_id)
+                    receipts_dash = receipts_dash.filter(bank_account_id=bank_account_id)
             elif report_type == "mobile_money":
-                payments_dash = payments_dash.filter(mode=Payment.MODE_MOBILE_MONEY)
+                receipts_dash = receipts_dash.filter(mode=Payment.MODE_MOBILE_MONEY)
                 chart_title = "Mobile Money Payments"
                 chart_series_label = "Mobile money received"
                 if mobile_account_id:
-                    payments_dash = payments_dash.filter(mobile_account_id=mobile_account_id)
+                    receipts_dash = receipts_dash.filter(mobile_account_id=mobile_account_id)
             else:
                 chart_title = "Income Overview"
                 chart_series_label = "Collected income"
                 if payment_mode and payment_mode != "all":
-                    payments_dash = payments_dash.filter(mode=payment_mode)
+                    receipts_dash = receipts_dash.filter(mode=payment_mode)
 
             daily = (
-                payments_dash.annotate(day=TruncDate("paid_at"))
+                receipts_dash.annotate(day=TruncDate("paid_at"))
                 .values("day")
                 .annotate(total=Sum("amount_paid"))
                 .order_by("day")
@@ -1262,11 +1256,8 @@ def financial_report(request):
             chart_values = [str(row["total"] or 0) for row in daily]
 
             grouped = {}
-            payments_for_summary = payments_dash.select_related("bank_account", "mobile_account")
-            for payment in payments_for_summary.order_by("-paid_at", "-id")[:800]:
-                day = payment.paid_at.date() if payment.paid_at else None
-                if not day:
-                    continue
+            for payment in receipts_dash.select_related("bank_account", "mobile_account").order_by("-paid_at", "-id")[:800]:
+                day = payment.paid_at.date()
                 if payment.mode == Payment.MODE_CARD:
                     account_label = str(payment.bank_account) if payment.bank_account_id else "-"
                 elif payment.mode == Payment.MODE_MOBILE_MONEY:
@@ -1277,26 +1268,24 @@ def financial_report(request):
                     account_label = "-"
                 key = (day, payment.mode, account_label)
                 grouped[key] = grouped.get(key, Decimal("0")) + (payment.amount_paid or Decimal("0"))
-
-            for (day, mode_value, account_label), amount_value in sorted(grouped.items(), key=lambda item: item[0][0], reverse=True)[:200]:
+            for (day, mode_value, account_label), amount_value in sorted(grouped.items(), key=lambda x: x[0][0], reverse=True)[:200]:
                 append_summary(day, amount_value, mode_value, account_label)
 
         elif report_type == "expenses":
             chart_title = "Expenses"
             chart_series_label = "Expenses recorded"
             chart_kind = "bar"
-            expenses_dash = Expense.objects.filter(hospital=hospital, date__gte=period_start, date__lte=period_end).select_related(
-                "bank_account", "mobile_money_account", "cash_drawer"
-            )
+            expenses_dash = Expense.objects.filter(
+                hospital=hospital, date__gte=period_start, date__lte=period_end
+            ).select_related("bank_account", "mobile_money_account", "cash_drawer")
             daily = expenses_dash.values("date").annotate(total=Sum("amount")).order_by("date")
             chart_labels = [row["date"].isoformat() for row in daily if row["date"]]
             chart_values = [str(row["total"] or 0) for row in daily]
-
             grouped = {}
             for expense in expenses_dash.order_by("-date", "-id")[:800]:
                 key = (expense.date, "expense", expense.source_account_label)
                 grouped[key] = grouped.get(key, Decimal("0")) + (expense.amount or Decimal("0"))
-            for (day, mode_value, account_label), amount_value in sorted(grouped.items(), key=lambda item: item[0][0], reverse=True)[:200]:
+            for (day, mode_value, account_label), amount_value in sorted(grouped.items(), key=lambda x: x[0][0], reverse=True)[:200]:
                 append_summary(day, amount_value, mode_value, account_label)
 
         elif report_type == "salaries":
@@ -1304,111 +1293,92 @@ def financial_report(request):
             chart_series_label = "Salaries paid"
             chart_kind = "bar"
             salaries_dash = Salary.objects.filter(
-                hospital=hospital,
-                paid=True,
-                paid_at__gte=period_start,
-                paid_at__lte=period_end,
+                hospital=hospital, paid=True,
+                paid_at__gte=period_start, paid_at__lte=period_end,
             ).select_related("employee")
             daily = salaries_dash.values("paid_at").annotate(total=Sum("amount")).order_by("paid_at")
             chart_labels = [row["paid_at"].isoformat() for row in daily if row["paid_at"]]
             chart_values = [str(row["total"] or 0) for row in daily]
-
             grouped = {}
             for salary in salaries_dash.order_by("-paid_at", "-id")[:800]:
                 if not salary.paid_at:
                     continue
                 key = (salary.paid_at, "salary", salary.employee.get_full_name() or salary.employee.username)
                 grouped[key] = grouped.get(key, Decimal("0")) + (salary.amount or Decimal("0"))
-            for (day, mode_value, account_label), amount_value in sorted(grouped.items(), key=lambda item: item[0][0], reverse=True)[:200]:
+            for (day, mode_value, account_label), amount_value in sorted(grouped.items(), key=lambda x: x[0][0], reverse=True)[:200]:
                 append_summary(day, amount_value, mode_value, account_label)
 
         elif report_type == "net_profit":
             chart_title = "Net Profit"
             chart_series_label = "Net profit"
             chart_kind = "bar"
-
-            payments_dash = (
-                completed_visit_payments.filter(paid_at__date__gte=period_start, paid_at__date__lte=period_end)
-                .exclude(status=Payment.STATUS_WAIVED)
-                .exclude(paid_at__isnull=True)
-            )
             expenses_dash = Expense.objects.filter(hospital=hospital, date__gte=period_start, date__lte=period_end)
             salaries_dash = Salary.objects.filter(hospital=hospital, paid=True, paid_at__gte=period_start, paid_at__lte=period_end)
-
             income_daily = {
                 row["day"]: (row["total"] or Decimal("0"))
-                for row in payments_dash.annotate(day=TruncDate("paid_at")).values("day").annotate(total=Sum("amount_paid"))
+                for row in receipts_dash.annotate(day=TruncDate("paid_at")).values("day").annotate(total=Sum("amount_paid"))
             }
-            exp_daily = {
-                row["date"]: (row["total"] or Decimal("0"))
-                for row in expenses_dash.values("date").annotate(total=Sum("amount"))
-            }
-            sal_daily = {
-                row["paid_at"]: (row["total"] or Decimal("0"))
-                for row in salaries_dash.values("paid_at").annotate(total=Sum("amount"))
-            }
-
+            exp_daily = {row["date"]: (row["total"] or Decimal("0")) for row in expenses_dash.values("date").annotate(total=Sum("amount"))}
+            sal_daily = {row["paid_at"]: (row["total"] or Decimal("0")) for row in salaries_dash.values("paid_at").annotate(total=Sum("amount"))}
             cursor = period_start
             while cursor <= period_end:
-                income = income_daily.get(cursor, Decimal("0"))
-                expense_amt = exp_daily.get(cursor, Decimal("0"))
-                salary_amt = sal_daily.get(cursor, Decimal("0"))
-                net = income - (expense_amt + salary_amt)
+                net = income_daily.get(cursor, Decimal("0")) - exp_daily.get(cursor, Decimal("0")) - sal_daily.get(cursor, Decimal("0"))
                 chart_labels.append(cursor.isoformat())
                 chart_values.append(str(net))
                 cursor += timedelta(days=1)
-
-            # Summary: show recent days, newest first.
             for label, value in zip(reversed(chart_labels), reversed(chart_values)):
                 append_summary(timezone.datetime.fromisoformat(label).date(), Decimal(value), "net_profit", "Income - Expenses - Salaries")
                 if len(summary_rows) >= 60:
                     break
 
         elif report_type == "pharmacy_income":
+            # Pharmacy income: sum of receipt amounts for visits that included dispensed drugs,
+            # attributed to the date the receipt was paid (not the dispensing date).
             from doctor.models import Prescription
             chart_title = "Pharmacy Income"
-            chart_series_label = "Pharmacy sales (dispensed)"
+            chart_series_label = "Pharmacy receipts"
             chart_kind = "bar"
-            pharma_dash = (
+
+            # Get visit IDs that had at least one dispensed prescription in the period.
+            pharma_visit_ids = set(
                 Prescription.objects.filter(
                     visit__hospital=hospital,
                     dispensed=True,
                     dispensed_at__date__gte=period_start,
                     dispensed_at__date__lte=period_end,
-                )
-                .select_related("visit__patient", "drug")
+                ).values_list("visit_id", flat=True)
             )
+
+            # Find the receipts for those visits, using paid_at as the date.
+            pharma_receipts = receipts_period.filter(visit_id__in=pharma_visit_ids)
+
             daily = (
-                pharma_dash.annotate(day=TruncDate("dispensed_at"))
+                pharma_receipts.annotate(day=TruncDate("paid_at"))
                 .values("day")
-                .annotate(total=Sum("total_price"))
+                .annotate(total=Sum("amount_paid"))
                 .order_by("day")
             )
             chart_labels = [row["day"].isoformat() for row in daily if row["day"]]
             chart_values = [str(row["total"] or 0) for row in daily]
 
-            grouped = {}
+            # Drug sales breakdown for summary table (from Prescription for drug-level detail).
             drug_totals = {}
-            for rx in pharma_dash.order_by("-dispensed_at", "-id")[:800]:
+            for rx in Prescription.objects.filter(
+                visit__hospital=hospital,
+                dispensed=True,
+                dispensed_at__date__gte=period_start,
+                dispensed_at__date__lte=period_end,
+            ).select_related("drug", "visit__patient").order_by("-dispensed_at")[:800]:
                 day = rx.dispensed_at.date() if rx.dispensed_at else None
                 if not day:
                     continue
                 item_name = str(rx.drug) if rx.drug_id else "Unknown Drug"
-                key = (day, "pharmacy", item_name)
-                grouped[key] = grouped.get(key, Decimal("0")) + (rx.total_price or Decimal("0"))
-                # Accumulate per-drug totals for the sales list
+                append_summary(day, rx.total_price or Decimal("0"), "pharmacy", item_name)
                 drug_id = rx.drug_id or 0
                 if drug_id not in drug_totals:
-                    drug_totals[drug_id] = {
-                        "drug_name": item_name,
-                        "quantity_sold": Decimal("0"),
-                        "total_amount": Decimal("0"),
-                        "stock_remaining": rx.drug.current_quantity if rx.drug else Decimal("0"),
-                    }
+                    drug_totals[drug_id] = {"drug_name": item_name, "quantity_sold": Decimal("0"), "total_amount": Decimal("0"), "stock_remaining": rx.drug.current_quantity if rx.drug else Decimal("0")}
                 drug_totals[drug_id]["quantity_sold"] += rx.total_quantity or Decimal("0")
                 drug_totals[drug_id]["total_amount"] += rx.total_price or Decimal("0")
-            for (day, mode_value, account_label), amount_value in sorted(grouped.items(), key=lambda item: item[0][0], reverse=True)[:200]:
-                append_summary(day, amount_value, mode_value, account_label)
             pharma_sales_list = sorted(drug_totals.values(), key=lambda x: x["total_amount"], reverse=True)
 
     context = {
@@ -1419,10 +1389,10 @@ def financial_report(request):
         "today": today,
         "month_start": month_start,
         "paid_income": paid_income,
-        "paid_income_today": payments_today.aggregate(total=Sum("amount_paid"))["total"] or 0,
-        "paid_income_month": payments_month.aggregate(total=Sum("amount_paid"))["total"] or 0,
-        "receipt_count_today": payments_today.count(),
-        "receipt_count_month": payments_month.count(),
+        "paid_income_today": receipts_today.aggregate(total=Sum("amount_paid"))["total"] or 0,
+        "paid_income_month": receipts_month.aggregate(total=Sum("amount_paid"))["total"] or 0,
+        "receipt_count_today": receipts_today.count(),
+        "receipt_count_month": receipts_month.count(),
         "period_start": period_start,
         "period_end": period_end,
         "income_period": income_period,
@@ -1444,8 +1414,13 @@ def financial_report(request):
         ),
         "salary_items": Salary.objects.filter(hospital=hospital).select_related("employee").order_by("-month", "-id")[:10] if hospital else [],
         "low_stock_items": InventoryItem.objects.filter(hospital=hospital, current_quantity__lte=models.F("reorder_level")).order_by("current_quantity", "name")[:10] if hospital else [],
-        "part_paid_count": payments.filter(status=Payment.STATUS_PART_PAID).count(),
-        "outstanding_balance": (payments.aggregate(total=Sum(models.F("amount") - models.F("amount_paid")))["total"] or 0),
+        "part_paid_count": Payment.objects.filter(visit__hospital=hospital, status=Payment.STATUS_PART_PAID).count() if hospital else 0,
+        "outstanding_balance": (
+            Payment.objects.filter(visit__hospital=hospital)
+            .exclude(status=Payment.STATUS_WAIVED)
+            .aggregate(total=Sum(models.F("amount") - models.F("amount_paid")))["total"] or 0
+            if hospital else 0
+        ),
         "open_drawer": open_drawer,
         "open_drawer_cash_in": open_drawer_cash_in,
         "open_drawer_cash_out": open_drawer_cash_out,
