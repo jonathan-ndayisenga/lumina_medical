@@ -1404,7 +1404,7 @@ def financial_report(request):
         "salary_total": salary_total,
         "net_profit": paid_income - (expense_total + salary_total),
         "account_balance": account.balance if account else 0,
-        "pending_payments": payments.exclude(status=Payment.STATUS_WAIVED).exclude(amount_paid=models.F("amount")).count(),
+        "pending_payments": Payment.objects.filter(visit__hospital=hospital).exclude(status=Payment.STATUS_WAIVED).exclude(amount_paid=models.F("amount")).count() if hospital else 0,
         "expense_items": (
             Expense.objects.filter(hospital=hospital)
             .select_related("bank_account", "mobile_money_account", "cash_drawer")
