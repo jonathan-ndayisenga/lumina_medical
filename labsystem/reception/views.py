@@ -1203,6 +1203,28 @@ def print_payment_receipt(request, payment_id):
     visit = payment.visit
     payments = visit.payments.select_related("bank_account", "mobile_account", "recorded_by").order_by("-paid_at", "-id")
 
+    # Build unified receipt line items:
+    # - Non-pharmacy services use their service name
+    # - Pharmacy VisitServices are replaced by the actual dispensed drug name
+    receipt_items = []
+    pharmacy_vs_ids = set()
+
+    for rx in visit.prescriptions.filter(dispensed=True).select_related("drug"):
+        receipt_items.append({
+            "name": rx.drug.name if rx.drug else "Drug",
+            "price": rx.total_price,
+        })
+        if rx.billing_visit_service_id:
+            pharmacy_vs_ids.add(rx.billing_visit_service_id)
+
+    for vs in visit.visit_services.select_related("service").order_by("id"):
+        if vs.pk in pharmacy_vs_ids:
+            continue  # already represented by the drug name above
+        receipt_items.append({
+            "name": vs.service.name,
+            "price": vs.price_at_time,
+        })
+
     walink = ""
     raw_number = (visit.whatsapp_number or "").strip()
     if raw_number:
@@ -1217,6 +1239,7 @@ def print_payment_receipt(request, payment_id):
             "visit": visit,
             "payment": payment,
             "payments": payments,
+            "receipt_items": receipt_items,
             "total_paid": visit.total_paid,
             "balance_due": visit.balance_due,
             "walink": walink,

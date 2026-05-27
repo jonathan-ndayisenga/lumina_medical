@@ -75,10 +75,10 @@
 <div class="sep"></div>
 
 <div>SERVICES</div>
-{% for item in visit.visit_services.all %}
+{% for item in receipt_items %}
 <div class="row">
-    <span class="n">{{ item.service.name|truncatechars:16 }}</span>
-    <span class="p">{{ item.price_at_time }}</span>
+    <span class="n">{{ item.name|truncatechars:16 }}</span>
+    <span class="p">{{ item.price }}</span>
 </div>
 {% empty %}
 <div class="c">(no services)</div>
