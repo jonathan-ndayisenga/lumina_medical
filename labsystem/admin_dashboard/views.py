@@ -132,7 +132,8 @@ def financial_metric_detail(request, metric):
     period_end = parse_date_param(request.GET.get("end_date"), today)
 
     payments = (
-        Payment.objects.filter(visit__hospital=hospital, visit__status=Visit.STATUS_COMPLETED)
+        Payment.objects.filter(visit__hospital=hospital, paid_at__isnull=False, amount_paid__gt=0)
+        .exclude(status=Payment.STATUS_WAIVED)
         .select_related("visit__patient", "recorded_by")
     )
     expenses = Expense.objects.filter(hospital=hospital).select_related("bank_account", "mobile_money_account", "cash_drawer")
@@ -537,9 +538,11 @@ def inventory_dashboard_snapshot(hospital):
     monthly_income_rows = (
         _Payment.objects.filter(
             visit__hospital=hospital,
-            visit__status="completed",
             paid_at__date__gte=period_start,
+            paid_at__isnull=False,
+            amount_paid__gt=0,
         )
+        .exclude(status=_Payment.STATUS_WAIVED)
         .annotate(month=TruncMonth("paid_at"))
         .values("month")
         .annotate(total=Sum("amount_paid"))
@@ -994,7 +997,10 @@ def hospital_dashboard(request):
     queue_entries = QueueEntry.objects.filter(hospital=hospital) if hospital else QueueEntry.objects.none()
     users = hospital.users.all() if hospital else User.objects.none()
     payments = Payment.objects.filter(visit__hospital=hospital) if hospital else Payment.objects.none()
-    completed_visit_payments = payments.filter(visit__status=Visit.STATUS_COMPLETED)
+    completed_visit_payments = (
+        payments.filter(paid_at__isnull=False, amount_paid__gt=0)
+        .exclude(status=Payment.STATUS_WAIVED)
+    ) if hospital else Payment.objects.none()
     services = Service.objects.filter(hospital=hospital, is_active=True) if hospital else Service.objects.none()
     account = sync_hospital_account_balance(hospital) if hospital else None
     low_stock_items = InventoryItem.objects.filter(hospital=hospital, current_quantity__lte=models.F("reorder_level")) if hospital else InventoryItem.objects.none()
@@ -1041,7 +1047,10 @@ def hospital_dashboard(request):
 def financial_report(request):
     hospital = active_hospital(request)
     payments = Payment.objects.filter(visit__hospital=hospital) if hospital else Payment.objects.none()
-    completed_visit_payments = payments.filter(visit__status=Visit.STATUS_COMPLETED)
+    completed_visit_payments = (
+        payments.filter(paid_at__isnull=False, amount_paid__gt=0)
+        .exclude(status=Payment.STATUS_WAIVED)
+    ) if hospital else Payment.objects.none()
     paid_income = completed_visit_payments.aggregate(total=Sum("amount_paid"))["total"] or 0
     expense_total = Expense.objects.filter(hospital=hospital).aggregate(total=Sum("amount"))["total"] or 0 if hospital else 0
     salary_total = Salary.objects.filter(hospital=hospital, paid=True).aggregate(total=Sum("amount"))["total"] or 0 if hospital else 0
@@ -3083,7 +3092,8 @@ def receipts_list(request):
         else MobileMoneyAccount.objects.none()
     )
     payments = (
-        Payment.objects.filter(visit__hospital=hospital, visit__status=Visit.STATUS_COMPLETED)
+        Payment.objects.filter(visit__hospital=hospital, paid_at__isnull=False, amount_paid__gt=0)
+        .exclude(status=Payment.STATUS_WAIVED)
         .select_related("visit__patient", "recorded_by", "bank_account", "mobile_account")
         .prefetch_related("visit__visit_services__service", "bank_transactions", "mobile_money_transactions")
         .order_by("-paid_at", "-id")
