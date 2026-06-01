@@ -1203,24 +1203,27 @@ def print_payment_receipt(request, payment_id):
     visit = payment.visit
     payments = visit.payments.select_related("bank_account", "mobile_account", "recorded_by").order_by("-paid_at", "-id")
 
-    # Build unified receipt line items:
-    # - Non-pharmacy services use their service name
-    # - Pharmacy VisitServices are replaced by the actual dispensed drug name
-    receipt_items = []
+    from django.db.models import Q as _Q
+    service_items = []
+    drug_items = []
     pharmacy_vs_ids = set()
 
-    for rx in visit.prescriptions.filter(dispensed=True).select_related("drug"):
-        receipt_items.append({
+    # Drugs: billed (doctor workflow) OR dispensed (quick-dispense walk-in)
+    for rx in visit.prescriptions.filter(
+        _Q(billing_visit_service__isnull=False) | _Q(dispensed=True)
+    ).select_related("drug").distinct():
+        drug_items.append({
             "name": rx.drug.name if rx.drug else "Drug",
             "price": rx.total_price,
         })
         if rx.billing_visit_service_id:
             pharmacy_vs_ids.add(rx.billing_visit_service_id)
 
+    # Services: everything that is NOT a pharmacy billing placeholder
     for vs in visit.visit_services.select_related("service").order_by("id"):
         if vs.pk in pharmacy_vs_ids:
-            continue  # already represented by the drug name above
-        receipt_items.append({
+            continue
+        service_items.append({
             "name": vs.service.name,
             "price": vs.price_at_time,
         })
@@ -1239,7 +1242,8 @@ def print_payment_receipt(request, payment_id):
             "visit": visit,
             "payment": payment,
             "payments": payments,
-            "receipt_items": receipt_items,
+            "service_items": service_items,
+            "drug_items": drug_items,
             "total_paid": visit.total_paid,
             "balance_due": visit.balance_due,
             "walink": walink,

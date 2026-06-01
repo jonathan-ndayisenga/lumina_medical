@@ -74,15 +74,28 @@
 <div><span class="lbl">Visit:</span> #{{ visit.id }}</div>
 <div class="sep"></div>
 
+{% if service_items %}
 <div>SERVICES</div>
-{% for item in receipt_items %}
+{% for item in service_items %}
 <div class="row">
     <span class="n">{{ item.name|truncatechars:16 }}</span>
     <span class="p">{{ item.price }}</span>
 </div>
-{% empty %}
-<div class="c">(no services)</div>
 {% endfor %}
+{% endif %}
+{% if drug_items %}
+{% if service_items %}<div class="sep"></div>{% endif %}
+<div>DRUGS</div>
+{% for item in drug_items %}
+<div class="row">
+    <span class="n">{{ item.name|truncatechars:16 }}</span>
+    <span class="p">{{ item.price }}</span>
+</div>
+{% endfor %}
+{% endif %}
+{% if not service_items and not drug_items %}
+<div class="c">(no items)</div>
+{% endif %}
 <div class="sep"></div>
 
 <div class="row"><span class="n">TOTAL</span><span class="p">{{ visit.total_amount }}</span></div>
