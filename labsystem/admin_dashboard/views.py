@@ -2465,6 +2465,19 @@ def restock_inventory_item(request, item_id):
 
 
 @role_required(User.ROLE_HOSPITAL_ADMIN)
+def delete_inventory_batch(request, batch_id):
+    if request.method != "POST":
+        return redirect("manage_inventory")
+    batch = get_object_or_404(InventoryBatch, pk=batch_id, item__hospital=active_hospital(request))
+    item = batch.item
+    batch_number = batch.batch_number
+    batch.delete()
+    item.recalculate_current_quantity()
+    messages.success(request, f"Batch {batch_number} deleted from {item.name}.")
+    return redirect("manage_inventory")
+
+
+@role_required(User.ROLE_HOSPITAL_ADMIN)
 def edit_inventory_batch(request, batch_id):
     """Edit batch_number, expiry_date, and unit_cost of an existing inventory batch."""
     batch = get_object_or_404(InventoryBatch, pk=batch_id, item__hospital=active_hospital(request))
