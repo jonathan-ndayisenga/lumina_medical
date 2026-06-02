@@ -1,0 +1,52 @@
+{% extends 'base.html' %}
+{% block title %}Admit for Nursing Care — Lumina{% endblock %}
+{% block page_title %}Admit for IV Nursing Care{% endblock %}
+{% block page_subtitle %}Select the IV prescriptions this patient will receive under nursing management.{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto space-y-5">
+
+  <div class="card">
+    <p class="font-bold text-text-main text-lg">{{ visit.patient.name }}</p>
+    <p class="text-sm text-text-muted mt-1">Visit #{{ visit.id }} &middot; {{ visit.visit_date|date:"d M Y" }}</p>
+  </div>
+
+  <form method="post">
+    {% csrf_token %}
+    <div class="card space-y-4">
+      <h3 class="font-bold text-text-main">Select Prescriptions for Nursing Care</h3>
+      <p class="text-sm text-text-muted">Only non-tablet prescriptions are shown. Checked items will be dispensed dose-by-dose by nurses.</p>
+
+      {% if iv_prescriptions %}
+        {% for rx in iv_prescriptions %}
+        <label class="flex items-start gap-3 p-3 rounded-lg border border-gray-200 hover:bg-gray-50 cursor-pointer">
+          <input type="checkbox" name="prescription_ids" value="{{ rx.pk }}" class="mt-1 h-4 w-4 rounded border-gray-300" checked>
+          <div class="flex-1">
+            <p class="font-semibold text-text-main">{{ rx.drug.name }}</p>
+            <p class="text-xs text-text-muted mt-0.5">
+              {{ rx.dosage_mg }} {{ rx.drug.base_unit }} &times; {{ rx.frequency_per_day }}x/day &times; {{ rx.duration_days }} day(s)
+              = <strong>{{ rx.frequency_per_day|add:0 }}{% widthratio rx.frequency_per_day 1 rx.duration_days %}</strong>
+              &nbsp;|&nbsp; Total: {{ rx.total_quantity }} {{ rx.drug.base_unit }}(s)
+            </p>
+            <p class="text-xs text-text-muted">
+              Doses planned: <strong>{{ rx.frequency_per_day }} &times; {{ rx.duration_days }} = {% widthratio rx.frequency_per_day 1 rx.duration_days %}</strong>
+              &nbsp;&middot;&nbsp; Per dose: <strong>{{ rx.total_quantity }} &divide; {% widthratio rx.frequency_per_day 1 rx.duration_days %}</strong>
+            </p>
+          </div>
+        </label>
+        {% endfor %}
+      {% else %}
+        <p class="text-sm text-text-muted italic">No eligible IV/infusion prescriptions found for this visit.</p>
+      {% endif %}
+
+      <div class="flex gap-3 pt-2">
+        {% if iv_prescriptions %}
+        <button type="submit" class="btn btn-primary">Admit for Nursing Care</button>
+        {% endif %}
+        <a href="{% url 'nursing_admissions' %}" class="btn btn-secondary">Cancel</a>
+      </div>
+    </div>
+  </form>
+
+</div>
+{% endblock %}

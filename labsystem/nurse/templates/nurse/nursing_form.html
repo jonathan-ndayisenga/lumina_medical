@@ -65,6 +65,15 @@
                 <h3 class="text-sm font-semibold text-text-main">Medications to Dispense</h3>
                 <p class="text-xs text-text-muted mt-1">Dispensing deducts stock immediately and records the inventory consumption against this visit.</p>
             </div>
+            {% if not visit.nursing_admission %}
+            <a href="{% url 'start_nursing_admission' visit.pk %}" class="btn btn-secondary btn-sm">
+                + Admit for IV Nursing Care
+            </a>
+            {% else %}
+            <a href="{% url 'nursing_admission_detail' visit.nursing_admission.pk %}" class="btn btn-secondary btn-sm">
+                View IV Nursing Care
+            </a>
+            {% endif %}
         </div>
         <div class="space-y-3">
             {% for prescription in prescriptions %}
@@ -84,11 +93,16 @@
                             {% if prescription.dispensed %}
                                 <span class="inline-flex items-center rounded-full bg-green-100 px-2 py-1 text-xs font-semibold text-green-700 mt-2">Dispensed</span>
                                 <p class="text-xs text-text-muted mt-2">{{ prescription.dispensed_at|date:"M d, Y H:i" }}</p>
+                            {% elif prescription.nursing_managed %}
+                                <span class="inline-flex items-center rounded-full bg-indigo-100 px-2 py-1 text-xs font-semibold text-indigo-700 mt-2">IV Nursing Care</span>
+                                <p class="text-xs text-text-muted mt-1">Dispensed dose-by-dose by nurse.</p>
                             {% else %}
-                                <form method="post" action="{% url 'dispense_prescription' queue_entry.pk prescription.pk %}" class="mt-2">
-                                    {% csrf_token %}
-                                    <button type="submit" class="btn btn-primary btn-sm">Dispense Now</button>
-                                </form>
+                                <div class="mt-2 flex gap-2 flex-wrap">
+                                    <form method="post" action="{% url 'dispense_prescription' queue_entry.pk prescription.pk %}">
+                                        {% csrf_token %}
+                                        <button type="submit" class="btn btn-primary btn-sm">Dispense Now</button>
+                                    </form>
+                                </div>
                             {% endif %}
                         </div>
                     </div>

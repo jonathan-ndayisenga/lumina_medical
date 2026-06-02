@@ -693,81 +693,78 @@
   });
 
   // ── Restock modal ──────────────────────────────────────────────────────────
-  const restockModal      = document.getElementById('restockModal');
-  const restockForm       = document.getElementById('restockForm');
-  const restockTitle      = document.getElementById('restockModalTitle');
-  const restockBatchSelect     = document.getElementById('restockBatchSelect');
-  const restockBatchSelectWrap = document.getElementById('restockBatchSelectWrap');
-  const restockBatchNumberWrap = document.getElementById('restockBatchNumberWrap');
-  const restockBatchNumber     = document.getElementById('restockBatchNumber');
-  const restockExpiry          = document.getElementById('restockExpiry');
+  document.addEventListener('DOMContentLoaded', function () {
+    const restockModal      = document.getElementById('restockModal');
+    const restockForm       = document.getElementById('restockForm');
+    const restockTitle      = document.getElementById('restockModalTitle');
+    const restockBatchSelect     = document.getElementById('restockBatchSelect');
+    const restockBatchSelectWrap = document.getElementById('restockBatchSelectWrap');
+    const restockBatchNumberWrap = document.getElementById('restockBatchNumberWrap');
+    const restockBatchNumber     = document.getElementById('restockBatchNumber');
+    const restockExpiry          = document.getElementById('restockExpiry');
 
-  function closeRestock() {
-    restockModal.classList.add('hidden');
-    restockForm.reset();
-    restockBatchSelectWrap.classList.add('hidden');
-    restockBatchNumberWrap.classList.remove('hidden');
-    restockBatchSelect.innerHTML = '<option value="">+ New batch</option>';
-  }
-
-  document.querySelectorAll('.restock-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const itemId   = btn.dataset.itemId;
-      const itemName = btn.dataset.itemName;
-      let batches = [];
-      try { batches = JSON.parse(btn.dataset.batches || '[]'); } catch(e) {}
-
-      restockTitle.textContent = 'Restock: ' + itemName;
-      restockForm.action = `/platform/hospital/inventory/${itemId}/restock/`;
+    function closeRestock() {
+      restockModal.classList.add('hidden');
       restockForm.reset();
-
-      // Populate batch dropdown
+      restockBatchSelectWrap.classList.add('hidden');
+      restockBatchNumberWrap.classList.remove('hidden');
       restockBatchSelect.innerHTML = '<option value="">+ New batch</option>';
-      batches.forEach(b => {
-        const opt = document.createElement('option');
-        opt.value = b.n;
-        opt.dataset.expiry = b.e;
-        opt.textContent = b.n + (b.e ? '  (exp: ' + b.e + ')' : '');
-        restockBatchSelect.appendChild(opt);
-      });
+    }
 
-      if (batches.length > 0) {
-        restockBatchSelectWrap.classList.remove('hidden');
-        // Pre-select first batch and populate fields
-        restockBatchSelect.value = batches[0].n;
-        restockBatchNumber.value = batches[0].n;
-        restockExpiry.value      = batches[0].e || '';
-        restockBatchNumberWrap.classList.add('hidden');
-      } else {
-        restockBatchSelectWrap.classList.add('hidden');
+    document.querySelectorAll('.restock-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const itemId   = btn.dataset.itemId;
+        const itemName = btn.dataset.itemName;
+        let batches = [];
+        try { batches = JSON.parse(btn.dataset.batches || '[]'); } catch(e) {}
+
+        restockTitle.textContent = 'Restock: ' + itemName;
+        restockForm.action = `/platform/hospital/inventory/${itemId}/restock/`;
+        restockForm.reset();
+
+        restockBatchSelect.innerHTML = '<option value="">+ New batch</option>';
+        batches.forEach(b => {
+          const opt = document.createElement('option');
+          opt.value = b.n;
+          opt.dataset.expiry = b.e;
+          opt.textContent = b.n + (b.e ? '  (exp: ' + b.e + ')' : '');
+          restockBatchSelect.appendChild(opt);
+        });
+
+        if (batches.length > 0) {
+          restockBatchSelectWrap.classList.remove('hidden');
+          restockBatchSelect.value = batches[0].n;
+          restockBatchNumber.value = batches[0].n;
+          restockExpiry.value      = batches[0].e || '';
+          restockBatchNumberWrap.classList.add('hidden');
+        } else {
+          restockBatchSelectWrap.classList.add('hidden');
+          restockBatchNumberWrap.classList.remove('hidden');
+          restockBatchNumber.value = '';
+        }
+
+        restockModal.classList.remove('hidden');
+        restockForm.querySelector('[name="quantity_received"]').focus();
+      });
+    });
+
+    restockBatchSelect.addEventListener('change', () => {
+      const selected = restockBatchSelect.options[restockBatchSelect.selectedIndex];
+      if (restockBatchSelect.value === '') {
         restockBatchNumberWrap.classList.remove('hidden');
         restockBatchNumber.value = '';
+        restockExpiry.value = '';
+        restockBatchNumber.focus();
+      } else {
+        restockBatchNumberWrap.classList.add('hidden');
+        restockBatchNumber.value = restockBatchSelect.value;
+        restockExpiry.value = selected.dataset.expiry || '';
       }
-
-      restockModal.classList.remove('hidden');
-      restockForm.querySelector('[name="quantity_received"]').focus();
     });
-  });
 
-  // When dropdown changes, sync batch number input
-  restockBatchSelect.addEventListener('change', () => {
-    const selected = restockBatchSelect.options[restockBatchSelect.selectedIndex];
-    if (restockBatchSelect.value === '') {
-      // New batch — show input, clear it
-      restockBatchNumberWrap.classList.remove('hidden');
-      restockBatchNumber.value = '';
-      restockExpiry.value = '';
-      restockBatchNumber.focus();
-    } else {
-      // Existing batch — hide input, populate value
-      restockBatchNumberWrap.classList.add('hidden');
-      restockBatchNumber.value = restockBatchSelect.value;
-      restockExpiry.value = selected.dataset.expiry || '';
-    }
+    document.getElementById('restockModalClose').addEventListener('click', closeRestock);
+    restockModal.addEventListener('click', e => { if (e.target === restockModal) closeRestock(); });
   });
-
-  document.getElementById('restockModalClose').addEventListener('click', closeRestock);
-  restockModal.addEventListener('click', e => { if (e.target === restockModal) closeRestock(); });
 </script>
 
 {# ── Batch edit modal ── #}

@@ -7,8 +7,14 @@ import urllib.parse
 
 
 def _digits_only(raw: str) -> str:
-    """Strip everything except digits (used to build wa.me URLs)."""
-    return re.sub(r"[^\d]", "", raw)
+    """Strip everything except digits and normalize to international format.
+    Uganda local numbers starting with 0 are converted to 256XXXXXXXXX.
+    """
+    digits = re.sub(r"[^\d]", "", raw)
+    # Local format: 07XXXXXXXX or 03XXXXXXXX (10 digits starting with 0) → 256XXXXXXXXX
+    if len(digits) == 10 and digits.startswith("0"):
+        digits = "256" + digits[1:]
+    return digits
 
 
 def build_receipt_message(payment, visit) -> str:

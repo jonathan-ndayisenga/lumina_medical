@@ -1,0 +1,159 @@
+{% extends 'base.html' %}
+{% block title %}{{ admission.visit.patient.name }} — Nursing Care{% endblock %}
+{% block page_title %}{{ admission.visit.patient.name }}{% endblock %}
+{% block page_subtitle %}Visit #{{ admission.visit.id }} &middot; Admitted {{ admission.admitted_at|date:"d M Y H:i" }} by {{ admission.admitted_by.get_full_name|default:admission.admitted_by.username }}{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+
+  {# Status bar #}
+  <div class="flex items-center justify-between flex-wrap gap-3">
+    {% if admission.is_active %}
+      <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold bg-green-50 text-green-700">Active</span>
+      <form method="post" action="{% url 'discharge_nursing' admission.pk %}" onsubmit="return confirm('Discharge {{ admission.visit.patient.name }} from nursing care?')">
+        {% csrf_token %}
+        <input type="text" name="discharge_notes" placeholder="Discharge notes (optional)" class="form-control mr-2" style="display:inline-block;width:240px;">
+        <button type="submit" class="btn btn-secondary btn-sm">Discharge Patient</button>
+      </form>
+    {% else %}
+      <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold bg-gray-100 text-gray-600">Discharged {{ admission.discharged_at|date:"d M Y H:i" }}</span>
+      {% if admission.discharge_notes %}
+        <p class="text-sm text-text-muted">{{ admission.discharge_notes }}</p>
+      {% endif %}
+    {% endif %}
+  </div>
+
+  {# Active medications #}
+  {% if active_items %}
+  <div>
+    <h3 class="text-base font-bold text-text-main mb-3">Active Medications</h3>
+    <div class="space-y-4">
+      {% for ci in active_items %}
+      <div class="card border border-indigo-100">
+        <div class="flex items-start justify-between gap-3 flex-wrap">
+          <div class="flex-1">
+            <p class="font-bold text-text-main text-base">{{ ci.prescription.drug.name }}</p>
+            <p class="text-xs text-text-muted mt-0.5">
+              {{ ci.prescription.dosage_mg }} {{ ci.prescription.drug.base_unit }} &times;
+              {{ ci.prescription.frequency_per_day }}x/day &times;
+              {{ ci.prescription.duration_days }} day(s)
+              &nbsp;&middot;&nbsp; Per dose: {{ ci.per_dose_quantity }} {{ ci.prescription.drug.base_unit }}(s)
+            </p>
+          </div>
+          <div class="text-right">
+            <p class="text-2xl font-bold text-indigo-600">{{ ci.doses_given }}<span class="text-base text-text-muted">/{{ ci.doses_planned }}</span></p>
+            <p class="text-xs text-text-muted">doses given</p>
+          </div>
+        </div>
+
+        {# Progress bar #}
+        <div class="mt-3 w-full bg-gray-200 rounded-full h-2">
+          <div class="bg-indigo-600 h-2 rounded-full transition-all" style="width:{{ ci.progress_pct }}%"></div>
+        </div>
+        <p class="text-xs text-text-muted mt-1">{{ ci.doses_remaining }} dose(s) remaining</p>
+
+        {# Dose history for this item #}
+        {% if ci.doses.all %}
+        <div class="mt-3 space-y-1">
+          {% for dose in ci.doses.all %}
+          <div class="flex items-center gap-3 text-xs text-text-muted">
+            <span class="font-semibold text-text-main">Dose {{ forloop.counter }}</span>
+            <span>{{ dose.administered_at|date:"d M Y H:i" }}</span>
+            <span>— {{ dose.administered_by.get_full_name|default:"Unknown" }}</span>
+            {% if dose.notes %}<span class="text-indigo-600">{{ dose.notes }}</span>{% endif %}
+          </div>
+          {% endfor %}
+        </div>
+        {% endif %}
+
+        {% if admission.is_active %}
+        <div class="mt-4 flex gap-2 flex-wrap">
+          <form method="post" action="{% url 'administer_dose' ci.pk %}">
+            {% csrf_token %}
+            <input type="text" name="notes" placeholder="Notes (optional)" class="form-control mr-2" style="display:inline-block;width:180px;">
+            <button type="submit" class="btn btn-primary btn-sm">Give Dose {{ ci.doses_given|add:1 }}</button>
+          </form>
+          <button type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('stopForm{{ ci.pk }}').classList.toggle('hidden')">Stop Medication</button>
+        </div>
+        <form id="stopForm{{ ci.pk }}" method="post" action="{% url 'stop_care_item' ci.pk %}" class="hidden mt-2 flex gap-2">
+          {% csrf_token %}
+          <input type="text" name="stop_reason" placeholder="Reason for stopping (e.g. doctor changed prescription)" class="form-control flex-1">
+          <button type="submit" class="btn btn-danger btn-sm">Confirm Stop</button>
+        </form>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  {# Completed medications #}
+  {% if completed_items %}
+  <div>
+    <h3 class="text-base font-bold text-text-main mb-3">Completed</h3>
+    <div class="space-y-2">
+      {% for ci in completed_items %}
+      <div class="card border border-green-100 bg-green-50/30">
+        <div class="flex items-center justify-between gap-3">
+          <div>
+            <p class="font-semibold text-text-main">{{ ci.prescription.drug.name }}</p>
+            <p class="text-xs text-text-muted">All {{ ci.doses_planned }} doses given</p>
+          </div>
+          <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700">Complete</span>
+        </div>
+        <div class="mt-2 space-y-1">
+          {% for dose in ci.doses.all %}
+          <p class="text-xs text-text-muted">Dose {{ forloop.counter }}: {{ dose.administered_at|date:"d M Y H:i" }} — {{ dose.administered_by.get_full_name|default:"Unknown" }}</p>
+          {% endfor %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  {# Stopped medications #}
+  {% if stopped_items %}
+  <div>
+    <h3 class="text-base font-bold text-text-main mb-3">Stopped</h3>
+    <div class="space-y-2">
+      {% for ci in stopped_items %}
+      <div class="card border border-amber-100 bg-amber-50/30">
+        <div class="flex items-center justify-between gap-3">
+          <div>
+            <p class="font-semibold text-text-main">{{ ci.prescription.drug.name }}</p>
+            <p class="text-xs text-text-muted">{{ ci.doses_given }} of {{ ci.doses_planned }} doses given &middot; Stopped {{ ci.stopped_at|date:"d M Y H:i"|default:"—" }}</p>
+            {% if ci.stop_reason %}<p class="text-xs text-amber-700 mt-0.5">{{ ci.stop_reason }}</p>{% endif %}
+          </div>
+          <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-700">Stopped</span>
+        </div>
+        <div class="mt-2 space-y-1">
+          {% for dose in ci.doses.all %}
+          <p class="text-xs text-text-muted">Dose {{ forloop.counter }}: {{ dose.administered_at|date:"d M Y H:i" }} — {{ dose.administered_by.get_full_name|default:"Unknown" }}</p>
+          {% endfor %}
+        </div>
+        {# Add replacement prescription if doctor changed drug #}
+        {% if ci.prescription.replacement_prescriptions.exists %}
+        <div class="mt-2 p-2 rounded bg-indigo-50 border border-indigo-100">
+          <p class="text-xs font-semibold text-indigo-700">Replaced by:</p>
+          {% for replacement in ci.prescription.replacement_prescriptions.all %}
+          <p class="text-xs text-indigo-600">{{ replacement.drug.name }} &middot; {{ replacement.frequency_per_day }}x/day &times; {{ replacement.duration_days }} day(s)</p>
+          {% endfor %}
+        </div>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  {% if not active_items and not completed_items and not stopped_items %}
+  <div class="card text-center text-text-muted py-10">No medications recorded for this admission.</div>
+  {% endif %}
+
+  <div class="pt-2">
+    <a href="{% url 'nursing_admissions' %}" class="btn btn-secondary btn-sm">&larr; Back to Nursing Care</a>
+  </div>
+
+</div>
+{% endblock %}

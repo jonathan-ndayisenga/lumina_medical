@@ -5,6 +5,8 @@ from django.db import transaction
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 
+from decimal import Decimal
+
 from accounts.models import User
 from admin_dashboard.models import InventoryTransaction
 from doctor.models import Consultation, Prescription
@@ -13,7 +15,7 @@ from reception.models import QueueEntry, Triage, Visit
 from reception.workflow import ensure_pending_queue_entry, send_to_reception_queue, sync_visit_status
 
 from .forms import NurseNoteForm, TriageForm
-from .models import NurseNote
+from .models import NurseNote, NursingAdmission, NursingCareItem, NursingDose
 
 
 def nurse_role_required(view_func):
@@ -267,3 +269,237 @@ def dispense_prescription(request, queue_entry_id, prescription_id):
 
     messages.success(request, f"Dispensed {prescription.quantity_display} of {drug.name}.")
     return redirect("perform_nursing", queue_entry_id=queue_entry.pk)
+
+
+# ── Nursing Care (IV Admissions) ──────────────────────────────────────────────
+
+@nurse_role_required
+def nursing_admissions(request):
+    """List all active and recent nursing care admissions."""
+    hospital = get_active_hospital(request)
+    active = NursingAdmission.objects.filter(
+        hospital=hospital, status=NursingAdmission.STATUS_ACTIVE
+    ).select_related("visit__patient", "admitted_by").prefetch_related("care_items__doses")
+
+    discharged = NursingAdmission.objects.filter(
+        hospital=hospital, status=NursingAdmission.STATUS_DISCHARGED
+    ).select_related("visit__patient", "admitted_by").order_by("-discharged_at")[:20]
+
+    return render(request, "nurse/nursing_admissions.html", {
+        "active_nav": "nurse",
+        "active_admissions": active,
+        "discharged_admissions": discharged,
+    })
+
+
+@nurse_role_required
+def start_nursing_admission(request, visit_id):
+    """Admit a patient for IV nursing care — select which prescriptions to manage."""
+    hospital = get_active_hospital(request)
+    visit = get_object_or_404(Visit, pk=visit_id, hospital=hospital)
+
+    # Can't admit twice
+    if hasattr(visit, "nursing_admission"):
+        messages.info(request, f"{visit.patient.name} is already under nursing care.")
+        return redirect("nursing_admission_detail", admission_id=visit.nursing_admission.pk)
+
+    # Only IV/infusion prescriptions make sense for nursing care
+    iv_prescriptions = visit.prescriptions.filter(
+        dispensed=False,
+        nursing_managed=False,
+    ).select_related("drug").exclude(drug__category__in=["tablet", "capsule"])
+
+    if request.method == "POST":
+        selected_ids = request.POST.getlist("prescription_ids")
+        if not selected_ids:
+            messages.error(request, "Select at least one prescription to manage.")
+        else:
+            admission = NursingAdmission.objects.create(
+                visit=visit,
+                hospital=hospital,
+                admitted_by=request.user,
+            )
+            for rx_id in selected_ids:
+                try:
+                    rx = iv_prescriptions.get(pk=rx_id)
+                except Prescription.DoesNotExist:
+                    continue
+                doses_planned = max(1, (rx.frequency_per_day or 1) * (rx.duration_days or 1))
+                per_dose_qty = (Decimal(rx.total_quantity or 0) / doses_planned).quantize(Decimal("0.0001"))
+                NursingCareItem.objects.create(
+                    admission=admission,
+                    prescription=rx,
+                    doses_planned=doses_planned,
+                    per_dose_quantity=per_dose_qty,
+                )
+                rx.nursing_managed = True
+                rx.save(update_fields=["nursing_managed"])
+
+            messages.success(request, f"{visit.patient.name} admitted for nursing care.")
+            return redirect("nursing_admission_detail", admission_id=admission.pk)
+
+    return render(request, "nurse/start_nursing_admission.html", {
+        "active_nav": "nurse",
+        "visit": visit,
+        "iv_prescriptions": iv_prescriptions,
+    })
+
+
+@nurse_role_required
+def nursing_admission_detail(request, admission_id):
+    """Main working view — give doses, view history, discharge patient."""
+    hospital = get_active_hospital(request)
+    admission = get_object_or_404(
+        NursingAdmission.objects.select_related("visit__patient", "admitted_by")
+        .prefetch_related(
+            "care_items__prescription__drug",
+            "care_items__doses__administered_by",
+            "care_items__stopped_by",
+        ),
+        pk=admission_id,
+        hospital=hospital,
+    )
+    active_items = [ci for ci in admission.care_items.all() if ci.is_active and not ci.is_complete]
+    completed_items = [ci for ci in admission.care_items.all() if ci.is_complete]
+    stopped_items = [ci for ci in admission.care_items.all() if not ci.is_active and not ci.is_complete]
+
+    return render(request, "nurse/nursing_admission_detail.html", {
+        "active_nav": "nurse",
+        "admission": admission,
+        "active_items": active_items,
+        "completed_items": completed_items,
+        "stopped_items": stopped_items,
+    })
+
+
+@nurse_role_required
+@transaction.atomic
+def administer_dose(request, care_item_id):
+    """Record one dose administration and deduct from inventory."""
+    if request.method != "POST":
+        return redirect("nursing_admissions")
+
+    hospital = get_active_hospital(request)
+    care_item = get_object_or_404(
+        NursingCareItem.objects.select_related(
+            "admission__visit__hospital", "prescription__drug"
+        ),
+        pk=care_item_id,
+        admission__hospital=hospital,
+    )
+
+    if not care_item.is_active:
+        messages.error(request, "This medication has been stopped.")
+        return redirect("nursing_admission_detail", admission_id=care_item.admission_id)
+
+    if care_item.is_complete:
+        messages.info(request, "All doses for this medication have already been given.")
+        return redirect("nursing_admission_detail", admission_id=care_item.admission_id)
+
+    drug = care_item.prescription.drug
+    per_dose_qty = care_item.per_dose_quantity
+    stock_qty = drug.to_stock_quantity(per_dose_qty)
+
+    if drug.available_dispense_quantity < per_dose_qty:
+        messages.error(
+            request,
+            f"Insufficient stock for {drug.name}. Available: {drug.quantity_label}. "
+            f"Required per dose: {per_dose_qty} {drug.base_unit}(s). Please restock."
+        )
+        return redirect("nursing_admission_detail", admission_id=care_item.admission_id)
+
+    notes = (request.POST.get("notes") or "").strip()
+
+    # Deduct inventory
+    drug.consume_stock(stock_qty)
+    InventoryTransaction.objects.create(
+        hospital=hospital,
+        item=drug,
+        transaction_type=InventoryTransaction.TYPE_CONSUME,
+        quantity=per_dose_qty,
+        unit_cost=drug.unit_cost,
+        visit=care_item.admission.visit,
+        prescription=care_item.prescription,
+        performed_by=request.user,
+        notes=f"Nursing dose {care_item.doses_given + 1}/{care_item.doses_planned} — {drug.name}",
+    )
+
+    # Record the dose
+    NursingDose.objects.create(
+        care_item=care_item,
+        administered_by=request.user,
+        quantity_given=per_dose_qty,
+        notes=notes,
+    )
+
+    # If all doses complete, mark prescription as dispensed
+    care_item.refresh_from_db()
+    if care_item.is_complete:
+        rx = care_item.prescription
+        rx.dispensed = True
+        rx.dispensed_at = timezone.now()
+        rx.dispensed_by = request.user
+        rx.save(update_fields=["dispensed", "dispensed_at", "dispensed_by"])
+        if rx.billing_visit_service_id:
+            rx.billing_visit_service.performed = True
+            rx.billing_visit_service.performed_at = timezone.now()
+            rx.billing_visit_service.save(update_fields=["performed", "performed_at"])
+        messages.success(request, f"Dose given. All {care_item.doses_planned} doses of {drug.name} complete.")
+    else:
+        messages.success(
+            request,
+            f"Dose {care_item.doses_given}/{care_item.doses_planned} recorded for {drug.name}."
+        )
+
+    return redirect("nursing_admission_detail", admission_id=care_item.admission_id)
+
+
+@nurse_role_required
+@transaction.atomic
+def stop_care_item(request, care_item_id):
+    """Stop a medication mid-treatment (e.g. doctor changed the prescription)."""
+    if request.method != "POST":
+        return redirect("nursing_admissions")
+
+    hospital = get_active_hospital(request)
+    care_item = get_object_or_404(
+        NursingCareItem.objects.select_related("admission__visit__hospital", "prescription__drug"),
+        pk=care_item_id,
+        admission__hospital=hospital,
+    )
+
+    reason = (request.POST.get("stop_reason") or "").strip()
+    care_item.is_active = False
+    care_item.stopped_at = timezone.now()
+    care_item.stopped_by = request.user
+    care_item.stop_reason = reason or "Stopped by nurse"
+    care_item.save(update_fields=["is_active", "stopped_at", "stopped_by", "stop_reason"])
+
+    messages.success(request, f"{care_item.prescription.drug.name} stopped. {care_item.doses_given} of {care_item.doses_planned} doses were given.")
+    return redirect("nursing_admission_detail", admission_id=care_item.admission_id)
+
+
+@nurse_role_required
+@transaction.atomic
+def discharge_nursing(request, admission_id):
+    """Discharge a patient from nursing care."""
+    if request.method != "POST":
+        return redirect("nursing_admissions")
+
+    hospital = get_active_hospital(request)
+    admission = get_object_or_404(NursingAdmission, pk=admission_id, hospital=hospital)
+
+    notes = (request.POST.get("discharge_notes") or "").strip()
+    admission.status = NursingAdmission.STATUS_DISCHARGED
+    admission.discharged_at = timezone.now()
+    admission.discharged_by = request.user
+    admission.discharge_notes = notes
+    admission.save(update_fields=["status", "discharged_at", "discharged_by", "discharge_notes"])
+
+    # Stop any still-active care items
+    admission.care_items.filter(is_active=True, doses__isnull=False).update(
+        is_active=False, stopped_at=timezone.now(), stop_reason="Patient discharged"
+    )
+
+    messages.success(request, f"{admission.visit.patient.name} discharged from nursing care.")
+    return redirect("nursing_admissions")

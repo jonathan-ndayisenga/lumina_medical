@@ -172,6 +172,10 @@ class Prescription(models.Model):
         blank=True,
         related_name="prescriptions",
     )
+    nursing_managed = models.BooleanField(
+        default=False,
+        help_text="If True, this prescription is dispensed dose-by-dose by nurses, not all at once by pharmacy.",
+    )
 
     class Meta:
         ordering = ["-prescribed_at", "-id"]

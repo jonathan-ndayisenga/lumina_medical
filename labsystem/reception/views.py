@@ -1047,6 +1047,7 @@ def complete_visit(request, visit_id):
                 "bank_account": None,
                 "mobile_account": None,
                 "payment_notes": "",
+                "whatsapp_number": visit.whatsapp_number or visit.patient.contact or "",
             },
         )
 
