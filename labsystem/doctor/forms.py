@@ -14,6 +14,7 @@ class ConsultationForm(forms.ModelForm):
     oxygen_saturation = forms.IntegerField(label="SpO2 (%)", required=False)
     glucose_mg_dl = forms.IntegerField(label="Glucose (mg/dL)", required=False)
     send_to_nurse = forms.BooleanField(required=False)
+    send_to_sonographer = forms.BooleanField(required=False, label="Send to sonographer for scan")
     send_to_reception = forms.BooleanField(required=False, label="Send to reception for billing")
 
     class Meta:
@@ -76,9 +77,14 @@ class ConsultationForm(forms.ModelForm):
 
     def clean(self):
         cleaned_data = super().clean()
-        if cleaned_data.get("send_to_nurse") and cleaned_data.get("send_to_reception"):
+        destinations = sum([
+            bool(cleaned_data.get("send_to_nurse")),
+            bool(cleaned_data.get("send_to_sonographer")),
+            bool(cleaned_data.get("send_to_reception")),
+        ])
+        if destinations > 1:
             raise forms.ValidationError(
-                "Choose either nurse follow-up or reception billing, not both at once."
+                "Choose only one destination: nurse, sonographer, or reception billing."
             )
         return cleaned_data
 

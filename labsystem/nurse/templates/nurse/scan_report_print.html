@@ -1,0 +1,108 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Scan Report — {{ patient.name }}{% endblock %}
+{% block print_header %}{% endblock %}
+
+{% block extra_css %}
+<style>
+    @page {
+        size: A4 portrait;
+        margin: 10mm;
+    }
+
+    @media print {
+        body {
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+        }
+
+        .content { padding: 0; }
+        .print-header, .patient-grid { break-inside: avoid; }
+        .findings-block { break-inside: auto; }
+        .signature-block { break-inside: avoid; margin-top: 40px; }
+
+        .no-print { display: none !important; }
+    }
+
+    @media (max-width: 760px) {
+        .print-header { flex-direction: column; align-items: flex-start; }
+        .print-meta { width: 100%; text-align: left; }
+        .patient-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="space-y-4 print-shell" style="background: #fff; color: #111827; font-size: 13px; line-height: 1.5; max-width: 780px; margin: 0 auto;">
+
+    {% include "partials/print_header.html" with hospital=hospital print_title="ULTRASOUND SCAN REPORT" print_subtitle=report.get_scan_type_display %}
+
+    <!-- Patient info grid -->
+    <div class="patient-grid grid grid-cols-3 gap-1 p-2 border border-gray-200 rounded-lg bg-white" style="font-size: 0.75rem;">
+        <div class="flex items-baseline gap-1 flex-wrap min-w-0">
+            <span class="font-semibold uppercase text-text-muted" style="font-size: 0.66rem;">Name:</span>
+            <span class="font-semibold text-text-main" style="font-size: 0.79rem;">{{ patient.name }}</span>
+        </div>
+        <div class="flex items-baseline gap-1 flex-wrap min-w-0">
+            <span class="font-semibold uppercase text-text-muted" style="font-size: 0.66rem;">Age:</span>
+            <span class="font-semibold text-text-main" style="font-size: 0.79rem;">{{ patient.age }}</span>
+        </div>
+        <div class="flex items-baseline gap-1 flex-wrap min-w-0">
+            <span class="font-semibold uppercase text-text-muted" style="font-size: 0.66rem;">Sex:</span>
+            <span class="font-semibold text-text-main" style="font-size: 0.79rem;">{{ patient.get_sex_display }}</span>
+        </div>
+        <div class="flex items-baseline gap-1 flex-wrap min-w-0">
+            <span class="font-semibold uppercase text-text-muted" style="font-size: 0.66rem;">Scan Type:</span>
+            <span class="font-semibold text-text-main" style="font-size: 0.79rem;">{{ report.get_scan_type_display }}</span>
+        </div>
+        <div class="flex items-baseline gap-1 flex-wrap min-w-0">
+            <span class="font-semibold uppercase text-text-muted" style="font-size: 0.66rem;">Date:</span>
+            <span class="font-semibold text-text-main" style="font-size: 0.79rem;">{{ report.created_at|date:"d M Y H:i" }}</span>
+        </div>
+        <div class="flex items-baseline gap-1 flex-wrap min-w-0">
+            <span class="font-semibold uppercase text-text-muted" style="font-size: 0.66rem;">Sonographer:</span>
+            <span class="font-semibold text-text-main" style="font-size: 0.79rem;">
+                {% if report.sonographer %}{{ report.sonographer.get_full_name|default:report.sonographer.username }}{% else %}&mdash;{% endif %}
+            </span>
+        </div>
+        {% if report.clinical_indication %}
+        <div class="col-span-3 flex items-baseline gap-1 flex-wrap min-w-0">
+            <span class="font-semibold uppercase text-text-muted" style="font-size: 0.66rem;">Clinical Indication:</span>
+            <span class="font-semibold text-text-main" style="font-size: 0.79rem;">{{ report.clinical_indication }}</span>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Findings -->
+    <section class="findings-block border border-gray-200 rounded-lg overflow-hidden">
+        <div class="px-3 py-2 bg-gray-50 text-text-main font-bold uppercase text-xs" style="letter-spacing: 0.08em; border-bottom: 1px solid #e5e7eb;">
+            Findings
+        </div>
+        <div class="px-4 py-3" style="white-space: pre-wrap; font-size: 0.82rem; line-height: 1.6;">{{ report.findings }}</div>
+    </section>
+
+    <!-- Impression -->
+    <section class="findings-block border border-gray-200 rounded-lg overflow-hidden">
+        <div class="px-3 py-2 bg-gray-50 text-text-main font-bold uppercase text-xs" style="letter-spacing: 0.08em; border-bottom: 1px solid #e5e7eb;">
+            Impression
+        </div>
+        <div class="px-4 py-3" style="white-space: pre-wrap; font-size: 0.82rem; line-height: 1.6;">{{ report.impression }}</div>
+    </section>
+
+    <!-- Signature block -->
+    <div class="signature-block" style="margin-top: 48px;">
+        <div style="border-top: 1px solid #111827; width: 220px; padding-top: 4px; font-size: 0.75rem;">
+            <strong>{% if report.sonographer %}{{ report.sonographer.get_full_name|default:report.sonographer.username }}{% else %}Sonographer{% endif %}</strong><br>
+            <span style="color: #6b7280;">Sonographer — {{ hospital.name }}</span>
+        </div>
+    </div>
+
+    <!-- Print button (hidden on print) -->
+    <div class="no-print flex gap-3 mt-6">
+        <button onclick="window.print()" class="btn btn-primary">Print</button>
+        <a href="{% url 'scan_queue' %}" class="btn btn-secondary">Back to Queue</a>
+    </div>
+
+</div>
+{% endblock %}

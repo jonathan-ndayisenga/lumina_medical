@@ -259,6 +259,7 @@ class Service(models.Model):
     CATEGORY_TRIAGE = "triage"
     CATEGORY_PROCEDURE = "procedure"
     CATEGORY_PHARMACY = "pharmacy"
+    CATEGORY_SCAN = "scan"
     CATEGORY_OTHER = "other"
 
     CATEGORY_CHOICES = [
@@ -267,6 +268,7 @@ class Service(models.Model):
         (CATEGORY_TRIAGE, "Triage"),
         (CATEGORY_PROCEDURE, "Procedure"),
         (CATEGORY_PHARMACY, "Pharmacy"),
+        (CATEGORY_SCAN, "Scan / Ultrasound"),
         (CATEGORY_OTHER, "Other"),
     ]
 
@@ -314,6 +316,7 @@ class QueueEntry(models.Model):
     TYPE_LAB_DOCTOR = "lab_doctor"
     TYPE_DOCTOR = "doctor"
     TYPE_NURSE = "nurse"
+    TYPE_SONOGRAPHER = "sonographer"
     TYPE_RECEPTION = "reception"
 
     QUEUE_TYPE_CHOICES = [
@@ -321,6 +324,7 @@ class QueueEntry(models.Model):
         (TYPE_LAB_DOCTOR, "Lab Request From Doctor"),
         (TYPE_DOCTOR, "Doctor"),
         (TYPE_NURSE, "Nurse"),
+        (TYPE_SONOGRAPHER, "Sonographer"),
         (TYPE_RECEPTION, "Reception Queue"),
     ]
 

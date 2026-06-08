@@ -12,4 +12,8 @@ urlpatterns = [
     path("nursing-care/<int:admission_id>/discharge/", views.discharge_nursing, name="discharge_nursing"),
     path("nursing-care/dose/<int:care_item_id>/administer/", views.administer_dose, name="administer_dose"),
     path("nursing-care/dose/<int:care_item_id>/stop/", views.stop_care_item, name="stop_care_item"),
+    # Sonographer
+    path("scan-queue/", views.scan_queue, name="scan_queue"),
+    path("scan-queue/<int:queue_entry_id>/report/", views.scan_report, name="scan_report"),
+    path("scan-report/<int:report_id>/print/", views.scan_report_print, name="scan_report_print"),
 ]

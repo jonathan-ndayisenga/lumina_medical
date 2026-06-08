@@ -18,7 +18,7 @@ This document describes the current state of the codebase (models, modules, rout
 
 ---
 
-## 1. System Overview
+## 1. System Overview 
 
 The system is a multi-tenant Hospital EMR centered on a single "Visit" object that connects:
 

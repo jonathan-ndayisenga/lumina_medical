@@ -125,6 +125,61 @@ class NursingCareItem(models.Model):
         return min(100, int((self.doses_given / self.doses_planned) * 100))
 
 
+class ScanReport(models.Model):
+    SCAN_ABDOMINAL = "abdominal"
+    SCAN_OBSTETRIC = "obstetric"
+    SCAN_PELVIC = "pelvic"
+    SCAN_CARDIAC = "cardiac"
+    SCAN_RENAL = "renal"
+    SCAN_THYROID = "thyroid"
+    SCAN_MUSCULOSKELETAL = "musculoskeletal"
+    SCAN_OTHER = "other"
+
+    SCAN_TYPE_CHOICES = [
+        (SCAN_ABDOMINAL, "Abdominal Ultrasound"),
+        (SCAN_OBSTETRIC, "Obstetric Ultrasound"),
+        (SCAN_PELVIC, "Pelvic Ultrasound"),
+        (SCAN_CARDIAC, "Cardiac Ultrasound (Echo)"),
+        (SCAN_RENAL, "Renal Ultrasound"),
+        (SCAN_THYROID, "Thyroid Ultrasound"),
+        (SCAN_MUSCULOSKELETAL, "Musculoskeletal Ultrasound"),
+        (SCAN_OTHER, "Other"),
+    ]
+
+    STATUS_DRAFT = "draft"
+    STATUS_FINAL = "final"
+    STATUS_CHOICES = [
+        (STATUS_DRAFT, "Draft"),
+        (STATUS_FINAL, "Finalized"),
+    ]
+
+    visit = models.ForeignKey(
+        "reception.Visit",
+        on_delete=models.CASCADE,
+        related_name="scan_reports",
+    )
+    sonographer = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="scan_reports",
+    )
+    scan_type = models.CharField(max_length=30, choices=SCAN_TYPE_CHOICES, default=SCAN_OTHER)
+    clinical_indication = models.TextField(blank=True, help_text="Reason for the scan / clinical notes from referring doctor")
+    findings = models.TextField(help_text="Detailed scan findings")
+    impression = models.TextField(help_text="Summary / conclusion")
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default=STATUS_DRAFT)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"Scan Report — {self.visit.patient.name} ({self.get_scan_type_display()})"
+
+
 class NursingDose(models.Model):
     care_item = models.ForeignKey(
         NursingCareItem,

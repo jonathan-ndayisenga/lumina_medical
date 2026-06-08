@@ -1,0 +1,196 @@
+{% extends "base.html" %}
+
+{% block title %}Sonographer - Hospital EMR{% endblock %}
+{% block page_title %}Sonographer{% endblock %}
+{% block page_subtitle %}Manage scan requests and record ultrasound findings.{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+
+    <!-- ── Waiting Queue ─────────────────────────────────────────────────── -->
+    <div class="card">
+        <h4 class="text-sm font-semibold text-text-main mb-2">Waiting for Scan</h4>
+        <p class="text-xs text-text-muted mb-4">Patients referred for ultrasound or scan from reception or doctor.</p>
+
+        <!-- Mobile cards -->
+        <div class="space-y-3 md:hidden">
+            {% for entry in queue_entries %}
+                <article class="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm space-y-3">
+                    <div>
+                        <h5 class="text-sm font-semibold text-text-main">{{ entry.visit.patient.name }}</h5>
+                        <p class="text-xs text-text-muted">{{ entry.visit.patient.age }} / {{ entry.visit.patient.get_sex_display }}</p>
+                    </div>
+                    <dl class="space-y-2 text-sm">
+                        <div>
+                            <dt class="text-xs uppercase tracking-wide text-text-muted">Visit Date</dt>
+                            <dd class="text-text-main">{{ entry.visit.visit_date|date:"M d, Y H:i" }}</dd>
+                        </div>
+                        <div>
+                            <dt class="text-xs uppercase tracking-wide text-text-muted">Reason</dt>
+                            <dd class="text-text-main">{{ entry.reason|default:"Scan requested" }}</dd>
+                        </div>
+                        <div>
+                            <dt class="text-xs uppercase tracking-wide text-text-muted">Referred By</dt>
+                            <dd class="text-text-main">
+                                {% if entry.requested_by %}{{ entry.requested_by.get_full_name|default:entry.requested_by.username }}{% else %}System{% endif %}
+                            </dd>
+                        </div>
+                    </dl>
+                    <a class="btn btn-primary w-full" href="{% url 'scan_report' entry.id %}">Open Scan Report</a>
+                </article>
+            {% empty %}
+                <div class="rounded-2xl border border-dashed border-gray-300 bg-gray-50 px-4 py-8 text-center text-sm text-text-muted">
+                    No scans pending.
+                </div>
+            {% endfor %}
+        </div>
+
+        <!-- Desktop table -->
+        <div class="overflow-x-auto hidden md:block">
+            <table class="w-full min-w-full">
+                <thead>
+                    <tr class="border-b-2 border-gray-200">
+                        <th class="text-left px-4 py-3 text-xs font-semibold uppercase text-text-muted">Patient</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold uppercase text-text-muted">Age / Sex</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold uppercase text-text-muted">Visit Date</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold uppercase text-text-muted">Reason</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold uppercase text-text-muted">Referred By</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold uppercase text-text-muted">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for entry in queue_entries %}
+                        <tr class="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                            <td class="px-4 py-3 text-sm font-medium text-text-main">{{ entry.visit.patient.name }}</td>
+                            <td class="px-4 py-3 text-sm text-text-muted">{{ entry.visit.patient.age }} / {{ entry.visit.patient.get_sex_display }}</td>
+                            <td class="px-4 py-3 text-sm text-text-muted">{{ entry.visit.visit_date|date:"M d, Y H:i" }}</td>
+                            <td class="px-4 py-3 text-sm text-text-muted">{{ entry.reason|default:"Scan requested" }}</td>
+                            <td class="px-4 py-3 text-sm text-text-muted">
+                                {% if entry.requested_by %}{{ entry.requested_by.get_full_name|default:entry.requested_by.username }}{% else %}System{% endif %}
+                            </td>
+                            <td class="px-4 py-3 text-sm">
+                                <a class="btn btn-primary btn-sm" href="{% url 'scan_report' entry.id %}">Open Scan Report</a>
+                            </td>
+                        </tr>
+                    {% empty %}
+                        <tr>
+                            <td colspan="6" class="px-4 py-8 text-center text-sm text-text-muted">No patients waiting for a scan.</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- ── Completed / Recent Reports ────────────────────────────────────── -->
+    <div class="card">
+        <h4 class="text-sm font-semibold text-text-main mb-2">Recent Scan Reports</h4>
+        <p class="text-xs text-text-muted mb-4">Completed and draft scan reports from this facility.</p>
+
+        <!-- Mobile cards -->
+        <div class="space-y-3 md:hidden">
+            {% for report in recent_reports %}
+                <article class="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm space-y-3">
+                    <div class="flex items-start justify-between gap-3">
+                        <div>
+                            <h5 class="text-sm font-semibold text-text-main">{{ report.visit.patient.name }}</h5>
+                            <p class="text-xs text-text-muted">{{ report.created_at|date:"M d, Y" }}</p>
+                        </div>
+                        {% if report.status == 'final' %}
+                            <span class="inline-flex items-center px-2 py-1 rounded-full text-[11px] font-semibold bg-green-100 text-green-800">Finalized</span>
+                        {% else %}
+                            <span class="inline-flex items-center px-2 py-1 rounded-full text-[11px] font-semibold bg-yellow-100 text-yellow-800">Draft</span>
+                        {% endif %}
+                    </div>
+                    <dl class="space-y-2 text-sm">
+                        <div>
+                            <dt class="text-xs uppercase tracking-wide text-text-muted">Scan Type</dt>
+                            <dd class="text-text-main">{{ report.get_scan_type_display }}</dd>
+                        </div>
+                        <div>
+                            <dt class="text-xs uppercase tracking-wide text-text-muted">Sonographer</dt>
+                            <dd class="text-text-main">
+                                {% if report.sonographer %}{{ report.sonographer.get_full_name|default:report.sonographer.username }}{% else %}&mdash;{% endif %}
+                            </dd>
+                        </div>
+                        <div>
+                            <dt class="text-xs uppercase tracking-wide text-text-muted">Impression</dt>
+                            <dd class="text-text-main text-xs line-clamp-2">{{ report.impression|truncatewords:15 }}</dd>
+                        </div>
+                    </dl>
+                    <div class="flex gap-2">
+                        <a href="{% url 'scan_report_print' report.id %}" target="_blank" class="btn btn-secondary btn-sm">Print</a>
+                    </div>
+                </article>
+            {% empty %}
+                <div class="rounded-2xl border border-dashed border-gray-300 bg-gray-50 px-4 py-8 text-center text-sm text-text-muted">
+                    No scan reports yet.
+                </div>
+            {% endfor %}
+        </div>
+
+        <!-- Desktop table -->
+        <div class="overflow-x-auto hidden md:block">
+            <table class="w-full min-w-full">
+                <thead>
+                    <tr class="border-b-2 border-gray-200">
+                        <th class="text-left px-4 py-3 text-xs font-semibold uppercase text-text-muted">Patient</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold uppercase text-text-muted">Scan Type</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold uppercase text-text-muted">Date</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold uppercase text-text-muted">Sonographer</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold uppercase text-text-muted">Status</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold uppercase text-text-muted">Impression</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold uppercase text-text-muted">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for report in recent_reports %}
+                        <tr class="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                            <td class="px-4 py-3 text-sm font-medium text-text-main">{{ report.visit.patient.name }}</td>
+                            <td class="px-4 py-3 text-sm text-text-muted">{{ report.get_scan_type_display }}</td>
+                            <td class="px-4 py-3 text-sm text-text-muted">{{ report.created_at|date:"M d, Y" }}</td>
+                            <td class="px-4 py-3 text-sm text-text-muted">
+                                {% if report.sonographer %}{{ report.sonographer.get_full_name|default:report.sonographer.username }}{% else %}&mdash;{% endif %}
+                            </td>
+                            <td class="px-4 py-3 text-sm">
+                                {% if report.status == 'final' %}
+                                    <span class="inline-block px-2 py-1 rounded-full text-xs font-medium bg-green-50 text-green-700">Finalized</span>
+                                {% else %}
+                                    <span class="inline-block px-2 py-1 rounded-full text-xs font-medium bg-yellow-50 text-yellow-700">Draft</span>
+                                {% endif %}
+                            </td>
+                            <td class="px-4 py-3 text-sm text-text-muted max-w-xs truncate">{{ report.impression|truncatewords:12 }}</td>
+                            <td class="px-4 py-3 text-sm">
+                                <a href="{% url 'scan_report_print' report.id %}" target="_blank" class="btn btn-secondary btn-sm">Print</a>
+                            </td>
+                        </tr>
+                    {% empty %}
+                        <tr>
+                            <td colspan="7" class="px-4 py-8 text-center text-sm text-text-muted">No scan reports yet.</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        {% if recent_reports.paginator.num_pages > 1 %}
+        <div class="flex items-center justify-between pt-4 border-t border-gray-100 mt-2">
+            <p class="text-xs text-text-muted">
+                Page {{ recent_reports.number }} of {{ recent_reports.paginator.num_pages }} &mdash; {{ recent_reports.paginator.count }} report{{ recent_reports.paginator.count|pluralize }}
+            </p>
+            <div class="flex gap-2 flex-wrap">
+                {% if recent_reports.has_previous %}
+                    <a href="?page=1" class="btn btn-secondary btn-sm">First</a>
+                    <a href="?page={{ recent_reports.previous_page_number }}" class="btn btn-secondary btn-sm">Previous</a>
+                {% endif %}
+                {% if recent_reports.has_next %}
+                    <a href="?page={{ recent_reports.next_page_number }}" class="btn btn-secondary btn-sm">Next</a>
+                    <a href="?page={{ recent_reports.paginator.num_pages }}" class="btn btn-secondary btn-sm">Last</a>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+</div>
+{% endblock %}

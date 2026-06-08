@@ -69,6 +69,7 @@ def queue_types_for_service(service):
         service.CATEGORY_LAB: [QueueEntry.TYPE_RECEPTION],
         service.CATEGORY_CONSULTATION: [QueueEntry.TYPE_DOCTOR],
         service.CATEGORY_TRIAGE: [QueueEntry.TYPE_NURSE],
+        service.CATEGORY_SCAN: [QueueEntry.TYPE_SONOGRAPHER],
     }
     return mapping.get(service.category, [])
 
@@ -80,6 +81,8 @@ def queue_reason_for_service(service):
         return f"Initial consultation: {service.name}"
     if service.category == service.CATEGORY_TRIAGE:
         return f"Triage required: {service.name}"
+    if service.category == service.CATEGORY_SCAN:
+        return f"Scan requested: {service.name}"
     return f"Initial {service.category}: {service.name}"
 
 

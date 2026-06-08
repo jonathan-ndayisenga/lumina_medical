@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+
+{% block title %}Scan Report — {{ patient.name }}{% endblock %}
+{% block page_title %}Scan Report{% endblock %}
+{% block page_subtitle %}{{ visit.patient.name }} &mdash; {{ visit.visit_date|date:"M d, Y" }}{% endblock %}
+
+{% block content %}
+<div class="max-w-3xl mx-auto space-y-6">
+
+    <!-- Patient info card -->
+    <div class="card">
+        <h4 class="text-sm font-semibold text-text-main mb-3">Patient Details</h4>
+        <dl class="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
+            <div>
+                <dt class="text-xs uppercase tracking-wide text-text-muted">Name</dt>
+                <dd class="font-medium text-text-main">{{ visit.patient.name }}</dd>
+            </div>
+            <div>
+                <dt class="text-xs uppercase tracking-wide text-text-muted">Age / Sex</dt>
+                <dd class="text-text-main">{{ visit.patient.age }} / {{ visit.patient.get_sex_display }}</dd>
+            </div>
+            <div>
+                <dt class="text-xs uppercase tracking-wide text-text-muted">Visit Date</dt>
+                <dd class="text-text-main">{{ visit.visit_date|date:"M d, Y H:i" }}</dd>
+            </div>
+            <div>
+                <dt class="text-xs uppercase tracking-wide text-text-muted">Referred For</dt>
+                <dd class="text-text-main">{{ queue_entry.reason|default:"Scan" }}</dd>
+            </div>
+        </dl>
+    </div>
+
+    <!-- Report form -->
+    <form method="post" class="card space-y-5">
+        {% csrf_token %}
+
+        <h4 class="text-sm font-semibold text-text-main">
+            {% if report %}Edit Scan Report{% else %}New Scan Report{% endif %}
+            {% if report and report.status == 'final' %}
+                <span class="ml-2 text-xs font-normal text-green-600 bg-green-50 border border-green-200 rounded-full px-2 py-0.5">Finalized</span>
+            {% elif report %}
+                <span class="ml-2 text-xs font-normal text-yellow-700 bg-yellow-50 border border-yellow-200 rounded-full px-2 py-0.5">Draft</span>
+            {% endif %}
+        </h4>
+
+        <div>
+            <label class="block text-xs font-semibold text-text-muted uppercase tracking-wide mb-1" for="scan_type">Scan Type</label>
+            <select name="scan_type" id="scan_type" class="input w-full" {% if report and report.status == 'final' %}disabled{% endif %}>
+                {% for value, label in scan_type_choices %}
+                    <option value="{{ value }}" {% if report and report.scan_type == value %}selected{% elif not report and value == 'other' %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div>
+            <label class="block text-xs font-semibold text-text-muted uppercase tracking-wide mb-1" for="clinical_indication">Clinical Indication <span class="font-normal normal-case text-text-muted">(optional)</span></label>
+            <input type="text" name="clinical_indication" id="clinical_indication" class="input w-full"
+                placeholder="e.g. Abdominal pain, check for gallstones"
+                value="{{ report.clinical_indication|default:'' }}"
+                {% if report and report.status == 'final' %}disabled{% endif %}>
+        </div>
+
+        <div>
+            <label class="block text-xs font-semibold text-text-muted uppercase tracking-wide mb-1" for="findings">Findings <span class="text-red-500">*</span></label>
+            <textarea name="findings" id="findings" rows="8" class="input w-full font-mono text-sm"
+                placeholder="Describe detailed scan findings here..."
+                {% if report and report.status == 'final' %}disabled{% endif %}>{{ report.findings|default:'' }}</textarea>
+        </div>
+
+        <div>
+            <label class="block text-xs font-semibold text-text-muted uppercase tracking-wide mb-1" for="impression">Impression / Conclusion <span class="text-red-500">*</span></label>
+            <textarea name="impression" id="impression" rows="4" class="input w-full"
+                placeholder="Summary and clinical impression..."
+                {% if report and report.status == 'final' %}disabled{% endif %}>{{ report.impression|default:'' }}</textarea>
+        </div>
+
+        {% if not report or report.status != 'final' %}
+            <div class="flex flex-wrap gap-3 pt-2">
+                <button type="submit" name="action" value="draft" class="btn btn-secondary">Save Draft</button>
+                <button type="submit" name="action" value="finalize" class="btn btn-primary"
+                    onclick="return confirm('Finalize this report? This will send the patient to reception.')">
+                    Finalize &amp; Send to Reception
+                </button>
+            </div>
+        {% else %}
+            <div class="flex gap-3 pt-2">
+                <a href="{% url 'scan_report_print' report.id %}" target="_blank" class="btn btn-primary">Print Report</a>
+                <a href="{% url 'scan_queue' %}" class="btn btn-secondary">Back to Queue</a>
+            </div>
+        {% endif %}
+    </form>
+
+    {% if report and report.status == 'final' %}
+        <div class="text-center">
+            <a href="{% url 'scan_report_print' report.id %}" target="_blank" class="btn btn-primary">Print Scan Report</a>
+        </div>
+    {% endif %}
+
+</div>
+{% endblock %}

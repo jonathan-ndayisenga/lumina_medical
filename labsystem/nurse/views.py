@@ -15,7 +15,7 @@ from reception.models import QueueEntry, Triage, Visit
 from reception.workflow import ensure_pending_queue_entry, send_to_reception_queue, sync_visit_status
 
 from .forms import NurseNoteForm, TriageForm
-from .models import NurseNote, NursingAdmission, NursingCareItem, NursingDose
+from .models import NurseNote, NursingAdmission, NursingCareItem, NursingDose, ScanReport
 
 
 def nurse_role_required(view_func):
@@ -503,3 +503,128 @@ def discharge_nursing(request, admission_id):
 
     messages.success(request, f"{admission.visit.patient.name} discharged from nursing care.")
     return redirect("nursing_admissions")
+
+
+# ── Sonographer Queue & Scan Reports ─────────────────────────────────────────
+
+def sonographer_role_required(view_func):
+    @login_required
+    def wrapped(request, *args, **kwargs):
+        user = request.user
+        allowed = getattr(user, "role", "") in {
+            User.ROLE_SUPERADMIN,
+            User.ROLE_HOSPITAL_ADMIN,
+            User.ROLE_NURSE,
+        } or user.groups.filter(name__in=["Nurse", "Sonographer"]).exists()
+        if not allowed:
+            return redirect("app_home")
+        return view_func(request, *args, **kwargs)
+    return wrapped
+
+
+@sonographer_role_required
+def scan_queue(request):
+    from django.core.paginator import Paginator
+
+    hospital = get_active_hospital(request)
+    queue_entries = QueueEntry.objects.filter(
+        queue_type=QueueEntry.TYPE_SONOGRAPHER,
+        processed=False,
+    ).select_related("visit__patient", "hospital", "requested_by").order_by("created_at")
+    if hospital and getattr(request.user, "role", "") != User.ROLE_SUPERADMIN:
+        queue_entries = queue_entries.filter(hospital=hospital)
+
+    recent_reports_qs = ScanReport.objects.select_related(
+        "visit__patient", "visit__hospital", "sonographer"
+    ).order_by("-created_at")
+    if hospital and getattr(request.user, "role", "") != User.ROLE_SUPERADMIN:
+        recent_reports_qs = recent_reports_qs.filter(visit__hospital=hospital)
+
+    paginator = Paginator(recent_reports_qs, 10)
+    page_number = request.GET.get("page")
+    recent_reports = paginator.get_page(page_number)
+
+    return render(request, "nurse/scan_queue.html", {
+        "active_nav": "scan_queue",
+        "queue_entries": queue_entries,
+        "recent_reports": recent_reports,
+    })
+
+
+@sonographer_role_required
+@transaction.atomic
+def scan_report(request, queue_entry_id):
+    hospital = get_active_hospital(request)
+    queue_entries = QueueEntry.objects.select_related("visit__patient", "visit__hospital").filter(
+        queue_type=QueueEntry.TYPE_SONOGRAPHER,
+    )
+    if hospital and getattr(request.user, "role", "") != User.ROLE_SUPERADMIN:
+        queue_entries = queue_entries.filter(hospital=hospital)
+    queue_entry = get_object_or_404(queue_entries, pk=queue_entry_id)
+    visit = queue_entry.visit
+
+    existing_report = visit.scan_reports.first()
+
+    if request.method == "POST":
+        scan_type = request.POST.get("scan_type", ScanReport.SCAN_OTHER)
+        clinical_indication = (request.POST.get("clinical_indication") or "").strip()
+        findings = (request.POST.get("findings") or "").strip()
+        impression = (request.POST.get("impression") or "").strip()
+        action = request.POST.get("action", "draft")
+
+        if not findings or not impression:
+            messages.error(request, "Findings and impression are required.")
+        else:
+            status = ScanReport.STATUS_FINAL if action == "finalize" else ScanReport.STATUS_DRAFT
+            if existing_report:
+                existing_report.scan_type = scan_type
+                existing_report.clinical_indication = clinical_indication
+                existing_report.findings = findings
+                existing_report.impression = impression
+                existing_report.status = status
+                existing_report.sonographer = request.user
+                existing_report.save()
+                report = existing_report
+            else:
+                report = ScanReport.objects.create(
+                    visit=visit,
+                    sonographer=request.user,
+                    scan_type=scan_type,
+                    clinical_indication=clinical_indication,
+                    findings=findings,
+                    impression=impression,
+                    status=status,
+                )
+
+            if action == "finalize":
+                from reception.workflow import mark_queue_entries_processed, send_to_reception_queue
+                mark_queue_entries_processed(visit=visit, queue_type=QueueEntry.TYPE_SONOGRAPHER)
+                send_to_reception_queue(visit=visit, requested_by=request.user, reason="Scan report finalized")
+                messages.success(request, f"Scan report finalized for {visit.patient.name}. Patient sent to reception.")
+                return redirect("scan_queue")
+            else:
+                messages.success(request, "Report saved as draft.")
+                return redirect("scan_report", queue_entry_id=queue_entry.pk)
+
+    return render(request, "nurse/scan_report_form.html", {
+        "active_nav": "nurse",
+        "queue_entry": queue_entry,
+        "visit": visit,
+        "report": existing_report,
+        "scan_type_choices": ScanReport.SCAN_TYPE_CHOICES,
+    })
+
+
+@sonographer_role_required
+def scan_report_print(request, report_id):
+    hospital = get_active_hospital(request)
+    qs = ScanReport.objects.select_related("visit__patient", "visit__hospital", "sonographer")
+    if hospital and getattr(request.user, "role", "") != User.ROLE_SUPERADMIN:
+        qs = qs.filter(visit__hospital=hospital)
+    report = get_object_or_404(qs, pk=report_id)
+    return render(request, "nurse/scan_report_print.html", {
+        "report": report,
+        "visit": report.visit,
+        "patient": report.visit.patient,
+        "hospital": report.visit.hospital,
+    })

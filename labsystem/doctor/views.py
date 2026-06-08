@@ -838,6 +838,17 @@ def consultation(request, visit_id):
                 )
                 close_doctor_queue = True
                 feedback.append("Patient sent to nurse queue.")
+            elif form.cleaned_data.get("send_to_sonographer"):
+                ensure_pending_queue_entry(
+                    visit=visit,
+                    hospital=visit.hospital,
+                    queue_type=QueueEntry.TYPE_SONOGRAPHER,
+                    reason="Doctor requested scan / ultrasound.",
+                    requested_by=request.user,
+                    notes="Consultation completed and handed off to sonographer.",
+                )
+                close_doctor_queue = True
+                feedback.append("Patient sent to sonographer queue.")
             else:
                 close_doctor_queue = False
 
