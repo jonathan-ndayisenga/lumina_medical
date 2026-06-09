@@ -134,6 +134,22 @@
                                                 Send to Doctor
                                             </button>
                                         </form>
+
+                                        <form method="post" action="{% url 'reception_queue_send_to_sonographer' row.entry.pk %}" class="flex flex-col sm:flex-row gap-2">
+                                            {% csrf_token %}
+                                            <select name="scan_service_id" class="form-control text-sm">
+                                                {% if scan_services %}
+                                                    {% for service in scan_services %}
+                                                        <option value="{{ service.pk }}">{{ service.name }} - {{ service.price }}</option>
+                                                    {% endfor %}
+                                                {% else %}
+                                                    <option value="">No active scan services</option>
+                                                {% endif %}
+                                            </select>
+                                            <button type="submit" class="btn btn-secondary btn-sm" {% if not scan_services %}disabled{% endif %}>
+                                                Send to Sonographer
+                                            </button>
+                                        </form>
                                     </div>
                                 </td>
                             </tr>

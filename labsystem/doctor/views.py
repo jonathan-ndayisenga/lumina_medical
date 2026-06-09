@@ -839,16 +839,36 @@ def consultation(request, visit_id):
                 close_doctor_queue = True
                 feedback.append("Patient sent to nurse queue.")
             elif form.cleaned_data.get("send_to_sonographer"):
+                # Attach the first active scan service to the visit bill
+                scan_service = Service.objects.filter(
+                    hospital=visit.hospital,
+                    category=Service.CATEGORY_SCAN,
+                    is_active=True,
+                ).first()
+                if scan_service:
+                    already_billed = visit.visit_services.filter(service=scan_service).exists()
+                    if not already_billed:
+                        VisitService.objects.create(
+                            visit=visit,
+                            service=scan_service,
+                            price_at_time=scan_service.price,
+                            notes="Added automatically when doctor referred patient to sonographer.",
+                        )
+                        visit.total_amount = (visit.total_amount or 0) + scan_service.price
+                        visit.save(update_fields=["total_amount"])
                 ensure_pending_queue_entry(
                     visit=visit,
                     hospital=visit.hospital,
                     queue_type=QueueEntry.TYPE_SONOGRAPHER,
-                    reason="Doctor requested scan / ultrasound.",
+                    reason=f"Doctor requested scan / ultrasound{': ' + scan_service.name if scan_service else ''}.",
                     requested_by=request.user,
                     notes="Consultation completed and handed off to sonographer.",
                 )
                 close_doctor_queue = True
-                feedback.append("Patient sent to sonographer queue.")
+                feedback.append(
+                    f"Patient sent to sonographer queue."
+                    + (f" {scan_service.name} added to bill." if scan_service else " No scan service found — add one under Services.")
+                )
             else:
                 close_doctor_queue = False
 

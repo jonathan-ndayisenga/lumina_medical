@@ -143,6 +143,14 @@ def consultation_services_queryset(hospital):
     ).order_by("name")
 
 
+def scan_services_queryset(hospital):
+    return Service.objects.filter(
+        hospital=hospital,
+        category=Service.CATEGORY_SCAN,
+        is_active=True,
+    ).order_by("name")
+
+
 def reception_queue_other_open_work(visit):
     return visit.queue_entries.exclude(queue_type=QueueEntry.TYPE_RECEPTION).filter(processed=False)
 
@@ -227,6 +235,7 @@ def reception_dashboard(request):
 def receptionist_queue(request):
     hospital = get_active_hospital(request)
     consultation_services = list(consultation_services_queryset(hospital)) if hospital else []
+    scan_services = list(scan_services_queryset(hospital)) if hospital else []
     queue_entries = list(reception_queue_queryset(hospital)) if hospital else []
     queue_rows = []
 
@@ -276,6 +285,7 @@ def receptionist_queue(request):
             "queue_count": len(queue_rows),
             "pending_dispense_count": sum(row["pending_dispense_count"] for row in queue_rows),
             "consultation_services": consultation_services,
+            "scan_services": scan_services,
         },
     )
 
@@ -432,6 +442,57 @@ def receptionist_queue_send_to_doctor(request, queue_entry_id):
     )
     sync_visit_status(visit)
     messages.success(request, f"{visit.patient.name} sent to doctor queue.")
+    return redirect("reception_queue")
+
+
+@reception_role_required
+@transaction.atomic
+def receptionist_queue_send_to_sonographer(request, queue_entry_id):
+    if request.method != "POST":
+        raise PermissionDenied("Sending a patient to sonographer requires a POST request.")
+
+    hospital = get_active_hospital(request)
+    queue_entry = get_object_or_404(reception_queue_queryset(hospital), pk=queue_entry_id)
+    visit = queue_entry.visit
+
+    if reception_queue_other_open_work(visit).exists():
+        messages.error(request, "This visit still has other open queue work and cannot be routed to sonographer yet.")
+        return redirect("reception_queue")
+
+    scan_service_qs = scan_services_queryset(hospital)
+    scan_service = scan_service_qs.filter(pk=request.POST.get("scan_service_id")).first()
+    if scan_service is None:
+        scan_service = scan_service_qs.first()
+    if scan_service is None:
+        messages.error(request, "Create at least one active Scan / Ultrasound service before sending patients to sonographer.")
+        return redirect("reception_queue")
+
+    already_billed = visit.visit_services.filter(
+        service=scan_service,
+        service__category=Service.CATEGORY_SCAN,
+        performed=False,
+    ).exists()
+    if not already_billed:
+        VisitService.objects.create(
+            visit=visit,
+            service=scan_service,
+            price_at_time=scan_service.price,
+            notes=f"Added from receptionist queue — referred to sonographer.",
+        )
+        visit.total_amount = (visit.total_amount or Decimal("0.00")) + scan_service.price
+        visit.save(update_fields=["total_amount"])
+
+    close_reception_queue_for_visit(visit)
+    ensure_pending_queue_entry(
+        visit=visit,
+        hospital=visit.hospital,
+        queue_type=QueueEntry.TYPE_SONOGRAPHER,
+        reason=f"Reception referred patient for scan: {scan_service.name}.",
+        requested_by=request.user,
+        notes=f"Scan service '{scan_service.name}' added to bill and patient sent to sonographer.",
+    )
+    sync_visit_status(visit)
+    messages.success(request, f"{visit.patient.name} sent to sonographer. {scan_service.name} added to bill.")
     return redirect("reception_queue")
 
 
