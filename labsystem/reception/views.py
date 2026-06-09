@@ -1378,5 +1378,95 @@ def view_visit_report(request, visit_id):
         "lab_reports": lab_reports,
         "payments": visit.payments.select_related("bank_account", "mobile_account", "recorded_by").order_by("-paid_at", "-id"),
     }
-    
+
     return render(request, "reception/visit_report.html", context)
+
+
+# ── Quick Send Returning Patient to Queue ─────────────────────────────────────
+
+QUICK_SEND_DESTINATIONS = {
+    "doctor": {
+        "queue_type": QueueEntry.TYPE_DOCTOR,
+        "category": Service.CATEGORY_CONSULTATION,
+        "label": "Doctor",
+        "reason": "Returning patient — sent directly to doctor queue by reception.",
+    },
+    "lab": {
+        "queue_type": QueueEntry.TYPE_LAB_RECEPTION,
+        "category": Service.CATEGORY_LAB,
+        "label": "Lab",
+        "reason": "Returning patient — sent directly to lab by reception.",
+    },
+    "sonographer": {
+        "queue_type": QueueEntry.TYPE_SONOGRAPHER,
+        "category": Service.CATEGORY_SCAN,
+        "label": "Sonographer",
+        "reason": "Returning patient — sent directly to sonographer by reception.",
+    },
+    "nurse": {
+        "queue_type": QueueEntry.TYPE_NURSE,
+        "category": Service.CATEGORY_TRIAGE,
+        "label": "Nurse",
+        "reason": "Returning patient — sent directly to nurse queue by reception.",
+    },
+}
+
+
+@reception_role_required
+@transaction.atomic
+def patient_quick_send(request, patient_id):
+    if request.method != "POST":
+        raise PermissionDenied("Quick send requires a POST request.")
+
+    hospital = get_active_hospital(request)
+    patient = get_object_or_404(Patient, pk=patient_id, hospital=hospital)
+    destination = request.POST.get("destination", "").strip()
+
+    if destination not in QUICK_SEND_DESTINATIONS:
+        messages.error(request, "Invalid destination selected.")
+        return redirect("patient_visits", patient_id=patient.pk)
+
+    config = QUICK_SEND_DESTINATIONS[destination]
+
+    # Find the first active service of the right category
+    service = Service.objects.filter(
+        hospital=hospital,
+        category=config["category"],
+        is_active=True,
+    ).first()
+
+    if service is None:
+        messages.error(
+            request,
+            f"No active {config['label'].lower()} service found. "
+            f"Please create one under Services before sending patients there."
+        )
+        return redirect("patient_visits", patient_id=patient.pk)
+
+    # Create a new visit
+    visit = Visit.objects.create(
+        patient=patient,
+        hospital=hospital,
+        status=Visit.STATUS_IN_PROGRESS,
+        total_amount=service.price,
+        created_by=request.user,
+        notes=f"Quick send to {config['label']} by {request.user.get_full_name() or request.user.username}.",
+    )
+
+    VisitService.objects.create(
+        visit=visit,
+        service=service,
+        price_at_time=service.price,
+    )
+
+    ensure_pending_queue_entry(
+        visit=visit,
+        hospital=hospital,
+        queue_type=config["queue_type"],
+        reason=config["reason"],
+        requested_by=request.user,
+    )
+
+    sync_visit_status(visit)
+    messages.success(request, f"{patient.name} sent to {config['label']} queue.")
+    return redirect("reception_queue")

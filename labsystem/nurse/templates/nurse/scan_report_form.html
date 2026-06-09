@@ -75,13 +75,59 @@
         </div>
 
         {% if not report or report.status != 'final' %}
-            <div class="flex flex-wrap gap-3 pt-2">
-                <button type="submit" name="action" value="draft" class="btn btn-secondary">Save Draft</button>
-                <button type="submit" name="action" value="finalize" class="btn btn-primary"
-                    onclick="return confirm('Finalize this report? This will send the patient to reception.')">
-                    Finalize &amp; Send to Reception
-                </button>
+
+            <!-- Hidden handoff value driven by the buttons below -->
+            <input type="hidden" name="handoff" id="handoff-value" value="">
+
+            <div class="border-t border-gray-100 pt-4 space-y-3">
+                <p class="text-xs font-semibold text-text-muted uppercase tracking-wide">Send patient to after finalizing</p>
+                <p class="text-xs text-text-muted">Pick one — you can only choose one destination. Save Draft skips this.</p>
+
+                <div class="flex flex-col gap-2" id="handoff-buttons">
+                    <button type="button" data-handoff="nurse"
+                        class="handoff-btn flex items-center gap-3 rounded-xl border-2 border-gray-200 bg-white px-4 py-3 text-left text-sm font-medium text-text-main transition-all hover:border-blue-300 hover:bg-blue-50">
+                        <span class="handoff-icon flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full border-2 border-gray-300 text-white transition-all">
+                            <svg class="hidden h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+                        </span>
+                        <span>
+                            <span class="block font-semibold">Nurse Queue</span>
+                            <span class="block text-xs font-normal text-text-muted">Nursing care or medication follow-up</span>
+                        </span>
+                    </button>
+
+                    <button type="button" data-handoff="doctor"
+                        class="handoff-btn flex items-center gap-3 rounded-xl border-2 border-gray-200 bg-white px-4 py-3 text-left text-sm font-medium text-text-main transition-all hover:border-blue-300 hover:bg-blue-50">
+                        <span class="handoff-icon flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full border-2 border-gray-300 text-white transition-all">
+                            <svg class="hidden h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+                        </span>
+                        <span>
+                            <span class="block font-semibold">Back to Doctor</span>
+                            <span class="block text-xs font-normal text-text-muted">Send scan results back for doctor review</span>
+                        </span>
+                    </button>
+
+                    <button type="button" data-handoff="billing"
+                        class="handoff-btn flex items-center gap-3 rounded-xl border-2 border-gray-200 bg-white px-4 py-3 text-left text-sm font-medium text-text-main transition-all hover:border-blue-300 hover:bg-blue-50">
+                        <span class="handoff-icon flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full border-2 border-gray-300 text-white transition-all">
+                            <svg class="hidden h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+                        </span>
+                        <span>
+                            <span class="block font-semibold">Reception / Billing</span>
+                            <span class="block text-xs font-normal text-text-muted">Patient is done — ready for payment</span>
+                        </span>
+                    </button>
+                </div>
+
+                <div id="handoff-warning" class="hidden rounded-lg bg-red-50 border border-red-200 px-4 py-2 text-xs text-red-700">
+                    You must select a destination before finalizing the report.
+                </div>
             </div>
+
+            <div class="flex flex-wrap gap-3 pt-2 border-t border-gray-100">
+                <button type="submit" name="action" value="draft" class="btn btn-secondary">Save Draft</button>
+                <button type="button" id="finalize-btn" class="btn btn-primary">Finalize &amp; Hand Off</button>
+            </div>
+
         {% else %}
             <div class="flex gap-3 pt-2">
                 <a href="{% url 'scan_report_print' report.id %}" target="_blank" class="btn btn-primary">Print Report</a>
@@ -95,6 +141,70 @@
             <a href="{% url 'scan_report_print' report.id %}" target="_blank" class="btn btn-primary">Print Scan Report</a>
         </div>
     {% endif %}
+
+{% if not report or report.status != 'final' %}
+<script>
+(function () {
+    const buttons = document.querySelectorAll('.handoff-btn');
+    const hiddenInput = document.getElementById('handoff-value');
+    const warning = document.getElementById('handoff-warning');
+    const finalizeBtn = document.getElementById('finalize-btn');
+    const form = finalizeBtn?.closest('form');
+
+    function activate(btn) {
+        btn.classList.remove('border-gray-200', 'bg-white');
+        btn.classList.add('border-blue-500', 'bg-blue-50', 'ring-1', 'ring-blue-400');
+        const icon = btn.querySelector('.handoff-icon');
+        icon.classList.remove('border-gray-300');
+        icon.classList.add('border-blue-500', 'bg-blue-500');
+        icon.querySelector('svg').classList.remove('hidden');
+    }
+
+    function deactivate(btn) {
+        btn.classList.add('border-gray-200', 'bg-white');
+        btn.classList.remove('border-blue-500', 'bg-blue-50', 'ring-1', 'ring-blue-400');
+        const icon = btn.querySelector('.handoff-icon');
+        icon.classList.add('border-gray-300');
+        icon.classList.remove('border-blue-500', 'bg-blue-500');
+        icon.querySelector('svg').classList.add('hidden');
+    }
+
+    buttons.forEach(btn => {
+        btn.addEventListener('click', () => {
+            const already = hiddenInput.value === btn.dataset.handoff;
+            // Deactivate all
+            buttons.forEach(deactivate);
+            if (already) {
+                // Toggle off
+                hiddenInput.value = '';
+            } else {
+                activate(btn);
+                hiddenInput.value = btn.dataset.handoff;
+            }
+            warning.classList.add('hidden');
+        });
+    });
+
+    finalizeBtn?.addEventListener('click', () => {
+        if (!hiddenInput.value) {
+            warning.classList.remove('hidden');
+            warning.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            return;
+        }
+        const dest = { nurse: 'Nurse Queue', doctor: 'Doctor', billing: 'Reception / Billing' }[hiddenInput.value];
+        if (confirm(`Finalize this scan report and send the patient to ${dest}?`)) {
+            // Set a hidden submit button's name/value and submit
+            const actionInput = document.createElement('input');
+            actionInput.type = 'hidden';
+            actionInput.name = 'action';
+            actionInput.value = 'finalize';
+            form.appendChild(actionInput);
+            form.submit();
+        }
+    });
+})();
+</script>
+{% endif %}
 
 </div>
 {% endblock %}

@@ -83,8 +83,13 @@ class ConsultationForm(forms.ModelForm):
             bool(cleaned_data.get("send_to_reception")),
         ])
         if destinations > 1:
+            selected = []
+            if cleaned_data.get("send_to_nurse"): selected.append("Nurse Queue")
+            if cleaned_data.get("send_to_sonographer"): selected.append("Sonographer")
+            if cleaned_data.get("send_to_reception"): selected.append("Reception / Billing")
             raise forms.ValidationError(
-                "Choose only one destination: nurse, sonographer, or reception billing."
+                f"You selected {' and '.join(selected)} at the same time — you can only hand off to one destination. "
+                f"Please choose one and save again."
             )
         return cleaned_data
 
