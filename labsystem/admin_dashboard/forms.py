@@ -170,7 +170,7 @@ class HospitalStaffUserUpdateForm(forms.ModelForm):
 class HospitalServiceForm(forms.ModelForm):
     class Meta:
         model = Service
-        fields = ("name", "category", "price", "is_active")
+        fields = ("name", "category", "price", "is_active", "is_per_day")
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

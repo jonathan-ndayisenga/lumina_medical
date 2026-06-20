@@ -508,27 +508,42 @@ def add_billable_service_api(request, visit_id):
         is_active=True,
     )
 
+    days = 1
+    if service.is_per_day:
+        try:
+            days = int(request.POST.get("days", "1"))
+        except ValueError:
+            return JsonResponse({"error": "Enter a valid number of days."}, status=400)
+        if days < 1:
+            return JsonResponse({"error": "Number of days must be at least 1."}, status=400)
+
+    total_price = service.price * days
+    notes = f"Added during consultation by {request.user.get_full_name() or request.user.username}"
+    if service.is_per_day:
+        notes = f"{service.name} × {days} day(s) — {notes}"
+
     visit_service, created = VisitService.objects.get_or_create(
         visit=visit,
         service=service,
         defaults={
-            "price_at_time": service.price,
-            "notes": f"Added during consultation by {request.user.get_full_name() or request.user.username}",
+            "price_at_time": total_price,
+            "notes": notes,
         },
     )
     if not created:
         return JsonResponse({"error": f"{service.name} is already on this visit."}, status=400)
 
-    visit.total_amount += service.price
+    visit.total_amount += total_price
     visit.save(update_fields=["total_amount"])
 
+    display_name = f"{service.name} ({days} day{'s' if days != 1 else ''})" if service.is_per_day else service.name
     return JsonResponse(
         {
-            "message": f"{service.name} added to the visit bill.",
+            "message": f"{display_name} added to the visit bill.",
             "service": {
                 "visit_service_id": visit_service.pk,
                 "service_id": service.pk,
-                "service_name": service.name,
+                "service_name": display_name,
                 "price": str(visit_service.price_at_time),
                 "category": service.get_category_display(),
             },

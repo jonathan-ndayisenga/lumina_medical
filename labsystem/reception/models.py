@@ -277,6 +277,10 @@ class Service(models.Model):
     category = models.CharField(max_length=50, choices=CATEGORY_CHOICES)
     price = models.DecimalField(max_digits=10, decimal_places=2)
     is_active = models.BooleanField(default=True)
+    is_per_day = models.BooleanField(
+        default=False,
+        help_text="If checked, billing this service asks for number of days and multiplies the price (e.g. Nursing Fee, Bed Fee).",
+    )
     test_profile = models.ForeignKey(
         "lab.TestProfile",
         on_delete=models.SET_NULL,

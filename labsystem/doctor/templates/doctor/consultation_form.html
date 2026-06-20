@@ -159,9 +159,10 @@
                 <select id="billable-service-select" class="form-control flex-1">
                     <option value="">Select a billable service</option>
                     {% for service in available_billable_services %}
-                        <option value="{{ service.id }}">{{ service.name }} - {{ service.category|title }} ({{ service.price }})</option>
+                        <option value="{{ service.id }}" data-per-day="{% if service.is_per_day %}1{% else %}0{% endif %}" data-price="{{ service.price }}">{{ service.name }} - {{ service.category|title }} ({{ service.price }}{% if service.is_per_day %}/day{% endif %})</option>
                     {% endfor %}
                 </select>
+                <input type="number" id="billable-service-days" min="1" step="1" value="1" placeholder="Days" class="form-control hidden" style="max-width:90px;">
                 <button type="button" id="add-billable-service-btn" class="btn btn-primary whitespace-nowrap">Add to Bill</button>
             </div>
 
@@ -621,6 +622,7 @@
     const selectedLabEmpty = document.getElementById('selected-lab-empty');
     const totalAmount = document.getElementById('visit-total-amount');
     const billableServiceSelect = document.getElementById('billable-service-select');
+    const billableServiceDays = document.getElementById('billable-service-days');
     const addBillableServiceButton = document.getElementById('add-billable-service-btn');
     const billableServiceMessage = document.getElementById('billable-service-message');
     const billableServicesList = document.getElementById('billable-services-list');
@@ -1140,9 +1142,28 @@
       }
     }
 
+    function syncBillableDaysVisibility() {
+      const selectedOption = billableServiceSelect?.selectedOptions?.[0];
+      const isPerDay = selectedOption?.dataset.perDay === '1';
+      if (!billableServiceDays) return;
+      if (isPerDay) {
+        billableServiceDays.classList.remove('hidden');
+        billableServiceDays.value = billableServiceDays.value || '1';
+      } else {
+        billableServiceDays.classList.add('hidden');
+      }
+    }
+
     async function addBillableService() {
       if (!billableServiceSelect || !billableServiceSelect.value) {
         showMessage(billableServiceMessage, 'Select a billable service first.', 'error');
+        return;
+      }
+      const selectedOption = billableServiceSelect.selectedOptions[0];
+      const isPerDay = selectedOption?.dataset.perDay === '1';
+      const days = parseInt(billableServiceDays?.value || '1', 10);
+      if (isPerDay && (!days || days < 1)) {
+        showMessage(billableServiceMessage, 'Enter a valid number of days.', 'error');
         return;
       }
       addBillableServiceButton.disabled = true;
@@ -1150,12 +1171,19 @@
         const currentValue = billableServiceSelect.value;
         const formData = new FormData();
         formData.append('service_id', currentValue);
+        if (isPerDay) {
+          formData.append('days', days);
+        }
         const payload = await postForm(page.dataset.addServiceUrl, formData);
         billableServicesEmpty?.classList.add('hidden');
         billableServicesList.prepend(createBillableCard(payload.service));
         updateTotalAmount(payload.visit_total_amount);
         billableServiceSelect.querySelector(`option[value="${currentValue}"]`)?.remove();
         billableServiceSelect.value = '';
+        if (billableServiceDays) {
+          billableServiceDays.value = '1';
+          billableServiceDays.classList.add('hidden');
+        }
         showMessage(billableServiceMessage, payload.message, 'success');
       } catch (error) {
         showMessage(billableServiceMessage, error.message, 'error');
@@ -1265,6 +1293,8 @@
     openModalButton.addEventListener('click', openModal);
     closeModalButton.addEventListener('click', closeModal);
     addBillableServiceButton?.addEventListener('click', addBillableService);
+    billableServiceSelect?.addEventListener('change', syncBillableDaysVisibility);
+    syncBillableDaysVisibility();
     addPrescriptionButton?.addEventListener('click', addPrescription);
     drugSearchInput?.addEventListener('input', renderDrugSearchResults);
     drugSearchInput?.addEventListener('focus', renderDrugSearchResults);
