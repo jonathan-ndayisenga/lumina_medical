@@ -820,7 +820,7 @@ def consultation(request, visit_id):
         .exclude(category__in=[Service.CATEGORY_LAB, Service.CATEGORY_PHARMACY])
         .exclude(pk__in=existing_billable_service_ids)
         .order_by("category", "name")
-        .values("id", "name", "price", "category")
+        .values("id", "name", "price", "category", "is_per_day")
     )
     available_drugs = list(
         InventoryItem.objects.filter(
