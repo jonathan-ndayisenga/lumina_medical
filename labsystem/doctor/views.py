@@ -661,6 +661,39 @@ def add_prescription_api(request, visit_id):
     )
 
 
+@doctor_role_required
+@require_http_methods(["POST"])
+@transaction.atomic
+def remove_billable_service_api(request, visit_id, visit_service_id):
+    hospital = get_active_hospital(request)
+    visits = Visit.objects.select_related("hospital").all()
+    if hospital and getattr(request.user, "role", "") != User.ROLE_SUPERADMIN:
+        visits = visits.filter(hospital=hospital)
+    visit = get_object_or_404(visits, pk=visit_id)
+    if visit.status == Visit.STATUS_CANCELLED:
+        return JsonResponse({"error": "This visit was terminated by an administrator."}, status=409)
+
+    visit_service = get_object_or_404(
+        VisitService.objects.exclude(service__category__in=[Service.CATEGORY_LAB, Service.CATEGORY_PHARMACY]),
+        pk=visit_service_id,
+        visit=visit,
+    )
+
+    removed_price = visit_service.price_at_time
+    service_name = visit_service.service.name
+    visit_service.delete()
+
+    visit.total_amount = max(Decimal("0"), visit.total_amount - removed_price)
+    visit.save(update_fields=["total_amount"])
+
+    return JsonResponse(
+        {
+            "message": f"{service_name} removed from the visit bill.",
+            "visit_total_amount": str(visit.total_amount),
+        }
+    )
+
+
 @prescribing_role_required
 @require_http_methods(["POST"])
 @transaction.atomic
