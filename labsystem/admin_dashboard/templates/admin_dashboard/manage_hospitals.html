@@ -27,7 +27,7 @@
                     </div>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {% for field in form %}
-                            {% if field.name != 'admin_username' and field.name != 'admin_password' and field.name != 'admin_password_confirm' %}
+                            {% if field.name != 'admin_username' and field.name != 'admin_password' and field.name != 'admin_password_confirm' and field.name != 'modules' %}
                                 <div class="{% if field.name == 'logo' or field.name == 'subscription_plan' %}md:col-span-2{% endif %}">
                                     <label for="{{ field.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">{{ field.label }}</label>
                                     {{ field }}
@@ -40,6 +40,37 @@
                                 </div>
                             {% endif %}
                         {% endfor %}
+                    </div>
+
+                    <div>
+                        <h4 class="text-sm font-semibold text-text-main">Modules &amp; Pricing</h4>
+                        <p class="text-xs text-text-muted mt-1">Select the modules this hospital is subscribed to. Core modules are always included free of charge.</p>
+                        <div id="hospital-modules-list" class="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            {% for module in all_modules %}
+                                <label class="flex items-center justify-between gap-2 rounded-lg border border-gray-200 px-3 py-2 hover:bg-gray-50 cursor-pointer text-sm {% if module.is_core %}bg-gray-50{% endif %}">
+                                    <span class="flex items-center gap-2">
+                                        <input type="checkbox" name="modules" value="{{ module.pk }}"
+                                            data-price="{{ module.monthly_price }}"
+                                            {% if module.pk in form.modules.value or module.is_core %}checked{% endif %}
+                                            {% if module.is_core %}disabled{% endif %}
+                                            class="h-4 w-4 rounded border-gray-300 text-indigo-600">
+                                        {% if module.is_core %}
+                                            <input type="hidden" name="modules" value="{{ module.pk }}">
+                                        {% endif %}
+                                        <span class="font-medium text-text-main">{{ module.name }}{% if module.is_core %} <span class="text-xs text-text-muted">(core)</span>{% endif %}</span>
+                                    </span>
+                                    <span class="text-xs font-semibold text-text-muted">
+                                        {% if module.monthly_price > 0 %}UGX {{ module.monthly_price }}/mo{% else %}Free{% endif %}
+                                    </span>
+                                </label>
+                            {% endfor %}
+                        </div>
+                        {% for error in form.modules.errors %}
+                            <div class="mt-1 text-xs text-red-600">{{ error }}</div>
+                        {% endfor %}
+                        <p class="text-xs text-text-muted mt-2">
+                            Estimated total: <span id="hospital-modules-total" class="font-semibold text-text-main">UGX 0</span>/month
+                        </p>
                     </div>
                 </section>
 
@@ -148,4 +179,27 @@
         </div>
     </div>
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const list = document.getElementById('hospital-modules-list');
+    const totalEl = document.getElementById('hospital-modules-total');
+    if (!list || !totalEl) return;
+
+    function recalcTotal() {
+        let total = 0;
+        list.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+            if (cb.checked) {
+                total += parseFloat(cb.dataset.price || '0');
+            }
+        });
+        totalEl.textContent = 'UGX ' + total.toLocaleString();
+    }
+
+    list.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+        cb.addEventListener('change', recalcTotal);
+    });
+    recalcTotal();
+});
+</script>
 {% endblock %}

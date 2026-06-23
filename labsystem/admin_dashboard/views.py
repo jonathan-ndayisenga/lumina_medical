@@ -19,7 +19,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from accounts.forms import HospitalSubscriptionPaymentForm, SubscriptionPlanForm
-from accounts.models import Hospital, HospitalSubscriptionPayment, SubscriptionPlan, User
+from accounts.models import Hospital, HospitalModuleSubscription, HospitalSubscriptionPayment, Module, SubscriptionPlan, User
 from lab.models import LabReport
 from reception.models import Patient, Payment, QueueEntry, Service, Visit
 from .forms import (
@@ -88,6 +88,34 @@ def hospital_admin_only(view_func):
     return wrapped
 
 
+def inventory_access_required(view_func):
+    """Requires the user's role/group to be eligible AND the hospital to have the Inventory module."""
+    @login_required
+    def wrapped(request, *args, **kwargs):
+        if not request.user.can_access_inventory:
+            return HttpResponseForbidden(
+                "This hospital does not have the Pharmacy/Inventory module enabled, "
+                "or your account does not have access to it."
+            )
+        return view_func(request, *args, **kwargs)
+
+    return wrapped
+
+
+def finance_access_required(view_func):
+    """Requires the user's role/group to be eligible AND the hospital to have the Finance module."""
+    @login_required
+    def wrapped(request, *args, **kwargs):
+        if not request.user.can_access_finance:
+            return HttpResponseForbidden(
+                "This hospital does not have the Finance module enabled, "
+                "or your account does not have access to it."
+            )
+        return view_func(request, *args, **kwargs)
+
+    return wrapped
+
+
 def active_hospital(request):
     return getattr(request, "hospital", None) or getattr(request.user, "hospital", None)
 
@@ -119,7 +147,7 @@ def payment_from_receipt_reference(reference, hospital, mode=None):
     return queryset.select_related("visit__patient").first()
 
 
-@hospital_admin_only
+@finance_access_required
 def financial_metric_detail(request, metric):
     """Explain and break down a financial dashboard figure."""
     hospital = active_hospital(request)
@@ -975,6 +1003,57 @@ def developer_dashboard(request):
         subscription_end_date__isnull=False,
         subscription_end_date__lte=timezone.now().date() + timedelta(days=7),
     )
+
+    # --- Pie chart: expected monthly income share per module, platform-wide ---
+    modules = Module.objects.filter(is_active=True).order_by("display_order")
+    pie_labels = []
+    pie_values = []
+    module_expected_total = Decimal("0")
+    for module in modules:
+        active_count = HospitalModuleSubscription.objects.filter(module=module, is_active=True).count()
+        expected = module.monthly_price * active_count
+        if expected > 0:
+            pie_labels.append(module.name)
+            pie_values.append(str(expected))
+            module_expected_total += expected
+
+    # --- Line chart: 6-month window, two switchable modes ---
+    today = timezone.now().date()
+    month_starts = []
+    cursor = today.replace(day=1)
+    for _ in range(6):
+        month_starts.append(cursor)
+        cursor = (cursor - timedelta(days=1)).replace(day=1)
+    month_starts.reverse()
+    month_labels = [m.strftime("%b %Y") for m in month_starts]
+
+    # Mode 1: projected monthly income per hospital (current module mix, projected
+    # back to each hospital's onboarding month — clearly a projection, not collected cash).
+    income_datasets = []
+    all_hospitals = list(hospitals)
+    for hospital in all_hospitals:
+        monthly_total = sum(
+            (m.monthly_price for m in modules if m.code in hospital.active_module_codes),
+            Decimal("0"),
+        )
+        onboarded_month = hospital.created_at.date().replace(day=1) if hospital.created_at else today.replace(day=1)
+        data_points = [
+            str(monthly_total) if month >= onboarded_month else "0"
+            for month in month_starts
+        ]
+        if monthly_total > 0:
+            income_datasets.append({"label": hospital.name, "data": data_points})
+
+    # Mode 2: hospital onboarding trend — count of new hospitals per month.
+    onboarding_counts = []
+    for month in month_starts:
+        next_month = (month + timedelta(days=32)).replace(day=1)
+        count = sum(
+            1 for h in all_hospitals
+            if h.created_at and month <= h.created_at.date() < next_month
+        )
+        onboarding_counts.append(count)
+
     context = {
         "active_nav": "superadmin",
         "dashboard_title": "Super Admin Dashboard",
@@ -985,6 +1064,12 @@ def developer_dashboard(request):
         "total_hospitals": hospitals.count(),
         "active_hospitals": hospitals.filter(is_active=True).count(),
         "total_users": User.objects.count(),
+        "module_expected_total": module_expected_total,
+        "pie_labels_json": json.dumps(pie_labels),
+        "pie_values_json": json.dumps(pie_values),
+        "month_labels_json": json.dumps(month_labels),
+        "income_datasets_json": json.dumps(income_datasets),
+        "onboarding_counts_json": json.dumps(onboarding_counts),
     }
     return render(request, "admin_dashboard/developer_dashboard.html", context)
 
@@ -1043,7 +1128,7 @@ def hospital_dashboard(request):
     return render(request, "admin_dashboard/hospital_dashboard.html", context)
 
 
-@hospital_admin_only
+@finance_access_required
 def financial_report(request):
     hospital = active_hospital(request)
 
@@ -1454,7 +1539,7 @@ def financial_report(request):
     return render(request, "admin_dashboard/financial_report.html", context)
 
 
-@hospital_admin_only
+@finance_access_required
 def financial_statements(request):
     """Landing page for the three core statements: Bank, Mobile Money, and Cash Drawer."""
     hospital = active_hospital(request)
@@ -1677,7 +1762,7 @@ def manage_users(request):
     users = hospital.users.order_by("role", "first_name", "username") if hospital else User.objects.none()
 
     if request.method == "POST":
-        form = HospitalStaffUserForm(request.POST)
+        form = HospitalStaffUserForm(request.POST, hospital=hospital)
         if form.is_valid():
             user = form.save(commit=False)
             user.hospital = hospital
@@ -1687,7 +1772,7 @@ def manage_users(request):
             return redirect("manage_users")
         messages.error(request, "Please fix the user details below.")
     else:
-        form = HospitalStaffUserForm()
+        form = HospitalStaffUserForm(hospital=hospital)
 
     context = hospital_admin_context(
         request,
@@ -1702,7 +1787,8 @@ def manage_users(request):
 @role_required(User.ROLE_HOSPITAL_ADMIN)
 def edit_user(request, user_id):
     user = hospital_owned_or_404(User, request, pk=user_id)
-    form = HospitalStaffUserUpdateForm(request.POST or None, instance=user)
+    hospital = active_hospital(request)
+    form = HospitalStaffUserUpdateForm(request.POST or None, instance=user, hospital=hospital)
     if request.method == "POST":
         if form.is_valid():
             form.save()
@@ -1829,7 +1915,7 @@ def delete_service(request, service_id):
     return render(request, "admin_dashboard/confirm_delete.html", context)
 
 
-@hospital_admin_only
+@finance_access_required
 def manage_expenses(request):
     from datetime import date as _date
     import urllib.parse as _urlparse
@@ -1924,7 +2010,7 @@ def manage_expenses(request):
     return render(request, "admin_dashboard/manage_expenses.html", context)
 
 
-@hospital_admin_only
+@finance_access_required
 def edit_expense(request, expense_id):
     expense = hospital_owned_or_404(Expense, request, pk=expense_id)
     form = ExpenseForm(request.POST or None, instance=expense, hospital=active_hospital(request))
@@ -1945,7 +2031,7 @@ def edit_expense(request, expense_id):
     return render(request, "admin_dashboard/object_form.html", context)
 
 
-@hospital_admin_only
+@finance_access_required
 def delete_expense(request, expense_id):
     expense = hospital_owned_or_404(Expense, request, pk=expense_id)
     if request.method == "POST":
@@ -1971,7 +2057,7 @@ def delete_expense(request, expense_id):
     return render(request, "admin_dashboard/confirm_delete.html", context)
 
 
-@role_required(User.ROLE_HOSPITAL_ADMIN)
+@finance_access_required
 def manage_salaries(request):
     hospital = active_hospital(request)
     salaries_qs = Salary.objects.filter(hospital=hospital).select_related("employee").order_by("-month", "-id") if hospital else Salary.objects.none()
@@ -2001,7 +2087,7 @@ def manage_salaries(request):
     return render(request, "admin_dashboard/manage_salaries.html", context)
 
 
-@role_required(User.ROLE_HOSPITAL_ADMIN)
+@finance_access_required
 def edit_salary(request, salary_id):
     salary = hospital_owned_or_404(Salary, request, pk=salary_id)
     form = SalaryForm(request.POST or None, instance=salary, hospital=active_hospital(request))
@@ -2022,7 +2108,7 @@ def edit_salary(request, salary_id):
     return render(request, "admin_dashboard/object_form.html", context)
 
 
-@role_required(User.ROLE_HOSPITAL_ADMIN)
+@finance_access_required
 def delete_salary(request, salary_id):
     salary = hospital_owned_or_404(Salary, request, pk=salary_id)
     if request.method == "POST":
@@ -2048,7 +2134,7 @@ def delete_salary(request, salary_id):
     return render(request, "admin_dashboard/confirm_delete.html", context)
 
 
-@role_required(User.ROLE_HOSPITAL_ADMIN)
+@inventory_access_required
 def manage_inventory(request):
     hospital = active_hospital(request)
     inventory_items = InventoryItem.objects.filter(hospital=hospital).order_by("name") if hospital else InventoryItem.objects.none()
@@ -2155,7 +2241,7 @@ def manage_inventory(request):
     return render(request, "admin_dashboard/manage_inventory.html", context)
 
 
-@role_required(User.ROLE_HOSPITAL_ADMIN)
+@inventory_access_required
 def inventory_insights(request):
     from datetime import date as _date
     from doctor.models import Prescription
@@ -2246,7 +2332,7 @@ def inventory_insights(request):
     return render(request, "admin_dashboard/inventory_insights.html", context)
 
 
-@role_required(User.ROLE_HOSPITAL_ADMIN)
+@inventory_access_required
 def download_inventory_import_template(request):
     response = HttpResponse(content_type="text/csv")
     filename_date = timezone.localdate().isoformat()
@@ -2256,7 +2342,7 @@ def download_inventory_import_template(request):
     return response
 
 
-@role_required(User.ROLE_HOSPITAL_ADMIN)
+@inventory_access_required
 @transaction.atomic
 def upload_inventory_bulk(request):
     if request.method != "POST":
@@ -2376,7 +2462,7 @@ def upload_inventory_bulk(request):
     return redirect("manage_inventory")
 
 
-@role_required(User.ROLE_HOSPITAL_ADMIN)
+@inventory_access_required
 def edit_inventory_item(request, item_id):
     item = hospital_owned_or_404(InventoryItem, request, pk=item_id)
     form = InventoryItemForm(request.POST or None, instance=item)
@@ -2397,7 +2483,7 @@ def edit_inventory_item(request, item_id):
     return render(request, "admin_dashboard/object_form.html", context)
 
 
-@role_required(User.ROLE_HOSPITAL_ADMIN)
+@inventory_access_required
 def delete_inventory_item(request, item_id):
     item = hospital_owned_or_404(InventoryItem, request, pk=item_id)
     if request.method == "POST":
@@ -2423,7 +2509,7 @@ def delete_inventory_item(request, item_id):
     return render(request, "admin_dashboard/confirm_delete.html", context)
 
 
-@role_required(User.ROLE_HOSPITAL_ADMIN)
+@inventory_access_required
 @transaction.atomic
 def restock_inventory_item(request, item_id):
     item = hospital_owned_or_404(InventoryItem, request, pk=item_id)
@@ -2464,7 +2550,7 @@ def restock_inventory_item(request, item_id):
     return redirect("manage_inventory")
 
 
-@role_required(User.ROLE_HOSPITAL_ADMIN)
+@inventory_access_required
 def delete_inventory_batch(request, batch_id):
     if request.method != "POST":
         return redirect("manage_inventory")
@@ -2477,7 +2563,7 @@ def delete_inventory_batch(request, batch_id):
     return redirect("manage_inventory")
 
 
-@role_required(User.ROLE_HOSPITAL_ADMIN)
+@inventory_access_required
 def edit_inventory_batch(request, batch_id):
     """Edit batch_number, expiry_date, and unit_cost of an existing inventory batch."""
     batch = get_object_or_404(InventoryBatch, pk=batch_id, item__hospital=active_hospital(request))
@@ -2626,7 +2712,7 @@ def report_consultations(request):
     return render(request, "admin_dashboard/report_consultations.html", context)
 
 
-@role_required(User.ROLE_HOSPITAL_ADMIN)
+@inventory_access_required
 def download_inventory_report(request):
     hospital = active_hospital(request)
     inventory_items = (
@@ -2687,7 +2773,7 @@ def download_inventory_report(request):
     return response
 
 
-@role_required(User.ROLE_HOSPITAL_ADMIN)
+@inventory_access_required
 def printable_inventory_report(request):
     hospital = active_hospital(request)
     inventory_items = (
@@ -2713,7 +2799,7 @@ def printable_inventory_report(request):
     return render(request, "admin_dashboard/inventory_printable_report.html", context)
 
 
-@role_required(User.ROLE_HOSPITAL_ADMIN)
+@inventory_access_required
 def download_inventory_xlsx(request):
     hospital = active_hospital(request)
     inventory_items = (
@@ -2733,7 +2819,7 @@ def download_inventory_xlsx(request):
     return response
 
 
-@hospital_admin_only
+@finance_access_required
 def bank_account_list(request):
     hospital = active_hospital(request)
     accounts = BankAccount.objects.filter(hospital=hospital).order_by("bank_name", "account_name") if hospital else BankAccount.objects.none()
@@ -2747,7 +2833,7 @@ def bank_account_list(request):
     return render(request, "admin_dashboard/bank_account_list.html", context)
 
 
-@hospital_admin_only
+@finance_access_required
 def bank_account_create(request):
     hospital = active_hospital(request)
     form = BankAccountForm(request.POST or None)
@@ -2770,7 +2856,7 @@ def bank_account_create(request):
     return render(request, "admin_dashboard/object_form.html", context)
 
 
-@hospital_admin_only
+@finance_access_required
 def edit_bank_account(request, account_id):
     account = hospital_owned_or_404(BankAccount, request, pk=account_id)
     form = BankAccountForm(request.POST or None, instance=account)
@@ -2791,7 +2877,7 @@ def edit_bank_account(request, account_id):
     return render(request, "admin_dashboard/object_form.html", context)
 
 
-@hospital_admin_only
+@finance_access_required
 def delete_bank_account(request, account_id):
     account = hospital_owned_or_404(BankAccount, request, pk=account_id)
     if request.method == "POST":
@@ -2817,7 +2903,7 @@ def delete_bank_account(request, account_id):
     return render(request, "admin_dashboard/confirm_delete.html", context)
 
 
-@hospital_admin_only
+@finance_access_required
 def bank_account_detail(request, account_id):
     account = hospital_owned_or_404(BankAccount, request, pk=account_id)
     transaction_form = BankTransactionForm(request.POST or None, hospital=active_hospital(request))
@@ -2851,7 +2937,7 @@ def bank_account_detail(request, account_id):
     return render(request, "admin_dashboard/bank_account_detail.html", context)
 
 
-@hospital_admin_only
+@finance_access_required
 def mobile_money_list(request):
     hospital = active_hospital(request)
     accounts = MobileMoneyAccount.objects.filter(hospital=hospital).order_by("provider", "number") if hospital else MobileMoneyAccount.objects.none()
@@ -2865,7 +2951,7 @@ def mobile_money_list(request):
     return render(request, "admin_dashboard/mobile_money_list.html", context)
 
 
-@hospital_admin_only
+@finance_access_required
 def mobile_money_create(request):
     hospital = active_hospital(request)
     form = MobileMoneyAccountForm(request.POST or None)
@@ -2888,7 +2974,7 @@ def mobile_money_create(request):
     return render(request, "admin_dashboard/object_form.html", context)
 
 
-@hospital_admin_only
+@finance_access_required
 def edit_mobile_money(request, account_id):
     account = hospital_owned_or_404(MobileMoneyAccount, request, pk=account_id)
     form = MobileMoneyAccountForm(request.POST or None, instance=account)
@@ -2909,7 +2995,7 @@ def edit_mobile_money(request, account_id):
     return render(request, "admin_dashboard/object_form.html", context)
 
 
-@hospital_admin_only
+@finance_access_required
 def delete_mobile_money(request, account_id):
     account = hospital_owned_or_404(MobileMoneyAccount, request, pk=account_id)
     if request.method == "POST":
@@ -2935,7 +3021,7 @@ def delete_mobile_money(request, account_id):
     return render(request, "admin_dashboard/confirm_delete.html", context)
 
 
-@hospital_admin_only
+@finance_access_required
 def mobile_money_account_detail(request, account_id):
     account = hospital_owned_or_404(MobileMoneyAccount, request, pk=account_id)
     transaction_form = MobileMoneyTransactionForm(request.POST or None, hospital=active_hospital(request))
@@ -2974,7 +3060,7 @@ def mobile_money_account_detail(request, account_id):
     return render(request, "admin_dashboard/mobile_money_detail.html", context)
 
 
-@hospital_admin_only
+@finance_access_required
 def cash_drawer_list(request):
     hospital = active_hospital(request)
     drawers = CashDrawer.objects.filter(hospital=hospital).order_by("-date", "-id") if hospital else CashDrawer.objects.none()
@@ -2989,7 +3075,7 @@ def cash_drawer_list(request):
     return render(request, "admin_dashboard/cash_drawer_list.html", context)
 
 
-@hospital_admin_only
+@finance_access_required
 def open_cash_drawer(request):
     hospital = active_hospital(request)
     open_drawer = CashDrawer.objects.filter(hospital=hospital, closed_at__isnull=True).first() if hospital else None
@@ -3018,7 +3104,7 @@ def open_cash_drawer(request):
     return render(request, "admin_dashboard/object_form.html", context)
 
 
-@hospital_admin_only
+@finance_access_required
 def cash_drawer_detail(request, pk):
     drawer = hospital_owned_or_404(CashDrawer, request, pk=pk)
     cash_in = drawer.transactions.filter(transaction_type=CashTransaction.TYPE_CASH_IN).aggregate(total=Sum("amount"))["total"] or Decimal("0")
@@ -3070,7 +3156,7 @@ def cash_drawer_detail(request, pk):
     return render(request, "admin_dashboard/cash_drawer_detail.html", context)
 
 
-@hospital_admin_only
+@finance_access_required
 def receipts_list(request):
     hospital = active_hospital(request)
     bank_accounts = BankAccount.objects.filter(hospital=hospital, is_active=True).order_by("bank_name", "account_name") if hospital else BankAccount.objects.none()
@@ -3138,7 +3224,7 @@ def receipts_list(request):
     return render(request, "admin_dashboard/receipts_list.html", context)
 
 
-@hospital_admin_only
+@finance_access_required
 def bank_reconciliation(request):
     hospital = active_hospital(request)
     form = BankReconciliationForm(request.POST or None, hospital=hospital)
@@ -3213,7 +3299,7 @@ def bank_reconciliation(request):
     return render(request, "admin_dashboard/bank_reconciliation.html", context)
 
 
-@hospital_admin_only
+@finance_access_required
 def mobile_money_statement(request):
     hospital = active_hospital(request)
     form = MobileMoneyStatementForm(request.POST or None, hospital=hospital)
@@ -3294,7 +3380,7 @@ def mobile_money_statement(request):
     return render(request, "admin_dashboard/mobile_money_statement.html", context)
 
 
-@hospital_admin_only
+@finance_access_required
 def three_way_reconciliation(request):
     hospital = active_hospital(request)
     form = ThreeWayReconciliationForm(request.POST or None)
@@ -3354,7 +3440,7 @@ def three_way_reconciliation(request):
     return render(request, "admin_dashboard/three_way_reconciliation.html", context)
 
 
-@hospital_admin_only
+@finance_access_required
 def reconciliation_detail(request, pk):
     statement = hospital_owned_or_404(ReconciliationStatement, request, pk=pk)
     if statement.statement_type == ReconciliationStatement.TYPE_BANK:
@@ -3392,6 +3478,7 @@ def manage_hospitals(request):
             try:
                 with transaction.atomic():
                     hospital = form.save()
+                    form.save_module_subscriptions(hospital)
                     User.objects.create_user(
                         username=form.cleaned_data["admin_username"],
                         password=form.cleaned_data["admin_password"],
@@ -3420,7 +3507,12 @@ def manage_hospitals(request):
         "Hospitals",
         "Manage hospital accounts, subscriptions, and deployment details.",
     )
-    context.update({"hospitals": hospitals, "form": form, "query": query})
+    context.update({
+        "hospitals": hospitals,
+        "form": form,
+        "query": query,
+        "all_modules": Module.objects.filter(is_active=True),
+    })
     return render(request, "admin_dashboard/manage_hospitals.html", context)
 
 
@@ -3431,6 +3523,7 @@ def edit_hospital(request, hospital_id):
     if request.method == "POST":
         if form.is_valid():
             form.save()
+            form.save_module_subscriptions(hospital)
             messages.success(request, f"Hospital '{hospital.name}' updated.")
             return redirect("manage_hospitals")
         messages.error(request, "Please fix the hospital details below.")

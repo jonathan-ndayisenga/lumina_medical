@@ -55,6 +55,58 @@ class Hospital(models.Model):
                 pass
         return static("images/default_hospital_logo.png")
 
+    @cached_property
+    def active_module_codes(self):
+        return set(
+            self.module_subscriptions.filter(is_active=True).values_list("module__code", flat=True)
+        )
+
+    def has_module(self, code):
+        return code in self.active_module_codes
+
+
+class Module(models.Model):
+    """A sellable platform module (Reception, Doctor, Lab, Inventory, Finance, etc.)."""
+
+    CODE_RECEPTION = "reception"
+    CODE_DOCTOR = "doctor"
+    CODE_NURSE = "nurse"
+    CODE_LAB = "lab"
+    CODE_INVENTORY = "inventory"
+    CODE_FINANCE = "finance"
+
+    code = models.SlugField(max_length=50, unique=True)
+    name = models.CharField(max_length=100)
+    monthly_price = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    is_core = models.BooleanField(
+        default=False,
+        help_text="Core modules (e.g. Reception) are included with every hospital and cannot be unselected.",
+    )
+    url_name = models.CharField(max_length=100, blank=True, help_text="Django URL name for this module's sidebar entry.")
+    icon_svg = models.TextField(blank=True, help_text="Inner SVG path markup for the sidebar icon.")
+    is_active = models.BooleanField(default=True)
+    display_order = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ["display_order", "name"]
+
+    def __str__(self):
+        return self.name
+
+
+class HospitalModuleSubscription(models.Model):
+    hospital = models.ForeignKey(Hospital, on_delete=models.CASCADE, related_name="module_subscriptions")
+    module = models.ForeignKey(Module, on_delete=models.CASCADE, related_name="hospital_subscriptions")
+    subscribed_at = models.DateTimeField(auto_now_add=True)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        unique_together = ("hospital", "module")
+        ordering = ["module__display_order"]
+
+    def __str__(self):
+        return f"{self.hospital.name} — {self.module.name}"
+
 
 class User(AbstractUser):
     ROLE_SUPERADMIN = "superadmin"
@@ -104,21 +156,55 @@ class User(AbstractUser):
     def can_access_hospital_admin(self):
         return self.is_superadmin or self.role == self.ROLE_HOSPITAL_ADMIN
 
+    def _hospital_has_module(self, code):
+        """Superadmins bypass module gating entirely; everyone else needs their hospital subscribed."""
+        if self.is_superadmin:
+            return True
+        if not self.hospital_id:
+            return False
+        return self.hospital.has_module(code)
+
     @property
     def can_access_reception(self):
-        return self.can_access_hospital_admin or self.role == self.ROLE_RECEPTIONIST or self.has_module_group("Reception")
+        if self.is_superadmin:
+            return True
+        eligible = self.is_hospital_admin or self.role == self.ROLE_RECEPTIONIST or self.has_module_group("Reception")
+        return eligible and self._hospital_has_module("reception")
 
     @property
     def can_access_doctor(self):
-        return self.can_access_hospital_admin or self.role == self.ROLE_DOCTOR or self.has_module_group("Doctor")
+        if self.is_superadmin:
+            return True
+        eligible = self.is_hospital_admin or self.role == self.ROLE_DOCTOR or self.has_module_group("Doctor")
+        return eligible and self._hospital_has_module("doctor")
 
     @property
     def can_access_nurse(self):
-        return self.can_access_hospital_admin or self.role == self.ROLE_NURSE or self.has_module_group("Nurse")
+        if self.is_superadmin:
+            return True
+        eligible = self.is_hospital_admin or self.role == self.ROLE_NURSE or self.has_module_group("Nurse")
+        return eligible and self._hospital_has_module("nurse")
 
     @property
     def can_access_lab(self):
-        return self.can_access_hospital_admin or self.role == self.ROLE_LAB_ATTENDANT or self.has_module_group("Lab")
+        if self.is_superadmin:
+            return True
+        eligible = self.is_hospital_admin or self.role == self.ROLE_LAB_ATTENDANT or self.has_module_group("Lab")
+        return eligible and self._hospital_has_module("lab")
+
+    @property
+    def can_access_inventory(self):
+        if self.is_superadmin:
+            return True
+        eligible = self.is_hospital_admin or self.has_module_group("Inventory")
+        return eligible and self._hospital_has_module("inventory")
+
+    @property
+    def can_access_finance(self):
+        if self.is_superadmin:
+            return True
+        eligible = self.is_hospital_admin or self.has_module_group("Finance")
+        return eligible and self._hospital_has_module("finance")
 
     def get_full_name(self):
         full = f"{self.first_name} {self.last_name}".strip()
@@ -139,8 +225,10 @@ class User(AbstractUser):
             "Doctor": "Doctor",
             "Nurse": "Nurse",
             "Lab": "Lab",
+            "Inventory": "Inventory",
+            "Finance": "Finance",
         }
-        for group_name in ("Reception", "Doctor", "Nurse", "Lab"):
+        for group_name in ("Reception", "Doctor", "Nurse", "Lab", "Inventory", "Finance"):
             label = group_label_map[group_name]
             if self.has_module_group(group_name) and label not in labels:
                 labels.append(label)

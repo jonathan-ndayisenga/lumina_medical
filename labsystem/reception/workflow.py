@@ -8,6 +8,28 @@ from reception.models import QueueEntry, Visit
 
 RECEPTION_SOURCE_PREFIX = "Source: "
 
+# Which platform Module must be enabled for a hospital to receive this queue type.
+# Reception is core and always enabled, so it's intentionally left unmapped (no gate needed).
+QUEUE_TYPE_TO_MODULE_CODE = {
+    QueueEntry.TYPE_DOCTOR: "doctor",
+    QueueEntry.TYPE_NURSE: "nurse",
+    QueueEntry.TYPE_LAB_RECEPTION: "lab",
+    QueueEntry.TYPE_LAB_DOCTOR: "lab",
+    QueueEntry.TYPE_SONOGRAPHER: "nurse",
+}
+
+
+def require_module_for_queue_type(*, hospital, queue_type: str) -> None:
+    """Block routing a patient to a module the hospital hasn't subscribed to."""
+    module_code = QUEUE_TYPE_TO_MODULE_CODE.get(queue_type)
+    if not module_code:
+        return
+    if not hospital or not hospital.has_module(module_code):
+        raise PermissionDenied(
+            f"This hospital does not have the '{module_code}' module enabled, "
+            "so this patient cannot be routed there."
+        )
+
 
 def user_can_admin_override(user) -> bool:
     return bool(getattr(user, "can_access_hospital_admin", False))
@@ -86,6 +108,7 @@ def ensure_pending_queue_entry(
     requested_by=None,
 ) -> QueueEntry:
     """Create a fresh queue entry only when no open entry of the same type exists."""
+    require_module_for_queue_type(hospital=hospital, queue_type=queue_type)
     existing_pending = visit.queue_entries.filter(queue_type=queue_type, processed=False).order_by("-created_at").first()
     if existing_pending:
         changed_fields = []

@@ -8,7 +8,7 @@ from django.contrib.auth.models import Group
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 
-from accounts.models import Hospital, User
+from accounts.models import Hospital, HospitalModuleSubscription, Module, User
 from reception.models import Service
 
 from .models import (
@@ -31,6 +31,12 @@ class HospitalForm(forms.ModelForm):
     admin_username = forms.CharField(max_length=150, required=True)
     admin_password = forms.CharField(widget=forms.PasswordInput, required=True)
     admin_password_confirm = forms.CharField(widget=forms.PasswordInput, required=True)
+    modules = forms.ModelMultipleChoiceField(
+        queryset=Module.objects.filter(is_active=True),
+        required=False,
+        widget=forms.CheckboxSelectMultiple,
+        help_text="Select which modules this hospital is subscribed to. Core modules (e.g. Reception) are always included.",
+    )
 
     class Meta:
         model = Hospital
@@ -60,6 +66,18 @@ class HospitalForm(forms.ModelForm):
         self.require_admin_credentials = require_admin_credentials
         for field_name in ("location", "box_number", "phone_number"):
             self.fields[field_name].required = True
+
+        core_module_ids = list(Module.objects.filter(is_core=True).values_list("pk", flat=True))
+        if self.instance.pk:
+            self.fields["modules"].initial = list(
+                Module.objects.filter(
+                    hospital_subscriptions__hospital=self.instance,
+                    hospital_subscriptions__is_active=True,
+                ).values_list("pk", flat=True)
+            ) or core_module_ids
+        else:
+            self.fields["modules"].initial = core_module_ids
+
         if not require_admin_credentials:
             for field_name in ("admin_username", "admin_password", "admin_password_confirm"):
                 self.fields.pop(field_name, None)
@@ -68,6 +86,23 @@ class HospitalForm(forms.ModelForm):
             self.fields[field_name].required = True
             self.fields[field_name].widget.attrs.setdefault("class", "form-control")
         self.fields["logo"].help_text = "Optional. PNG or JPG works well."
+
+    def save_module_subscriptions(self, hospital):
+        """Sync HospitalModuleSubscription rows to match the selected modules.
+        Core modules are always force-included, regardless of checkbox state."""
+        selected = set(self.cleaned_data.get("modules") or [])
+        selected |= set(Module.objects.filter(is_core=True))
+
+        selected_ids = {m.pk for m in selected}
+        for module in selected:
+            HospitalModuleSubscription.objects.update_or_create(
+                hospital=hospital,
+                module=module,
+                defaults={"is_active": True},
+            )
+        HospitalModuleSubscription.objects.filter(hospital=hospital).exclude(
+            module_id__in=selected_ids
+        ).update(is_active=False)
 
     def clean_subdomain(self):
         subdomain = self.cleaned_data.get("subdomain", "").lower().strip()
@@ -113,21 +148,43 @@ class HospitalForm(forms.ModelForm):
         return cleaned_data
 
 
+MODULE_CODE_TO_GROUP_NAME = {
+    "reception": "Reception",
+    "doctor": "Doctor",
+    "nurse": "Nurse",
+    "lab": "Lab",
+    "inventory": "Inventory",
+    "finance": "Finance",
+}
+
+
+def _module_group_queryset(hospital):
+    """Only offer groups for modules the hospital has actually subscribed to."""
+    if not hospital:
+        return Group.objects.filter(name__in=MODULE_CODE_TO_GROUP_NAME.values()).order_by("name")
+    allowed_names = [
+        MODULE_CODE_TO_GROUP_NAME[code]
+        for code in hospital.active_module_codes
+        if code in MODULE_CODE_TO_GROUP_NAME
+    ]
+    return Group.objects.filter(name__in=allowed_names).order_by("name")
+
+
 class HospitalStaffUserForm(UserCreationForm):
     groups = forms.ModelMultipleChoiceField(
         queryset=Group.objects.none(),
         required=False,
         widget=forms.CheckboxSelectMultiple,
-        help_text="Optional: assign this user to multiple modules (Reception, Lab, Doctor, Nurse).",
+        help_text="Optional: assign this user to one or more modules this hospital has subscribed to.",
     )
 
     class Meta(UserCreationForm.Meta):
         model = User
         fields = ("username", "first_name", "last_name", "email", "role", "is_active", "groups")
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, hospital=None, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields["groups"].queryset = Group.objects.filter(name__in=["Reception", "Lab", "Doctor", "Nurse"]).order_by("name")
+        self.fields["groups"].queryset = _module_group_queryset(hospital)
         self.fields["role"].choices = [
             (User.ROLE_HOSPITAL_ADMIN, "Hospital Admin"),
             (User.ROLE_RECEPTIONIST, "Receptionist"),
@@ -145,16 +202,16 @@ class HospitalStaffUserUpdateForm(forms.ModelForm):
         queryset=Group.objects.none(),
         required=False,
         widget=forms.CheckboxSelectMultiple,
-        help_text="Optional: assign this user to multiple modules (Reception, Lab, Doctor, Nurse).",
+        help_text="Optional: assign this user to one or more modules this hospital has subscribed to.",
     )
 
     class Meta:
         model = User
         fields = ("username", "first_name", "last_name", "email", "role", "is_active", "groups")
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, hospital=None, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields["groups"].queryset = Group.objects.filter(name__in=["Reception", "Lab", "Doctor", "Nurse"]).order_by("name")
+        self.fields["groups"].queryset = _module_group_queryset(hospital)
         self.fields["role"].choices = [
             (User.ROLE_HOSPITAL_ADMIN, "Hospital Admin"),
             (User.ROLE_RECEPTIONIST, "Receptionist"),

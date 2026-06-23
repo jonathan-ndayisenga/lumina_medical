@@ -25,6 +25,32 @@
         </div>
     </div>
 
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div class="card">
+            <div class="flex items-center justify-between mb-4">
+                <h4 class="text-sm font-semibold text-text-main">Expected Income by Module</h4>
+                <span class="text-xs text-text-muted">Total: UGX {{ module_expected_total }}/mo</span>
+            </div>
+            {% if pie_labels_json == "[]" %}
+                <p class="text-sm text-text-muted text-center py-10">No paid module subscriptions yet.</p>
+            {% else %}
+                <canvas id="modulePieChart" height="220"></canvas>
+            {% endif %}
+        </div>
+
+        <div class="card">
+            <div class="flex items-center justify-between mb-4 gap-3 flex-wrap">
+                <h4 class="text-sm font-semibold text-text-main">Platform Trend</h4>
+                <select id="trendModeSelect" class="form-control" style="max-width:220px;">
+                    <option value="income">Monthly Income (by hospital)</option>
+                    <option value="onboarding">Hospital Onboarding Trend</option>
+                </select>
+            </div>
+            <canvas id="trendChart" height="220"></canvas>
+            <p id="trendChartNote" class="text-xs text-text-muted mt-3"></p>
+        </div>
+    </div>
+
     <div class="card">
         <h4 class="text-sm font-semibold text-text-main mb-4">Platform Management</h4>
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
@@ -87,4 +113,85 @@
         {% endif %}
     </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+<script>
+(function () {
+    const pieLabels = {{ pie_labels_json|safe }};
+    const pieValues = {{ pie_values_json|safe }};
+    const monthLabels = {{ month_labels_json|safe }};
+    const incomeDatasets = {{ income_datasets_json|safe }};
+    const onboardingCounts = {{ onboarding_counts_json|safe }};
+
+    const pieCanvas = document.getElementById('modulePieChart');
+    if (pieCanvas && pieLabels.length) {
+        new Chart(pieCanvas, {
+            type: 'pie',
+            data: {
+                labels: pieLabels,
+                datasets: [{
+                    data: pieValues,
+                    backgroundColor: ['#4f46e5', '#16a34a', '#f59e0b', '#0ea5e9', '#ef4444', '#8b5cf6'],
+                }],
+            },
+            options: {
+                plugins: { legend: { position: 'bottom' } },
+            },
+        });
+    }
+
+    const trendCanvas = document.getElementById('trendChart');
+    const trendNote = document.getElementById('trendChartNote');
+    const palette = ['#4f46e5', '#16a34a', '#f59e0b', '#0ea5e9', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6'];
+
+    let trendChart = null;
+
+    function renderIncomeMode() {
+        trendNote.textContent = 'Projected monthly recurring income per hospital, based on each hospital\'s current module subscriptions.';
+        const datasets = incomeDatasets.map((ds, i) => ({
+            label: ds.label,
+            data: ds.data,
+            backgroundColor: palette[i % palette.length],
+            borderColor: palette[i % palette.length],
+            fill: false,
+            tension: 0.3,
+        }));
+        return { type: 'line', labels: monthLabels, datasets, stacked: false };
+    }
+
+    function renderOnboardingMode() {
+        trendNote.textContent = 'Number of new hospitals onboarded per month.';
+        return {
+            type: 'bar',
+            labels: monthLabels,
+            datasets: [{
+                label: 'Hospitals onboarded',
+                data: onboardingCounts,
+                backgroundColor: '#4f46e5',
+            }],
+            stacked: false,
+        };
+    }
+
+    function drawTrend(mode) {
+        const config = mode === 'onboarding' ? renderOnboardingMode() : renderIncomeMode();
+        if (trendChart) trendChart.destroy();
+        trendChart = new Chart(trendCanvas, {
+            type: config.type,
+            data: { labels: config.labels, datasets: config.datasets },
+            options: {
+                scales: { y: { beginAtZero: true } },
+                plugins: { legend: { display: config.datasets.length > 1 || mode === 'income' } },
+            },
+        });
+    }
+
+    if (trendCanvas) {
+        drawTrend('income');
+        document.getElementById('trendModeSelect').addEventListener('change', e => drawTrend(e.target.value));
+    }
+})();
+</script>
 {% endblock %}
