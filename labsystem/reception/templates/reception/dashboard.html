@@ -35,6 +35,10 @@
             <p class="text-3xl font-bold text-amber-600">{{ ready_for_billing_count }}</p>
         </div>
         <div class="card">
+            <p class="text-text-muted text-sm font-medium mb-2">Outstanding Balance</p>
+            <p class="text-3xl font-bold text-red-600">{{ outstanding_balance_count }}</p>
+        </div>
+        <div class="card">
             <p class="text-text-muted text-sm font-medium mb-2">Completed</p>
             <p class="text-3xl font-bold text-green-600">{{ completed_visit_count }}</p>
         </div>
@@ -112,7 +116,7 @@
             <h4 class="text-sm font-semibold text-text-main mb-4">Ready for Billing</h4>
             <div class="space-y-3 max-h-72 overflow-y-auto">
                 {% for visit in ready_for_billing_visits %}
-                    <div class="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm">
+                    <div class="rounded-lg border {% if visit.has_outstanding_balance %}border-red-200 bg-red-50{% else %}border-amber-200 bg-amber-50{% endif %} p-3 text-sm">
                         <div class="flex items-center justify-between gap-3">
                             <div>
                                 <p class="font-medium text-text-main">{{ visit.patient.name }}</p>
@@ -120,7 +124,11 @@
                             </div>
                             <a href="{% url 'complete_visit' visit.pk %}" class="btn btn-primary btn-sm">{% if visit.undispensed_prescription_count %}Dispense / Bill{% else %}Bill Visit{% endif %}</a>
                         </div>
-                        <p class="text-xs text-text-muted mt-2">Outstanding total: {{ visit.total_amount }}</p>
+                        {% if visit.has_outstanding_balance %}
+                            <p class="text-xs font-semibold text-red-700 mt-2">Outstanding Balance — UGX {{ visit.balance_due }} remaining (UGX {{ visit.total_paid }} already paid)</p>
+                        {% else %}
+                            <p class="text-xs text-text-muted mt-2">Outstanding total: {{ visit.total_amount }}</p>
+                        {% endif %}
                         {% if visit.undispensed_prescription_count %}
                             <p class="text-xs text-purple-700 font-medium mt-1">{{ visit.undispensed_prescription_count }} medicine{{ visit.undispensed_prescription_count|pluralize }} waiting for dispensing.</p>
                         {% endif %}

@@ -5,7 +5,7 @@ from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.paginator import Paginator
 from django.db import transaction
-from django.db.models import Count, Max, Q
+from django.db.models import Count, Max, Q, Sum
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -171,6 +171,13 @@ def reception_queue_status_payload(entry):
             "other_open_work": other_open_work.count(),
         }
     if visit.status == Visit.STATUS_READY_FOR_BILLING:
+        if visit.has_outstanding_balance:
+            return {
+                "label": f"Outstanding Balance — UGX {visit.balance_due}",
+                "badge_class": "bg-red-100 text-red-700",
+                "pending_dispense_count": pending_dispense_count,
+                "other_open_work": other_open_work.count(),
+            }
         return {
             "label": "Ready for Billing",
             "badge_class": "bg-amber-100 text-amber-700",
@@ -211,6 +218,18 @@ def reception_dashboard(request):
         if hospital else Visit.objects.none()
     )
     ready_for_dispense = [visit for visit in ready_for_billing if getattr(visit, "undispensed_prescription_count", 0) > 0]
+
+    billing_status_qs = (
+        Visit.objects.filter(hospital=hospital, status=Visit.STATUS_READY_FOR_BILLING)
+        .annotate(_paid_total=Sum("payments__amount_paid", filter=~Q(payments__status="waived")))
+        if hospital else Visit.objects.none()
+    )
+    outstanding_balance_count = billing_status_qs.filter(_paid_total__gt=0).count() if hospital else 0
+    unbilled_count = (
+        Visit.objects.filter(hospital=hospital, status=Visit.STATUS_READY_FOR_BILLING).count() - outstanding_balance_count
+        if hospital else 0
+    )
+
     context = {
         "active_nav": "reception",
         "dashboard_title": "Reception Dashboard",
@@ -220,7 +239,8 @@ def reception_dashboard(request):
         "visit_count": Visit.objects.filter(hospital=hospital).count() if hospital else 0,
         "queue_count": QueueEntry.objects.filter(hospital=hospital, processed=False).count() if hospital else 0,
         "completed_visit_count": Visit.objects.filter(hospital=hospital, status=Visit.STATUS_COMPLETED).count() if hospital else 0,
-        "ready_for_billing_count": Visit.objects.filter(hospital=hospital, status=Visit.STATUS_READY_FOR_BILLING).count() if hospital else 0,
+        "ready_for_billing_count": unbilled_count,
+        "outstanding_balance_count": outstanding_balance_count,
         "ready_for_dispense_count": len(ready_for_dispense),
         "reception_queue_count": reception_queue_queryset(hospital).count() if hospital else 0,
         "recent_patients": patients,

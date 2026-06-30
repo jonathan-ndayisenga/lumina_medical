@@ -117,6 +117,16 @@ class Visit(models.Model):
         return self.balance_due <= 0
 
     @property
+    def is_unbilled(self):
+        """No payment has been made yet — genuinely awaiting first billing."""
+        return self.total_paid <= 0
+
+    @property
+    def has_outstanding_balance(self):
+        """At least one payment has been made, but the balance isn't fully cleared yet."""
+        return self.total_paid > 0 and not self.is_fully_paid
+
+    @property
     def is_adjustment_visit(self):
         return self.visit_type == self.TYPE_ADJUSTMENT
 
