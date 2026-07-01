@@ -1,0 +1,81 @@
+{% extends 'base.html' %}
+{% block title %}New Placement — Home Care{% endblock %}
+{% block page_title %}New Placement{% endblock %}
+{% block page_subtitle %}Assign a nurse to a client and set the contract terms. A contract is automatically generated on save.{% endblock %}
+{% block content %}
+<div class="max-w-2xl mx-auto">
+    <div class="card space-y-5">
+        <form method="post">
+            {% csrf_token %}
+            {% if form.non_field_errors %}
+                <div class="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">{{ form.non_field_errors }}</div>
+            {% endif %}
+
+            <div>
+                <h4 class="text-sm font-semibold text-text-main mb-3">Assignment</h4>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label for="{{ form.client.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">Client</label>
+                        {{ form.client }}
+                        {% for e in form.client.errors %}<p class="text-xs text-red-600 mt-1">{{ e }}</p>{% endfor %}
+                    </div>
+                    <div>
+                        <label for="{{ form.nurse.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">Nurse</label>
+                        {{ form.nurse }}
+                        {% for e in form.nurse.errors %}<p class="text-xs text-red-600 mt-1">{{ e }}</p>{% endfor %}
+                    </div>
+                    <div class="md:col-span-2">
+                        <label for="{{ form.service_type.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">Service Type</label>
+                        {{ form.service_type }}
+                        {% for e in form.service_type.errors %}<p class="text-xs text-red-600 mt-1">{{ e }}</p>{% endfor %}
+                    </div>
+                </div>
+            </div>
+
+            <div>
+                <h4 class="text-sm font-semibold text-text-main mb-3">Rates</h4>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label for="{{ form.client_rate.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">Client Rate (UGX/month)</label>
+                        {{ form.client_rate }}
+                        <p class="text-xs text-text-muted mt-1">Amount billed to the client.</p>
+                        {% for e in form.client_rate.errors %}<p class="text-xs text-red-600 mt-1">{{ e }}</p>{% endfor %}
+                    </div>
+                    <div>
+                        <label for="{{ form.nurse_rate.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">Nurse Rate (UGX/month)</label>
+                        {{ form.nurse_rate }}
+                        <p class="text-xs text-text-muted mt-1">Amount paid to the nurse.</p>
+                        {% for e in form.nurse_rate.errors %}<p class="text-xs text-red-600 mt-1">{{ e }}</p>{% endfor %}
+                    </div>
+                </div>
+            </div>
+
+            <div>
+                <h4 class="text-sm font-semibold text-text-main mb-3">Contract Period</h4>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label for="{{ form.contract_start.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">Start Date</label>
+                        {{ form.contract_start }}
+                        {% for e in form.contract_start.errors %}<p class="text-xs text-red-600 mt-1">{{ e }}</p>{% endfor %}
+                    </div>
+                    <div>
+                        <label for="{{ form.contract_end.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">End Date</label>
+                        {{ form.contract_end }}
+                        {% for e in form.contract_end.errors %}<p class="text-xs text-red-600 mt-1">{{ e }}</p>{% endfor %}
+                    </div>
+                </div>
+            </div>
+
+            <div>
+                <label for="{{ form.notes.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">Notes (optional)</label>
+                {{ form.notes }}
+            </div>
+
+            <div class="flex gap-3 pt-4 border-t border-gray-200">
+                <button type="submit" class="btn btn-primary">Create Placement & Generate Contract</button>
+                <a href="{% url 'homecare_placement_list' %}" class="btn btn-secondary">Cancel</a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

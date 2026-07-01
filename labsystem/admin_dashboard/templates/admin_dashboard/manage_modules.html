@@ -1,0 +1,54 @@
+{% extends 'admin_dashboard/developer_base.html' %}
+{% block title %}Module Pricing — Lumina{% endblock %}
+{% block page_title %}Module Pricing{% endblock %}
+{% block page_subtitle %}Set the monthly price for each platform module. Changes take effect on the next invoice generated.{% endblock %}
+
+{% block developer_content %}
+<div class="card border border-gray-100 shadow-none overflow-x-auto">
+    <table class="w-full text-sm">
+        <thead class="bg-gray-50 border-b border-gray-200">
+            <tr>
+                <th class="text-left px-4 py-3 text-xs font-semibold uppercase text-text-muted">Module</th>
+                <th class="text-left px-4 py-3 text-xs font-semibold uppercase text-text-muted">Code</th>
+                <th class="text-left px-4 py-3 text-xs font-semibold uppercase text-text-muted">Price / Month</th>
+                <th class="text-left px-4 py-3 text-xs font-semibold uppercase text-text-muted">Core</th>
+                <th class="text-left px-4 py-3 text-xs font-semibold uppercase text-text-muted">Active</th>
+                <th class="text-left px-4 py-3 text-xs font-semibold uppercase text-text-muted">Hospitals Subscribed</th>
+                <th class="text-left px-4 py-3 text-xs font-semibold uppercase text-text-muted">Expected / Month</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100">
+            {% for row in module_rows %}
+            <tr class="hover:bg-gray-50">
+                <td class="px-4 py-3 font-semibold text-text-main">{{ row.module.name }}</td>
+                <td class="px-4 py-3 font-mono text-xs text-text-muted">{{ row.module.code }}</td>
+                <td class="px-4 py-3 font-semibold text-text-main">
+                    {% if row.module.monthly_price > 0 %}UGX {{ row.module.monthly_price }}{% else %}Free{% endif %}
+                </td>
+                <td class="px-4 py-3">
+                    {% if row.module.is_core %}<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700">Core</span>{% else %}—{% endif %}
+                </td>
+                <td class="px-4 py-3">
+                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold {% if row.module.is_active %}bg-green-50 text-green-700{% else %}bg-gray-100 text-gray-500{% endif %}">
+                        {% if row.module.is_active %}Active{% else %}Inactive{% endif %}
+                    </span>
+                </td>
+                <td class="px-4 py-3 text-text-muted">{{ row.subscriber_count }}</td>
+                <td class="px-4 py-3 font-semibold text-green-700">UGX {{ row.expected_monthly }}</td>
+                <td class="px-4 py-3">
+                    <a href="{% url 'edit_module' row.module.pk %}" class="btn btn-secondary btn-sm">Edit Price</a>
+                </td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="8" class="px-4 py-12 text-center text-sm text-text-muted italic">No modules found.</td></tr>
+            {% endfor %}
+            <tr class="bg-gray-50 font-bold">
+                <td colspan="6" class="px-4 py-3 text-sm text-text-main text-right">Platform Total / Month</td>
+                <td class="px-4 py-3 text-sm text-green-700">UGX {{ platform_total }}</td>
+                <td></td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+{% endblock %}

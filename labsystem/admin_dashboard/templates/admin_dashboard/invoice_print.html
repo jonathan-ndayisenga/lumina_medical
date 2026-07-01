@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Invoice {{ invoice.invoice_number }}</title>
+<style>
+    @page { size: A4; margin: 20mm; }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: Arial, Helvetica, sans-serif; font-size: 11pt; color: #111; line-height: 1.5; }
+
+    .header { display: flex; justify-content: space-between; align-items: flex-start; padding-bottom: 16px; border-bottom: 3px solid #4f46e5; margin-bottom: 24px; }
+    .issuer-name { font-size: 20pt; font-weight: bold; color: #4f46e5; }
+    .issuer-sub { font-size: 9pt; color: #666; margin-top: 2px; }
+    .logo { max-height: 64px; max-width: 130px; }
+
+    .invoice-meta { display: flex; justify-content: space-between; margin-bottom: 28px; }
+    .invoice-meta-left { }
+    .invoice-meta-left h2 { font-size: 16pt; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; color: #111; }
+    .invoice-meta-left p { font-size: 9pt; color: #555; margin-top: 2px; }
+    .invoice-meta-right { text-align: right; font-size: 10pt; }
+    .invoice-meta-right .label { color: #888; }
+    .invoice-meta-right .value { font-weight: bold; color: #111; }
+
+    .bill-to { margin-bottom: 24px; padding: 14px 16px; background: #f8f9ff; border-left: 4px solid #4f46e5; border-radius: 0 6px 6px 0; }
+    .bill-to h3 { font-size: 9pt; text-transform: uppercase; letter-spacing: 0.5px; color: #888; margin-bottom: 4px; }
+    .bill-to p { font-size: 11pt; font-weight: bold; color: #111; }
+    .bill-to .sub { font-size: 9pt; font-weight: normal; color: #555; }
+
+    table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+    thead th { background: #4f46e5; color: #fff; padding: 10px 12px; text-align: left; font-size: 9pt; text-transform: uppercase; letter-spacing: 0.5px; }
+    thead th:last-child { text-align: right; }
+    tbody td { padding: 10px 12px; border-bottom: 1px solid #e5e7eb; font-size: 10pt; }
+    tbody td:last-child { text-align: right; font-weight: 600; }
+    tbody tr:last-child td { border-bottom: none; }
+    tbody tr.free td { color: #888; }
+
+    .total-row { background: #f0f0ff; }
+    .total-row td { padding: 12px; font-size: 12pt; font-weight: bold; border-top: 2px solid #4f46e5; }
+
+    .footer { margin-top: 32px; padding-top: 16px; border-top: 1px solid #e5e7eb; font-size: 9pt; color: #888; display: flex; justify-content: space-between; }
+
+    .btn { display: inline-block; margin-top: 20px; padding: 8px 20px; background: #4f46e5; color: #fff; border: none; border-radius: 6px; cursor: pointer; font-size: 10pt; text-decoration: none; }
+    @media print { .btn { display: none !important; } }
+</style>
+</head>
+<body>
+
+<div class="header">
+    <div>
+        <div class="issuer-name">Lumina Medical Services</div>
+        <div class="issuer-sub">Platform provider &middot; jonathanndayisenga22@gmail.com</div>
+    </div>
+</div>
+
+<div class="invoice-meta">
+    <div class="invoice-meta-left">
+        <h2>Invoice</h2>
+        <p># {{ invoice.invoice_number }}</p>
+    </div>
+    <div class="invoice-meta-right">
+        <div><span class="label">Date issued: </span><span class="value">{{ invoice.generated_at|date:"d F Y" }}</span></div>
+        <div><span class="label">Period: </span><span class="value">{{ invoice.period_start|date:"d M Y" }} — {{ invoice.period_end|date:"d M Y" }}</span></div>
+        {% if invoice.hospital.subscription_end_date %}
+        <div><span class="label">Subscription ends: </span><span class="value">{{ invoice.hospital.subscription_end_date|date:"d M Y" }}</span></div>
+        {% endif %}
+    </div>
+</div>
+
+<div class="bill-to">
+    <h3>Bill To</h3>
+    <p>{{ invoice.hospital.name }}</p>
+    <p class="sub">{{ invoice.hospital.location }}{% if invoice.hospital.email %} &middot; {{ invoice.hospital.email }}{% endif %}{% if invoice.hospital.phone_number %} &middot; {{ invoice.hospital.phone_number }}{% endif %}</p>
+</div>
+
+<table>
+    <thead>
+        <tr>
+            <th style="width:50%">Module / Service</th>
+            <th>Description</th>
+            <th>Amount</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for module in active_modules %}
+        <tr {% if module.monthly_price == 0 %}class="free"{% endif %}>
+            <td><strong>{{ module.name }}</strong>{% if module.is_core %} <span style="font-size:8pt;color:#4f46e5;">(Core)</span>{% endif %}</td>
+            <td>Monthly subscription</td>
+            <td>{% if module.monthly_price > 0 %}UGX {{ module.monthly_price }}{% else %}Free{% endif %}</td>
+        </tr>
+        {% endfor %}
+        <tr class="total-row">
+            <td colspan="2">Total Due</td>
+            <td>UGX {{ invoice.total_amount }}</td>
+        </tr>
+    </tbody>
+</table>
+
+{% if invoice.notes %}
+<div style="font-size:10pt; color:#555; margin-bottom:16px;"><strong>Notes:</strong> {{ invoice.notes }}</div>
+{% endif %}
+
+<div class="footer">
+    <div>Thank you for using Lumina Medical Services.</div>
+    <div>Generated by {{ invoice.generated_by.get_full_name|default:invoice.generated_by.username|default:"System" }}</div>
+</div>
+
+<div style="text-align:center;">
+    <button onclick="window.print()" class="btn">Print / Save as PDF</button>
+    <a href="{% url 'invoice_list' invoice.hospital.pk %}" class="btn" style="background:#6b7280; margin-left:8px;">Back to Invoices</a>
+</div>
+
+</body>
+</html>

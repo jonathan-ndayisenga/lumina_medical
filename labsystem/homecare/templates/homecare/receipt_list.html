@@ -1,0 +1,38 @@
+{% extends 'base.html' %}
+{% block title %}Receipts — Home Care{% endblock %}
+{% block page_title %}Receipts{% endblock %}
+{% block page_subtitle %}All receipts issued to clients for home care services.{% endblock %}
+{% block content %}
+<div class="card border border-gray-100 shadow-none overflow-x-auto">
+    <table class="w-full text-sm">
+        <thead class="bg-gray-50 border-b border-gray-200">
+            <tr>
+                <th class="text-left px-4 py-3 text-xs font-semibold uppercase text-text-muted">Receipt #</th>
+                <th class="text-left px-4 py-3 text-xs font-semibold uppercase text-text-muted">Client</th>
+                <th class="text-left px-4 py-3 text-xs font-semibold uppercase text-text-muted">Nurse</th>
+                <th class="text-left px-4 py-3 text-xs font-semibold uppercase text-text-muted">Amount Paid</th>
+                <th class="text-left px-4 py-3 text-xs font-semibold uppercase text-text-muted">Period</th>
+                <th class="text-left px-4 py-3 text-xs font-semibold uppercase text-text-muted">Date</th>
+                <th class="text-left px-4 py-3 text-xs font-semibold uppercase text-text-muted">By</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100">
+            {% for r in receipts %}
+            <tr class="hover:bg-gray-50">
+                <td class="px-4 py-3 font-mono text-xs text-text-muted">{{ r.receipt_number }}</td>
+                <td class="px-4 py-3 font-semibold text-text-main">{{ r.placement.client.name }}</td>
+                <td class="px-4 py-3 text-text-muted">{{ r.placement.nurse.name }}</td>
+                <td class="px-4 py-3 font-semibold text-text-main">UGX {{ r.amount_paid }}</td>
+                <td class="px-4 py-3 text-text-muted">{{ r.period_covered|default:"—" }}</td>
+                <td class="px-4 py-3 text-text-muted whitespace-nowrap">{{ r.paid_at|date:"d M Y" }}</td>
+                <td class="px-4 py-3 text-text-muted">{{ r.recorded_by.get_full_name|default:r.recorded_by.username|default:"—" }}</td>
+                <td class="px-4 py-3"><a href="{% url 'homecare_receipt_print' r.pk %}" class="btn btn-secondary btn-sm">Print</a></td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="8" class="px-4 py-12 text-center text-sm text-text-muted italic">No receipts issued yet.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

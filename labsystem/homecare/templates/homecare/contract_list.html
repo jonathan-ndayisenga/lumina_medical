@@ -1,0 +1,44 @@
+{% extends 'base.html' %}
+{% block title %}Contracts — Home Care{% endblock %}
+{% block page_title %}Contracts{% endblock %}
+{% block page_subtitle %}Auto-generated nurse contracts. Each placement generates one contract.{% endblock %}
+{% block content %}
+<div class="card border border-gray-100 shadow-none overflow-x-auto">
+    <table class="w-full text-sm">
+        <thead class="bg-gray-50 border-b border-gray-200">
+            <tr>
+                <th class="text-left px-4 py-3 text-xs font-semibold uppercase text-text-muted">Contract #</th>
+                <th class="text-left px-4 py-3 text-xs font-semibold uppercase text-text-muted">Client</th>
+                <th class="text-left px-4 py-3 text-xs font-semibold uppercase text-text-muted">Nurse</th>
+                <th class="text-left px-4 py-3 text-xs font-semibold uppercase text-text-muted">Generated</th>
+                <th class="text-left px-4 py-3 text-xs font-semibold uppercase text-text-muted">Status</th>
+                <th class="text-left px-4 py-3 text-xs font-semibold uppercase text-text-muted"></th>
+            </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100">
+            {% for contract in contracts %}
+            <tr class="hover:bg-gray-50">
+                <td class="px-4 py-3 font-mono text-xs text-text-muted">{{ contract.contract_number }}</td>
+                <td class="px-4 py-3 font-semibold text-text-main">{{ contract.placement.client.name }}</td>
+                <td class="px-4 py-3 text-text-muted">{{ contract.placement.nurse.name }}</td>
+                <td class="px-4 py-3 text-text-muted">{{ contract.generated_at|date:"d M Y" }}</td>
+                <td class="px-4 py-3">
+                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold
+                        {% if contract.placement.status == 'active' %}bg-green-50 text-green-700
+                        {% elif contract.placement.status == 'completed' %}bg-gray-100 text-gray-600
+                        {% else %}bg-red-50 text-red-700{% endif %}">
+                        {{ contract.placement.get_status_display }}
+                    </span>
+                </td>
+                <td class="px-4 py-3 flex gap-2">
+                    <a href="{% url 'homecare_contract_print' contract.pk %}" class="btn btn-secondary btn-sm">Print</a>
+                    <a href="{% url 'homecare_placement_detail' contract.placement.pk %}" class="btn btn-secondary btn-sm">Placement</a>
+                </td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="6" class="px-4 py-12 text-center text-sm text-text-muted italic">No contracts generated yet. Create a placement to auto-generate one.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

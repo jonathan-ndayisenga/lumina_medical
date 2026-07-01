@@ -1,0 +1,45 @@
+{% extends 'base.html' %}
+{% block title %}Nurses — Home Care{% endblock %}
+{% block page_title %}Nurses{% endblock %}
+{% block page_subtitle %}All registered nurses under this home care service.{% endblock %}
+{% block content %}
+<div class="space-y-5">
+    <div class="flex justify-end">
+        <a href="{% url 'homecare_register_nurse' %}" class="btn btn-primary">+ Register Nurse</a>
+    </div>
+    <div class="card border border-gray-100 shadow-none overflow-x-auto">
+        <table class="w-full text-sm">
+            <thead class="bg-gray-50 border-b border-gray-200">
+                <tr>
+                    <th class="text-left px-4 py-3 text-xs font-semibold uppercase text-text-muted">Name</th>
+                    <th class="text-left px-4 py-3 text-xs font-semibold uppercase text-text-muted">Age</th>
+                    <th class="text-left px-4 py-3 text-xs font-semibold uppercase text-text-muted">Contact</th>
+                    <th class="text-left px-4 py-3 text-xs font-semibold uppercase text-text-muted">Qualification</th>
+                    <th class="text-left px-4 py-3 text-xs font-semibold uppercase text-text-muted">Status</th>
+                    <th class="text-left px-4 py-3 text-xs font-semibold uppercase text-text-muted"></th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+                {% for nurse in nurses %}
+                <tr class="hover:bg-gray-50">
+                    <td class="px-4 py-3 font-semibold text-text-main">{{ nurse.name }}</td>
+                    <td class="px-4 py-3 text-text-muted">{{ nurse.age }}</td>
+                    <td class="px-4 py-3 text-text-muted">{{ nurse.contact }}</td>
+                    <td class="px-4 py-3 text-text-muted">{{ nurse.qualification }}</td>
+                    <td class="px-4 py-3">
+                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold {% if nurse.is_active %}bg-green-50 text-green-700{% else %}bg-gray-100 text-gray-500{% endif %}">
+                            {% if nurse.is_active %}Active{% else %}Inactive{% endif %}
+                        </span>
+                    </td>
+                    <td class="px-4 py-3">
+                        <a href="{% url 'homecare_nurse_detail' nurse.pk %}" class="btn btn-secondary btn-sm">View</a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="6" class="px-4 py-12 text-center text-sm text-text-muted italic">No nurses registered yet.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

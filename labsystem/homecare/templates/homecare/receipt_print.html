@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Receipt {{ receipt.receipt_number }}</title>
+<style>
+    @page { size: 80mm auto; margin: 0mm; }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Courier New', monospace; font-size: 11px; font-weight: bold; line-height: 1.1; color: #000; background: #fff; width: 80mm; padding: 3mm 2mm; }
+    .c { text-align: center; }
+    .sep { border-top: 1.5px solid #000; margin: 2px 0; height: 0; }
+    .row { display: flex; justify-content: space-between; }
+    .btn { display: block; width: 100%; margin-top: 5px; padding: 3px 0; font-family: 'Courier New', monospace; font-size: 11px; text-align: center; cursor: pointer; border: 1px solid #000; background: #fff; color: #000; }
+    @media print { .btn { display: none !important; } }
+</style>
+</head>
+<body>
+
+<div class="c">{{ receipt.placement.hospital.name }}</div>
+<div class="c" style="font-size:9px; font-weight:normal;">{{ receipt.placement.hospital.location }}</div>
+<div class="c" style="font-size:9px; font-weight:normal;">{{ receipt.placement.hospital.phone_number }}</div>
+<div class="sep"></div>
+<div class="c">HOME CARE RECEIPT</div>
+<div class="c">{{ receipt.receipt_number }}</div>
+<div class="c">{{ receipt.paid_at|date:"Y-m-d H:i" }}</div>
+<div class="sep"></div>
+<div><b>Client :</b> {{ receipt.placement.client.name }}</div>
+<div><b>Nurse  :</b> {{ receipt.placement.nurse.name }}</div>
+<div><b>Service:</b> {{ receipt.placement.get_service_type_display }}</div>
+{% if receipt.period_covered %}<div><b>Period :</b> {{ receipt.period_covered }}</div>{% endif %}
+<div class="sep"></div>
+<div class="row"><span><b>Amount Paid</b></span><span>{{ receipt.amount_paid }}</span></div>
+<div class="row"><span><b>Balance Due</b></span><span>{{ receipt.placement.balance_due }}</span></div>
+<div class="sep"></div>
+<div><b>Issued by:</b> {{ receipt.recorded_by.get_full_name|default:receipt.recorded_by.username|default:"—" }}</div>
+{% if receipt.notes %}<div style="font-size:9px; font-weight:normal; margin-top:2px;">{{ receipt.notes }}</div>{% endif %}
+<div class="sep"></div>
+<div class="c">Thank you</div>
+
+<button onclick="window.print()" class="btn">Print / Save as PDF</button>
+
+</body>
+</html>

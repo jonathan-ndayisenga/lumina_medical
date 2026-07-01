@@ -18,6 +18,7 @@ urlpatterns = [
     path('nurse/', include('nurse.urls')),
     path('accounts/', include('django.contrib.auth.urls')),
     path('lab/', include('lab.urls')),  # Lab moved to /lab/ prefix
+    path('homecare/', include('homecare.urls')),
 ]
 
 if settings.DEBUG:

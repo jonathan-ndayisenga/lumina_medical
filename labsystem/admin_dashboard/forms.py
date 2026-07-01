@@ -31,6 +31,15 @@ class HospitalForm(forms.ModelForm):
     admin_username = forms.CharField(max_length=150, required=True)
     admin_password = forms.CharField(widget=forms.PasswordInput, required=True)
     admin_password_confirm = forms.CharField(widget=forms.PasswordInput, required=True)
+    subscription_months = forms.IntegerField(
+        min_value=1,
+        max_value=60,
+        initial=1,
+        required=True,
+        label="Subscription Duration (months)",
+        help_text="How many months the hospital has paid for. The subscription end date is set automatically from today.",
+        widget=forms.NumberInput(attrs={"class": "form-control", "placeholder": "e.g. 1, 3, 6, 12"}),
+    )
     modules = forms.ModelMultipleChoiceField(
         queryset=Module.objects.filter(is_active=True),
         required=False,
@@ -87,11 +96,28 @@ class HospitalForm(forms.ModelForm):
             self.fields[field_name].widget.attrs.setdefault("class", "form-control")
         self.fields["logo"].help_text = "Optional. PNG or JPG works well."
 
+    def save_subscription_end_date(self, hospital):
+        """Set hospital.subscription_end_date from the submitted subscription_months.
+        Uses 30 days per month — standard SaaS billing approximation."""
+        from datetime import date, timedelta
+        months = self.cleaned_data.get("subscription_months") or 1
+        hospital.subscription_end_date = date.today() + timedelta(days=30 * months)
+        hospital.is_active = True
+        hospital.save(update_fields=["subscription_end_date", "is_active"])
+
     def save_module_subscriptions(self, hospital):
         """Sync HospitalModuleSubscription rows to match the selected modules.
-        Core modules are always force-included, regardless of checkbox state."""
+        Core modules (Reception) are force-included EXCEPT when the hospital
+        is a pure Home Care tenant (home_care selected but no clinical modules).
+        A personal-doctor home-care business has no walk-in patients and
+        does not need the Reception module."""
         selected = set(self.cleaned_data.get("modules") or [])
-        selected |= set(Module.objects.filter(is_core=True))
+        selected_codes = {m.code for m in selected}
+        clinical_codes = {"doctor", "nurse", "lab", "reception", "inventory", "finance"}
+        is_homecare_only = "home_care" in selected_codes and not (selected_codes & clinical_codes)
+
+        if not is_homecare_only:
+            selected |= set(Module.objects.filter(is_core=True))
 
         selected_ids = {m.pk for m in selected}
         for module in selected:
@@ -146,6 +172,19 @@ class HospitalForm(forms.ModelForm):
                 self.add_error("admin_password_confirm", "Please confirm the password.")
 
         return cleaned_data
+
+
+class ModuleForm(forms.ModelForm):
+    """Superadmin form for editing a Module's price and active state."""
+    class Meta:
+        model = Module
+        fields = ("name", "monthly_price", "is_active", "display_order")
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for field in self.fields.values():
+            if hasattr(field.widget, "attrs"):
+                field.widget.attrs.setdefault("class", "form-control")
 
 
 MODULE_CODE_TO_GROUP_NAME = {

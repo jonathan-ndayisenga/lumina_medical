@@ -404,6 +404,50 @@
                         </div>
                     {% endif %}
 
+                    {% if user.can_access_home_care %}
+                        <div>
+                            <div class="text-xs font-bold uppercase tracking-widest text-white/60 mb-2">Home Care</div>
+                            <div class="space-y-1">
+                                <a href="{% url 'homecare_dashboard' %}" class="sidebar-link {% if active_nav == 'homecare' %}active{% endif %}">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-5 h-5">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M3 12l9-9 9 9M5 10v10a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V10" />
+                                    </svg>
+                                    Dashboard
+                                </a>
+                                <a href="{% url 'homecare_client_list' %}" class="sidebar-link {% if active_nav == 'homecare_clients' %}active{% endif %}">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-5 h-5">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 7a4 4 0 1 0 0-8 4 4 0 0 0 0 8m11 14v-2a4 4 0 0 0-3-3.87m1-11.13a4 4 0 1 1 0 8" />
+                                    </svg>
+                                    Clients
+                                </a>
+                                <a href="{% url 'homecare_nurse_list' %}" class="sidebar-link {% if active_nav == 'homecare_nurses' %}active{% endif %}">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-5 h-5">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 2a5 5 0 1 0 0 10A5 5 0 0 0 12 2m0 12c-6 0-9 3-9 4v2h18v-2c0-1-3-4-9-4" />
+                                    </svg>
+                                    Nurses
+                                </a>
+                                <a href="{% url 'homecare_placement_list' %}" class="sidebar-link {% if active_nav == 'homecare_placements' %}active{% endif %}">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-5 h-5">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 5a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2M9 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2" />
+                                    </svg>
+                                    Placements
+                                </a>
+                                <a href="{% url 'homecare_contract_list' %}" class="sidebar-link {% if active_nav == 'homecare_contracts' %}active{% endif %}">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-5 h-5">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l5 5v15a2 2 0 0 1-2 2Z" />
+                                    </svg>
+                                    Contracts
+                                </a>
+                                <a href="{% url 'homecare_receipt_list' %}" class="sidebar-link {% if active_nav == 'homecare_receipts' %}active{% endif %}">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-5 h-5">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21V5a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v16l3.5-2 3.5 2 3.5-2 3.5 2Z" />
+                                    </svg>
+                                    Receipts
+                                </a>
+                            </div>
+                        </div>
+                    {% endif %}
+
                     {% if user.can_access_lab %}
                         <div>
                             <div class="space-y-1">

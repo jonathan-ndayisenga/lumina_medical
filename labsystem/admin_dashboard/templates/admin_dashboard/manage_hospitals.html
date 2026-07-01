@@ -132,6 +132,7 @@
                         <th class="text-left px-4 py-3 text-xs font-semibold uppercase">Contact</th>
                         <th class="text-left px-4 py-3 text-xs font-semibold uppercase">Plan</th>
                         <th class="text-left px-4 py-3 text-xs font-semibold uppercase">Status</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold uppercase">Subscription Ends</th>
                         <th class="text-left px-4 py-3 text-xs font-semibold uppercase">Created</th>
                         <th class="text-left px-4 py-3 text-xs font-semibold uppercase">Actions</th>
                     </tr>
@@ -162,11 +163,38 @@
                                 <div>{{ hospital.email|default:'-' }}</div>
                             </td>
                             <td class="px-4 py-3 text-sm text-text-muted">{{ hospital.subscription_plan.name|default:'-' }}</td>
-                            <td class="px-4 py-3 text-sm"><span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold {% if hospital.is_active %}bg-green-50 text-green-700{% else %}bg-gray-100 text-gray-600{% endif %}">{% if hospital.is_active %}Active{% else %}Inactive{% endif %}</span></td>
+                            <td class="px-4 py-3 text-sm">
+                                <form method="post" action="{% url 'toggle_hospital_active' hospital.pk %}">
+                                    {% csrf_token %}
+                                    {% if not hospital.is_active %}
+                                        <button type="submit" class="inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-600 hover:bg-green-50 hover:text-green-700 transition-colors cursor-pointer border-0">
+                                            Inactive — click to reactivate
+                                        </button>
+                                    {% elif hospital.subscription_end_date and hospital.subscription_end_date < today %}
+                                        <button type="submit" class="inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold bg-red-50 text-red-700 hover:bg-green-50 hover:text-green-700 transition-colors cursor-pointer border-0">
+                                            Expired — click to reactivate
+                                        </button>
+                                    {% else %}
+                                        <button type="submit" class="inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold bg-green-50 text-green-700 hover:bg-gray-100 hover:text-gray-600 transition-colors cursor-pointer border-0" onclick="return confirm('Deactivate {{ hospital.name }}?')">
+                                            Active
+                                        </button>
+                                    {% endif %}
+                                </form>
+                            </td>
+                            <td class="px-4 py-3 text-sm">
+                                {% if hospital.subscription_end_date %}
+                                    <span class="{% if hospital.subscription_end_date < today %}text-red-600 font-semibold{% else %}text-text-muted{% endif %}">
+                                        {{ hospital.subscription_end_date|date:"d M Y" }}
+                                    </span>
+                                {% else %}
+                                    <span class="text-text-muted">—</span>
+                                {% endif %}
+                            </td>
                             <td class="px-4 py-3 text-sm text-text-muted">{{ hospital.created_at|date:"M d, Y" }}</td>
                             <td class="px-4 py-3 text-sm">
                                 <div class="flex gap-2 flex-wrap">
-                                    <a href="{% url 'edit_hospital' hospital.pk %}" class="btn btn-secondary btn-sm">Edit</a>
+                                    <a href="{% url 'edit_hospital' hospital.pk %}" class="btn btn-secondary btn-sm">Edit / Renew</a>
+                                    <a href="{% url 'invoice_list' hospital.pk %}" class="btn btn-secondary btn-sm">Invoices</a>
                                     <a href="{% url 'delete_hospital' hospital.pk %}" class="btn btn-danger btn-sm">Delete</a>
                                 </div>
                             </td>

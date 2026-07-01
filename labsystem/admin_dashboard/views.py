@@ -19,7 +19,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from accounts.forms import HospitalSubscriptionPaymentForm, SubscriptionPlanForm
-from accounts.models import Hospital, HospitalModuleSubscription, HospitalSubscriptionPayment, Module, SubscriptionPlan, User
+from accounts.models import Hospital, HospitalInvoice, HospitalModuleSubscription, HospitalSubscriptionPayment, Module, SubscriptionPlan, User
 from lab.models import LabReport
 from reception.models import Patient, Payment, QueueEntry, Service, Visit
 from .forms import (
@@ -3461,6 +3461,128 @@ def reconciliation_detail(request, pk):
 
 
 # =====================================
+# SUPERADMIN VIEWS - Module Management
+# =====================================
+
+@role_required(User.ROLE_SUPERADMIN)
+def manage_modules(request):
+    """Superadmin view to see and edit module prices."""
+    from .forms import ModuleForm
+    from django.db.models import Count as _Count
+    modules_qs = Module.objects.annotate(
+        subscriber_count=_Count(
+            "hospital_subscriptions",
+            filter=models.Q(hospital_subscriptions__is_active=True),
+        )
+    ).order_by("display_order", "name")
+
+    module_rows = [
+        {
+            "module": m,
+            "subscriber_count": m.subscriber_count,
+            "expected_monthly": m.monthly_price * m.subscriber_count,
+        }
+        for m in modules_qs
+    ]
+    platform_total = sum(r["expected_monthly"] for r in module_rows)
+
+    return render(request, "admin_dashboard/manage_modules.html", {
+        "active_nav": "superadmin_modules",
+        "dashboard_title": "Module Pricing",
+        "dashboard_intro": "Set the monthly price for each platform module. Changes take effect on the next invoice generated.",
+        "module_rows": module_rows,
+        "platform_total": platform_total,
+    })
+
+
+@role_required(User.ROLE_SUPERADMIN)
+def edit_module(request, module_id):
+    from .forms import ModuleForm
+    module = get_object_or_404(Module, pk=module_id)
+    form = ModuleForm(request.POST or None, instance=module)
+    if request.method == "POST":
+        if form.is_valid():
+            form.save()
+            messages.success(request, f"Module '{module.name}' updated — price set to UGX {module.monthly_price}/mo.")
+            return redirect("manage_modules")
+        messages.error(request, "Please fix the details below.")
+    context = superadmin_context(
+        request, "superadmin_modules", f"Edit Module — {module.name}",
+        "Update the module name, monthly price, or active state.",
+    )
+    context.update({"form": form, "object_label": module.name, "cancel_url": "manage_modules"})
+    return render(request, "admin_dashboard/object_form.html", context)
+
+
+# =====================================
+# SUPERADMIN VIEWS - Invoices
+# =====================================
+
+@role_required(User.ROLE_SUPERADMIN)
+def generate_invoice(request, hospital_id):
+    """Generate an invoice for a hospital based on its current active module subscriptions."""
+    if request.method != "POST":
+        return redirect("manage_hospitals")
+
+    from accounts.models import HospitalInvoice
+    hospital = get_object_or_404(Hospital, pk=hospital_id)
+
+    period_start_raw = request.POST.get("period_start", "").strip()
+    period_end_raw   = request.POST.get("period_end", "").strip()
+
+    try:
+        period_start = timezone.datetime.fromisoformat(period_start_raw).date()
+        period_end   = timezone.datetime.fromisoformat(period_end_raw).date()
+    except (ValueError, TypeError):
+        today = timezone.now().date()
+        period_start = today.replace(day=1)
+        period_end   = hospital.subscription_end_date or today
+
+    active_modules = Module.objects.filter(
+        hospital_subscriptions__hospital=hospital,
+        hospital_subscriptions__is_active=True,
+    ).order_by("display_order")
+
+    total = sum((m.monthly_price for m in active_modules), Decimal("0"))
+
+    invoice = HospitalInvoice.objects.create(
+        hospital=hospital,
+        period_start=period_start,
+        period_end=period_end,
+        total_amount=total,
+        generated_by=request.user,
+    )
+    return redirect("invoice_print", invoice_id=invoice.pk)
+
+
+@role_required(User.ROLE_SUPERADMIN)
+def invoice_print(request, invoice_id):
+    from accounts.models import HospitalInvoice
+    invoice = get_object_or_404(HospitalInvoice, pk=invoice_id)
+    active_modules = Module.objects.filter(
+        hospital_subscriptions__hospital=invoice.hospital,
+        hospital_subscriptions__is_active=True,
+    ).order_by("display_order")
+    return render(request, "admin_dashboard/invoice_print.html", {
+        "invoice": invoice,
+        "hospital": invoice.hospital,
+        "active_modules": active_modules,
+    })
+
+
+@role_required(User.ROLE_SUPERADMIN)
+def invoice_list(request, hospital_id):
+    from accounts.models import HospitalInvoice
+    hospital = get_object_or_404(Hospital, pk=hospital_id)
+    invoices = HospitalInvoice.objects.filter(hospital=hospital).order_by("-generated_at")
+    return render(request, "admin_dashboard/invoice_list.html", {
+        "active_nav": "superadmin_hospitals",
+        "hospital": hospital,
+        "invoices": invoices,
+    })
+
+
+# =====================================
 # SUPERADMIN VIEWS - Hospitals Management
 # =====================================
 
@@ -3478,6 +3600,7 @@ def manage_hospitals(request):
             try:
                 with transaction.atomic():
                     hospital = form.save()
+                    form.save_subscription_end_date(hospital)
                     form.save_module_subscriptions(hospital)
                     User.objects.create_user(
                         username=form.cleaned_data["admin_username"],
@@ -3512,6 +3635,7 @@ def manage_hospitals(request):
         "form": form,
         "query": query,
         "all_modules": Module.objects.filter(is_active=True),
+        "today": timezone.now().date(),
     })
     return render(request, "admin_dashboard/manage_hospitals.html", context)
 
@@ -3523,6 +3647,7 @@ def edit_hospital(request, hospital_id):
     if request.method == "POST":
         if form.is_valid():
             form.save()
+            form.save_subscription_end_date(hospital)
             form.save_module_subscriptions(hospital)
             messages.success(request, f"Hospital '{hospital.name}' updated.")
             return redirect("manage_hospitals")
@@ -3536,6 +3661,26 @@ def edit_hospital(request, hospital_id):
     )
     context.update({"form": form, "object_label": hospital.name, "cancel_url": "manage_hospitals"})
     return render(request, "admin_dashboard/object_form.html", context)
+
+
+@role_required(User.ROLE_SUPERADMIN)
+def toggle_hospital_active(request, hospital_id):
+    """One-click toggle: reactivate (paid) or deactivate a hospital subscription."""
+    if request.method != "POST":
+        return redirect("manage_hospitals")
+    hospital = get_object_or_404(Hospital, pk=hospital_id)
+    from datetime import date, timedelta
+    if hospital.is_active:
+        hospital.is_active = False
+        messages.warning(request, f"'{hospital.name}' has been deactivated.")
+    else:
+        hospital.is_active = True
+        today = date.today()
+        if not hospital.subscription_end_date or hospital.subscription_end_date < today:
+            hospital.subscription_end_date = today + timedelta(days=30)
+        messages.success(request, f"'{hospital.name}' reactivated — subscription extended to {hospital.subscription_end_date}.")
+    hospital.save(update_fields=["is_active", "subscription_end_date"])
+    return redirect("manage_hospitals")
 
 
 @role_required(User.ROLE_SUPERADMIN)

@@ -1,0 +1,39 @@
+{% extends 'base.html' %}
+{% block title %}Clients — Home Care{% endblock %}
+{% block page_title %}Clients{% endblock %}
+{% block page_subtitle %}All registered clients under this home care service.{% endblock %}
+{% block content %}
+<div class="space-y-5">
+    <div class="flex justify-end">
+        <a href="{% url 'homecare_register_client' %}" class="btn btn-primary">+ Register Client</a>
+    </div>
+    <div class="card border border-gray-100 shadow-none overflow-x-auto">
+        <table class="w-full text-sm">
+            <thead class="bg-gray-50 border-b border-gray-200">
+                <tr>
+                    <th class="text-left px-4 py-3 text-xs font-semibold uppercase text-text-muted">Name</th>
+                    <th class="text-left px-4 py-3 text-xs font-semibold uppercase text-text-muted">Location</th>
+                    <th class="text-left px-4 py-3 text-xs font-semibold uppercase text-text-muted">Contact</th>
+                    <th class="text-left px-4 py-3 text-xs font-semibold uppercase text-text-muted">NIN</th>
+                    <th class="text-left px-4 py-3 text-xs font-semibold uppercase text-text-muted"></th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+                {% for client in clients %}
+                <tr class="hover:bg-gray-50">
+                    <td class="px-4 py-3 font-semibold text-text-main">{{ client.name }}</td>
+                    <td class="px-4 py-3 text-text-muted">{{ client.location }}</td>
+                    <td class="px-4 py-3 text-text-muted">{{ client.contact }}</td>
+                    <td class="px-4 py-3 text-text-muted">{{ client.nin|default:"—" }}</td>
+                    <td class="px-4 py-3">
+                        <a href="{% url 'homecare_client_detail' client.pk %}" class="btn btn-secondary btn-sm">View</a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="5" class="px-4 py-12 text-center text-sm text-text-muted italic">No clients registered yet.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

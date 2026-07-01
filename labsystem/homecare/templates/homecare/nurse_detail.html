@@ -1,0 +1,50 @@
+{% extends 'base.html' %}
+{% block title %}{{ nurse.name }} — Home Care{% endblock %}
+{% block page_title %}{{ nurse.name }}{% endblock %}
+{% block page_subtitle %}Nurse profile and placement history.{% endblock %}
+{% block content %}
+<div class="space-y-5">
+    <div class="card">
+        <h3 class="text-sm font-semibold text-text-main mb-4">Nurse Details</h3>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 text-sm">
+            <div><p class="text-xs text-text-muted uppercase tracking-wide">Age</p><p class="font-semibold text-text-main mt-1">{{ nurse.age }}</p></div>
+            <div><p class="text-xs text-text-muted uppercase tracking-wide">Contact</p><p class="font-semibold text-text-main mt-1">{{ nurse.contact }}</p></div>
+            <div><p class="text-xs text-text-muted uppercase tracking-wide">NIN</p><p class="font-semibold text-text-main mt-1">{{ nurse.nin|default:"—" }}</p></div>
+            <div><p class="text-xs text-text-muted uppercase tracking-wide">Tribe</p><p class="font-semibold text-text-main mt-1">{{ nurse.tribe|default:"—" }}</p></div>
+            <div><p class="text-xs text-text-muted uppercase tracking-wide">Religion</p><p class="font-semibold text-text-main mt-1">{{ nurse.religion|default:"—" }}</p></div>
+            <div><p class="text-xs text-text-muted uppercase tracking-wide">Qualification</p><p class="font-semibold text-text-main mt-1">{{ nurse.qualification }}</p></div>
+            <div class="sm:col-span-2"><p class="text-xs text-text-muted uppercase tracking-wide">Address</p><p class="font-semibold text-text-main mt-1">{{ nurse.address }}</p></div>
+            <div><p class="text-xs text-text-muted uppercase tracking-wide">Status</p>
+                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold mt-1 {% if nurse.is_active %}bg-green-50 text-green-700{% else %}bg-gray-100 text-gray-500{% endif %}">
+                    {% if nurse.is_active %}Active{% else %}Inactive{% endif %}
+                </span>
+            </div>
+        </div>
+        {% if nurse.notes %}<div class="mt-4 p-3 bg-gray-50 rounded-lg text-sm text-text-muted">{{ nurse.notes }}</div>{% endif %}
+    </div>
+
+    <div class="card border border-gray-100 shadow-none">
+        <h3 class="text-sm font-semibold text-text-main mb-4">Placement History</h3>
+        {% if placements %}
+        <div class="space-y-3">
+            {% for p in placements %}
+            <div class="flex items-center justify-between gap-3 p-3 rounded-lg border border-gray-200 bg-gray-50 text-sm">
+                <div>
+                    <p class="font-semibold text-text-main">{{ p.client.name }}</p>
+                    <p class="text-xs text-text-muted mt-0.5">{{ p.get_service_type_display }} &middot; {{ p.contract_start }} — {{ p.contract_end }}</p>
+                </div>
+                <div class="flex items-center gap-2">
+                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold {% if p.status == 'active' %}bg-green-50 text-green-700{% elif p.status == 'completed' %}bg-gray-100 text-gray-600{% else %}bg-red-50 text-red-700{% endif %}">{{ p.get_status_display }}</span>
+                    <a href="{% url 'homecare_placement_detail' p.pk %}" class="btn btn-secondary btn-sm">View</a>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <p class="text-sm text-text-muted italic text-center py-8">No placements recorded for this nurse yet.</p>
+        {% endif %}
+    </div>
+
+    <a href="{% url 'homecare_nurse_list' %}" class="btn btn-secondary btn-sm">&larr; Back to Nurses</a>
+</div>
+{% endblock %}

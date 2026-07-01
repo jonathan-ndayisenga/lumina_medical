@@ -1,0 +1,50 @@
+{% extends 'base.html' %}
+{% block title %}Placements — Home Care{% endblock %}
+{% block page_title %}Placements{% endblock %}
+{% block page_subtitle %}All nurse-client assignments under this home care service.{% endblock %}
+{% block content %}
+<div class="space-y-5">
+    <div class="flex justify-end">
+        <a href="{% url 'homecare_placement_create' %}" class="btn btn-primary">+ New Placement</a>
+    </div>
+    <div class="card border border-gray-100 shadow-none overflow-x-auto">
+        <table class="w-full text-sm">
+            <thead class="bg-gray-50 border-b border-gray-200">
+                <tr>
+                    <th class="text-left px-4 py-3 text-xs font-semibold uppercase text-text-muted">Client</th>
+                    <th class="text-left px-4 py-3 text-xs font-semibold uppercase text-text-muted">Nurse</th>
+                    <th class="text-left px-4 py-3 text-xs font-semibold uppercase text-text-muted">Service</th>
+                    <th class="text-left px-4 py-3 text-xs font-semibold uppercase text-text-muted">Period</th>
+                    <th class="text-left px-4 py-3 text-xs font-semibold uppercase text-text-muted">Client Rate</th>
+                    <th class="text-left px-4 py-3 text-xs font-semibold uppercase text-text-muted">Status</th>
+                    <th class="text-left px-4 py-3 text-xs font-semibold uppercase text-text-muted"></th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+                {% for p in placements %}
+                <tr class="hover:bg-gray-50">
+                    <td class="px-4 py-3 font-semibold text-text-main">{{ p.client.name }}</td>
+                    <td class="px-4 py-3 text-text-muted">{{ p.nurse.name }}</td>
+                    <td class="px-4 py-3 text-text-muted">{{ p.get_service_type_display }}</td>
+                    <td class="px-4 py-3 text-text-muted whitespace-nowrap">{{ p.contract_start }} — {{ p.contract_end }}</td>
+                    <td class="px-4 py-3 font-semibold text-text-main">UGX {{ p.client_rate }}</td>
+                    <td class="px-4 py-3">
+                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold
+                            {% if p.status == 'active' %}bg-green-50 text-green-700
+                            {% elif p.status == 'completed' %}bg-gray-100 text-gray-600
+                            {% else %}bg-red-50 text-red-700{% endif %}">
+                            {{ p.get_status_display }}
+                        </span>
+                    </td>
+                    <td class="px-4 py-3">
+                        <a href="{% url 'homecare_placement_detail' p.pk %}" class="btn btn-secondary btn-sm">View</a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="7" class="px-4 py-12 text-center text-sm text-text-muted italic">No placements yet.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

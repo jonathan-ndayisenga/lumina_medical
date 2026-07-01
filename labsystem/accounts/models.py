@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.contrib.auth.models import AbstractUser
 from django.templatetags.static import static
 from django.db import models
@@ -206,6 +207,13 @@ class User(AbstractUser):
         eligible = self.is_hospital_admin or self.has_module_group("Finance")
         return eligible and self._hospital_has_module("finance")
 
+    @property
+    def can_access_home_care(self):
+        if self.is_superadmin:
+            return True
+        eligible = self.is_hospital_admin or self.has_module_group("Home Care")
+        return eligible and self._hospital_has_module("home_care")
+
     def get_full_name(self):
         full = f"{self.first_name} {self.last_name}".strip()
         if self.role == self.ROLE_DOCTOR and full and not full.startswith("Dr."):
@@ -227,8 +235,9 @@ class User(AbstractUser):
             "Lab": "Lab",
             "Inventory": "Inventory",
             "Finance": "Finance",
+            "Home Care": "Home Care",
         }
-        for group_name in ("Reception", "Doctor", "Nurse", "Lab", "Inventory", "Finance"):
+        for group_name in ("Reception", "Doctor", "Nurse", "Lab", "Inventory", "Finance", "Home Care"):
             label = group_label_map[group_name]
             if self.has_module_group(group_name) and label not in labels:
                 labels.append(label)
@@ -299,3 +308,40 @@ class HospitalSubscriptionPayment(models.Model):
 
     def __str__(self):
         return f"{self.hospital.name} - {self.amount}"
+
+
+class HospitalInvoice(models.Model):
+    hospital = models.ForeignKey(
+        Hospital,
+        on_delete=models.CASCADE,
+        related_name="invoices",
+    )
+    invoice_number = models.CharField(max_length=50, unique=True)
+    period_start = models.DateField()
+    period_end = models.DateField()
+    total_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    generated_at = models.DateTimeField(auto_now_add=True)
+    generated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="invoices_generated",
+    )
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["-generated_at"]
+
+    def __str__(self):
+        return f"{self.invoice_number} — {self.hospital.name}"
+
+    def save(self, *args, **kwargs):
+        if not self.invoice_number:
+            from django.utils.timezone import now as _now
+            stamp = _now().strftime("%Y%m%d")
+            last = HospitalInvoice.objects.filter(
+                invoice_number__startswith=f"INV-{stamp}"
+            ).count()
+            self.invoice_number = f"INV-{stamp}-{str(last + 1).zfill(4)}"
+        super().save(*args, **kwargs)

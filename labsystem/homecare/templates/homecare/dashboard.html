@@ -1,0 +1,145 @@
+{% extends 'base.html' %}
+{% block title %}Home Care Dashboard{% endblock %}
+{% block page_title %}Home Care Management{% endblock %}
+{% block page_subtitle %}Manage nurse placements, client contracts, and care operations.{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+
+    {# ── Stat cards ── #}
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div class="card">
+            <p class="text-xs uppercase tracking-wide text-text-muted">Active Nurses</p>
+            <p class="text-3xl font-bold text-text-main mt-2">{{ active_nurses }}</p>
+        </div>
+        <div class="card">
+            <p class="text-xs uppercase tracking-wide text-text-muted">Active Placements</p>
+            <p class="text-3xl font-bold text-indigo-600 mt-2">{{ active_placements }}</p>
+        </div>
+        <div class="card">
+            <p class="text-xs uppercase tracking-wide text-text-muted">Income This Month</p>
+            <p class="text-3xl font-bold text-green-600 mt-2">UGX {{ income_this_month }}</p>
+        </div>
+    </div>
+
+    {# ── Quick actions ── #}
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <a href="{% url 'homecare_register_client' %}" class="btn btn-primary text-center">+ Register Client</a>
+        <a href="{% url 'homecare_register_nurse' %}" class="btn btn-secondary text-center">+ Register Nurse</a>
+        <a href="{% url 'homecare_placement_create' %}" class="btn btn-secondary text-center">+ New Placement</a>
+    </div>
+
+    {# ── Finance chart ── #}
+    <div class="card">
+        <div class="flex items-center justify-between mb-4 flex-wrap gap-3">
+            <div>
+                <h3 class="text-sm font-semibold text-text-main">Finance Overview</h3>
+                <p class="text-xs text-text-muted mt-0.5">Last 6 months — client income collected vs projected nurse payouts</p>
+            </div>
+        </div>
+        <canvas id="homecareChart" height="180"></canvas>
+        <div class="flex gap-6 mt-3 text-xs text-text-muted justify-center">
+            <span class="flex items-center gap-1"><span class="inline-block w-3 h-3 rounded-full bg-indigo-600"></span> Client Income</span>
+            <span class="flex items-center gap-1"><span class="inline-block w-3 h-3 rounded-full bg-red-400"></span> Nurse Payouts</span>
+            <span class="flex items-center gap-1"><span class="inline-block w-3 h-3 rounded-full bg-green-500"></span> Margin</span>
+        </div>
+    </div>
+
+    {# ── Recent placements ── #}
+    {% if recent_placements %}
+    <div class="card">
+        <div class="flex items-center justify-between mb-4">
+            <h3 class="text-sm font-semibold text-text-main">Recent Placements</h3>
+            <a href="{% url 'homecare_placement_list' %}" class="btn btn-secondary btn-sm">View All</a>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead class="bg-gray-50 border-b border-gray-200">
+                    <tr>
+                        <th class="text-left px-4 py-3 text-xs font-semibold uppercase text-text-muted">Client</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold uppercase text-text-muted">Nurse</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold uppercase text-text-muted">Service</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold uppercase text-text-muted">Rate</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold uppercase text-text-muted">Status</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-100">
+                    {% for p in recent_placements %}
+                    <tr class="hover:bg-gray-50">
+                        <td class="px-4 py-3 font-semibold text-text-main">{{ p.client.name }}</td>
+                        <td class="px-4 py-3 text-text-muted">{{ p.nurse.name }}</td>
+                        <td class="px-4 py-3 text-text-muted">{{ p.get_service_type_display }}</td>
+                        <td class="px-4 py-3 text-text-muted">UGX {{ p.client_rate }}/mo</td>
+                        <td class="px-4 py-3">
+                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold
+                                {% if p.status == 'active' %}bg-green-50 text-green-700
+                                {% elif p.status == 'completed' %}bg-gray-100 text-gray-600
+                                {% else %}bg-red-50 text-red-700{% endif %}">
+                                {{ p.get_status_display }}
+                            </span>
+                        </td>
+                        <td class="px-4 py-3">
+                            <a href="{% url 'homecare_placement_detail' p.pk %}" class="btn btn-secondary btn-sm">View</a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+<script>
+(function () {
+    const labels = {{ chart_labels_json|safe }};
+    const income = {{ income_values_json|safe }};
+    const payouts = {{ payout_values_json|safe }};
+    const margin = {{ margin_values_json|safe }};
+
+    const ctx = document.getElementById('homecareChart');
+    if (!ctx) return;
+
+    new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: 'Client Income',
+                    data: income,
+                    backgroundColor: '#4f46e5',
+                    borderRadius: 4,
+                },
+                {
+                    label: 'Nurse Payouts',
+                    data: payouts,
+                    backgroundColor: '#f87171',
+                    borderRadius: 4,
+                },
+                {
+                    label: 'Margin',
+                    data: margin,
+                    backgroundColor: '#22c55e',
+                    borderRadius: 4,
+                },
+            ],
+        },
+        options: {
+            scales: {
+                y: { beginAtZero: true },
+                x: { grid: { display: false } },
+            },
+            plugins: {
+                legend: { display: false },
+            },
+        },
+    });
+})();
+</script>
+{% endblock %}

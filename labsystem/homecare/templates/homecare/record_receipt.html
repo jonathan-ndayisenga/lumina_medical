@@ -1,0 +1,37 @@
+{% extends 'base.html' %}
+{% block title %}Record Payment — Home Care{% endblock %}
+{% block page_title %}Record Payment{% endblock %}
+{% block page_subtitle %}Issue a receipt for {{ placement.client.name }} — Balance: UGX {{ placement.balance_due }}{% endblock %}
+{% block content %}
+<div class="max-w-xl mx-auto space-y-4">
+    <div class="card bg-gray-50 border border-gray-200">
+        <div class="grid grid-cols-2 gap-3 text-sm">
+            <div><p class="text-xs text-text-muted uppercase tracking-wide">Client</p><p class="font-semibold text-text-main mt-0.5">{{ placement.client.name }}</p></div>
+            <div><p class="text-xs text-text-muted uppercase tracking-wide">Nurse</p><p class="font-semibold text-text-main mt-0.5">{{ placement.nurse.name }}</p></div>
+            <div><p class="text-xs text-text-muted uppercase tracking-wide">Monthly Rate</p><p class="font-semibold text-text-main mt-0.5">UGX {{ placement.client_rate }}</p></div>
+            <div><p class="text-xs text-text-muted uppercase tracking-wide">Outstanding Balance</p><p class="font-bold text-red-600 mt-0.5">UGX {{ placement.balance_due }}</p></div>
+        </div>
+    </div>
+
+    <div class="card">
+        <form method="post" class="space-y-4">
+            {% csrf_token %}
+            {% if form.non_field_errors %}
+                <div class="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">{{ form.non_field_errors }}</div>
+            {% endif %}
+            {% for field in form %}
+            <div>
+                <label for="{{ field.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">{{ field.label }}</label>
+                {{ field }}
+                {% if field.help_text %}<p class="text-xs text-text-muted mt-1">{{ field.help_text }}</p>{% endif %}
+                {% for error in field.errors %}<p class="text-xs text-red-600 mt-1">{{ error }}</p>{% endfor %}
+            </div>
+            {% endfor %}
+            <div class="flex gap-3 pt-4 border-t border-gray-200">
+                <button type="submit" class="btn btn-primary">Issue Receipt</button>
+                <a href="{% url 'homecare_placement_detail' placement.pk %}" class="btn btn-secondary">Cancel</a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
