@@ -24,10 +24,16 @@
                         {{ form.nurse }}
                         {% for e in form.nurse.errors %}<p class="text-xs text-red-600 mt-1">{{ e }}</p>{% endfor %}
                     </div>
-                    <div class="md:col-span-2">
+                    <div>
                         <label for="{{ form.service_type.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">Service Type</label>
                         {{ form.service_type }}
                         {% for e in form.service_type.errors %}<p class="text-xs text-red-600 mt-1">{{ e }}</p>{% endfor %}
+                    </div>
+                    <div>
+                        <label for="{{ form.rate_period.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">Rate Period</label>
+                        {{ form.rate_period }}
+                        <p class="text-xs text-text-muted mt-1">{{ form.rate_period.help_text }}</p>
+                        {% for e in form.rate_period.errors %}<p class="text-xs text-red-600 mt-1">{{ e }}</p>{% endfor %}
                     </div>
                 </div>
             </div>

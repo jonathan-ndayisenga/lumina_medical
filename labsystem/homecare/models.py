@@ -4,6 +4,8 @@ from django.conf import settings
 from django.db import models
 from django.utils import timezone
 
+from reception.models import hospital_initials
+
 
 class HomeCareNurse(models.Model):
     hospital = models.ForeignKey(
@@ -100,14 +102,27 @@ class HomeCarePlacement(models.Model):
         on_delete=models.PROTECT,
         related_name="placements",
     )
+    RATE_PER_DAY = "day"
+    RATE_PER_WEEK = "week"
+    RATE_PER_MONTH = "month"
+    RATE_PERIOD_CHOICES = [
+        (RATE_PER_DAY, "Per Day"),
+        (RATE_PER_WEEK, "Per Week"),
+        (RATE_PER_MONTH, "Per Month"),
+    ]
+
     service_type = models.CharField(max_length=20, choices=SERVICE_CHOICES)
+    rate_period = models.CharField(
+        max_length=20, choices=RATE_PERIOD_CHOICES, default=RATE_PER_MONTH,
+        help_text="How often the rates are charged.",
+    )
     nurse_rate = models.DecimalField(
         max_digits=12, decimal_places=2,
-        help_text="Amount paid to the nurse per month.",
+        help_text="Amount paid to the nurse (per selected rate period).",
     )
     client_rate = models.DecimalField(
         max_digits=12, decimal_places=2,
-        help_text="Amount charged to the client per month.",
+        help_text="Amount charged to the client (per selected rate period).",
     )
     contract_start = models.DateField()
     contract_end = models.DateField()
@@ -126,7 +141,7 @@ class HomeCarePlacement(models.Model):
         ordering = ["-created_at"]
 
     def __str__(self):
-        return f"{self.client.name} ← {self.nurse.name} ({self.get_service_type_display()})"
+        return f"{self.client.name} -> {self.nurse.name} ({self.get_service_type_display()})"
 
     @property
     def total_billed(self):
@@ -174,8 +189,12 @@ class HomeCareContract(models.Model):
     def _generate_number(self):
         from django.utils.timezone import now as _now
         stamp = _now().strftime("%Y%m%d")
-        last = HomeCareContract.objects.filter(contract_number__startswith=f"CON-{stamp}").count()
-        return f"CON-{stamp}-{str(last + 1).zfill(4)}"
+        try:
+            prefix = hospital_initials(self.placement.hospital.name, fallback="CON")
+        except Exception:
+            prefix = "CON"
+        last = HomeCareContract.objects.filter(contract_number__startswith=f"{prefix}{stamp}").count()
+        return f"{prefix}{stamp}-{str(last + 1).zfill(4)}"
 
     def _snapshot(self):
         p = self.placement
@@ -223,5 +242,9 @@ class HomeCareReceipt(models.Model):
     def _generate_number(self):
         from django.utils.timezone import now as _now
         stamp = _now().strftime("%Y%m%d")
-        last = HomeCareReceipt.objects.filter(receipt_number__startswith=f"HCR-{stamp}").count()
-        return f"HCR-{stamp}-{str(last + 1).zfill(4)}"
+        try:
+            prefix = hospital_initials(self.placement.hospital.name, fallback="HCR")
+        except Exception:
+            prefix = "HCR"
+        last = HomeCareReceipt.objects.filter(receipt_number__startswith=f"{prefix}{stamp}").count()
+        return f"{prefix}{stamp}-{str(last + 1).zfill(4)}"

@@ -155,7 +155,11 @@ class User(AbstractUser):
 
     @property
     def can_access_hospital_admin(self):
-        return self.is_superadmin or self.role == self.ROLE_HOSPITAL_ADMIN
+        if self.is_superadmin:
+            return True
+        if self.role != self.ROLE_HOSPITAL_ADMIN:
+            return False
+        return self._hospital_has_module("hospital_mgmt")
 
     def _hospital_has_module(self, code):
         """Superadmins bypass module gating entirely; everyone else needs their hospital subscribed."""

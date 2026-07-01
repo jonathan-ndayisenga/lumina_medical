@@ -4,8 +4,9 @@
 {% block page_subtitle %}All registered nurses under this home care service.{% endblock %}
 {% block content %}
 <div class="space-y-5">
-    <div class="flex justify-end">
-        <a href="{% url 'homecare_register_nurse' %}" class="btn btn-primary">+ Register Nurse</a>
+    <div class="flex items-start justify-between gap-3 flex-wrap">
+        {% include "homecare/partials/search_bar.html" with placeholder="Search by name, contact or qualification..." %}
+        <a href="{% url 'homecare_register_nurse' %}" class="btn btn-primary whitespace-nowrap">+ Register Nurse</a>
     </div>
     <div class="card border border-gray-100 shadow-none overflow-x-auto">
         <table class="w-full text-sm">
@@ -31,15 +32,20 @@
                             {% if nurse.is_active %}Active{% else %}Inactive{% endif %}
                         </span>
                     </td>
-                    <td class="px-4 py-3">
+                    <td class="px-4 py-3 flex gap-2">
                         <a href="{% url 'homecare_nurse_detail' nurse.pk %}" class="btn btn-secondary btn-sm">View</a>
+                        <form method="post" action="{% url 'homecare_delete_nurse' nurse.pk %}" onsubmit="return confirm('Delete {{ nurse.name|escapejs }}? This cannot be undone.')">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-danger btn-sm">Delete</button>
+                        </form>
                     </td>
                 </tr>
                 {% empty %}
-                <tr><td colspan="6" class="px-4 py-12 text-center text-sm text-text-muted italic">No nurses registered yet.</td></tr>
+                <tr><td colspan="6" class="px-4 py-12 text-center text-sm text-text-muted italic">{% if q %}No nurses match "{{ q }}".{% else %}No nurses registered yet.{% endif %}</td></tr>
                 {% endfor %}
             </tbody>
         </table>
     </div>
+    {% include "homecare/partials/pagination.html" %}
 </div>
 {% endblock %}

@@ -16,11 +16,18 @@
             <p class="text-xs uppercase tracking-wide text-text-muted">Active Placements</p>
             <p class="text-3xl font-bold text-indigo-600 mt-2">{{ active_placements }}</p>
         </div>
-        <div class="card">
-            <p class="text-xs uppercase tracking-wide text-text-muted">Income This Month</p>
-            <p class="text-3xl font-bold text-green-600 mt-2">UGX {{ income_this_month }}</p>
+        <div class="card" id="financialCard">
+            <p class="text-xs uppercase tracking-wide text-text-muted" id="financialCardLabel">Client Income This Month</p>
+            <p class="text-3xl font-bold mt-2" id="financialCardValue" style="color:#4f46e5;">UGX {{ income_this_month }}</p>
         </div>
     </div>
+
+    {# hidden data for JS card switching #}
+    <div id="financialData"
+         data-income="{{ income_this_month }}"
+         data-payouts="{{ payout_this_month }}"
+         data-margin="{{ margin_this_month }}"
+         style="display:none;"></div>
 
     {# ── Quick actions ── #}
     <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -34,15 +41,15 @@
         <div class="flex items-center justify-between mb-4 flex-wrap gap-3">
             <div>
                 <h3 class="text-sm font-semibold text-text-main">Finance Overview</h3>
-                <p class="text-xs text-text-muted mt-0.5">Last 6 months — client income collected vs projected nurse payouts</p>
+                <p class="text-xs text-text-muted mt-0.5" id="homecareChartNote">Last 6 months</p>
             </div>
+            <select id="homecareChartMode" class="form-control" style="max-width:200px;">
+                <option value="income">Client Income</option>
+                <option value="payouts">Nurse Payouts</option>
+                <option value="margin">Margin</option>
+            </select>
         </div>
         <canvas id="homecareChart" height="180"></canvas>
-        <div class="flex gap-6 mt-3 text-xs text-text-muted justify-center">
-            <span class="flex items-center gap-1"><span class="inline-block w-3 h-3 rounded-full bg-indigo-600"></span> Client Income</span>
-            <span class="flex items-center gap-1"><span class="inline-block w-3 h-3 rounded-full bg-red-400"></span> Nurse Payouts</span>
-            <span class="flex items-center gap-1"><span class="inline-block w-3 h-3 rounded-full bg-green-500"></span> Margin</span>
-        </div>
     </div>
 
     {# ── Recent placements ── #}
@@ -97,49 +104,84 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
 <script>
 (function () {
-    const labels = {{ chart_labels_json|safe }};
-    const income = {{ income_values_json|safe }};
+    const labels  = {{ chart_labels_json|safe }};
+    const income  = {{ income_values_json|safe }};
     const payouts = {{ payout_values_json|safe }};
-    const margin = {{ margin_values_json|safe }};
+    const margin  = {{ margin_values_json|safe }};
 
-    const ctx = document.getElementById('homecareChart');
+    const ctx     = document.getElementById('homecareChart');
+    const modeEl  = document.getElementById('homecareChartMode');
+    const noteEl  = document.getElementById('homecareChartNote');
     if (!ctx) return;
 
-    new Chart(ctx, {
-        type: 'bar',
-        data: {
-            labels: labels,
-            datasets: [
-                {
-                    label: 'Client Income',
-                    data: income,
-                    backgroundColor: '#4f46e5',
-                    borderRadius: 4,
-                },
-                {
-                    label: 'Nurse Payouts',
-                    data: payouts,
-                    backgroundColor: '#f87171',
-                    borderRadius: 4,
-                },
-                {
-                    label: 'Margin',
-                    data: margin,
-                    backgroundColor: '#22c55e',
-                    borderRadius: 4,
-                },
-            ],
-        },
-        options: {
-            scales: {
-                y: { beginAtZero: true },
-                x: { grid: { display: false } },
+    const datasets = {
+        income:  { label: 'Client Income',  data: income,  color: '#4f46e5', note: 'Actual client receipts collected — last 6 months' },
+        payouts: { label: 'Nurse Payouts',  data: payouts, color: '#f87171', note: 'Projected nurse costs based on active placements — last 6 months' },
+        margin:  { label: 'Margin',         data: margin,  color: '#22c55e', note: 'Client income minus nurse payouts — last 6 months' },
+    };
+
+    let chart = null;
+
+    function draw(mode) {
+        const ds = datasets[mode];
+        noteEl.textContent = ds.note;
+        if (chart) chart.destroy();
+        chart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: ds.label,
+                    data: ds.data,
+                    borderColor: ds.color,
+                    backgroundColor: ds.color + '18',
+                    fill: true,
+                    tension: 0.4,
+                    pointRadius: 4,
+                    pointHoverRadius: 6,
+                    borderWidth: 2,
+                }],
             },
-            plugins: {
-                legend: { display: false },
+            options: {
+                scales: {
+                    y: { beginAtZero: true, grid: { color: '#f1f5f9' } },
+                    x: { grid: { display: false } },
+                },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: ctx => 'UGX ' + Number(ctx.parsed.y).toLocaleString(),
+                        },
+                    },
+                },
             },
-        },
-    });
+        });
+    }
+
+    // ── Stat card syncing ──────────────────────────────────────────────────────
+    const fd       = document.getElementById('financialData');
+    const cardLabel = document.getElementById('financialCardLabel');
+    const cardValue = document.getElementById('financialCardValue');
+    const cardMeta  = { income:  { label:'Client Income This Month',  color:'#4f46e5' },
+                        payouts: { label:'Nurse Payouts This Month',   color:'#f87171' },
+                        margin:  { label:'Margin This Month',          color:'#22c55e' } };
+    const cardData = fd ? {
+        income:  'UGX ' + Number(fd.dataset.income).toLocaleString(),
+        payouts: 'UGX ' + Number(fd.dataset.payouts).toLocaleString(),
+        margin:  'UGX ' + Number(fd.dataset.margin).toLocaleString(),
+    } : {};
+
+    function updateCard(mode) {
+        if (!cardLabel || !cardValue || !cardMeta[mode]) return;
+        cardLabel.textContent   = cardMeta[mode].label;
+        cardValue.textContent   = cardData[mode] || '—';
+        cardValue.style.color   = cardMeta[mode].color;
+    }
+
+    draw('income');
+    updateCard('income');
+    modeEl.addEventListener('change', e => { draw(e.target.value); updateCard(e.target.value); });
 })();
 </script>
 {% endblock %}

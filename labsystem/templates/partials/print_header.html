@@ -1,16 +1,27 @@
 {% load static %}
-<div class="print-header flex justify-between gap-3 items-start pb-2 border-b-2 border-text-main">
-    <div class="print-brand flex items-start gap-2">
-        <img src="{% static 'images/lumina-logo.jpeg' %}" alt="Lumina Logo" class="h-11 rounded-lg">
-        <div class="text-xs">
-            <strong class="block text-text-main text-sm">LUMINA MEDICAL SERVICES</strong>
-            <span class="text-text-muted">lighting up your health.</span><br>
-            <span class="text-text-muted">PO BOX: 200132, Kampala · Kisaasi Kyanja road</span><br>
-            <span class="text-text-muted">Phone: 0750639410 / 0780105909</span>
+<div class="print-header" style="display:flex; justify-content:space-between; align-items:flex-start; padding-bottom:10px; border-bottom:2px solid #1B1E3A; margin-bottom:14px; gap:16px;">
+    <div style="display:flex; align-items:flex-start; gap:10px;">
+        {% if hospital and hospital.logo %}
+            <img src="{{ hospital.logo_url }}" alt="{{ hospital.name }}" style="height:48px; width:48px; object-fit:cover; border-radius:6px; flex-shrink:0;">
+        {% endif %}
+        <div style="font-family:Inter,system-ui,sans-serif;">
+            <div style="font-size:13pt; font-weight:700; color:#1B1E3A; letter-spacing:0.02em; line-height:1.2;">
+                {% if hospital %}{{ hospital.name|upper }}{% else %}TERNAH EMR{% endif %}
+            </div>
+            {% if hospital %}
+            <div style="font-size:8.5pt; color:#5B6478; margin-top:3px; line-height:1.5;">
+                {% if hospital.location %}{{ hospital.location }}<br>{% endif %}
+                {% if hospital.phone_number %}{{ hospital.phone_number }}{% if hospital.email %} &nbsp;·&nbsp; {{ hospital.email }}{% endif %}{% endif %}
+            </div>
+            {% endif %}
         </div>
     </div>
-    <div class="print-meta text-xs text-right">
-        <div><strong>{{ print_title|default:"DOCUMENT" }}</strong></div>
-        {% if print_subtitle %}<div class="text-text-muted">{{ print_subtitle }}</div>{% endif %}
+    <div style="text-align:right; font-family:Inter,system-ui,sans-serif;">
+        <div style="font-size:11pt; font-weight:700; color:#1B1E3A; letter-spacing:0.06em; text-transform:uppercase;">
+            {{ print_title|default:"DOCUMENT" }}
+        </div>
+        {% if print_subtitle %}
+        <div style="font-size:8.5pt; color:#5B6478; margin-top:3px;">{{ print_subtitle }}</div>
+        {% endif %}
     </div>
 </div>

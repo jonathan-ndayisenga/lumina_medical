@@ -1,0 +1,12 @@
+<form method="get" class="flex gap-2 items-center mb-4">
+    <div class="relative flex-1 max-w-sm">
+        <input type="text" name="q" value="{{ q }}" placeholder="{{ placeholder|default:'Search...' }}"
+               class="form-control pl-9">
+        <svg class="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="m21 21-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0Z"/>
+        </svg>
+    </div>
+    {% if extra_filters %}{{ extra_filters }}{% endif %}
+    <button type="submit" class="btn btn-secondary btn-sm">Search</button>
+    {% if q %}<a href="?" class="btn btn-secondary btn-sm">Clear</a>{% endif %}
+</form>

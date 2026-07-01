@@ -2,11 +2,16 @@ import json
 from datetime import timedelta
 from decimal import Decimal
 
+from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.core.paginator import Paginator
 from django.db.models import Q, Sum
 from django.http import HttpResponseForbidden
-from django.shortcuts import get_object_or_404, render
+from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
+
+from accounts.models import AuditLog
+from .forms import HomeCareClientForm, HomeCareNurseForm, HomeCarePlacementForm, HomeCareReceiptForm
 
 from .models import (
     HomeCareClient,
@@ -15,6 +20,18 @@ from .models import (
     HomeCareReceipt,
     HomeCarePlacement,
 )
+
+
+def _audit_delete(request, hospital, model_name, object_id, label):
+    """Write a delete action to AuditLog so it appears in the superadmin audit trail."""
+    AuditLog.objects.create(
+        user=request.user,
+        hospital=hospital,
+        action="delete",
+        model_name=model_name,
+        object_id=str(object_id),
+        details={"label": label, "deleted_by": request.user.get_full_name() or request.user.username},
+    )
 
 
 def homecare_access_required(view_func):
@@ -48,11 +65,24 @@ def homecare_dashboard(request):
     ).select_related("client", "nurse").order_by("-created_at")[:5]
 
     month_start = today.replace(day=1)
+    month_end = (month_start + timedelta(days=32)).replace(day=1) - timedelta(days=1)
     income_this_month = HomeCareReceipt.objects.filter(
         placement__hospital=hospital,
         paid_at__date__gte=month_start,
         paid_at__date__lte=today,
     ).aggregate(total=Sum("amount_paid"))["total"] or Decimal("0")
+
+    # Projected nurse payouts and margin for this month
+    active_this_month = list(
+        HomeCarePlacement.objects.filter(
+            hospital=hospital,
+            contract_start__lte=month_end,
+            contract_end__gte=month_start,
+        ).exclude(status=HomeCarePlacement.STATUS_TERMINATED)
+        .values("nurse_rate")
+    )
+    payout_this_month = sum((p["nurse_rate"] or Decimal("0")) for p in active_this_month)
+    margin_this_month = income_this_month - payout_this_month
 
     # ── Finance chart: last 6 months ───────────────────────────────────────────
     months = []
@@ -100,6 +130,8 @@ def homecare_dashboard(request):
         "active_nurses": active_nurses,
         "active_placements": active_placements,
         "income_this_month": income_this_month,
+        "payout_this_month": payout_this_month,
+        "margin_this_month": margin_this_month,
         "recent_placements": recent_placements,
         "chart_labels_json": json.dumps(month_labels),
         "income_values_json": json.dumps(income_values),
@@ -111,15 +143,17 @@ def homecare_dashboard(request):
 @homecare_access_required
 def nurse_list(request):
     hospital = get_active_hospital(request)
+    q = request.GET.get("q", "").strip()
     nurses = HomeCareNurse.objects.filter(hospital=hospital)
-    return render(request, "homecare/nurse_list.html", {"active_nav": "homecare", "nurses": nurses})
+    if q:
+        nurses = nurses.filter(Q(name__icontains=q) | Q(contact__icontains=q) | Q(qualification__icontains=q))
+    page_obj = Paginator(nurses, 10).get_page(request.GET.get("page"))
+    return render(request, "homecare/nurse_list.html", {"active_nav": "homecare", "page_obj": page_obj, "nurses": page_obj, "q": q})
 
 
 @homecare_access_required
 def register_nurse(request):
     hospital = get_active_hospital(request)
-    from django.contrib import messages
-    from .forms import HomeCareNurseForm
     if request.method == "POST":
         form = HomeCareNurseForm(request.POST)
         if form.is_valid():
@@ -144,17 +178,35 @@ def nurse_detail(request, nurse_id):
 
 
 @homecare_access_required
+def delete_nurse(request, nurse_id):
+    if request.method != "POST":
+        return redirect("homecare_nurse_list")
+    hospital = get_active_hospital(request)
+    nurse = get_object_or_404(HomeCareNurse, pk=nurse_id, hospital=hospital)
+    if nurse.placements.filter(status=HomeCarePlacement.STATUS_ACTIVE).exists():
+        messages.error(request, f"Cannot delete {nurse.name} — they have active placements.")
+        return redirect("homecare_nurse_detail", nurse_id=nurse.pk)
+    name = nurse.name
+    _audit_delete(request, hospital, "HomeCareNurse", nurse_id, name)
+    nurse.delete()
+    messages.success(request, f"Nurse {name} deleted.")
+    return redirect("homecare_nurse_list")
+
+
+@homecare_access_required
 def client_list(request):
     hospital = get_active_hospital(request)
+    q = request.GET.get("q", "").strip()
     clients = HomeCareClient.objects.filter(hospital=hospital)
-    return render(request, "homecare/client_list.html", {"active_nav": "homecare", "clients": clients})
+    if q:
+        clients = clients.filter(Q(name__icontains=q) | Q(contact__icontains=q) | Q(location__icontains=q))
+    page_obj = Paginator(clients, 10).get_page(request.GET.get("page"))
+    return render(request, "homecare/client_list.html", {"active_nav": "homecare", "page_obj": page_obj, "clients": page_obj, "q": q})
 
 
 @homecare_access_required
 def register_client(request):
     hospital = get_active_hospital(request)
-    from django.contrib import messages
-    from .forms import HomeCareClientForm
     if request.method == "POST":
         form = HomeCareClientForm(request.POST)
         if form.is_valid():
@@ -179,17 +231,42 @@ def client_detail(request, client_id):
 
 
 @homecare_access_required
+def delete_client(request, client_id):
+    if request.method != "POST":
+        return redirect("homecare_client_list")
+    hospital = get_active_hospital(request)
+    client = get_object_or_404(HomeCareClient, pk=client_id, hospital=hospital)
+    if client.placements.filter(status=HomeCarePlacement.STATUS_ACTIVE).exists():
+        messages.error(request, f"Cannot delete {client.name} — they have active placements.")
+        return redirect("homecare_client_detail", client_id=client.pk)
+    name = client.name
+    _audit_delete(request, hospital, "HomeCareClient", client_id, name)
+    client.delete()
+    messages.success(request, f"Client {name} deleted.")
+    return redirect("homecare_client_list")
+
+
+@homecare_access_required
 def placement_list(request):
     hospital = get_active_hospital(request)
+    q = request.GET.get("q", "").strip()
+    status = request.GET.get("status", "").strip()
     placements = HomeCarePlacement.objects.filter(hospital=hospital).select_related("client", "nurse")
-    return render(request, "homecare/placement_list.html", {"active_nav": "homecare", "placements": placements})
+    if q:
+        placements = placements.filter(Q(client__name__icontains=q) | Q(nurse__name__icontains=q))
+    if status:
+        placements = placements.filter(status=status)
+    page_obj = Paginator(placements, 10).get_page(request.GET.get("page"))
+    return render(request, "homecare/placement_list.html", {
+        "active_nav": "homecare", "page_obj": page_obj, "placements": page_obj,
+        "q": q, "status": status,
+        "status_choices": HomeCarePlacement.STATUS_CHOICES,
+    })
 
 
 @homecare_access_required
 def placement_create(request):
     hospital = get_active_hospital(request)
-    from django.contrib import messages
-    from .forms import HomeCarePlacementForm
     if request.method == "POST":
         form = HomeCarePlacementForm(request.POST, hospital=hospital)
         if form.is_valid():
@@ -217,10 +294,26 @@ def placement_detail(request, placement_id):
 
 
 @homecare_access_required
+def terminate_placement(request, placement_id):
+    if request.method != "POST":
+        return redirect("homecare_placement_list")
+    hospital = get_active_hospital(request)
+    placement = get_object_or_404(HomeCarePlacement, pk=placement_id, hospital=hospital)
+    if placement.status == HomeCarePlacement.STATUS_TERMINATED:
+        messages.info(request, "This placement is already terminated.")
+        return redirect("homecare_placement_detail", placement_id=placement.pk)
+    reason = (request.POST.get("termination_reason") or "").strip()
+    placement.status = HomeCarePlacement.STATUS_TERMINATED
+    placement.save(update_fields=["status"])
+    _audit_delete(request, hospital, "HomeCarePlacement.terminate", placement_id,
+                  f"{placement.client.name} <- {placement.nurse.name} | Reason: {reason or 'Not specified'}")
+    messages.success(request, f"Placement for {placement.client.name} has been terminated.")
+    return redirect("homecare_placement_detail", placement_id=placement.pk)
+
+
+@homecare_access_required
 def record_receipt(request, placement_id):
     hospital = get_active_hospital(request)
-    from django.contrib import messages
-    from .forms import HomeCareReceiptForm
     placement = get_object_or_404(HomeCarePlacement, pk=placement_id, hospital=hospital)
     if request.method == "POST":
         form = HomeCareReceiptForm(request.POST)
@@ -244,10 +337,16 @@ def record_receipt(request, placement_id):
 @homecare_access_required
 def contract_list(request):
     hospital = get_active_hospital(request)
+    q = request.GET.get("q", "").strip()
     contracts = HomeCareContract.objects.filter(
         placement__hospital=hospital
     ).select_related("placement__client", "placement__nurse")
-    return render(request, "homecare/contract_list.html", {"active_nav": "homecare", "contracts": contracts})
+    if q:
+        contracts = contracts.filter(
+            Q(contract_number__icontains=q) | Q(placement__client__name__icontains=q) | Q(placement__nurse__name__icontains=q)
+        )
+    page_obj = Paginator(contracts, 10).get_page(request.GET.get("page"))
+    return render(request, "homecare/contract_list.html", {"active_nav": "homecare", "page_obj": page_obj, "contracts": page_obj, "q": q})
 
 
 @homecare_access_required
@@ -260,10 +359,16 @@ def contract_print(request, contract_id):
 @homecare_access_required
 def receipt_list(request):
     hospital = get_active_hospital(request)
+    q = request.GET.get("q", "").strip()
     receipts = HomeCareReceipt.objects.filter(
         placement__hospital=hospital
     ).select_related("placement__client", "placement__nurse", "recorded_by")
-    return render(request, "homecare/receipt_list.html", {"active_nav": "homecare", "receipts": receipts})
+    if q:
+        receipts = receipts.filter(
+            Q(receipt_number__icontains=q) | Q(placement__client__name__icontains=q) | Q(placement__nurse__name__icontains=q)
+        )
+    page_obj = Paginator(receipts, 10).get_page(request.GET.get("page"))
+    return render(request, "homecare/receipt_list.html", {"active_nav": "homecare", "page_obj": page_obj, "receipts": page_obj, "q": q})
 
 
 @homecare_access_required

@@ -3488,6 +3488,7 @@ def manage_modules(request):
 
     return render(request, "admin_dashboard/manage_modules.html", {
         "active_nav": "superadmin_modules",
+        "dashboard_title": "Module Prices",
         "dashboard_title": "Module Pricing",
         "dashboard_intro": "Set the monthly price for each platform module. Changes take effect on the next invoice generated.",
         "module_rows": module_rows,
@@ -3656,11 +3657,16 @@ def edit_hospital(request, hospital_id):
     context = superadmin_context(
         request,
         "superadmin_hospitals",
-        "Edit Hospital",
-        "Update hospital name, subdomain, subscription tier, and status.",
+        f"Edit Hospital — {hospital.name}",
+        "Update hospital details, modules, and subscription period.",
     )
-    context.update({"form": form, "object_label": hospital.name, "cancel_url": "manage_hospitals"})
-    return render(request, "admin_dashboard/object_form.html", context)
+    context.update({
+        "form": form,
+        "hospital": hospital,
+        "all_modules": Module.objects.filter(is_active=True),
+        "today": timezone.now().date(),
+    })
+    return render(request, "admin_dashboard/edit_hospital.html", context)
 
 
 @role_required(User.ROLE_SUPERADMIN)

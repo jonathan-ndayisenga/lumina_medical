@@ -29,6 +29,8 @@
                     {{ form.non_field_errors }}
                 </div>
             {% endif %}
+
+            {# Regular fields (text, select, number, date, file, etc.) #}
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {% for field in form %}
                     {% if field.field.widget.input_type != "checkbox" %}
@@ -45,9 +47,30 @@
                     {% endif %}
                 {% endfor %}
             </div>
+
+            {# Multi-select checkbox fields (ModelMultipleChoiceField / CheckboxSelectMultiple) #}
+            {% for field in form %}
+                {% if field.field.widget.input_type == "checkbox" and field.field.widget.allow_multiple_selected %}
+                <div class="mt-2">
+                    <p class="block text-sm font-semibold text-text-main mb-1">{{ field.label }}</p>
+                    {% if field.help_text %}<p class="text-xs text-text-muted mb-2">{{ field.help_text }}</p>{% endif %}
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        {% for choice in field %}
+                        <label class="flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 hover:bg-gray-50 cursor-pointer text-sm">
+                            {{ choice.tag }}
+                            <span class="font-medium text-text-main">{{ choice.choice_label }}</span>
+                        </label>
+                        {% endfor %}
+                    </div>
+                    {% for error in field.errors %}<div class="text-xs text-red-600 mt-1">{{ error }}</div>{% endfor %}
+                </div>
+                {% endif %}
+            {% endfor %}
+
+            {# Single boolean checkboxes — modern toggle style #}
             <div class="toggle-field-group">
                 {% for field in form %}
-                    {% if field.field.widget.input_type == "checkbox" %}
+                    {% if field.field.widget.input_type == "checkbox" and not field.field.widget.allow_multiple_selected %}
                         <div>
                             <label class="modern-toggle" for="{{ field.id_for_label }}">
                                 {{ field }}
@@ -60,6 +83,7 @@
                     {% endif %}
                 {% endfor %}
             </div>
+
             <div class="flex gap-3 flex-wrap pt-4 border-t border-gray-200">
                 <button type="submit" class="btn btn-primary">Save Changes</button>
                 <a href="{% url cancel_url %}" class="btn btn-secondary">Cancel</a>

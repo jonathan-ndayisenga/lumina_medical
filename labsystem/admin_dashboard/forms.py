@@ -107,16 +107,30 @@ class HospitalForm(forms.ModelForm):
 
     def save_module_subscriptions(self, hospital):
         """Sync HospitalModuleSubscription rows to match the selected modules.
-        Core modules (Reception) are force-included EXCEPT when the hospital
-        is a pure Home Care tenant (home_care selected but no clinical modules).
-        A personal-doctor home-care business has no walk-in patients and
-        does not need the Reception module."""
-        selected = set(self.cleaned_data.get("modules") or [])
-        selected_codes = {m.code for m in selected}
-        clinical_codes = {"doctor", "nurse", "lab", "reception", "inventory", "finance"}
-        is_homecare_only = "home_care" in selected_codes and not (selected_codes & clinical_codes)
 
-        if not is_homecare_only:
+        Core modules (Reception) are force-included EXCEPT for Home Care-only
+        hospitals. A pure home-care business has no walk-in patients and doesn't
+        need Reception.
+
+        The carve-out is detected from NON-CORE selected modules only, because
+        the template always submits Reception via a hidden input (is_core=True)
+        regardless of user intent. We ignore core modules in this check.
+        """
+        selected = set(self.cleaned_data.get("modules") or [])
+
+        # Determine intent from non-core selections only
+        non_core_selected_codes = {m.code for m in selected if not m.is_core}
+        clinical_non_core = {"doctor", "nurse", "lab", "inventory", "finance", "hospital_mgmt"}
+        is_homecare_only = (
+            "home_care" in non_core_selected_codes
+            and not (non_core_selected_codes & clinical_non_core)
+        )
+
+        if is_homecare_only:
+            # Remove core modules that were auto-submitted — homecare-only hospitals
+            # should NOT have Reception or other core modules forced onto them.
+            selected = {m for m in selected if not m.is_core}
+        else:
             selected |= set(Module.objects.filter(is_core=True))
 
         selected_ids = {m.pk for m in selected}

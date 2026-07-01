@@ -3,6 +3,7 @@
 {% block page_title %}Contracts{% endblock %}
 {% block page_subtitle %}Auto-generated nurse contracts. Each placement generates one contract.{% endblock %}
 {% block content %}
+{% include "homecare/partials/search_bar.html" with placeholder="Search by contract number, client or nurse..." %}
 <div class="card border border-gray-100 shadow-none overflow-x-auto">
     <table class="w-full text-sm">
         <thead class="bg-gray-50 border-b border-gray-200">
@@ -36,9 +37,10 @@
                 </td>
             </tr>
             {% empty %}
-            <tr><td colspan="6" class="px-4 py-12 text-center text-sm text-text-muted italic">No contracts generated yet. Create a placement to auto-generate one.</td></tr>
+            <tr><td colspan="6" class="px-4 py-12 text-center text-sm text-text-muted italic">{% if q %}No contracts match "{{ q }}".{% else %}No contracts generated yet.{% endif %}</td></tr>
             {% endfor %}
         </tbody>
     </table>
+    {% include "homecare/partials/pagination.html" %}
 </div>
 {% endblock %}

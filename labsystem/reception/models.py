@@ -8,6 +8,23 @@ from django.utils import timezone
 from accounts.models import Hospital
 
 
+def hospital_initials(name: str, fallback: str = "RCT") -> str:
+    """Extract uppercase initials from a hospital name.
+    'Lumina Medical Services' -> 'LMS'
+    'Mercy Hospital'          -> 'MH'
+    'Home_care'               -> 'HC'  (splits on underscore/hyphen too)
+    Words like 'and', 'the', 'of' are skipped.
+    """
+    import re
+    stop = {"and", "the", "of", "a", "an", "for", "in", "at", "by"}
+    # Split on spaces, underscores, and hyphens
+    parts = re.split(r"[\s_\-]+", name or "")
+    initials = "".join(
+        w[0].upper() for w in parts if w and w.lower() not in stop and w[0].isalpha()
+    )
+    return initials or fallback
+
+
 class Patient(models.Model):
     SEX_CHOICES = [
         ("M", "Male"),
@@ -430,7 +447,11 @@ class Payment(models.Model):
     def receipt_number(self):
         stamp = (self.paid_at or timezone.now()).strftime("%Y%m%d")
         suffix = f"{self.pk:06d}" if self.pk else "NEW"
-        return f"RCT-{stamp}-{suffix}"
+        try:
+            prefix = hospital_initials(self.visit.hospital.name)
+        except Exception:
+            prefix = "RCT"
+        return f"{prefix}{stamp}-{suffix}"
 
     @property
     def balance_due(self):

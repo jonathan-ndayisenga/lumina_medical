@@ -35,7 +35,7 @@ class HomeCareClientForm(forms.ModelForm):
 class HomeCarePlacementForm(forms.ModelForm):
     class Meta:
         model = HomeCarePlacement
-        fields = ("client", "nurse", "service_type", "nurse_rate", "client_rate", "contract_start", "contract_end", "notes")
+        fields = ("client", "nurse", "service_type", "rate_period", "nurse_rate", "client_rate", "contract_start", "contract_end", "notes")
         widgets = {
             "contract_start": forms.DateInput(attrs={"type": "date", "class": "form-control"}),
             "contract_end": forms.DateInput(attrs={"type": "date", "class": "form-control"}),

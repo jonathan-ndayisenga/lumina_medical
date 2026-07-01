@@ -1,14 +1,16 @@
 {% extends 'base.html' %}
 {% load static %}
 
-{% block title %}Login - Hospital EMR{% endblock %}
+{% block title %}Login — Ternah EMR{% endblock %}
 
 {% block auth_content %}
 <div class="w-full max-w-md">
     <div class="card bg-white/95 backdrop-blur-sm shadow-2xl border border-white/50">
         <div class="text-center mb-8">
-            <img src="{% static 'images/lumina-logo.jpeg' %}" alt="Lumina" class="h-16 w-auto mx-auto mb-4 rounded-lg shadow-sm">
-            <h1 class="text-3xl font-bold text-brand-dark mb-2">Hospital EMR</h1>
+            <div style="background:#0B1430;border-radius:14px;width:68px;height:68px;display:flex;align-items:center;justify-content:center;margin:0 auto 12px;">
+                <img src="{% static 'images/ternah_icon_white.png' %}" alt="Logo" style="height:44px;width:44px;object-fit:contain;">
+            </div>
+            <h1 class="text-2xl font-bold text-brand-dark mb-1">Hospital EMR</h1>
             <p class="text-text-muted text-sm">Sign in to your account</p>
         </div>
 
@@ -75,8 +77,7 @@
         </form>
 
         <div class="text-center mt-8 pt-6 border-t border-gray-200">
-            <p class="text-xs uppercase tracking-widest text-text-muted/60 mb-1">Lumina Medical Services</p>
-            <p class="text-xs text-text-muted">lighting up your health.</p>
+            <p class="text-xs text-text-muted">Hospital EMR &mdash; powered by Ternah Software</p>
         </div>
     </div>
 </div>
