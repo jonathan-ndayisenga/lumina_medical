@@ -6,6 +6,17 @@ from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import ensure_csrf_cookie
 
 
+def _hospital_admin_home(user) -> str:
+    """Pick the correct landing URL for a hospital_admin based on their subscribed modules."""
+    hospital = getattr(user, "hospital", None)
+    if hospital is not None:
+        codes = set(hospital.active_module_codes)
+        # Homecare-only hospital: skip hospital_dashboard (requires hospital_mgmt)
+        if "home_care" in codes and "hospital_mgmt" not in codes:
+            return reverse("homecare_dashboard")
+    return reverse("hospital_dashboard")
+
+
 @method_decorator(ensure_csrf_cookie, name="dispatch")
 class RoleAwareLoginView(LoginView):
     """Always land users on the correct module after login."""
@@ -18,7 +29,7 @@ class RoleAwareLoginView(LoginView):
         if user.is_superuser or getattr(user, "role", "") == "superadmin":
             return reverse("developer_dashboard")
         if getattr(user, "role", "") == "hospital_admin":
-            return reverse("hospital_dashboard")
+            return _hospital_admin_home(user)
 
         # Multi-role support via groups (non-breaking: role-based still works).
         if user.groups.filter(name="Reception").exists():
@@ -50,7 +61,7 @@ def app_home(request):
         return redirect("developer_dashboard")
 
     if getattr(user, "role", "") == "hospital_admin":
-        return redirect("hospital_dashboard")
+        return redirect(_hospital_admin_home(user))
 
     # Multi-role support via groups (non-breaking: role-based still works).
     if user.groups.filter(name="Reception").exists():
@@ -72,6 +83,13 @@ def app_home(request):
         return redirect("nurse_queue")
 
     return redirect("report_list")
+
+
+def landing(request):
+    """Public-facing Ternah Health landing page."""
+    if request.user.is_authenticated:
+        return redirect("app_home")
+    return render(request, "landing.html")
 
 
 def csrf_failure(request, reason="", template_name="errors/csrf_failure.html"):

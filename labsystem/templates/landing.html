@@ -1,0 +1,446 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ternah Health · Hospital EMR that actually fits</title>
+<style>
+:root{
+  --white:#FFFFFF;
+  --pale:#EEF0FB;
+  --pale2:#E4E8F8;
+  --cream:#FBF8F1;
+  --navy:#0B1430;
+  --indigo:#2A2F66;
+  --blue:#4F5BD5;
+  --soft:#6D8CFF;
+  --ink:#1B1E3A;
+  --slate:#5B6478;
+  --green:#2FA968;
+  --red:#C2363B;
+  --border:#DDE2F4;
+  --wa:#25D366;
+  --r:14px;
+  --serif:Georgia,'Times New Roman',serif;
+  --sans:Inter,'Segoe UI',system-ui,-apple-system,sans-serif;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{font-family:var(--sans);background:var(--white);color:var(--ink);
+     line-height:1.65;-webkit-font-smoothing:antialiased}
+a{color:inherit;text-decoration:none}
+img{max-width:100%;display:block}
+.container{max-width:1120px;margin:0 auto;padding:0 24px}
+
+.reveal{opacity:0;transform:translateY(18px);transition:opacity .6s ease,transform .6s ease}
+.reveal.in{opacity:1;transform:none}
+@media(prefers-reduced-motion:reduce){
+  html{scroll-behavior:auto}
+  .reveal{opacity:1;transform:none;transition:none}
+}
+
+/* Nav */
+.nav{position:sticky;top:0;z-index:100;background:rgba(255,255,255,.9);
+     backdrop-filter:blur(14px);border-bottom:1px solid var(--border)}
+.nav-inner{max-width:1120px;margin:0 auto;padding:0 24px;height:64px;
+           display:flex;align-items:center;justify-content:space-between}
+.brand{display:flex;align-items:center;gap:10px}
+.mark{width:34px;height:34px;border-radius:9px;background:var(--indigo);
+      display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.mark img{width:20px;height:20px;object-fit:contain}
+.brand-name{font-weight:800;font-size:.98rem;letter-spacing:.02em;color:var(--indigo)}
+.brand-name small{display:block;font-weight:600;font-size:.58rem;letter-spacing:.32em;
+                  color:var(--slate);text-transform:uppercase;margin-top:-2px}
+.nav-links{display:flex;align-items:center;gap:6px}
+.nav-link{font-size:.87rem;font-weight:500;color:var(--slate);padding:7px 14px;
+          border-radius:8px;transition:color .15s,background .15s}
+.nav-link:hover{color:var(--indigo);background:var(--pale)}
+.nav-cta{font-size:.87rem;font-weight:700;color:#fff;background:var(--blue);
+         padding:9px 20px;border-radius:9px;transition:filter .15s}
+.nav-cta:hover{filter:brightness(1.08)}
+
+/* Hero */
+.hero{position:relative;background:var(--white);padding:96px 24px 0;overflow:hidden}
+.hero::before{content:"";position:absolute;inset:0;pointer-events:none;
+  background:
+    radial-gradient(52% 42% at 50% 0%, var(--pale) 0%, transparent 70%),
+    linear-gradient(var(--pale2) 1px,transparent 1px),
+    linear-gradient(90deg,var(--pale2) 1px,transparent 1px);
+  background-size:auto,56px 56px,56px 56px;opacity:.5}
+.hero-inner{position:relative;max-width:820px;margin:0 auto;text-align:center}
+.hero-badge{display:inline-flex;align-items:center;gap:8px;background:var(--white);
+            border:1px solid var(--border);border-radius:999px;padding:6px 16px;
+            font-size:.74rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;
+            color:var(--blue);margin-bottom:30px;box-shadow:0 1px 4px rgba(43,47,102,.06)}
+.hero-badge i{width:7px;height:7px;border-radius:50%;background:var(--green);display:inline-block}
+.hero h1{font-family:var(--serif);font-weight:700;color:var(--ink);
+         font-size:clamp(2.5rem,6.4vw,4.2rem);line-height:1.06;letter-spacing:-.015em;
+         text-wrap:balance;margin-bottom:22px}
+.hero h1 em{font-style:italic;color:var(--blue)}
+.hero-sub{font-size:clamp(1rem,2.4vw,1.15rem);color:var(--slate);max-width:580px;
+          margin:0 auto 36px;text-wrap:balance}
+.hero-actions{display:flex;gap:14px;justify-content:center;flex-wrap:wrap;margin-bottom:26px}
+.btn{display:inline-flex;align-items:center;gap:10px;font-weight:700;font-size:.96rem;
+     padding:14px 28px;border-radius:11px;transition:transform .12s,filter .15s,background .15s}
+.btn:hover{transform:translateY(-1px)}
+.btn svg{width:19px;height:19px;fill:currentColor;flex-shrink:0}
+.btn-wa{background:var(--wa);color:#fff}
+.btn-wa:hover{filter:brightness(1.05)}
+.btn-quiet{background:var(--white);color:var(--indigo);border:1px solid var(--border)}
+.btn-quiet:hover{background:var(--pale)}
+.btn-blue{background:var(--blue);color:#fff}
+.btn-blue:hover{filter:brightness(1.08)}
+
+/* Dashboard mock */
+.dash-wrap{position:relative;max-width:940px;margin:52px auto -140px;padding:0 8px}
+.dash{background:#09090B;border:1px solid #26262B;border-radius:20px;
+      box-shadow:0 40px 90px -30px rgba(27,30,58,.45),0 0 0 8px rgba(79,91,213,.05);
+      overflow:hidden;text-align:left}
+.dash-top{display:flex;align-items:center;gap:8px;padding:14px 20px;border-bottom:1px solid #1E1E24}
+.dot{width:9px;height:9px;border-radius:50%}
+.dash-title{margin-left:auto;font-size:.68rem;font-weight:700;letter-spacing:.24em;color:var(--soft)}
+.dash-body{padding:20px;display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+.kpi{background:#141416;border:1px solid #26262B;border-radius:12px;padding:14px 16px}
+.kpi small{display:block;font-size:.66rem;letter-spacing:.06em;color:#8B8FA3;
+           text-transform:uppercase;margin-bottom:6px}
+.kpi b{font-size:1.35rem;color:#fff;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.kpi span{font-size:.7rem;font-weight:700;margin-left:8px}
+.up{color:var(--green)} .dim{color:#8B8FA3}
+.dash-table{grid-column:1/-1;background:#141416;border:1px solid #26262B;border-radius:12px;overflow:hidden}
+.dash-table header{display:grid;grid-template-columns:2fr 1.4fr 1fr;gap:8px;
+  padding:10px 16px;font-size:.64rem;letter-spacing:.1em;text-transform:uppercase;
+  color:#8B8FA3;border-bottom:1px solid #26262B}
+.dash-row{display:grid;grid-template-columns:2fr 1.4fr 1fr;gap:8px;align-items:center;
+  padding:11px 16px;font-size:.82rem;color:#D4D6E4;border-bottom:1px solid #1B1B20}
+.dash-row:last-child{border-bottom:none}
+.pill{justify-self:start;font-size:.66rem;font-weight:700;letter-spacing:.04em;
+      padding:4px 12px;border-radius:999px}
+.p-doc{background:rgba(109,140,255,.14);color:var(--soft)}
+.p-lab{background:rgba(255,255,255,.07);color:#A9ADC4}
+.p-ok{background:rgba(47,169,104,.15);color:#5CCB94}
+@media(max-width:760px){
+  .dash-body{grid-template-columns:repeat(2,1fr)}
+  .dash-row,.dash-table header{grid-template-columns:1.6fr 1fr 1fr}
+}
+
+/* Stats strip */
+.stats{background:var(--pale);padding:200px 24px 56px}
+.stats-inner{max-width:1120px;margin:0 auto;display:grid;
+             grid-template-columns:repeat(4,1fr);gap:24px;text-align:center}
+.stat b{display:block;font-family:var(--serif);font-size:1.9rem;color:var(--indigo);
+        letter-spacing:-.02em;line-height:1.1}
+.stat span{font-size:.74rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--slate)}
+@media(max-width:700px){.stats-inner{grid-template-columns:repeat(2,1fr)}}
+
+/* Section chrome */
+.section{padding:96px 24px}
+.eyebrow{font-size:.72rem;font-weight:800;letter-spacing:.18em;text-transform:uppercase;
+         color:var(--blue);margin-bottom:14px}
+.h2{font-family:var(--serif);font-weight:700;font-size:clamp(1.8rem,4vw,2.6rem);
+    letter-spacing:-.015em;line-height:1.12;text-wrap:balance;margin-bottom:16px}
+.sub{color:var(--slate);max-width:560px;font-size:1rem}
+
+/* Problem section — asymmetric two-column */
+.problem{background:var(--white)}
+.problem-grid{display:grid;grid-template-columns:1fr 1fr;gap:0;margin-top:56px;
+              border:1px solid var(--border);border-radius:var(--r);overflow:hidden}
+.prob-col{padding:36px 32px}
+.prob-col.gap-side{background:linear-gradient(160deg,#FBF3F3 0%,#fff 60%);
+                   border-right:1px solid var(--border)}
+.prob-col.fix-side{background:linear-gradient(160deg,#F0F9F4 0%,#fff 60%)}
+.prob-label{display:inline-block;font-size:.68rem;font-weight:800;letter-spacing:.18em;
+            text-transform:uppercase;padding:5px 14px;border-radius:999px;margin-bottom:24px}
+.gap-side .prob-label{background:var(--red);color:#fff}
+.fix-side .prob-label{background:var(--green);color:#fff}
+.prob-item{display:flex;gap:14px;padding:12px 0;border-bottom:1px solid var(--border);
+           font-size:.93rem;color:var(--ink);align-items:flex-start}
+.prob-item:last-child{border-bottom:none;padding-bottom:0}
+.prob-ico{width:24px;height:24px;border-radius:50%;flex-shrink:0;display:flex;
+          align-items:center;justify-content:center;font-style:normal;
+          font-size:.75rem;font-weight:900;color:#fff;margin-top:1px}
+.gap-side .prob-ico{background:var(--red)}
+.fix-side .prob-ico{background:var(--green)}
+@media(max-width:800px){.problem-grid{grid-template-columns:1fr}.prob-col.gap-side{border-right:none;border-bottom:1px solid var(--border)}}
+
+/* Features — offset layout */
+.features{background:var(--pale)}
+.feat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:22px;margin-top:48px}
+.feat{background:var(--white);border:1px solid var(--border);border-radius:var(--r);
+      padding:30px 28px;transition:transform .18s,box-shadow .18s}
+.feat:hover{transform:translateY(-3px);box-shadow:0 18px 40px -18px rgba(43,47,102,.25)}
+.feat-ico{width:46px;height:46px;border-radius:12px;background:var(--pale);
+          display:flex;align-items:center;justify-content:center;margin-bottom:18px}
+.feat-ico svg{width:22px;height:22px;stroke:var(--blue);fill:none;stroke-width:1.8;
+              stroke-linecap:round;stroke-linejoin:round}
+.feat h3{font-size:1.02rem;font-weight:700;letter-spacing:-.01em;margin-bottom:8px}
+.feat p{font-size:.9rem;color:var(--slate)}
+@media(max-width:860px){.feat-grid{grid-template-columns:1fr}}
+
+/* Modules */
+.modules{background:var(--indigo);color:#fff}
+.modules .eyebrow{color:var(--soft)}
+.modules .h2{color:#fff}
+.modules .sub{color:#B9C0E8}
+.mod-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(215px,1fr));gap:14px;margin-top:44px}
+.mod{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12);
+     border-radius:11px;padding:17px 19px;display:flex;align-items:center;gap:12px;
+     transition:background .15s,border-color .15s}
+.mod:hover{background:rgba(79,91,213,.22);border-color:var(--blue)}
+.mod i{width:8px;height:8px;border-radius:50%;background:var(--soft);flex-shrink:0}
+.mod span{font-size:.9rem;font-weight:600;color:#E7EAFB}
+
+/* Promise band */
+.promise{background:var(--cream);border-top:1px solid #EFE9DB;border-bottom:1px solid #EFE9DB;
+         text-align:center;padding:96px 24px}
+.promise blockquote{font-family:var(--serif);font-style:italic;font-weight:700;
+  font-size:clamp(1.7rem,4.4vw,2.7rem);color:var(--indigo);letter-spacing:-.01em;
+  line-height:1.2;max-width:760px;margin:0 auto 22px;text-wrap:balance}
+.promise p{color:var(--slate);max-width:560px;margin:0 auto 30px;font-size:1rem}
+.promise-ticks{display:flex;gap:28px;justify-content:center;flex-wrap:wrap}
+.ptick{display:flex;align-items:center;gap:9px;font-size:.9rem;font-weight:600;color:var(--ink)}
+.ptick i{width:22px;height:22px;border-radius:50%;background:var(--green);color:#fff;
+         display:flex;align-items:center;justify-content:center;font-size:.72rem;font-weight:800;font-style:normal}
+
+/* CTA */
+.cta{background:var(--white);padding:96px 24px}
+.cta-card{position:relative;overflow:hidden;background:var(--indigo);border-radius:24px;
+          max-width:840px;margin:0 auto;padding:64px 40px;text-align:center}
+.cta-card::before{content:"";position:absolute;inset:0;opacity:.06;
+  background:linear-gradient(rgba(255,255,255,.9) 1px,transparent 1px),
+             linear-gradient(90deg,rgba(255,255,255,.9) 1px,transparent 1px);
+  background-size:36px 36px}
+.cta-card>*{position:relative}
+.cta-card .h2{color:#fff;margin-bottom:12px}
+.cta-card p{color:#B9C0E8;margin-bottom:36px;font-size:.98rem}
+.cta-actions{display:flex;gap:14px;justify-content:center;flex-wrap:wrap}
+.cta-tag{margin-top:30px;font-family:var(--serif);font-style:italic;color:var(--soft);font-size:.92rem}
+
+/* Footer */
+.footer{background:var(--navy);padding:40px 24px 28px}
+.footer-inner{max-width:1120px;margin:0 auto;display:flex;align-items:center;
+              justify-content:space-between;flex-wrap:wrap;gap:18px}
+.footer .brand-name{color:#fff}
+.footer .brand-name small{color:#8A93C8}
+.footer-links{display:flex;gap:22px}
+.footer-links a{font-size:.84rem;color:#9AA2CE;transition:color .15s}
+.footer-links a:hover{color:#fff}
+.footer-copy{max-width:1120px;margin:22px auto 0;text-align:center;
+             font-size:.78rem;color:#5A628F;border-top:1px solid rgba(255,255,255,.07);padding-top:20px}
+
+@media(max-width:540px){
+  .hide-sm{display:none}
+  .hero{padding-top:64px}
+  .section,.promise,.cta{padding:70px 20px}
+  .cta-card{padding:44px 24px}
+  .dash-wrap{margin-bottom:-110px}
+  .stats{padding-top:160px}
+}
+
+/* WA icon in footer link */
+.wa-icon{width:15px;height:15px;fill:currentColor;vertical-align:middle;margin-right:4px}
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="nav-inner">
+    <a href="/" class="brand">
+      <div class="mark">
+        <img src="{% static 'images/ternah_icon_white.png' %}" alt="Ternah">
+      </div>
+      <span class="brand-name">TERNAH<small>Health Systems</small></span>
+    </a>
+    <div class="nav-links">
+      <a href="#features" class="nav-link hide-sm">Features</a>
+      <a href="#modules" class="nav-link hide-sm">Modules</a>
+      <a href="https://wa.me/256787770007" class="nav-link hide-sm" target="_blank" rel="noopener">Contact</a>
+      <a href="/login/" class="nav-cta">Log in</a>
+    </div>
+  </div>
+</nav>
+
+<section class="hero">
+  <div class="hero-inner">
+    <div class="hero-badge"><i></i>Built for African hospitals</div>
+    <h1>Hospital management<br>that <em>actually fits.</em></h1>
+    <p class="hero-sub">
+      Ternah is a modular EMR covering Reception, Doctor, Lab, Nurse, Pharmacy, Home Care and Finance.
+      Subscribe only to what your facility runs, and add modules as you grow.
+    </p>
+    <div class="hero-actions">
+      <a href="https://wa.me/256787770007?text=Hello%2C%20I%27d%20like%20to%20learn%20more%20about%20Ternah%20EMR." class="btn btn-wa" target="_blank" rel="noopener">
+        <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 0 1-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 0 1-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 0 1 2.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0 0 12.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 0 0 5.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 0 0-3.48-8.413Z"/></svg>
+        Chat on WhatsApp
+      </a>
+      <a href="/login/" class="btn btn-quiet">Log in to your account</a>
+    </div>
+  </div>
+
+  <div class="dash-wrap reveal">
+    <div class="dash" role="img" aria-label="Preview of the Ternah EMR dashboard">
+      <div class="dash-top">
+        <span class="dot" style="background:var(--red)"></span>
+        <span class="dot" style="background:#F4B740"></span>
+        <span class="dot" style="background:var(--green)"></span>
+        <span class="dash-title">TERNAH HMS</span>
+      </div>
+      <div class="dash-body">
+        <div class="kpi"><small>Patients today</small><b>248</b><span class="up">+12%</span></div>
+        <div class="kpi"><small>In queue</small><b>12</b><span class="dim">live</span></div>
+        <div class="kpi"><small>Lab pending</small><b>9</b><span class="dim">2 urgent</span></div>
+        <div class="kpi"><small>Revenue · UGX</small><b>8.4M</b><span class="up">+6%</span></div>
+        <div class="dash-table">
+          <header><span>Patient</span><span>Department</span><span>Status</span></header>
+          <div class="dash-row"><span>Nakato A.</span><span>Consultation</span><span class="pill p-doc">With doctor</span></div>
+          <div class="dash-row"><span>Okello J.</span><span>Laboratory</span><span class="pill p-lab">Awaiting results</span></div>
+          <div class="dash-row"><span>Namara P.</span><span>Pharmacy</span><span class="pill p-ok">Ready to dispense</span></div>
+          <div class="dash-row"><span>Ssemanda R.</span><span>Reception</span><span class="pill p-lab">Checked in</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="stats">
+  <div class="stats-inner">
+    <div class="stat reveal"><b>8</b><span>Modules available</span></div>
+    <div class="stat reveal"><b>One</b><span>Platform, every dept</span></div>
+    <div class="stat reveal"><b>Live</b><span>Queues &amp; reports</span></div>
+    <div class="stat reveal"><b>Uganda</b><span>Built in East Africa</span></div>
+  </div>
+</div>
+
+<section class="section problem">
+  <div class="container">
+    <p class="eyebrow">The problem we fix</p>
+    <h2 class="h2">Your departments have systems.<br>Do they talk to each other?</h2>
+    <p class="sub">Most facilities run reception, lab, pharmacy and billing on separate tools or on paper. Patient data gets lost in the handoffs between them.</p>
+    <div class="problem-grid">
+      <div class="prob-col gap-side reveal">
+        <span class="prob-label">Before Ternah</span>
+        <div class="prob-item"><span class="prob-ico">✕</span><span>Files re-registered at every department, every visit</span></div>
+        <div class="prob-item"><span class="prob-ico">✕</span><span>Lab results walked across the compound on paper</span></div>
+        <div class="prob-item"><span class="prob-ico">✕</span><span>Billing leaks: services rendered but never invoiced</span></div>
+        <div class="prob-item"><span class="prob-ico">✕</span><span>Month-end reports assembled by hand, days late</span></div>
+      </div>
+      <div class="prob-col fix-side reveal">
+        <span class="prob-label">With Ternah</span>
+        <div class="prob-item"><span class="prob-ico">✓</span><span>One patient record shared by every department</span></div>
+        <div class="prob-item"><span class="prob-ico">✓</span><span>Results posted to the doctor the moment they are ready</span></div>
+        <div class="prob-item"><span class="prob-ico">✓</span><span>Every service captured, receipted and reconciled</span></div>
+        <div class="prob-item"><span class="prob-ico">✓</span><span>Income vs. expenditure dashboards, always current</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section features" id="features">
+  <div class="container">
+    <p class="eyebrow">Why Ternah</p>
+    <h2 class="h2">Everything a hospital needs.<br>Nothing it doesn't.</h2>
+    <p class="sub" style="margin-bottom:0">Built around the workflows your staff already know, not a template they must adapt to.</p>
+    <div class="feat-grid">
+      <div class="feat reveal">
+        <div class="feat-ico"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="3" width="8" height="8" rx="2"/><rect x="3" y="13" width="8" height="8" rx="2"/><rect x="13" y="13" width="8" height="8" rx="2"/></svg></div>
+        <h3>Modular subscriptions</h3>
+        <p>Pay only for the departments you run. Add Reception, Lab, Pharmacy, Finance or Home Care independently with no locked bundles.</p>
+      </div>
+      <div class="feat reveal">
+        <div class="feat-ico"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19c0-3 2.6-4.6 5.5-4.6s5.5 1.6 5.5 4.6"/><path d="M16 5.5h5M16 9h5M17.5 12.5H21"/></svg></div>
+        <h3>Patient queue management</h3>
+        <p>Real-time queues across reception, doctor, nurse, lab and sonographer with full visit histories and smart routing between departments.</p>
+      </div>
+      <div class="feat reveal">
+        <div class="feat-ico"><svg viewBox="0 0 24 24"><path d="M9 3v5l-4.2 8A2.5 2.5 0 0 0 7 20h10a2.5 2.5 0 0 0 2.2-4L15 8V3"/><path d="M7 3h10M8 13h8"/></svg></div>
+        <h3>Lab reports &amp; results</h3>
+        <p>Structured report templates, printable results under your hospital's own header, and a complete test history per patient.</p>
+      </div>
+      <div class="feat reveal">
+        <div class="feat-ico"><svg viewBox="0 0 24 24"><path d="M4 20V9M10 20V4M16 20v-7M21 20H3"/></svg></div>
+        <h3>Financial oversight</h3>
+        <p>Branded receipts, outstanding balances, salary tracking, expenses, and an income vs. expenditure dashboard the director can trust.</p>
+      </div>
+      <div class="feat reveal">
+        <div class="feat-ico"><svg viewBox="0 0 24 24"><path d="M3 11l9-7 9 7"/><path d="M5 10v9h14v-9"/><path d="M10 19v-5h4v5"/></svg></div>
+        <h3>Home care management</h3>
+        <p>Community nurses, client placements, per-day, week or month billing cycles, service contracts and receipts all linked to your facility.</p>
+      </div>
+      <div class="feat reveal">
+        <div class="feat-ico"><svg viewBox="0 0 24 24"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/><circle cx="12" cy="15" r="1.6"/></svg></div>
+        <h3>Multi-role access control</h3>
+        <p>Doctors, nurses, lab attendants, receptionists and admins each see only what their role requires with granular permissions per hospital.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section modules" id="modules">
+  <div class="container">
+    <p class="eyebrow">Module catalogue</p>
+    <h2 class="h2">Subscribe to what your hospital runs.</h2>
+    <p class="sub">Mix and match modules to fit your facility. Scale as you grow.</p>
+    <div class="mod-grid">
+      <div class="mod reveal"><i></i><span>Reception</span></div>
+      <div class="mod reveal"><i></i><span>Doctor / Consultation</span></div>
+      <div class="mod reveal"><i></i><span>Laboratory</span></div>
+      <div class="mod reveal"><i></i><span>Nursing Care</span></div>
+      <div class="mod reveal"><i></i><span>Pharmacy &amp; Inventory</span></div>
+      <div class="mod reveal"><i></i><span>Finance &amp; Billing</span></div>
+      <div class="mod reveal"><i></i><span>Home Care</span></div>
+      <div class="mod reveal"><i></i><span>Hospital Management</span></div>
+    </div>
+  </div>
+</section>
+
+<section class="promise">
+  <blockquote class="reveal">"One system, shaped around how you work."</blockquote>
+  <p>We are engineers in Kampala building for facilities like yours, deployed hands-on, supported on WhatsApp, and shaped to your workflows rather than the other way round.</p>
+  <div class="promise-ticks">
+    <div class="ptick reveal"><i>✓</i>Same-day setup</div>
+    <div class="ptick reveal"><i>✓</i>On-the-ground support</div>
+    <div class="ptick reveal"><i>✓</i>Built to fit, not a template</div>
+  </div>
+</section>
+
+<section class="cta">
+  <div class="cta-card reveal">
+    <h2 class="h2">Ready to get your hospital online?</h2>
+    <p>Message us on WhatsApp and we will have your facility set up and running within the same day.</p>
+    <div class="cta-actions">
+      <a href="https://wa.me/256787770007?text=Hello%2C%20I%27d%20like%20to%20set%20up%20Ternah%20EMR%20for%20my%20hospital." class="btn btn-wa" target="_blank" rel="noopener">
+        <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 0 1-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 0 1-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 0 1 2.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0 0 12.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 0 0 5.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 0 0-3.48-8.413Z"/></svg>
+        Chat on WhatsApp
+      </a>
+      <a href="/login/" class="btn btn-blue">Log in to existing account</a>
+    </div>
+    <p class="cta-tag">Keep it simple.</p>
+  </div>
+</section>
+
+<footer class="footer">
+  <div class="footer-inner">
+    <a href="/" class="brand">
+      <div class="mark" style="background:rgba(255,255,255,.08)">
+        <img src="{% static 'images/ternah_icon_white.png' %}" alt="Ternah">
+      </div>
+      <span class="brand-name">TERNAH<small>Health Systems</small></span>
+    </a>
+    <div class="footer-links">
+      <a href="/login/">Login</a>
+      <a href="https://wa.me/256787770007" target="_blank" rel="noopener">WhatsApp</a>
+      <a href="#features">Features</a>
+      <a href="#modules">Modules</a>
+    </div>
+  </div>
+  <div class="footer-copy">© 2026 Ternah Software Ltd · Ternah Health Systems · Kampala, Uganda</div>
+</footer>
+
+<script>
+const io = new IntersectionObserver(es=>{
+  es.forEach(e=>{ if(e.isIntersecting){ e.target.classList.add('in'); io.unobserve(e.target);} });
+},{threshold:.12});
+document.querySelectorAll('.reveal').forEach(el=>io.observe(el));
+</script>
+</body>
+</html>
