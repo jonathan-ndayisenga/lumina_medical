@@ -51,6 +51,7 @@ class HospitalForm(forms.ModelForm):
         model = Hospital
         fields = (
             "name",
+            "tagline",
             "subdomain",
             "location",
             "box_number",
@@ -61,6 +62,7 @@ class HospitalForm(forms.ModelForm):
         )
         widgets = {
             "name": forms.TextInput(attrs={"placeholder": "Hospital name", "class": "form-control"}),
+            "tagline": forms.TextInput(attrs={"placeholder": "e.g. Your health, our priority", "class": "form-control"}),
             "subdomain": forms.TextInput(attrs={"placeholder": "hospital-code", "class": "form-control"}),
             "location": forms.TextInput(attrs={"placeholder": "Hospital location", "class": "form-control"}),
             "box_number": forms.TextInput(attrs={"placeholder": "PO Box", "class": "form-control"}),

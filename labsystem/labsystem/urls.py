@@ -21,5 +21,5 @@ urlpatterns = [
     path('homecare/', include('homecare.urls')),
 ]
 
-if settings.DEBUG:
-    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+# Serve uploaded media files in all environments (hospital logos, etc.)
+urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

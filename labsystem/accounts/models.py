@@ -30,6 +30,7 @@ class Hospital(models.Model):
     phone_number = models.CharField(max_length=20, blank=True)
     email = models.EmailField(blank=True)
     logo = models.ImageField(upload_to="hospital_logos/", blank=True, null=True)
+    tagline = models.CharField(max_length=120, blank=True)
     subscription_plan = models.ForeignKey(
         SubscriptionPlan,
         on_delete=models.SET_NULL,

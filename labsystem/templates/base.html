@@ -245,10 +245,14 @@
                 {% block sidebar_brand %}
                     <a href="{% url 'app_home' %}" class="flex items-center gap-3 text-white no-underline px-4 py-4 lg:p-0 mb-6">
                         {% if user.hospital %}
-                            <img src="{{ user.hospital.logo_url }}" alt="{{ user.hospital.name }}" class="w-14 h-14 rounded-lg object-cover bg-white">
+                            <img src="{{ user.hospital.logo_url }}" alt="{{ user.hospital.name }}" class="w-14 h-14 rounded-lg object-cover bg-white flex-shrink-0">
                             <div class="flex flex-col gap-0.5 min-w-0">
                                 <strong class="text-sm font-bold tracking-wide truncate">{{ user.hospital.name|upper }}</strong>
-                                <span class="text-xs text-white/75 truncate">{{ user.hospital.location|default:"" }}</span>
+                                {% if user.hospital.tagline %}
+                                <span class="text-xs text-white/75 truncate italic">{{ user.hospital.tagline }}</span>
+                                {% elif user.hospital.location %}
+                                <span class="text-xs text-white/75 truncate">{{ user.hospital.location }}</span>
+                                {% endif %}
                             </div>
                         {% else %}
                             <div style="width:56px;height:56px;background:#2A2F66;border-radius:10px;display:flex;align-items:center;justify-content:center;padding:8px;flex-shrink:0;">
