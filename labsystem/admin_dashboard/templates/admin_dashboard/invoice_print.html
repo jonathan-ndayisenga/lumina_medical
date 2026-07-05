@@ -2,111 +2,230 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>Invoice {{ invoice.invoice_number }}</title>
+<title>Invoice {{ invoice.invoice_number }} — Ternah Health</title>
 <style>
-    @page { size: A4; margin: 20mm; }
+    @page { size: A4; margin: 18mm 20mm; }
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: Arial, Helvetica, sans-serif; font-size: 11pt; color: #111; line-height: 1.5; }
+    body { font-family: 'Segoe UI', Arial, Helvetica, sans-serif; font-size: 10.5pt; color: #1a1d2e; line-height: 1.55; background: #fff; }
 
-    .header { display: flex; justify-content: space-between; align-items: flex-start; padding-bottom: 16px; border-bottom: 3px solid #4f46e5; margin-bottom: 24px; }
-    .issuer-name { font-size: 20pt; font-weight: bold; color: #4f46e5; }
-    .issuer-sub { font-size: 9pt; color: #666; margin-top: 2px; }
-    .logo { max-height: 64px; max-width: 130px; }
+    /* ── Header ── */
+    .header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        padding-bottom: 18px;
+        border-bottom: 3px solid #2A2F66;
+        margin-bottom: 26px;
+    }
+    .brand { display: flex; align-items: center; gap: 12px; }
+    .brand-logo {
+        width: 52px; height: 52px;
+        background: #2A2F66;
+        border-radius: 10px;
+        display: flex; align-items: center; justify-content: center;
+        padding: 8px; flex-shrink: 0;
+    }
+    .brand-logo img { width: 100%; height: 100%; object-fit: contain; }
+    .brand-text { }
+    .brand-name { font-size: 16pt; font-weight: 700; color: #0B1430; letter-spacing: 0.02em; }
+    .brand-sub { font-size: 8.5pt; color: #5B6478; margin-top: 2px; }
 
-    .invoice-meta { display: flex; justify-content: space-between; margin-bottom: 28px; }
-    .invoice-meta-left { }
-    .invoice-meta-left h2 { font-size: 16pt; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; color: #111; }
-    .invoice-meta-left p { font-size: 9pt; color: #555; margin-top: 2px; }
-    .invoice-meta-right { text-align: right; font-size: 10pt; }
-    .invoice-meta-right .label { color: #888; }
-    .invoice-meta-right .value { font-weight: bold; color: #111; }
+    .invoice-badge {
+        text-align: right;
+    }
+    .invoice-badge .word { font-size: 22pt; font-weight: 800; color: #4F5BD5; letter-spacing: 0.04em; text-transform: uppercase; }
+    .invoice-badge .num { font-size: 9pt; color: #5B6478; margin-top: 3px; font-family: 'Courier New', monospace; }
 
-    .bill-to { margin-bottom: 24px; padding: 14px 16px; background: #f8f9ff; border-left: 4px solid #4f46e5; border-radius: 0 6px 6px 0; }
-    .bill-to h3 { font-size: 9pt; text-transform: uppercase; letter-spacing: 0.5px; color: #888; margin-bottom: 4px; }
-    .bill-to p { font-size: 11pt; font-weight: bold; color: #111; }
-    .bill-to .sub { font-size: 9pt; font-weight: normal; color: #555; }
+    /* ── Meta row ── */
+    .meta-row {
+        display: flex;
+        justify-content: space-between;
+        gap: 20px;
+        margin-bottom: 26px;
+    }
+    .bill-to {
+        flex: 1;
+        background: #EEF0FB;
+        border-left: 4px solid #4F5BD5;
+        border-radius: 0 8px 8px 0;
+        padding: 14px 16px;
+    }
+    .bill-to .label { font-size: 8pt; text-transform: uppercase; letter-spacing: 0.8px; color: #4F5BD5; font-weight: 700; margin-bottom: 5px; }
+    .bill-to .name { font-size: 12pt; font-weight: 700; color: #0B1430; }
+    .bill-to .sub { font-size: 8.5pt; color: #5B6478; margin-top: 3px; }
 
-    table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
-    thead th { background: #4f46e5; color: #fff; padding: 10px 12px; text-align: left; font-size: 9pt; text-transform: uppercase; letter-spacing: 0.5px; }
+    .dates-box {
+        min-width: 190px;
+        text-align: right;
+    }
+    .dates-box .row { margin-bottom: 5px; }
+    .dates-box .dlabel { font-size: 8pt; color: #888; text-transform: uppercase; letter-spacing: 0.5px; }
+    .dates-box .dvalue { font-size: 9.5pt; font-weight: 600; color: #1a1d2e; }
+
+    /* ── Table ── */
+    table { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
+    thead tr { background: #0B1430; }
+    thead th { color: #fff; padding: 10px 14px; text-align: left; font-size: 8.5pt; text-transform: uppercase; letter-spacing: 0.6px; font-weight: 600; }
     thead th:last-child { text-align: right; }
-    tbody td { padding: 10px 12px; border-bottom: 1px solid #e5e7eb; font-size: 10pt; }
-    tbody td:last-child { text-align: right; font-weight: 600; }
+    tbody td { padding: 11px 14px; border-bottom: 1px solid #e8eaf0; font-size: 10pt; }
+    tbody td:last-child { text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
     tbody tr:last-child td { border-bottom: none; }
-    tbody tr.free td { color: #888; }
+    tbody tr.free td { color: #9ca3af; }
+    tbody tr:nth-child(even) { background: #fafbff; }
 
-    .total-row { background: #f0f0ff; }
-    .total-row td { padding: 12px; font-size: 12pt; font-weight: bold; border-top: 2px solid #4f46e5; }
+    .total-block {
+        display: flex;
+        justify-content: flex-end;
+        margin-bottom: 24px;
+    }
+    .total-inner {
+        background: #EEF0FB;
+        border: 1.5px solid #4F5BD5;
+        border-radius: 8px;
+        padding: 14px 24px;
+        min-width: 220px;
+    }
+    .total-inner .trow { display: flex; justify-content: space-between; gap: 32px; margin-bottom: 4px; font-size: 10pt; color: #5B6478; }
+    .total-inner .trow.grand { font-size: 13pt; font-weight: 800; color: #0B1430; border-top: 1.5px solid #4F5BD5; padding-top: 8px; margin-top: 8px; }
+    .total-inner .trow.grand span:last-child { color: #4F5BD5; }
 
-    .footer { margin-top: 32px; padding-top: 16px; border-top: 1px solid #e5e7eb; font-size: 9pt; color: #888; display: flex; justify-content: space-between; }
+    /* ── Notes ── */
+    .notes { font-size: 9.5pt; color: #555; margin-bottom: 24px; background: #fffbf0; border-left: 3px solid #f59e0b; padding: 10px 14px; border-radius: 0 6px 6px 0; }
+    .notes strong { color: #92400e; }
 
-    .btn { display: inline-block; margin-top: 20px; padding: 8px 20px; background: #4f46e5; color: #fff; border: none; border-radius: 6px; cursor: pointer; font-size: 10pt; text-decoration: none; }
-    @media print { .btn { display: none !important; } }
+    /* ── Footer ── */
+    .footer {
+        border-top: 1px solid #e0e3f0;
+        padding-top: 14px;
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-end;
+        font-size: 8.5pt;
+        color: #888;
+    }
+    .footer .thank { font-size: 9pt; color: #4F5BD5; font-weight: 600; }
+    .footer .gen { text-align: right; }
+
+    /* ── Buttons (screen only) ── */
+    .actions { text-align: center; margin-top: 28px; }
+    .btn {
+        display: inline-block;
+        padding: 9px 22px;
+        border-radius: 7px;
+        font-size: 10pt;
+        font-weight: 600;
+        text-decoration: none;
+        cursor: pointer;
+        border: none;
+    }
+    .btn-primary { background: #4F5BD5; color: #fff; }
+    .btn-secondary { background: #e5e7eb; color: #374151; margin-left: 10px; }
+    @media print {
+        .actions { display: none !important; }
+        body { font-size: 10pt; }
+    }
 </style>
 </head>
 <body>
 
+<!-- Header -->
 <div class="header">
-    <div>
-        <div class="issuer-name">Lumina Medical Services</div>
-        <div class="issuer-sub">Platform provider &middot; jonathanndayisenga22@gmail.com</div>
+    <div class="brand">
+        <div class="brand-logo">
+            <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABAAAAAQACAIAAADwf7zUAAAABmJLR0QA/wD/AP+gvaeTAAAgAElEQVR4nOzdaZRV1Z03/mIoQRMgj9CJA3acSLca7I4xEpsQhxCCGhSQucGku1c/3f+nO0sRUaIM0kFUbI1D00RjJIIyjyIEkSigooCiEQEVUCJzLJCxqqjh1v8FrooahqLq3rvvPfvzeZm6dfbXtUjV+dbZ+3fqVVVVFQAAAHGoHzoAAACQPQoAAABERAEAAICIKAAAABARBQAAACKiAAAAQEQUAAAAiIgCAAAAEVEAAAAgIgoAAABERAEAAICIKAAAABARBQAAACKiAAAAQEQUAAAAiIgCAAAAEVEAAAAgIgoAAABERAEAAICIKAAAABARBQAAACKiAAAAQEQUAAAAiIgCAAAAEVEAAAAgIgoAAABERAEAAICIKAAAABARBQAAACKiAAAAQEQUAAAAiIgCAAAAEVEAAAAgIgoAAABERAEAAICIKAAAABARBQAAACKiAAAAQEQUAAAAiIgCAAAAEVEAAAAgIgoAAABERAEAAICIKAAAABARBQAAACKiAAAAQEQUAAAAiIgCAAAAEVEAAAAgIgoAAABERAEAAICIKAAAABARBQAAACKiAAAAQEQUAAAAiIgCAAAAEVEAAAAgIgoAAABERAEAAICIKAAAABARBQAAACKiAAAAQEQUAAAAiIgCAAAAEVEAAAAgIgoAAABERAEAAICIKAAAABARBQAAACKiAAAAQEQUAAAAiIgCAAAAEVEAAAAgIgoAAABERAEAAICIKAAAABARBQAAACKiAAAAQEQUAAAAiIgCAAAAEVEAAAAgIgoAAABERAEAAICIKAAAABARBQAAACKiAAAAQEQUAAAAiIgCAAAAEVEAAAAgIgoAAABERAEAAICIKAAAABARBQAAACKiAAAAQEQUAAAAiIgCAAAAEVEAAAAgIgoAAABERAEAAICIKAAAABARBQAAACKiAAAAQEQUAAAAiIgCAAAAEVEAAAAgIgoAAABERAEAAICIKAAAABARBQAAACKiAAAAQEQUAAAAiIgCAAAAEVEAAAAgIgoAAABERAEAAICIKAAAABARBQAAACKiAAAAQEQUAAAAiIgCAAAAEVEAAAAgIgoAAABERAEAAICIKAAAABARBQAAACKiAAAAQEQUAAAAiIgCAAAAEVEAAAAgIgoAAABERAEAAICIKAAAABARBQAAACKiAAAAQEQUAAAAiIgCAAAAEVEAAAAgIgoAAABERAEAAICIKAAAABARBQAAACKiAAAAQEQUAAAAiIgCAAAAEVEAAAAgIgoAAABERAEAAICIKAAAABARBQAAACKiAAAAQEQUAAAAiIgCAAAAEVEAAAAgIgoAAABERAEAAICIKAAAABARBQAAACKiAAAAQEQUAAAAiIgCAAAAEVEAAAAgIgoAAABERAEAAICIKAAAABARBQAAACKiAAAAQEQUAAAAiIgCAAAAEVEAAAAgIgoAAABERAEAAICIKAAAABARBQAAACKiAAAAQEQUAAAAiIgCAAAAEVEAAAAgIgoAAABERAEAAICIKAAAABARBQAAACKiAAAAQEQUAAAAiIgCAAAAEVEAAAAgIgoAAABERAEAAICIKAAAABARBQAAACKiAAAAQEQUAAAAiIgCAAAAEVEAAAAgIgoAAABERAEAAICIKAAAABARBQAAACKiAAAAQEQUAAAAiIgCAAAAEVEAAAAgIgoAAABERAEAAICIKAAAABARBQAAACKiAAAAQEQUAAAAiIgCAAAAEVEAAAAgIgoAAABERAEAAICIKAAAABARBQAAACKiAAAAQEQUAAAAiIgCAAAAEVEAAAAgIgoAAABERAEAAICIKAAAABARBQAAACKiAAAAQEQUAAAAiIgCAAAAEVEAAAAgIgoAAABERAEAAICIKAAAABARBQAAACKiAAAAQEQUAAAAiIgCAAAAEVEAAAAgIgoAAABERAEAAICIKAAAABARBQAAACKiAAAAQEQUAAAAiIgCAAAAEVEAAAAgIgoAAABERAEAAICIKAAAABARBQAAACKiAAAAQEQUAAAAiIgCAAAAEVEAAAAgIgoAAABERAEAAICIKAAAABARBQAAACKiAAAAQEQUAAAAiIgCAAAAEVEAAAAgIgoAAABERAEAAICIKAAAABARBQAAACKiAAAAQEQUAAAAiIgCAAAAEVEAAAAgIgoAAABERAEAAICIKAAAABARBQAAACKiAAAAQEQUAAAAiIgCAAAAEVEAAAAgIgoAAABERAEAAICIKAAAABARBQAAACKiAAAAQEQUAAAAiIgCAAAAEVEAAAAgIgoAAABERAEAAICIKAAAABARBQAAACKiAAAAQEQUAAAAiIgCAAAAEVEAAAAgIgoAAABERAEAAICIKAAAABARBQAAACKiAAAAQEQUAAAAiIgCAAAAEVEAAAAgIgoAAABERAEAAICIKAAAABARBQAAACKiAAAAQEQUAAAAiIgCAAAAEVEAAAAgIgoAAABERAEAAICIKAAAABARBQAAACKiAAAAQEQUAAAAiIgCAAAAEVEAAAAgIgoAAABERAEAAICIKAAAABARBQAAACKiAAAAQEQUAAAAiIgCAAAAEWkYOgAQ0v4DB5avePP9dRs2btz0x482bdm6vbT0YHFJyYH9ByoqK0Oni1SjRic0bdrk/3zlK+f9basLv3n+FZe3bXXu2aFDBfPMs8/9x42DQqcgp332/zKtLzjv8sv+4W++cW7oUJDT6lVVVYXOAGTb5s1bp0x/ZtGSpatWrXGjn/vO+9tWN/Tt0at754YN4/qrzY4dH7e/uvvu3XtCByHPtDr37H/sff0/9rq+ceNGobNALlIAIC5LXnr1V4+Pe2Xp8lQqFToLx+eMM07/xbDbfnBFu9BBsqSqquqGf/7PRUuWhg5CvvrqV1vcNuA/e3S7LnQQyDkKAMTi/XUbfjHyAbdTea1evXo39O1x5+BbYngUMH7CtNuH3BU6BXnvisvaPnDff7VofnLoIJBDFACIwrSZz/588IjS0oOhg5AGP7ii3a/+575k7234aNPmDlf3PFBcHDoISXDGGac/+fgjrc49K3QQyBUKACRcZWVq4M+HT53+TOggpFPHDlc+9r//Xa9evdBBMqKyMtWt1z+/vvIPoYOQHP/nK82mTnzc4WA4xBhQSLKqqip3/4k0f8EL/zPmidApMmXMY7979096fbJ7T9+f/sfmzVtDB4Gc4AkAJNndox7+30fHhk5BRjRs2HDB3CnJ29Wwes17nbr2Ky8vDx2EBGr9zfNmTf3tCSecEDoIBOYJACTWsuUrf/XrJ0OnIFMqKiqG3/XfoVOkWVlZ2U23DHH3T4asemft3aMeDp0CwlMAIJkOHiy7+dZhZn0m2+IlS1eveS90inQa9cDod99bFzoFSfbEkxPffGtV6BQQmAIAyTR56qyPNm0OnYKMG/f0lNAR0mb5ipW//s1ToVOQcKlUasjwe/1xhMgpAJBAFRUVY2z+icP8515Ixq1McXHJgNvuTMZ/CznuD2+vfu75F0OngJAUAEigJS+/ZthFJHZ9sjsZu4DuHHHfxj9uCp2CWDz0P782BIWYKQCQQP64FZW33l4dOkJdLV6ydNKUWaFTEJHVa95btnxl6BQQjAIACbTwhSWhI5A9H374x9AR6mTXJ7v73zrUn2PJsklTZ4aOAMEoAJA0209+acfKK9jgAAAAASUVORK5CYII=" alt="Ternah">
+        </div>
+        <div class="brand-text">
+            <div class="brand-name">Ternah Health</div>
+            <div class="brand-sub">Platform provider &middot; ternah22@gmail.com</div>
+        </div>
+    </div>
+    <div class="invoice-badge">
+        <div class="word">Invoice</div>
+        <div class="num"># {{ invoice.invoice_number }}</div>
     </div>
 </div>
 
-<div class="invoice-meta">
-    <div class="invoice-meta-left">
-        <h2>Invoice</h2>
-        <p># {{ invoice.invoice_number }}</p>
+<!-- Meta: Bill To + Dates -->
+<div class="meta-row">
+    <div class="bill-to">
+        <div class="label">Bill To</div>
+        <div class="name">{{ invoice.hospital.name }}</div>
+        <div class="sub">
+            {% if invoice.hospital.location %}{{ invoice.hospital.location }}{% endif %}
+            {% if invoice.hospital.email %} &middot; {{ invoice.hospital.email }}{% endif %}
+            {% if invoice.hospital.phone_number %} &middot; {{ invoice.hospital.phone_number }}{% endif %}
+        </div>
     </div>
-    <div class="invoice-meta-right">
-        <div><span class="label">Date issued: </span><span class="value">{{ invoice.generated_at|date:"d F Y" }}</span></div>
-        <div><span class="label">Period: </span><span class="value">{{ invoice.period_start|date:"d M Y" }} — {{ invoice.period_end|date:"d M Y" }}</span></div>
+    <div class="dates-box">
+        <div class="row">
+            <div class="dlabel">Date Issued</div>
+            <div class="dvalue">{{ invoice.generated_at|date:"d F Y" }}</div>
+        </div>
+        <div class="row">
+            <div class="dlabel">Billing Period</div>
+            <div class="dvalue">{{ invoice.period_start|date:"d M Y" }} to {{ invoice.period_end|date:"d M Y" }}</div>
+        </div>
         {% if invoice.hospital.subscription_end_date %}
-        <div><span class="label">Subscription ends: </span><span class="value">{{ invoice.hospital.subscription_end_date|date:"d M Y" }}</span></div>
+        <div class="row">
+            <div class="dlabel">Subscription Ends</div>
+            <div class="dvalue">{{ invoice.hospital.subscription_end_date|date:"d M Y" }}</div>
+        </div>
         {% endif %}
     </div>
 </div>
 
-<div class="bill-to">
-    <h3>Bill To</h3>
-    <p>{{ invoice.hospital.name }}</p>
-    <p class="sub">{{ invoice.hospital.location }}{% if invoice.hospital.email %} &middot; {{ invoice.hospital.email }}{% endif %}{% if invoice.hospital.phone_number %} &middot; {{ invoice.hospital.phone_number }}{% endif %}</p>
-</div>
-
+<!-- Line Items -->
 <table>
     <thead>
         <tr>
             <th style="width:50%">Module / Service</th>
             <th>Description</th>
-            <th>Amount</th>
+            <th>Amount (UGX)</th>
         </tr>
     </thead>
     <tbody>
         {% for module in active_modules %}
         <tr {% if module.monthly_price == 0 %}class="free"{% endif %}>
-            <td><strong>{{ module.name }}</strong>{% if module.is_core %} <span style="font-size:8pt;color:#4f46e5;">(Core)</span>{% endif %}</td>
-            <td>Monthly subscription</td>
-            <td>{% if module.monthly_price > 0 %}UGX {{ module.monthly_price }}{% else %}Free{% endif %}</td>
+            <td>
+                <strong>{{ module.name }}</strong>
+                {% if module.is_core %}<span style="font-size:8pt;color:#4F5BD5;"> (Core)</span>{% endif %}
+            </td>
+            <td style="color:#5B6478;">Monthly subscription</td>
+            <td>{% if module.monthly_price > 0 %}{{ module.monthly_price }}{% else %}—{% endif %}</td>
         </tr>
         {% endfor %}
-        <tr class="total-row">
-            <td colspan="2">Total Due</td>
-            <td>UGX {{ invoice.total_amount }}</td>
-        </tr>
     </tbody>
 </table>
 
-{% if invoice.notes %}
-<div style="font-size:10pt; color:#555; margin-bottom:16px;"><strong>Notes:</strong> {{ invoice.notes }}</div>
-{% endif %}
-
-<div class="footer">
-    <div>Thank you for using Lumina Medical Services.</div>
-    <div>Generated by {{ invoice.generated_by.get_full_name|default:invoice.generated_by.username|default:"System" }}</div>
+<!-- Total -->
+<div class="total-block">
+    <div class="total-inner">
+        <div class="trow grand">
+            <span>Total Due</span>
+            <span>UGX {{ invoice.total_amount }}</span>
+        </div>
+    </div>
 </div>
 
-<div style="text-align:center;">
-    <button onclick="window.print()" class="btn">Print / Save as PDF</button>
-    <a href="{% url 'invoice_list' invoice.hospital.pk %}" class="btn" style="background:#6b7280; margin-left:8px;">Back to Invoices</a>
+{% if invoice.notes %}
+<div class="notes"><strong>Note:</strong> {{ invoice.notes }}</div>
+{% endif %}
+
+<!-- Footer -->
+<div class="footer">
+    <div>
+        <div class="thank">Thank you for choosing Ternah Health.</div>
+        <div style="margin-top:3px;">For queries, contact us at ternah22@gmail.com</div>
+    </div>
+    <div class="gen">
+        Generated by {{ invoice.generated_by.get_full_name|default:invoice.generated_by.username|default:"System" }}<br>
+        {{ invoice.generated_at|date:"d F Y, H:i" }}
+    </div>
+</div>
+
+<div class="actions">
+    <button onclick="window.print()" class="btn btn-primary">Print / Save PDF</button>
+    <a href="{% url 'invoice_list' invoice.hospital.pk %}" class="btn btn-secondary">Back to Invoices</a>
 </div>
 
 </body>

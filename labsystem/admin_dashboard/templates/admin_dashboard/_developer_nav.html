@@ -11,6 +11,8 @@
         <div class="text-xs font-bold uppercase tracking-widest text-white/60 mb-2">Billing</div>
         <div class="space-y-1">
             <a href="{% url 'manage_subscription_payments' %}" class="sidebar-link {% if active_nav == 'superadmin_payments' %}active{% endif %}">Payments</a>
+            <a href="{% url 'superadmin_invoices' %}" class="sidebar-link {% if active_nav == 'superadmin_invoices' %}active{% endif %}">Invoices</a>
+            <a href="{% url 'superadmin_receipts' %}" class="sidebar-link {% if active_nav == 'superadmin_receipts' %}active{% endif %}">Receipts</a>
             <a href="{% url 'manage_modules' %}" class="sidebar-link {% if active_nav == 'superadmin_modules' %}active{% endif %}">Module Prices</a>
         </div>
     </div>

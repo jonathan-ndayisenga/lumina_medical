@@ -1,0 +1,73 @@
+{% extends 'admin_dashboard/developer_base.html' %}
+{% block title %}Invoices — Ternah Health{% endblock %}
+{% block page_title %}Invoices{% endblock %}
+{% block page_subtitle %}All invoices generated across hospitals. Filter by hospital to narrow the list.{% endblock %}
+
+{% block developer_content %}
+<div class="space-y-5">
+
+    {# ── Filter bar ── #}
+    <div class="card shadow-none border border-gray-100">
+        <form method="get" class="flex flex-wrap gap-3 items-end">
+            <div>
+                <label class="block text-xs font-semibold text-text-muted mb-1">Hospital</label>
+                <select name="hospital" class="form-control" style="min-width:220px;">
+                    <option value="">All Hospitals</option>
+                    {% for h in hospitals %}
+                    <option value="{{ h.pk }}" {% if selected_hospital_id == h.pk|stringformat:"s" %}selected{% endif %}>{{ h.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <button type="submit" class="btn btn-primary">Filter</button>
+            {% if selected_hospital_id %}
+            <a href="{% url 'superadmin_invoices' %}" class="btn btn-secondary">Clear</a>
+            {% endif %}
+        </form>
+    </div>
+
+    {# ── Table ── #}
+    <div class="card shadow-none border border-gray-100 overflow-x-auto">
+        <table class="w-full text-sm">
+            <thead class="bg-gray-50 border-b border-gray-200">
+                <tr>
+                    <th class="text-left px-4 py-3 text-xs font-semibold uppercase text-text-muted">Invoice #</th>
+                    <th class="text-left px-4 py-3 text-xs font-semibold uppercase text-text-muted">Hospital</th>
+                    <th class="text-left px-4 py-3 text-xs font-semibold uppercase text-text-muted">Period</th>
+                    <th class="text-left px-4 py-3 text-xs font-semibold uppercase text-text-muted">Amount</th>
+                    <th class="text-left px-4 py-3 text-xs font-semibold uppercase text-text-muted">Status</th>
+                    <th class="text-left px-4 py-3 text-xs font-semibold uppercase text-text-muted">Generated</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+                {% for inv in invoices %}
+                <tr class="hover:bg-gray-50">
+                    <td class="px-4 py-3 font-mono text-xs text-text-muted">{{ inv.invoice_number }}</td>
+                    <td class="px-4 py-3 font-semibold text-text-main">{{ inv.hospital.name }}</td>
+                    <td class="px-4 py-3 text-text-muted whitespace-nowrap">{{ inv.period_start|date:"d M Y" }} to {{ inv.period_end|date:"d M Y" }}</td>
+                    <td class="px-4 py-3 font-bold text-text-main">UGX {{ inv.total_amount|floatformat:0 }}</td>
+                    <td class="px-4 py-3">
+                        {% if inv.is_paid %}
+                        <span class="inline-block px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700">Paid</span>
+                        {% else %}
+                        <span class="inline-block px-2 py-0.5 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-700">Unpaid</span>
+                        {% endif %}
+                    </td>
+                    <td class="px-4 py-3 text-text-muted">{{ inv.generated_at|date:"d M Y" }}</td>
+                    <td class="px-4 py-3 flex gap-2">
+                        <a href="{% url 'invoice_print' inv.pk %}" class="btn btn-secondary btn-sm" target="_blank">Print</a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="7" class="px-4 py-12 text-center text-sm text-text-muted italic">
+                        No invoices found{% if selected_hospital_id %} for the selected hospital{% endif %}.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+</div>
+{% endblock %}

@@ -303,16 +303,28 @@ class HospitalSubscriptionPayment(models.Model):
         related_name="subscription_payments",
     )
     amount = models.DecimalField(max_digits=10, decimal_places=2)
+    months_paid = models.PositiveIntegerField(default=1)
     period_start = models.DateField()
     period_end = models.DateField()
     paid_at = models.DateTimeField(auto_now_add=True)
     notes = models.TextField(blank=True)
+    receipt_number = models.CharField(max_length=50, unique=True, blank=True)
 
     class Meta:
         ordering = ["-paid_at"]
 
     def __str__(self):
         return f"{self.hospital.name} - {self.amount}"
+
+    def save(self, *args, **kwargs):
+        if not self.receipt_number:
+            from django.utils.timezone import now as _now
+            stamp = _now().strftime("%Y%m%d")
+            last = HospitalSubscriptionPayment.objects.filter(
+                receipt_number__startswith=f"TH-RCT-{stamp}"
+            ).count()
+            self.receipt_number = f"TH-RCT-{stamp}-{str(last + 1).zfill(4)}"
+        super().save(*args, **kwargs)
 
 
 class HospitalInvoice(models.Model):

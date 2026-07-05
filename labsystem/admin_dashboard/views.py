@@ -3583,6 +3583,99 @@ def invoice_list(request, hospital_id):
     })
 
 
+@role_required(User.ROLE_SUPERADMIN)
+def superadmin_invoices(request):
+    from accounts.models import HospitalInvoice
+    hospitals = Hospital.objects.order_by("name")
+    selected_hospital_id = request.GET.get("hospital", "")
+    qs = HospitalInvoice.objects.select_related("hospital").order_by("-generated_at")
+    if selected_hospital_id:
+        qs = qs.filter(hospital_id=selected_hospital_id)
+
+    # Annotate paid status by checking if any payment period overlaps the invoice period
+    invoice_list_data = []
+    for inv in qs:
+        is_paid = HospitalSubscriptionPayment.objects.filter(
+            hospital=inv.hospital,
+            period_start__lte=inv.period_end,
+            period_end__gte=inv.period_start,
+        ).exists()
+        inv.is_paid = is_paid
+        invoice_list_data.append(inv)
+
+    context = superadmin_context(
+        request,
+        "superadmin_invoices",
+        "Invoices",
+        "All invoices generated across hospitals.",
+    )
+    context.update({
+        "invoices": invoice_list_data,
+        "hospitals": hospitals,
+        "selected_hospital_id": selected_hospital_id,
+    })
+    return render(request, "admin_dashboard/superadmin_invoices.html", context)
+
+
+@role_required(User.ROLE_SUPERADMIN)
+def superadmin_receipts(request):
+    hospitals = Hospital.objects.order_by("name")
+    selected_hospital_id = request.GET.get("hospital", "")
+    qs = HospitalSubscriptionPayment.objects.select_related("hospital").exclude(receipt_number="").order_by("-paid_at")
+    if selected_hospital_id:
+        qs = qs.filter(hospital_id=selected_hospital_id)
+
+    context = superadmin_context(
+        request,
+        "superadmin_receipts",
+        "Receipts",
+        "Payment receipts issued to hospitals.",
+    )
+    context.update({
+        "payments": qs,
+        "hospitals": hospitals,
+        "selected_hospital_id": selected_hospital_id,
+    })
+    return render(request, "admin_dashboard/superadmin_receipts.html", context)
+
+
+@role_required(User.ROLE_SUPERADMIN)
+def receipt_print(request, payment_id):
+    payment = get_object_or_404(HospitalSubscriptionPayment, pk=payment_id)
+    active_modules = Module.objects.filter(
+        hospital_subscriptions__hospital=payment.hospital,
+        hospital_subscriptions__is_active=True,
+    ).order_by("display_order")
+    return render(request, "admin_dashboard/receipt_print.html", {
+        "payment": payment,
+        "hospital": payment.hospital,
+        "active_modules": active_modules,
+    })
+
+
+@role_required(User.ROLE_SUPERADMIN)
+def hospital_modules_json(request, hospital_id):
+    import json as _json
+    from django.http import JsonResponse
+    hospital = get_object_or_404(Hospital, pk=hospital_id)
+    active_ids = set(
+        hospital.module_subscriptions.filter(is_active=True).values_list("module_id", flat=True)
+    )
+    modules = Module.objects.order_by("display_order")
+    data = [
+        {
+            "id": m.pk,
+            "name": m.name,
+            "monthly_price": float(m.monthly_price),
+            "is_core": m.is_core,
+            "active": m.pk in active_ids,
+        }
+        for m in modules
+    ]
+    today = timezone.now().date().isoformat()
+    return JsonResponse({"modules": data, "today": today})
+
+
 # =====================================
 # SUPERADMIN VIEWS - Hospitals Management
 # =====================================
@@ -3801,24 +3894,57 @@ def delete_subscription_plan(request, plan_id):
 @role_required(User.ROLE_SUPERADMIN)
 def manage_subscription_payments(request):
     payments = HospitalSubscriptionPayment.objects.select_related("hospital").order_by("-paid_at")
+    hospitals = Hospital.objects.order_by("name")
 
     if request.method == "POST":
-        form = HospitalSubscriptionPaymentForm(request.POST)
-        if form.is_valid():
-            form.save()
-            messages.success(request, "Subscription payment recorded successfully.")
-            return redirect("manage_subscription_payments")
-        messages.error(request, "Please fix the payment details below.")
-    else:
-        form = HospitalSubscriptionPaymentForm()
+        hospital_id = request.POST.get("hospital")
+        amount_raw = request.POST.get("amount", "0")
+        period_start_raw = request.POST.get("period_start", "")
+        period_end_raw = request.POST.get("period_end", "")
+        months_paid_raw = request.POST.get("months_paid", "1")
+        notes = request.POST.get("notes", "")
+
+        try:
+            hospital = Hospital.objects.get(pk=hospital_id)
+            amount = Decimal(amount_raw)
+            period_start = timezone.datetime.fromisoformat(period_start_raw).date()
+            period_end = timezone.datetime.fromisoformat(period_end_raw).date()
+            months_paid = max(1, int(months_paid_raw))
+        except Exception:
+            messages.error(request, "Invalid payment details. Please check the form and try again.")
+            context = superadmin_context(request, "superadmin_payments", "Subscription Payments", "")
+            context.update({"payments": payments, "hospitals": hospitals, "duration_options": [1, 3, 6, 12]})
+            return render(request, "admin_dashboard/manage_subscription_payments.html", context)
+
+        payment = HospitalSubscriptionPayment.objects.create(
+            hospital=hospital,
+            amount=amount,
+            months_paid=months_paid,
+            period_start=period_start,
+            period_end=period_end,
+            notes=notes,
+        )
+        # Extend subscription end date by months_paid
+        base = hospital.subscription_end_date if (hospital.subscription_end_date and hospital.subscription_end_date >= period_start) else period_start
+        month = base.month - 1 + months_paid
+        year = base.year + month // 12
+        month = month % 12 + 1
+        import calendar as _cal
+        day = min(base.day, _cal.monthrange(year, month)[1])
+        from datetime import date as _date
+        hospital.subscription_end_date = _date(year, month, day)
+        hospital.save(update_fields=["subscription_end_date"])
+
+        messages.success(request, f"Payment recorded and receipt {payment.receipt_number} generated.")
+        return redirect("receipt_print", payment_id=payment.pk)
 
     context = superadmin_context(
         request,
         "superadmin_payments",
         "Subscription Payments",
-        "Track incoming payments from hospitals for subscription periods.",
+        "Record hospital subscription payments.",
     )
-    context.update({"payments": payments, "form": form})
+    context.update({"payments": payments, "hospitals": hospitals, "duration_options": [1, 3, 6, 12]})
     return render(request, "admin_dashboard/manage_subscription_payments.html", context)
 
 

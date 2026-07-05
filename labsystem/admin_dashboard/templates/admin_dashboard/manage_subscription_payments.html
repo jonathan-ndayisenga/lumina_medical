@@ -1,28 +1,75 @@
 {% extends 'admin_dashboard/developer_base.html' %}
-{% block title %}Payments — Ternah EMR{% endblock %}
+{% block title %}Payments — Ternah Health{% endblock %}
 {% block page_title %}Payments{% endblock %}
-{% block page_subtitle %}Record hospital subscription payments and review platform income history.{% endblock %}
+{% block page_subtitle %}Record subscription payments from hospitals. Modules and totals auto-fill based on the selected hospital.{% endblock %}
 
 {% block developer_content %}
 <div class="space-y-6">
 
     {# ── Record Payment ── #}
     <div class="card">
-        <h3 class="text-sm font-semibold text-text-main mb-4">Record New Payment</h3>
-        <form method="post" class="space-y-4">
+        <h3 class="text-sm font-semibold text-text-main mb-5">Record New Payment</h3>
+        <form method="post" id="payment-form" class="space-y-5">
             {% csrf_token %}
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {% for field in form %}
-                    <div>
-                        <label for="{{ field.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">{{ field.label }}</label>
-                        {{ field }}
-                        {% for error in field.errors %}
-                            <div class="text-xs text-red-600 mt-1">{{ error }}</div>
-                        {% endfor %}
-                    </div>
-                {% endfor %}
+
+            {# Step 1: Hospital #}
+            <div>
+                <label class="block text-sm font-semibold text-text-main mb-1">Hospital</label>
+                <select name="hospital" id="id_hospital" class="form-control" required>
+                    <option value="">Select hospital…</option>
+                    {% for h in hospitals %}
+                    <option value="{{ h.pk }}">{{ h.name }}</option>
+                    {% endfor %}
+                </select>
             </div>
-            <button type="submit" class="btn btn-primary">Save Payment</button>
+
+            {# Step 2: Duration toggle #}
+            <div>
+                <label class="block text-sm font-semibold text-text-main mb-2">Duration</label>
+                <div class="flex gap-3 flex-wrap" id="duration-btns">
+                    {% for m in duration_options %}
+                    <button type="button"
+                        class="duration-btn px-4 py-2 rounded-lg border text-sm font-semibold transition-colors"
+                        data-months="{{ m }}"
+                        style="border-color:#d1d5db; color:#374151;">
+                        {{ m }} month{% if m != 1 %}s{% endif %}
+                    </button>
+                    {% endfor %}
+                </div>
+                <input type="hidden" name="months_paid" id="id_months_paid" value="1">
+            </div>
+
+            {# Step 3: Modules – loaded via AJAX #}
+            <div id="modules-section" style="display:none;">
+                <label class="block text-sm font-semibold text-text-main mb-2">Modules (edit if hospital changed packages)</label>
+                <div id="modules-list" class="grid grid-cols-1 sm:grid-cols-2 gap-2"></div>
+            </div>
+
+            {# Step 4: Period dates #}
+            <div id="period-section" style="display:none;" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-semibold text-text-main mb-1">Period Start</label>
+                    <input type="date" name="period_start" id="id_period_start" class="form-control" required>
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-text-main mb-1">Period End</label>
+                    <input type="date" name="period_end" id="id_period_end" class="form-control" required>
+                </div>
+            </div>
+
+            {# Step 5: Total + Notes #}
+            <div id="total-section" style="display:none;" class="space-y-4">
+                <div class="bg-indigo-50 border border-indigo-200 rounded-xl px-5 py-4 flex items-center justify-between">
+                    <span class="text-sm font-semibold text-indigo-800">Total Amount</span>
+                    <span id="total-display" class="text-xl font-bold text-indigo-700">UGX 0</span>
+                    <input type="hidden" name="amount" id="id_amount" value="0">
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-text-main mb-1">Notes (optional)</label>
+                    <textarea name="notes" class="form-control" rows="2" placeholder="e.g. Paid via MTN Mobile Money, reference #123456"></textarea>
+                </div>
+                <button type="submit" class="btn btn-primary">Save Payment &amp; Generate Receipt</button>
+            </div>
         </form>
     </div>
 
@@ -32,34 +79,36 @@
         <table class="w-full text-sm">
             <thead class="bg-gray-50 border-b border-gray-200">
                 <tr>
+                    <th class="text-left px-4 py-3 text-xs font-semibold uppercase text-text-muted">Receipt #</th>
                     <th class="text-left px-4 py-3 text-xs font-semibold uppercase text-text-muted">Hospital</th>
                     <th class="text-left px-4 py-3 text-xs font-semibold uppercase text-text-muted">Amount</th>
                     <th class="text-left px-4 py-3 text-xs font-semibold uppercase text-text-muted">Period</th>
-                    <th class="text-left px-4 py-3 text-xs font-semibold uppercase text-text-muted">Paid At</th>
+                    <th class="text-left px-4 py-3 text-xs font-semibold uppercase text-text-muted">Date</th>
                     <th class="text-left px-4 py-3 text-xs font-semibold uppercase text-text-muted">Notes</th>
-                    <th class="text-left px-4 py-3 text-xs font-semibold uppercase text-text-muted"></th>
+                    <th></th>
                 </tr>
             </thead>
             <tbody class="divide-y divide-gray-100">
                 {% for payment in payments %}
                 <tr class="hover:bg-gray-50">
+                    <td class="px-4 py-3 font-mono text-xs text-text-muted">{{ payment.receipt_number }}</td>
                     <td class="px-4 py-3 font-semibold text-text-main">{{ payment.hospital.name }}</td>
                     <td class="px-4 py-3 font-semibold text-green-700">UGX {{ payment.amount|floatformat:0 }}</td>
                     <td class="px-4 py-3 text-text-muted whitespace-nowrap">
-                        {{ payment.period_start|date:"d M Y" }} — {{ payment.period_end|date:"d M Y" }}
+                        {{ payment.period_start|date:"d M Y" }} to {{ payment.period_end|date:"d M Y" }}
                     </td>
-                    <td class="px-4 py-3 text-text-muted whitespace-nowrap">{{ payment.paid_at|date:"d M Y H:i" }}</td>
-                    <td class="px-4 py-3 text-text-muted">{{ payment.notes|truncatewords:10|default:"—" }}</td>
+                    <td class="px-4 py-3 text-text-muted whitespace-nowrap">{{ payment.paid_at|date:"d M Y" }}</td>
+                    <td class="px-4 py-3 text-text-muted">{{ payment.notes|truncatewords:8|default:"—" }}</td>
                     <td class="px-4 py-3">
                         <div class="flex gap-2">
-                            <a href="{% url 'edit_subscription_payment' payment.pk %}" class="btn btn-secondary btn-sm">Edit</a>
+                            <a href="{% url 'receipt_print' payment.pk %}" class="btn btn-secondary btn-sm" target="_blank">Receipt</a>
                             <a href="{% url 'delete_subscription_payment' payment.pk %}" class="btn btn-danger btn-sm">Delete</a>
                         </div>
                     </td>
                 </tr>
                 {% empty %}
                 <tr>
-                    <td colspan="6" class="px-4 py-12 text-center text-sm text-text-muted italic">
+                    <td colspan="7" class="px-4 py-12 text-center text-sm text-text-muted italic">
                         No subscription payments recorded yet.
                     </td>
                 </tr>
@@ -69,4 +118,111 @@
     </div>
 
 </div>
+
+<script>
+(function () {
+    const hospitalSel = document.getElementById('id_hospital');
+    const monthsInput = document.getElementById('id_months_paid');
+    const amountInput = document.getElementById('id_amount');
+    const totalDisplay = document.getElementById('total-display');
+    const modulesList = document.getElementById('modules-list');
+    const modulesSection = document.getElementById('modules-section');
+    const periodSection = document.getElementById('period-section');
+    const totalSection = document.getElementById('total-section');
+    const durationBtns = document.querySelectorAll('.duration-btn');
+    const periodStart = document.getElementById('id_period_start');
+    const periodEnd = document.getElementById('id_period_end');
+
+    let currentModules = [];
+    let selectedMonths = 1;
+
+    // Duration buttons
+    durationBtns.forEach(btn => {
+        btn.addEventListener('click', function () {
+            durationBtns.forEach(b => {
+                b.style.borderColor = '#d1d5db';
+                b.style.background = '';
+                b.style.color = '#374151';
+            });
+            this.style.borderColor = '#4F5BD5';
+            this.style.background = '#EEF0FB';
+            this.style.color = '#2A2F66';
+            selectedMonths = parseInt(this.dataset.months, 10);
+            monthsInput.value = selectedMonths;
+            updatePeriodEnd();
+            recalcTotal();
+        });
+    });
+
+    // Activate first button by default
+    if (durationBtns.length > 0) {
+        durationBtns[0].click();
+    }
+
+    // Hospital change → load modules via AJAX
+    hospitalSel.addEventListener('change', function () {
+        const hid = this.value;
+        if (!hid) {
+            modulesSection.style.display = 'none';
+            periodSection.style.display = 'none';
+            totalSection.style.display = 'none';
+            return;
+        }
+        fetch('/superadmin/hospitals/' + hid + '/modules-json/')
+            .then(r => r.json())
+            .then(data => {
+                currentModules = data.modules;
+                renderModules(data.modules);
+                modulesSection.style.display = '';
+                periodSection.style.display = '';
+                totalSection.style.display = '';
+                // Pre-fill period start from today if empty
+                if (!periodStart.value) {
+                    periodStart.value = data.today;
+                }
+                updatePeriodEnd();
+                recalcTotal();
+            });
+    });
+
+    function renderModules(modules) {
+        modulesList.innerHTML = '';
+        modules.forEach(m => {
+            const label = document.createElement('label');
+            label.style.cssText = 'display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid #e5e7eb;border-radius:8px;cursor:pointer;background:#fff;font-size:13px;';
+            label.innerHTML =
+                '<input type="checkbox" name="module_ids" value="' + m.id + '" ' + (m.active ? 'checked' : '') + ' style="accent-color:#4F5BD5;width:16px;height:16px;">' +
+                '<span style="flex:1;">' + m.name + (m.is_core ? ' <span style="font-size:10px;color:#4F5BD5;">(Core)</span>' : '') + '</span>' +
+                '<span style="color:#5B6478;font-size:12px;">UGX ' + m.monthly_price.toLocaleString() + '/mo</span>';
+            const cb = label.querySelector('input');
+            cb.addEventListener('change', recalcTotal);
+            modulesList.appendChild(label);
+        });
+    }
+
+    function recalcTotal() {
+        const checkboxes = modulesList.querySelectorAll('input[type=checkbox]:checked');
+        let total = 0;
+        checkboxes.forEach(cb => {
+            const val = cb.value;
+            const mod = currentModules.find(m => String(m.id) === String(val));
+            if (mod) total += mod.monthly_price * selectedMonths;
+        });
+        amountInput.value = total;
+        totalDisplay.textContent = 'UGX ' + total.toLocaleString();
+    }
+
+    // Period start change → auto-fill period end based on months
+    periodStart.addEventListener('change', updatePeriodEnd);
+
+    function updatePeriodEnd() {
+        if (!periodStart.value) return;
+        const start = new Date(periodStart.value);
+        const end = new Date(start);
+        end.setMonth(end.getMonth() + selectedMonths);
+        end.setDate(end.getDate() - 1);
+        periodEnd.value = end.toISOString().slice(0, 10);
+    }
+})();
+</script>
 {% endblock %}
