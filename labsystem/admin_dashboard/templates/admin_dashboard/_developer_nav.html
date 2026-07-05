@@ -7,16 +7,13 @@
         </div>
     </div>
 
-    <details class="group" {% if active_nav == 'superadmin_modules' or active_nav == 'superadmin_payments' %}open{% endif %}>
-        <summary class="list-none cursor-pointer text-xs font-bold uppercase tracking-widest text-white/60 mb-2 flex items-center justify-between">
-            Billing
-            <span class="text-white/70 transition-transform group-open:rotate-180">v</span>
-        </summary>
-        <div class="space-y-1 pt-2">
-            <a href="{% url 'manage_modules' %}" class="sidebar-link {% if active_nav == 'superadmin_modules' %}active{% endif %}">Module Prices</a>
+    <div>
+        <div class="text-xs font-bold uppercase tracking-widest text-white/60 mb-2">Billing</div>
+        <div class="space-y-1">
             <a href="{% url 'manage_subscription_payments' %}" class="sidebar-link {% if active_nav == 'superadmin_payments' %}active{% endif %}">Payments</a>
+            <a href="{% url 'manage_modules' %}" class="sidebar-link {% if active_nav == 'superadmin_modules' %}active{% endif %}">Module Prices</a>
         </div>
-    </details>
+    </div>
 
     <div>
         <div class="text-xs font-bold uppercase tracking-widest text-white/60 mb-2">Compliance</div>
