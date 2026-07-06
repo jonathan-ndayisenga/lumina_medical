@@ -142,9 +142,7 @@
                         <tr class="hover:bg-gray-50 align-top">
                             <td class="px-4 py-3 text-sm text-text-main">
                                 <div class="flex items-start gap-3 min-w-[220px]">
-                                    <div style="width:80px;height:52px;min-width:80px;background:#EEF0FB;border-radius:10px;display:flex;align-items:center;justify-content:center;padding:6px;border:1px solid #d1d5db;">
-                                        <img src="{{ hospital.logo_url }}" alt="{{ hospital.name }} logo" style="max-width:100%;max-height:100%;object-fit:contain;border-radius:4px;">
-                                    </div>
+                                    <img src="{{ hospital.logo_url }}" alt="{{ hospital.name }} logo" style="width:52px;height:52px;min-width:52px;object-fit:contain;border-radius:8px;flex-shrink:0;">
                                     <div>
                                         <div class="font-semibold">{{ hospital.name }}</div>
                                         <div class="text-xs text-text-muted">Box {{ hospital.box_number|default:'-' }}</div>
