@@ -1,7 +1,7 @@
 {% extends 'admin_dashboard/developer_base.html' %}
 {% block title %}Payments — Ternah Health{% endblock %}
 {% block page_title %}Payments{% endblock %}
-{% block page_subtitle %}Record subscription payments from hospitals. Modules and totals auto-fill based on the selected hospital.{% endblock %}
+{% block page_subtitle %}Record subscription payments from hospitals. Select a hospital to load its modules and calculate the total.{% endblock %}
 
 {% block developer_content %}
 <div class="space-y-6">
@@ -12,37 +12,39 @@
         <form method="post" id="payment-form" class="space-y-5">
             {% csrf_token %}
 
-            {# Step 1: Hospital #}
-            <div>
+            {# Step 1: Searchable hospital picker #}
+            <div style="position:relative;">
                 <label class="block text-sm font-semibold text-text-main mb-1">Hospital</label>
-                <select name="hospital" id="id_hospital" class="form-control" required>
-                    <option value="">Select hospital…</option>
-                    {% for h in hospitals %}
-                    <option value="{{ h.pk }}">{{ h.name }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-
-            {# Step 2: Duration toggle #}
-            <div>
-                <label class="block text-sm font-semibold text-text-main mb-2">Duration</label>
-                <div class="flex gap-3 flex-wrap" id="duration-btns">
-                    {% for m in duration_options %}
-                    <button type="button"
-                        class="duration-btn px-4 py-2 rounded-lg border text-sm font-semibold transition-colors"
-                        data-months="{{ m }}"
-                        style="border-color:#d1d5db; color:#374151;">
-                        {{ m }} month{% if m != 1 %}s{% endif %}
-                    </button>
-                    {% endfor %}
+                <input type="text" id="hospital-search" autocomplete="off"
+                    placeholder="Type to search hospitals…"
+                    class="form-control"
+                    style="margin-bottom:0;">
+                <input type="hidden" name="hospital" id="id_hospital" required>
+                <div id="hospital-dropdown"
+                    style="display:none;position:absolute;z-index:50;width:100%;background:#fff;border:1px solid #d1d5db;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,0.10);max-height:220px;overflow-y:auto;margin-top:2px;">
                 </div>
-                <input type="hidden" name="months_paid" id="id_months_paid" value="1">
+                <div id="hospital-selected" style="display:none;margin-top:6px;padding:8px 12px;background:#EEF0FB;border-radius:8px;font-size:13px;color:#2A2F66;font-weight:600;display:flex;align-items:center;justify-content:space-between;">
+                    <span id="hospital-selected-name"></span>
+                    <button type="button" id="hospital-clear" style="background:none;border:none;cursor:pointer;color:#6b7280;font-size:16px;line-height:1;">&#x2715;</button>
+                </div>
             </div>
 
-            {# Step 3: Modules – loaded via AJAX #}
+            {# Step 2: Number of months #}
+            <div id="months-section" style="display:none;">
+                <label class="block text-sm font-semibold text-text-main mb-1">Number of Months</label>
+                <input type="number" name="months_paid" id="id_months_paid"
+                    value="1" min="1" max="36"
+                    class="form-control"
+                    style="max-width:160px;"
+                    placeholder="e.g. 3">
+                <p class="text-xs text-text-muted mt-1">Enter how many months this payment covers.</p>
+            </div>
+
+            {# Step 3: Modules #}
             <div id="modules-section" style="display:none;">
-                <label class="block text-sm font-semibold text-text-main mb-2">Modules (edit if hospital changed packages)</label>
+                <label class="block text-sm font-semibold text-text-main mb-2">Modules <span class="text-text-muted font-normal">(pre-ticked from hospital's active subscriptions — adjust if needed)</span></label>
                 <div id="modules-list" class="grid grid-cols-1 sm:grid-cols-2 gap-2"></div>
+                <p id="modules-empty" style="display:none;" class="text-xs text-text-muted mt-2 italic">No modules assigned to this hospital yet.</p>
             </div>
 
             {# Step 4: Period dates #}
@@ -52,21 +54,21 @@
                     <input type="date" name="period_start" id="id_period_start" class="form-control" required>
                 </div>
                 <div>
-                    <label class="block text-sm font-semibold text-text-main mb-1">Period End</label>
+                    <label class="block text-sm font-semibold text-text-main mb-1">Period End <span class="text-text-muted font-normal text-xs">(auto-filled)</span></label>
                     <input type="date" name="period_end" id="id_period_end" class="form-control" required>
                 </div>
             </div>
 
-            {# Step 5: Total + Notes #}
+            {# Step 5: Total + Notes + Submit #}
             <div id="total-section" style="display:none;" class="space-y-4">
-                <div class="bg-indigo-50 border border-indigo-200 rounded-xl px-5 py-4 flex items-center justify-between">
-                    <span class="text-sm font-semibold text-indigo-800">Total Amount</span>
-                    <span id="total-display" class="text-xl font-bold text-indigo-700">UGX 0</span>
+                <div style="background:#EEF0FB;border:1.5px solid #4F5BD5;border-radius:12px;padding:16px 20px;display:flex;align-items:center;justify-content:space-between;">
+                    <span class="text-sm font-semibold" style="color:#2A2F66;">Total Amount</span>
+                    <span id="total-display" style="font-size:1.25rem;font-weight:800;color:#4F5BD5;">UGX 0</span>
                     <input type="hidden" name="amount" id="id_amount" value="0">
                 </div>
                 <div>
-                    <label class="block text-sm font-semibold text-text-main mb-1">Notes (optional)</label>
-                    <textarea name="notes" class="form-control" rows="2" placeholder="e.g. Paid via MTN Mobile Money, reference #123456"></textarea>
+                    <label class="block text-sm font-semibold text-text-main mb-1">Notes <span class="text-text-muted font-normal">(optional)</span></label>
+                    <textarea name="notes" class="form-control" rows="2" placeholder="e.g. Paid via MTN Mobile Money, ref #123456"></textarea>
                 </div>
                 <button type="submit" class="btn btn-primary">Save Payment &amp; Generate Receipt</button>
             </div>
@@ -121,105 +123,173 @@
 
 <script>
 (function () {
-    const hospitalSel = document.getElementById('id_hospital');
-    const monthsInput = document.getElementById('id_months_paid');
-    const amountInput = document.getElementById('id_amount');
-    const totalDisplay = document.getElementById('total-display');
-    const modulesList = document.getElementById('modules-list');
-    const modulesSection = document.getElementById('modules-section');
-    const periodSection = document.getElementById('period-section');
-    const totalSection = document.getElementById('total-section');
-    const durationBtns = document.querySelectorAll('.duration-btn');
-    const periodStart = document.getElementById('id_period_start');
-    const periodEnd = document.getElementById('id_period_end');
+    // ── Data from Django ──
+    const HOSPITALS = [
+        {% for h in hospitals %}
+        { id: {{ h.pk }}, name: "{{ h.name|escapejs }}" },
+        {% endfor %}
+    ];
+
+    // ── Elements ──
+    const hospitalSearch  = document.getElementById('hospital-search');
+    const hospitalHidden  = document.getElementById('id_hospital');
+    const hospitalDrop    = document.getElementById('hospital-dropdown');
+    const hospitalSelDiv  = document.getElementById('hospital-selected');
+    const hospitalSelName = document.getElementById('hospital-selected-name');
+    const hospitalClear   = document.getElementById('hospital-clear');
+    const monthsSection   = document.getElementById('months-section');
+    const monthsInput     = document.getElementById('id_months_paid');
+    const modulesSection  = document.getElementById('modules-section');
+    const modulesList     = document.getElementById('modules-list');
+    const modulesEmpty    = document.getElementById('modules-empty');
+    const periodSection   = document.getElementById('period-section');
+    const totalSection    = document.getElementById('total-section');
+    const periodStart     = document.getElementById('id_period_start');
+    const periodEnd       = document.getElementById('id_period_end');
+    const amountInput     = document.getElementById('id_amount');
+    const totalDisplay    = document.getElementById('total-display');
 
     let currentModules = [];
-    let selectedMonths = 1;
+    let selectedHospitalId = null;
 
-    // Duration buttons
-    durationBtns.forEach(btn => {
-        btn.addEventListener('click', function () {
-            durationBtns.forEach(b => {
-                b.style.borderColor = '#d1d5db';
-                b.style.background = '';
-                b.style.color = '#374151';
+    // ── Searchable hospital dropdown ──
+    function renderDropdown(query) {
+        const q = query.toLowerCase().trim();
+        const matches = q ? HOSPITALS.filter(h => h.name.toLowerCase().includes(q)) : HOSPITALS;
+        if (matches.length === 0) {
+            hospitalDrop.innerHTML = '<div style="padding:10px 14px;font-size:13px;color:#6b7280;font-style:italic;">No hospitals found</div>';
+        } else {
+            hospitalDrop.innerHTML = matches.map(h =>
+                '<div class="hosp-opt" data-id="' + h.id + '" data-name="' + h.name.replace(/"/g,'&quot;') + '" ' +
+                'style="padding:10px 14px;font-size:13px;cursor:pointer;border-bottom:1px solid #f3f4f6;">' +
+                highlight(h.name, q) + '</div>'
+            ).join('');
+            hospitalDrop.querySelectorAll('.hosp-opt').forEach(el => {
+                el.addEventListener('mouseenter', () => el.style.background = '#EEF0FB');
+                el.addEventListener('mouseleave', () => el.style.background = '');
+                el.addEventListener('mousedown', (e) => {
+                    e.preventDefault();
+                    selectHospital(parseInt(el.dataset.id), el.dataset.name);
+                });
             });
-            this.style.borderColor = '#4F5BD5';
-            this.style.background = '#EEF0FB';
-            this.style.color = '#2A2F66';
-            selectedMonths = parseInt(this.dataset.months, 10);
-            monthsInput.value = selectedMonths;
-            updatePeriodEnd();
-            recalcTotal();
-        });
-    });
-
-    // Activate first button by default
-    if (durationBtns.length > 0) {
-        durationBtns[0].click();
+        }
+        hospitalDrop.style.display = '';
     }
 
-    // Hospital change → load modules via AJAX
-    hospitalSel.addEventListener('change', function () {
-        const hid = this.value;
-        if (!hid) {
-            modulesSection.style.display = 'none';
-            periodSection.style.display = 'none';
-            totalSection.style.display = 'none';
-            return;
+    function highlight(name, q) {
+        if (!q) return name;
+        const idx = name.toLowerCase().indexOf(q);
+        if (idx === -1) return name;
+        return name.slice(0, idx) + '<strong style="color:#4F5BD5;">' + name.slice(idx, idx + q.length) + '</strong>' + name.slice(idx + q.length);
+    }
+
+    function selectHospital(id, name) {
+        selectedHospitalId = id;
+        hospitalHidden.value = id;
+        hospitalSearch.value = '';
+        hospitalDrop.style.display = 'none';
+        hospitalSelName.textContent = name;
+        hospitalSelDiv.style.display = 'flex';
+        hospitalSearch.style.display = 'none';
+        loadModules(id);
+        monthsSection.style.display = '';
+        periodSection.style.display = '';
+        totalSection.style.display = '';
+        if (!periodStart.value) {
+            const today = new Date();
+            periodStart.value = today.toISOString().slice(0, 10);
         }
-        fetch('/superadmin/hospitals/' + hid + '/modules-json/')
+        updatePeriodEnd();
+    }
+
+    function clearHospital() {
+        selectedHospitalId = null;
+        hospitalHidden.value = '';
+        hospitalSearch.value = '';
+        hospitalSearch.style.display = '';
+        hospitalSelDiv.style.display = 'none';
+        hospitalDrop.style.display = 'none';
+        modulesSection.style.display = 'none';
+        monthsSection.style.display = 'none';
+        periodSection.style.display = 'none';
+        totalSection.style.display = 'none';
+        currentModules = [];
+        modulesList.innerHTML = '';
+    }
+
+    hospitalSearch.addEventListener('input', () => renderDropdown(hospitalSearch.value));
+    hospitalSearch.addEventListener('focus', () => renderDropdown(hospitalSearch.value));
+    hospitalSearch.addEventListener('blur', () => setTimeout(() => { hospitalDrop.style.display = 'none'; }, 150));
+    hospitalClear.addEventListener('click', clearHospital);
+
+    // ── Load modules via AJAX ──
+    function loadModules(hid) {
+        fetch('/platform/superadmin/hospitals/' + hid + '/modules-json/')
             .then(r => r.json())
             .then(data => {
                 currentModules = data.modules;
                 renderModules(data.modules);
                 modulesSection.style.display = '';
-                periodSection.style.display = '';
-                totalSection.style.display = '';
-                // Pre-fill period start from today if empty
-                if (!periodStart.value) {
-                    periodStart.value = data.today;
-                }
-                updatePeriodEnd();
                 recalcTotal();
+            })
+            .catch(() => {
+                modulesSection.style.display = '';
+                modulesEmpty.style.display = '';
+                modulesList.innerHTML = '';
             });
-    });
+    }
 
     function renderModules(modules) {
         modulesList.innerHTML = '';
+        if (modules.length === 0) {
+            modulesEmpty.style.display = '';
+            return;
+        }
+        modulesEmpty.style.display = 'none';
         modules.forEach(m => {
             const label = document.createElement('label');
-            label.style.cssText = 'display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid #e5e7eb;border-radius:8px;cursor:pointer;background:#fff;font-size:13px;';
+            label.style.cssText = 'display:flex;align-items:center;gap:10px;padding:10px 14px;border:1px solid #e5e7eb;border-radius:8px;cursor:pointer;background:#fff;font-size:13px;transition:border-color .15s;';
             label.innerHTML =
-                '<input type="checkbox" name="module_ids" value="' + m.id + '" ' + (m.active ? 'checked' : '') + ' style="accent-color:#4F5BD5;width:16px;height:16px;">' +
-                '<span style="flex:1;">' + m.name + (m.is_core ? ' <span style="font-size:10px;color:#4F5BD5;">(Core)</span>' : '') + '</span>' +
-                '<span style="color:#5B6478;font-size:12px;">UGX ' + m.monthly_price.toLocaleString() + '/mo</span>';
+                '<input type="checkbox" name="module_ids" value="' + m.id + '" ' +
+                (m.active ? 'checked' : '') +
+                ' style="accent-color:#4F5BD5;width:16px;height:16px;flex-shrink:0;">' +
+                '<span style="flex:1;font-weight:500;">' + m.name +
+                (m.is_core ? ' <span style="font-size:10px;color:#4F5BD5;font-weight:600;">(Core)</span>' : '') +
+                '</span>' +
+                '<span style="color:#5B6478;font-size:12px;white-space:nowrap;">UGX ' +
+                Number(m.monthly_price).toLocaleString() + '/mo</span>';
             const cb = label.querySelector('input');
             cb.addEventListener('change', recalcTotal);
+            label.addEventListener('mouseenter', () => label.style.borderColor = '#4F5BD5');
+            label.addEventListener('mouseleave', () => label.style.borderColor = '#e5e7eb');
             modulesList.appendChild(label);
         });
     }
 
+    // ── Total calculation ──
     function recalcTotal() {
-        const checkboxes = modulesList.querySelectorAll('input[type=checkbox]:checked');
+        const months = Math.max(1, parseInt(monthsInput.value) || 1);
+        const checked = modulesList.querySelectorAll('input[type=checkbox]:checked');
         let total = 0;
-        checkboxes.forEach(cb => {
-            const val = cb.value;
-            const mod = currentModules.find(m => String(m.id) === String(val));
-            if (mod) total += mod.monthly_price * selectedMonths;
+        checked.forEach(cb => {
+            const mod = currentModules.find(m => String(m.id) === String(cb.value));
+            if (mod) total += mod.monthly_price * months;
         });
         amountInput.value = total;
         totalDisplay.textContent = 'UGX ' + total.toLocaleString();
     }
 
-    // Period start change → auto-fill period end based on months
+    monthsInput.addEventListener('input', () => { updatePeriodEnd(); recalcTotal(); });
+
+    // ── Period end auto-fill ──
     periodStart.addEventListener('change', updatePeriodEnd);
 
     function updatePeriodEnd() {
         if (!periodStart.value) return;
+        const months = Math.max(1, parseInt(monthsInput.value) || 1);
         const start = new Date(periodStart.value);
         const end = new Date(start);
-        end.setMonth(end.getMonth() + selectedMonths);
+        end.setMonth(end.getMonth() + months);
         end.setDate(end.getDate() - 1);
         periodEnd.value = end.toISOString().slice(0, 10);
     }
