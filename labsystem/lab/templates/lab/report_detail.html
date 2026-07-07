@@ -163,7 +163,7 @@
                 <a href="{% url 'visit_terminate' report.visit.pk %}?next={{ request.get_full_path|urlencode }}" class="btn btn-danger">Terminate Visit</a>
             {% endif %}
         {% endif %}
-        <a href="{% url 'report_list' %}" class="btn btn-secondary">Back to Dashboard</a>
+        <a href="{% url 'patient_reports' report.pk %}" class="btn btn-secondary">Back to Patient Reports</a>
     </div>
 </div>
 

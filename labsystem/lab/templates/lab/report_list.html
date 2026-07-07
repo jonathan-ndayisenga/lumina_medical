@@ -1,8 +1,9 @@
 {% extends 'base.html' %}
+{% load lab_extras %}
 
-{% block title %}Laboratory Dashboard - Lumina Medical Services{% endblock %}
-{% block page_title %}Laboratory Dashboard{% endblock %}
-{% block page_subtitle %}Review completed reports, track printing, and return to the live lab queue whenever a new patient arrives.{% endblock %}
+{% block title %}Laboratory Reports{% endblock %}
+{% block page_title %}Laboratory Reports{% endblock %}
+{% block page_subtitle %}Patients grouped by name — click View Reports to see all tests for a patient.{% endblock %}
 
 {% block content %}
 <div class="space-y-6">
@@ -25,82 +26,62 @@
         <div class="flex flex-col md:flex-row gap-3">
             <input type="text" id="searchInput"
                    class="flex-1 min-w-0 px-4 py-2 border border-gray-300 rounded-lg bg-white text-text-main placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-brand-dark focus:border-transparent"
-                   placeholder="Search patient name, referred by, specimen, or report ID"
-                   value="{{ request.GET.search }}">
+                   placeholder="Search patient name, specimen, or referral"
+                   value="{{ search }}">
             <button type="button" class="btn btn-primary whitespace-nowrap" onclick="searchReports()">Search</button>
-        </div>
-
-        <div class="flex flex-wrap gap-2">
-            <button type="button"
-                    class="btn {% if not request.GET.filter %}bg-brand-dark text-white{% else %}btn-secondary{% endif %}"
-                    onclick="filterReports('all')">All</button>
-            <button type="button"
-                    class="btn {% if request.GET.filter == 'printed' %}bg-brand-dark text-white{% else %}btn-secondary{% endif %}"
-                    onclick="filterReports('printed')">Printed</button>
-            <button type="button"
-                    class="btn {% if request.GET.filter == 'draft' %}bg-brand-dark text-white{% else %}btn-secondary{% endif %}"
-                    onclick="filterReports('draft')">Draft</button>
-            <a href="{% url 'lab_queue' %}" class="btn btn-primary ml-auto">Open Live Lab Queue</a>
+            <a href="{% url 'lab_queue' %}" class="btn btn-primary whitespace-nowrap">Open Live Lab Queue</a>
         </div>
     </div>
 
-    {% if reports.object_list %}
+    {% if patients.object_list %}
     <div class="card overflow-hidden">
         <div class="overflow-x-auto">
             <table class="w-full">
                 <thead class="bg-gray-50 border-b border-gray-200">
                     <tr>
                         <th class="text-left px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-widest">Patient</th>
-                        <th class="text-left px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-widest">Template / Specimen</th>
-                        <th class="text-left px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-widest">Sample Date</th>
-                        <th class="text-left px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-widest">Technician / Referral</th>
-                        <th class="text-left px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-widest">Status</th>
-                        <th class="text-right px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-widest">Actions</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-widest">Tests Undergone</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-widest">Technician</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-widest">Last Sample</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-widest">Reports</th>
+                        <th class="text-right px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-widest">Action</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-gray-200">
-                    {% for report in reports %}
+                    {% for patient in patients %}
+                    {% with detail=patient_details|get_item:patient.patient_name %}
                     <tr class="hover:bg-gray-50 transition-colors">
                         <td class="px-4 py-3">
-                            <strong class="block text-text-main">{{ report.patient_name }}</strong>
-                            <div class="text-sm text-text-muted">{{ report.patient_age }} | {{ report.get_patient_sex_display }}</div>
-                            <div class="text-sm text-text-muted">REF: LUM-{{ report.id|stringformat:"05d" }}</div>
+                            <strong class="block text-text-main">{{ patient.patient_name }}</strong>
+                            <div class="text-sm text-text-muted">{{ detail.age }} &middot; {{ detail.sex }}</div>
                         </td>
                         <td class="px-4 py-3">
-                            <strong class="block text-text-main">{{ report.template_label }}</strong>
-                            <div class="text-sm text-text-muted">{{ report.specimen_type }}</div>
-                        </td>
-                        <td class="px-4 py-3">
-                            <strong class="block text-text-main">{{ report.sample_date|date:"d M Y" }}</strong>
-                            <div class="text-sm text-text-muted">Created {{ report.created_at|date:"d M Y" }}</div>
-                        </td>
-                        <td class="px-4 py-3">
-                            <strong class="block text-text-main">
-                                {% with att=report.attendant %}
-                                    {% if report.attendant_name %}{{ report.attendant_name }}
-                                    {% elif att %}{{ att.get_full_name|default:att.username }}
-                                    {% else %}N/A{% endif %}
-                                {% endwith %}
-                            </strong>
-                            <div class="text-sm text-text-muted">Referred by: {{ report.referred_by|default:"Not captured" }}</div>
-                        </td>
-                        <td class="px-4 py-3">
-                            <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-bold uppercase tracking-wide bg-brand-soft text-brand-dark">{% if report.printed %}Printed{% else %}Draft{% endif %}</span>
-                            {% if report.printed_at %}
-                                <div class="text-sm text-text-muted mt-1">{{ report.printed_at|date:"d M Y H:i" }}</div>
+                            {% if detail and detail.tests %}
+                                <div class="flex flex-wrap gap-1">
+                                    {% for test in detail.tests %}
+                                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-indigo-50 text-indigo-700">{{ test }}</span>
+                                    {% endfor %}
+                                </div>
+                            {% else %}
+                                <span class="text-text-muted text-sm">—</span>
                             {% endif %}
                         </td>
                         <td class="px-4 py-3">
-                            <div class="flex flex-wrap gap-2 justify-end">
-                                <a href="{% url 'report_detail' report.pk %}" class="btn btn-secondary btn-sm">View</a>
-                                <a href="{% url 'report_edit' report.pk %}" class="btn btn-secondary btn-sm">Edit</a>
-                                <a href="{% url 'report_print' report.pk %}" class="btn btn-secondary btn-sm" target="_blank">Print</a>
-                                {% if request.user.role == 'superadmin' or request.user.role == 'hospital_admin' %}
-                                <a href="{% url 'report_delete' report.pk %}?next={{ request.get_full_path|urlencode }}" class="btn btn-danger btn-sm">Delete</a>
-                                {% endif %}
-                            </div>
+                            <span class="text-sm text-text-main">{{ detail.technician|default:"—" }}</span>
+                        </td>
+                        <td class="px-4 py-3">
+                            <span class="text-sm text-text-main">{{ patient.latest_date|date:"d M Y" }}</span>
+                        </td>
+                        <td class="px-4 py-3">
+                            <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-bold bg-brand-soft text-brand-dark">
+                                {{ patient.report_count }} report{{ patient.report_count|pluralize }}
+                            </span>
+                        </td>
+                        <td class="px-4 py-3 text-right">
+                            <a href="{% url 'patient_reports' patient.latest_id %}" class="btn btn-primary btn-sm">View Reports</a>
                         </td>
                     </tr>
+                    {% endwith %}
                     {% endfor %}
                 </tbody>
             </table>
@@ -109,25 +90,25 @@
     {% else %}
     <div class="card text-center py-12 border-2 border-dashed border-gray-300">
         <h3 class="text-lg font-semibold text-text-main mb-2">No reports found</h3>
-        <p class="text-text-muted mb-4">New reports now start from the live lab queue so every result stays tied to a real patient request.</p>
+        <p class="text-text-muted mb-4">New reports start from the live lab queue so every result stays tied to a real patient request.</p>
         <a href="{% url 'lab_queue' %}" class="btn btn-primary inline-block">Go to Lab Queue</a>
     </div>
     {% endif %}
 
-    {% if reports.has_other_pages %}
+    {% if patients.has_other_pages %}
     <div class="flex flex-wrap gap-2 justify-center mt-6">
-        {% if reports.has_previous %}
-            <a href="?page={{ reports.previous_page_number }}{% if request.GET.search %}&search={{ request.GET.search }}{% endif %}{% if request.GET.filter %}&filter={{ request.GET.filter }}{% endif %}" class="btn btn-secondary btn-sm">Previous</a>
+        {% if patients.has_previous %}
+            <a href="?page={{ patients.previous_page_number }}{% if search %}&search={{ search }}{% endif %}" class="btn btn-secondary btn-sm">Previous</a>
         {% endif %}
-        {% for i in reports.paginator.page_range %}
-            {% if reports.number == i %}
+        {% for i in patients.paginator.page_range %}
+            {% if patients.number == i %}
                 <span class="btn btn-sm bg-gray-100 text-gray-600 cursor-default">{{ i }}</span>
             {% else %}
-                <a href="?page={{ i }}{% if request.GET.search %}&search={{ request.GET.search }}{% endif %}{% if request.GET.filter %}&filter={{ request.GET.filter }}{% endif %}" class="btn btn-secondary btn-sm">{{ i }}</a>
+                <a href="?page={{ i }}{% if search %}&search={{ search }}{% endif %}" class="btn btn-secondary btn-sm">{{ i }}</a>
             {% endif %}
         {% endfor %}
-        {% if reports.has_next %}
-            <a href="?page={{ reports.next_page_number }}{% if request.GET.search %}&search={{ request.GET.search }}{% endif %}{% if request.GET.filter %}&filter={{ request.GET.filter }}{% endif %}" class="btn btn-secondary btn-sm">Next</a>
+        {% if patients.has_next %}
+            <a href="?page={{ patients.next_page_number }}{% if search %}&search={{ search }}{% endif %}" class="btn btn-secondary btn-sm">Next</a>
         {% endif %}
     </div>
     {% endif %}
@@ -138,27 +119,10 @@
 <script>
 function searchReports() {
     const searchTerm = document.getElementById('searchInput').value;
-    const currentFilter = new URLSearchParams(window.location.search).get('filter') || '';
-    window.location.href = `?search=${encodeURIComponent(searchTerm)}${currentFilter ? '&filter=' + currentFilter : ''}`;
+    window.location.href = searchTerm ? `?search=${encodeURIComponent(searchTerm)}` : window.location.pathname;
 }
-
-function filterReports(filter) {
-    const searchTerm = document.getElementById('searchInput').value;
-    if (filter === 'all') {
-        window.location.href = searchTerm ? `?search=${encodeURIComponent(searchTerm)}` : window.location.pathname;
-        return;
-    }
-    window.location.href = `?filter=${filter}${searchTerm ? '&search=' + encodeURIComponent(searchTerm) : ''}`;
-}
-
-const searchInput = document.getElementById('searchInput');
-if (searchInput) {
-    searchInput.addEventListener('keypress', function (event) {
-        if (event.key === 'Enter') {
-            event.preventDefault();
-            searchReports();
-        }
-    });
-}
+document.getElementById('searchInput').addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') { e.preventDefault(); searchReports(); }
+});
 </script>
 {% endblock %}

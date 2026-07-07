@@ -1,0 +1,79 @@
+{% extends 'base.html' %}
+
+{% block title %}Reports for {{ patient_name }}{% endblock %}
+{% block page_title %}{{ patient_name }}{% endblock %}
+{% block page_subtitle %}All lab reports for this patient. Click View to open an individual report.{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+
+    <div class="flex items-center gap-3">
+        <a href="{% url 'report_list' %}" class="btn btn-secondary btn-sm">&larr; Back to Patients</a>
+    </div>
+
+    {% if reports %}
+    <div class="card overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="w-full">
+                <thead class="bg-gray-50 border-b border-gray-200">
+                    <tr>
+                        <th class="text-left px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-widest">Test / Specimen</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-widest">Requested By</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-widest">Technician</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-widest">Sample Date</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-widest">Status</th>
+                        <th class="text-right px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-widest">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200">
+                    {% for report in reports %}
+                    <tr class="hover:bg-gray-50 transition-colors">
+                        <td class="px-4 py-3">
+                            <strong class="block text-text-main">{{ report.template_label }}</strong>
+                            <div class="text-sm text-text-muted">{{ report.specimen_type }} &middot; REF: LUM-{{ report.id|stringformat:"05d" }}</div>
+                        </td>
+                        <td class="px-4 py-3">
+                            <span class="text-sm text-text-main">{{ report.referred_by|default:"—" }}</span>
+                        </td>
+                        <td class="px-4 py-3">
+                            <span class="text-sm text-text-main">
+                                {% if report.attendant_name %}{{ report.attendant_name }}
+                                {% elif report.attendant %}{{ report.attendant.get_full_name|default:report.attendant.username }}
+                                {% else %}—{% endif %}
+                            </span>
+                        </td>
+                        <td class="px-4 py-3">
+                            <span class="text-sm text-text-main">{{ report.sample_date|date:"d M Y" }}</span>
+                            <div class="text-xs text-text-muted">Created {{ report.created_at|date:"d M Y" }}</div>
+                        </td>
+                        <td class="px-4 py-3">
+                            <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-bold uppercase tracking-wide
+                                {% if report.printed %}bg-green-100 text-green-700{% else %}bg-brand-soft text-brand-dark{% endif %}">
+                                {% if report.printed %}Printed{% else %}Draft{% endif %}
+                            </span>
+                        </td>
+                        <td class="px-4 py-3">
+                            <div class="flex flex-wrap gap-2 justify-end">
+                                <a href="{% url 'report_detail' report.pk %}" class="btn btn-secondary btn-sm">View</a>
+                                <a href="{% url 'report_edit' report.pk %}" class="btn btn-secondary btn-sm">Edit</a>
+                                <a href="{% url 'report_print' report.pk %}" class="btn btn-secondary btn-sm" target="_blank">Print</a>
+                                {% if request.user.role == 'superadmin' or request.user.role == 'hospital_admin' %}
+                                <a href="{% url 'report_delete' report.pk %}?next={{ request.get_full_path|urlencode }}" class="btn btn-danger btn-sm">Delete</a>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% else %}
+    <div class="card text-center py-12 border-2 border-dashed border-gray-300">
+        <h3 class="text-lg font-semibold text-text-main mb-2">No reports found for this patient</h3>
+        <a href="{% url 'report_list' %}" class="btn btn-primary inline-block mt-4">Back to Patients</a>
+    </div>
+    {% endif %}
+
+</div>
+{% endblock %}

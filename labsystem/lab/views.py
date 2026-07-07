@@ -756,11 +756,10 @@ def lab_queue(request):
 @login_required
 @staff_required
 def report_list(request):
-    base_qs = scoped_reports_queryset(request).order_by('-created_at')
-    qs = base_qs.prefetch_related("results__source_profile")
+    from django.db.models import Count, Max
+    base_qs = scoped_reports_queryset(request)
 
     search = (request.GET.get('search') or '').strip()
-    selected_filter = (request.GET.get('filter') or '').strip()
 
     if search:
         filters = (
@@ -768,35 +767,85 @@ def report_list(request):
             Q(referred_by__icontains=search) |
             Q(specimen_type__icontains=search)
         )
-        if search.isdigit():
-            filters |= Q(pk=int(search))
-        qs = qs.filter(filters)
+        base_qs = base_qs.filter(filters)
 
-    if selected_filter == 'printed':
-        qs = qs.filter(printed=True)
-    elif selected_filter == 'draft':
-        qs = qs.filter(printed=False)
-
-    # Optimize: Calculate counts only for the entire base_qs once.
-    # Note: avoid naming aggregate keys the same as model fields (e.g. "printed"),
-    # otherwise Django can treat Q(printed=...) as referring to the aggregate alias.
-    from django.db.models import Count
     base_stats = base_qs.aggregate(
         total=Count("id"),
         printed_total=Count("id", filter=Q(printed=True)),
         draft_total=Count("id", filter=Q(printed=False)),
     )
 
-    paginator = Paginator(qs, 10)
-    reports = paginator.get_page(request.GET.get('page'))
+    # Group only by patient_name — one row per patient regardless of age/sex changes across visits
+    patient_groups = (
+        base_qs
+        .values('patient_name')
+        .annotate(
+            report_count=Count('id'),
+            latest_date=Max('sample_date'),
+            latest_id=Max('id'),
+        )
+        .order_by('-latest_date', 'patient_name')
+    )
+
+    paginator = Paginator(patient_groups, 20)
+    patients = paginator.get_page(request.GET.get('page'))
+
+    # For each patient group, fetch their reports to show test names + technician
+    patient_name_list = [p['patient_name'] for p in patients]
+    recent_reports = (
+        base_qs
+        .filter(patient_name__in=patient_name_list)
+        .select_related('profile', 'attendant')
+        .order_by('-sample_date')
+    )
+
+    # Build a dict: patient_name -> {tests, technician, age, sex}
+    from collections import defaultdict
+    patient_details = defaultdict(lambda: {'tests': [], 'technician': None, 'age': '', 'sex': ''})
+    for r in recent_reports:
+        pd = patient_details[r.patient_name]
+        label = r.profile.name if r.profile else r.specimen_type
+        if label not in pd['tests']:
+            pd['tests'].append(label)
+        if not pd['technician']:
+            pd['technician'] = r.attendant_name or (
+                r.attendant.get_full_name() or r.attendant.username if r.attendant else None
+            )
+        # Age/sex from most recent report (first encountered, already ordered -sample_date)
+        if not pd['age']:
+            pd['age'] = r.patient_age
+            pd['sex'] = r.get_patient_sex_display()
+
     context = {
-        'reports': reports,
+        'patients': patients,
+        'patient_details': dict(patient_details),
         'total_reports': base_stats['total'],
         'printed_count': base_stats['printed_total'],
         'draft_count': base_stats['draft_total'],
         'active_nav': 'dashboard',
+        'search': search,
     }
     return render(request, 'lab/report_list.html', context)
+
+
+@login_required
+@staff_required
+def patient_reports(request, report_id):
+    base_qs = scoped_reports_queryset(request)
+    anchor = get_object_or_404(base_qs, pk=report_id)
+    patient_name = anchor.patient_name
+    reports = (
+        base_qs
+        .filter(patient_name=patient_name)
+        .select_related('profile', 'attendant')
+        .order_by('-sample_date', '-created_at')
+    )
+    context = {
+        'patient_name': patient_name,
+        'reports': reports,
+        'active_nav': 'dashboard',
+    }
+    return render(request, 'lab/patient_reports.html', context)
 
 
 @login_required
