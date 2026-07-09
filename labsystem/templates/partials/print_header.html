@@ -15,7 +15,8 @@
             {% endif %}
             {% if hospital %}
             <div style="font-size:8.5pt; color:#5B6478; margin-top:3px; line-height:1.5;">
-                {% if hospital.box_number %}{{ hospital.box_number }}{% if hospital.location %}, {{ hospital.location }}{% endif %}<br>{% elif hospital.location %}{{ hospital.location }}<br>{% endif %}
+                {% if hospital.box_number %}PO BOX: {{ hospital.box_number }}{% if hospital.city %}, {{ hospital.city }}{% endif %}<br>{% endif %}
+                {% if hospital.location %}{{ hospital.location }}<br>{% endif %}
                 {% if hospital.phone_number %}Phone: {{ hospital.phone_number }}{% endif %}
             </div>
             {% endif %}

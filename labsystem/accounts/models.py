@@ -26,6 +26,7 @@ class Hospital(models.Model):
     name = models.CharField(max_length=200)
     subdomain = models.CharField(max_length=100, unique=True)
     location = models.CharField(max_length=255, blank=True)
+    city = models.CharField(max_length=100, blank=True)
     box_number = models.CharField(max_length=50, blank=True)
     phone_number = models.CharField(max_length=20, blank=True)
     email = models.EmailField(blank=True)
