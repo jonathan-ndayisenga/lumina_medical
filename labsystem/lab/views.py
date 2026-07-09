@@ -1132,6 +1132,7 @@ def report_detail(request, pk):
             'result_groups': group_results(report, results),
             'can_route_direct_lab': direct_lab_can_route(report),
             'active_nav': 'dashboard',
+            'hospital': report.hospital,
         },
     )
 
