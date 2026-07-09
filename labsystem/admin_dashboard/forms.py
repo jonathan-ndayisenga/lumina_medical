@@ -67,7 +67,7 @@ class HospitalForm(forms.ModelForm):
             "subdomain": forms.TextInput(attrs={"placeholder": "hospital-code", "class": "form-control"}),
             "location": forms.TextInput(attrs={"placeholder": "Street / road address", "class": "form-control"}),
             "city": forms.TextInput(attrs={"placeholder": "City e.g. Kampala", "class": "form-control"}),
-            "box_number": forms.TextInput(attrs={"placeholder": "e.g. 200132", "class": "form-control"}),
+            "box_number": forms.TextInput(attrs={"placeholder": "e.g. PO BOX: 200132", "class": "form-control"}),
             "phone_number": forms.TextInput(attrs={"placeholder": "+256...", "class": "form-control"}),
             "email": forms.EmailInput(attrs={"placeholder": "hospital@example.com", "class": "form-control"}),
             "logo": forms.ClearableFileInput(attrs={"class": "form-control"}),
