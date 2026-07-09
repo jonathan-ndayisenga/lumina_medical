@@ -1,0 +1,21 @@
+{% extends 'base.html' %}
+
+{% block title %}Delete Template{% endblock %}
+{% block page_title %}Delete Template{% endblock %}
+{% block page_subtitle %}This action is permanent and cannot be undone.{% endblock %}
+
+{% block content %}
+<div class="card max-w-lg">
+    <div class="space-y-4">
+        <p class="text-text-main">Are you sure you want to delete <strong>{{ profile.name }}</strong>?</p>
+        <p class="text-sm text-text-muted">This will remove the template and all its {{ profile.parameters.count }} test row{{ profile.parameters.count|pluralize }}. Existing lab reports that used this template are not affected.</p>
+        <div class="flex gap-3 pt-2">
+            <form method="post">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-danger">Delete Template</button>
+            </form>
+            <a href="{% url 'template_library' %}" class="btn btn-secondary">Cancel</a>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -168,21 +168,7 @@
 </div>
 
 <div class="report-shell space-y-4">
-    <div class="flex justify-between items-start gap-3 pb-3 border-b-2 border-text-main">
-        <div class="flex items-start gap-2">
-            <img src="{% static 'images/lumina-logo.jpeg' %}" alt="Lumina Logo" class="h-11 rounded-lg">
-            <div class="text-sm">
-                <strong class="block text-text-main">LUMINA MEDICAL SERVICES</strong>
-                <span class="text-xs text-text-muted">lighting up your health.</span><br>
-                <span class="text-xs text-text-muted">PO BOX: 200132, Kampala · Kisaasi Kyanja road</span><br>
-                <span class="text-xs text-text-muted">Phone: 0750639410 / 0780105909</span>
-            </div>
-        </div>
-        <div class="text-xs text-text-muted text-right">
-            <div><strong>LABORATORY REPORT</strong></div>
-            <div>{{ report.template_label }}</div>
-        </div>
-    </div>
+    {% include "partials/print_header.html" with hospital=hospital print_title="LABORATORY REPORT" print_subtitle=report.template_label %}
 
     <div class="patient-grid grid grid-cols-1 md:grid-cols-3 gap-2 p-4 border border-gray-200 rounded-2xl bg-gray-50">
         <div class="flex items-baseline gap-1 flex-wrap min-w-0">
@@ -279,9 +265,6 @@
     </section>
     {% endif %}
 
-    <div class="report-footer border-t border-gray-200 pt-2 text-center text-text-muted text-xs">
-        <div><strong>LUMINA MEDICAL SERVICES</strong> · lighting up your health.</div>
-        <div>PO BOX: 200132, Kampala · Kisaasi Kyanja road · Phone: 0750639410 / 0780105909</div>
-    </div>
+    {% include "partials/print_footer.html" with hospital=hospital %}
 </div>
 {% endblock %}

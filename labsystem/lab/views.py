@@ -861,6 +861,149 @@ def template_library(request):
 
 @login_required
 @staff_required
+def template_catalog_api(request):
+    """Autocomplete endpoint: returns matching TestCatalog names."""
+    q = (request.GET.get('q') or '').strip()
+    qs = TestCatalog.objects.all()
+    if q:
+        qs = qs.filter(name__icontains=q)
+    qs = qs.values('name', 'unit')[:30]
+    return JsonResponse({'results': list(qs)})
+
+
+@login_required
+@staff_required
+@transaction.atomic
+def template_save(request):
+    """Create or update a TestProfile + its parameters from a JSON payload."""
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POST required'}, status=405)
+
+    try:
+        body = json.loads(request.body)
+    except (json.JSONDecodeError, ValueError):
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+
+    profile_id = body.get('profile_id')
+    name = (body.get('name') or '').strip()
+    code = (body.get('code') or '').strip()
+    specimen_type = (body.get('specimen_type') or '').strip()
+    description = (body.get('description') or '').strip()
+    sections = body.get('sections') or []
+
+    if not name or not code:
+        return JsonResponse({'error': 'Template name and code are required.'}, status=400)
+
+    # Check code uniqueness
+    qs = TestProfile.objects.filter(code=code)
+    if profile_id:
+        qs = qs.exclude(pk=profile_id)
+    if qs.exists():
+        return JsonResponse({'error': f'A template with code "{code}" already exists.'}, status=400)
+
+    if profile_id:
+        profile = get_object_or_404(TestProfile, pk=profile_id)
+        profile.name = name
+        profile.code = code
+        profile.default_specimen_type = specimen_type
+        profile.description = description
+        profile.save()
+        profile.parameters.all().delete()
+    else:
+        profile = TestProfile.objects.create(
+            name=name,
+            code=code,
+            default_specimen_type=specimen_type,
+            description=description,
+            is_active=True,
+        )
+
+    order = 0
+    for section in sections:
+        section_name = (section.get('name') or '').strip()
+        for test_row in (section.get('tests') or []):
+            test_name = (test_row.get('name') or '').strip()
+            if not test_name:
+                continue
+            test_obj, _ = TestCatalog.objects.get_or_create(name=test_name)
+            TestProfileParameter.objects.create(
+                profile=profile,
+                test=test_obj,
+                section_name=section_name,
+                display_order=order,
+                input_type=test_row.get('input_type', 'text'),
+                default_reference_range=test_row.get('reference_range', ''),
+                default_unit=test_row.get('unit', ''),
+                default_comment=test_row.get('comment', ''),
+            )
+            order += 1
+
+    return JsonResponse({'ok': True, 'profile_id': profile.pk, 'redirect': reverse('template_library')})
+
+
+@login_required
+@staff_required
+def template_builder(request, profile_id=None):
+    """Render the template builder. If profile_id given, loads that profile for editing."""
+    clone_id = request.GET.get('clone')
+    source = None
+    if profile_id:
+        source = get_object_or_404(TestProfile, pk=profile_id)
+    elif clone_id:
+        source = get_object_or_404(TestProfile, pk=clone_id)
+
+    initial_data = None
+    if source:
+        params = source.parameters.select_related('test').order_by('display_order', 'id')
+        sections_map = {}
+        for p in params:
+            sec = p.section_name or ''
+            if sec not in sections_map:
+                sections_map[sec] = []
+            sections_map[sec].append({
+                'name': p.test.name,
+                'reference_range': p.default_reference_range,
+                'unit': p.default_unit,
+                'input_type': p.input_type,
+                'comment': p.default_comment,
+            })
+        initial_data = {
+            'profile_id': source.pk if profile_id else None,
+            'name': source.name if profile_id else f'Copy of {source.name}',
+            'code': source.code if profile_id else f'{source.code}-copy',
+            'specimen_type': source.default_specimen_type,
+            'description': source.description,
+            'sections': [{'name': k, 'tests': v} for k, v in sections_map.items()],
+        }
+
+    all_profiles = TestProfile.objects.filter(is_active=True).values('id', 'name')
+    return render(request, 'lab/template_builder.html', {
+        'active_nav': 'templates',
+        'editing': bool(profile_id),
+        'source': source,
+        'initial_data_json': json.dumps(initial_data) if initial_data else 'null',
+        'all_profiles': list(all_profiles),
+    })
+
+
+@login_required
+@staff_required
+@transaction.atomic
+def template_delete(request, profile_id):
+    profile = get_object_or_404(TestProfile, pk=profile_id)
+    if request.method == 'POST':
+        name = profile.name
+        profile.delete()
+        messages.success(request, f'Template "{name}" deleted.')
+        return redirect('template_library')
+    return render(request, 'lab/template_confirm_delete.html', {
+        'profile': profile,
+        'active_nav': 'templates',
+    })
+
+
+@login_required
+@staff_required
 @transaction.atomic
 def report_create(request):
     messages.info(
