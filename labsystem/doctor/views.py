@@ -664,6 +664,59 @@ def add_prescription_api(request, visit_id):
 @doctor_role_required
 @require_http_methods(["POST"])
 @transaction.atomic
+def remove_lab_service_api(request, visit_id, visit_service_id):
+    hospital = get_active_hospital(request)
+    visits = Visit.objects.select_related("hospital").all()
+    if hospital and getattr(request.user, "role", "") != User.ROLE_SUPERADMIN:
+        visits = visits.filter(hospital=hospital)
+    visit = get_object_or_404(visits, pk=visit_id)
+    if visit.status == Visit.STATUS_CANCELLED:
+        return JsonResponse({"error": "This visit was terminated by an administrator."}, status=409)
+
+    visit_service = get_object_or_404(
+        VisitService.objects.filter(service__category=Service.CATEGORY_LAB),
+        pk=visit_service_id,
+        visit=visit,
+    )
+
+    if visit_service.performed:
+        return JsonResponse(
+            {"error": f"{visit_service.service.name} has already been processed by the lab and cannot be removed."},
+            status=400,
+        )
+
+    removed_price = visit_service.price_at_time
+    service_name = visit_service.service.name
+    service_pk = visit_service.service.pk
+    visit_service.delete()
+
+    visit.total_amount = max(Decimal("0"), visit.total_amount - removed_price)
+    visit.save(update_fields=["total_amount"])
+
+    consultation = getattr(visit, "consultation", None)
+    if consultation and consultation.lab_requests:
+        updated = [r for r in consultation.lab_requests if int(r) != service_pk]
+        if updated != consultation.lab_requests:
+            consultation.lab_requests = updated
+            consultation.save(update_fields=["lab_requests"])
+
+    pending_services = [
+        requested_lab_service_payload(item)
+        for item in lab_visit_services(visit, performed=False)
+    ]
+
+    return JsonResponse(
+        {
+            "message": f"{service_name} removed from lab requests.",
+            "visit_total_amount": str(visit.total_amount),
+            "pending_services": pending_services,
+        }
+    )
+
+
+@doctor_role_required
+@require_http_methods(["POST"])
+@transaction.atomic
 def remove_billable_service_api(request, visit_id, visit_service_id):
     hospital = get_active_hospital(request)
     visits = Visit.objects.select_related("hospital").all()
@@ -783,7 +836,9 @@ def consultation(request, visit_id):
         triage_instance = visit.triage
     except Triage.DoesNotExist:
         triage_instance = None
+    from nurse.models import ScanReport
     lab_reports = LabReport.objects.filter(visit=visit).prefetch_related("results__test")
+    scan_reports = ScanReport.objects.filter(visit=visit).select_related("sonographer").order_by("-created_at")
     nurse_queue_entries = visit.queue_entries.filter(queue_type=QueueEntry.TYPE_NURSE).order_by("-created_at")
     nurse_notes = NurseNote.objects.filter(visit=visit).select_related("created_by")
     prescriptions = list(
@@ -958,6 +1013,7 @@ def consultation(request, visit_id):
             "available_drugs": available_drugs,
             "pending_lab_services": pending_lab_services,
             "completed_lab_services": completed_lab_services,
+            "scan_reports": scan_reports,
             "added_non_lab_visit_services": added_non_lab_visit_services,
             "prescriptions": prescriptions,
             "adjustment_origin_prescription": adjustment_origin_prescription,
@@ -980,7 +1036,9 @@ def consultation_detail(request, visit_id):
     consultation_instance = get_object_or_404(consultations, visit_id=visit_id)
     visit = consultation_instance.visit
     triage = Triage.objects.filter(visit=visit).first()
+    from nurse.models import ScanReport
     lab_reports = LabReport.objects.filter(visit=visit).prefetch_related("results__test")
+    scan_reports = ScanReport.objects.filter(visit=visit).select_related("sonographer").order_by("-created_at")
     nurse_queue_entries = visit.queue_entries.filter(queue_type=QueueEntry.TYPE_NURSE).order_by("-created_at")
     nurse_notes = NurseNote.objects.filter(visit=visit).select_related("created_by")
 
@@ -993,6 +1051,7 @@ def consultation_detail(request, visit_id):
             "triage": triage,
             "consultation_instance": consultation_instance,
             "lab_reports": lab_reports,
+            "scan_reports": scan_reports,
             "nurse_queue_entries": nurse_queue_entries,
             "nurse_notes": nurse_notes,
         },

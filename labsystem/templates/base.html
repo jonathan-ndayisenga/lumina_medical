@@ -245,7 +245,9 @@
                 {% block sidebar_brand %}
                     <a href="{% url 'app_home' %}" class="flex items-center gap-3 text-white no-underline px-4 py-4 lg:p-0 mb-6">
                         {% if user.hospital %}
-                            <img src="{{ user.hospital.logo_url }}" alt="{{ user.hospital.name }}" style="width:52px;height:52px;min-width:52px;object-fit:contain;flex-shrink:0;border-radius:8px;">
+                            <div style="width:52px;height:52px;min-width:52px;flex-shrink:0;border-radius:10px;overflow:hidden;background:rgba(255,255,255,0.15);display:flex;align-items:center;justify-content:center;">
+                                <img src="{{ user.hospital.logo_url }}" alt="{{ user.hospital.name }}" style="width:100%;height:100%;object-fit:contain;">
+                            </div>
                             <div class="flex flex-col gap-0.5 min-w-0">
                                 <strong class="text-sm font-bold tracking-wide truncate">{{ user.hospital.name|upper }}</strong>
                                 {% if user.hospital.tagline %}
