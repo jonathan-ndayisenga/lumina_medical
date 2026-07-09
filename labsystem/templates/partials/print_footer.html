@@ -2,13 +2,7 @@
     <div>
         <strong>{% if hospital %}{{ hospital.name }}{% else %}Hospital EMR{% endif %}</strong>
         {% if hospital and hospital.tagline %} · {{ hospital.tagline }}{% endif %}
+        {% if hospital and hospital.email %} · {{ hospital.email }}{% endif %}
     </div>
-    {% if hospital %}
-    <div>
-        {% if hospital.box_number %}PO BOX: {{ hospital.box_number }}{% if hospital.city %}, {{ hospital.city }}{% endif %}{% endif %}
-        {% if hospital.location %} · {{ hospital.location }}{% endif %}
-        {% if hospital.email %} · {{ hospital.email }}{% endif %}
-    </div>
-    {% endif %}
     <div style="margin-top:4px; font-size:0.6rem; color:#9ca3af; letter-spacing:0.04em;">Powered by Ternah Health</div>
 </div>
