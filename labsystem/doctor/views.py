@@ -145,6 +145,7 @@ def prescription_payload(prescription):
         "remaining_days_covered": prescription.remaining_days_covered,
         "dispensed_at": prescription.dispensed_at.strftime("%Y-%m-%d %H:%M") if prescription.dispensed_at else "",
         "batches": batches,
+        "notes": prescription.notes or "",
     }
 
 
