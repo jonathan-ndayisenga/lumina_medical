@@ -105,7 +105,7 @@ class Expense(models.Model):
         blank=True,
         related_name="expenses",
     )
-    date = models.DateField(auto_now_add=True)
+    date = models.DateField(default=timezone.localdate)
     notes = models.TextField(blank=True, help_text="Additional notes about this expense")
 
     class Meta:
@@ -225,7 +225,8 @@ class Salary(models.Model):
 class InventoryItem(models.Model):
     CATEGORY_DRUG = "drug"
     CATEGORY_SYRUP = "syrup"
-    CATEGORY_IV = "iv"
+    CATEGORY_IV_FLUID = "iv_fluid"
+    CATEGORY_IV_MED = "iv_med"
     CATEGORY_IM = "im"
     CATEGORY_TUBE = "tube"
     CATEGORY_REAGENT = "reagent"
@@ -234,7 +235,8 @@ class InventoryItem(models.Model):
     CATEGORY_CHOICES = [
         (CATEGORY_DRUG, "Tablet / Capsule"),
         (CATEGORY_SYRUP, "Syrup / Suspension"),
-        (CATEGORY_IV, "IV Medication / Fluid"),
+        (CATEGORY_IV_FLUID, "IV Fluid (e.g. Normal Saline, Ringer's)"),
+        (CATEGORY_IV_MED, "IV Medication (e.g. Ceftriaxone vial)"),
         (CATEGORY_IM, "IM Medication"),
         (CATEGORY_TUBE, "Tube / Cream / Ointment"),
         (CATEGORY_REAGENT, "Reagent"),
@@ -304,7 +306,7 @@ class InventoryItem(models.Model):
                 total_base = self.current_quantity * self.units_per_pack
                 return f"{self.current_quantity} {self.unit}(s) (~{total_base} {self.base_unit})"
             return f"{self.current_quantity} {self.unit}(s)"
-        if self.category in {self.CATEGORY_IV, self.CATEGORY_IM}:
+        if self.category in {self.CATEGORY_IV_FLUID, self.CATEGORY_IV_MED, self.CATEGORY_IM}:
             if self.units_per_pack > 0 and self.base_unit:
                 total_base = self.current_quantity * self.units_per_pack
                 return f"{self.current_quantity} {self.unit}(s) (~{total_base} {self.base_unit})"
@@ -321,7 +323,8 @@ class InventoryItem(models.Model):
         return self.category in {
             self.CATEGORY_DRUG,
             self.CATEGORY_SYRUP,
-            self.CATEGORY_IV,
+            self.CATEGORY_IV_FLUID,
+            self.CATEGORY_IV_MED,
             self.CATEGORY_IM,
             self.CATEGORY_TUBE,
         }
@@ -532,10 +535,18 @@ class InventoryItem(models.Model):
                 self.unit = "bottle"
             if self.pack_size_ml and (not self.units_per_pack or self.units_per_pack == Decimal("1")):
                 self.units_per_pack = self.pack_size_ml
-        elif self.category in {self.CATEGORY_IV, self.CATEGORY_IM}:
+        elif self.category == self.CATEGORY_IV_FLUID:
             self.base_unit = self.base_unit or "ml"
             if self.unit == "unit":
-                self.unit = "vial" if self.category == self.CATEGORY_IM else "bag"
+                self.unit = "bag"
+        elif self.category == self.CATEGORY_IV_MED:
+            self.base_unit = self.base_unit or "mg"
+            if self.unit == "unit":
+                self.unit = "vial"
+        elif self.category == self.CATEGORY_IM:
+            self.base_unit = self.base_unit or "ml"
+            if self.unit == "unit":
+                self.unit = "vial"
         elif self.category == self.CATEGORY_TUBE:
             if self.unit == "unit":
                 self.unit = "tube"

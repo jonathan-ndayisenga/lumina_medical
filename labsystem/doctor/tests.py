@@ -91,7 +91,7 @@ class DoctorWorkflowTests(TestCase):
         self.iv_drug = InventoryItem.objects.create(
             hospital=self.hospital,
             name="Normal Saline IV",
-            category=InventoryItem.CATEGORY_IV,
+            category=InventoryItem.CATEGORY_IV_FLUID,
             unit="bag",
             base_unit="ml",
             units_per_pack="500",

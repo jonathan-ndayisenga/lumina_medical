@@ -1,0 +1,174 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}Opening Balances — {{ hospital.name }}{% endblock %}
+{% block page_title %}Opening Balances{% endblock %}
+{% block page_subtitle %}Enter cash, bank balances, and equity when starting the system{% endblock %}
+
+{% block content %}
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+    <!-- Form -->
+    <div class="lg:col-span-2">
+        <div class="card">
+            <h2 class="text-base font-bold text-text-main mb-2">Post Opening Balances</h2>
+            <p class="text-sm text-text-muted mb-5">
+                Enter the actual balances in each account on the date you are starting the system.
+                Debits and credits must balance — assets and expenses are normally debit balances;
+                liabilities and equity are normally credit balances.
+            </p>
+
+            {% if success %}
+            <div class="mb-4 px-4 py-3 bg-emerald-50 border border-emerald-200 rounded text-sm text-emerald-700 font-semibold">
+                {{ success }}
+            </div>
+            {% endif %}
+
+            {% if error %}
+            <div class="mb-4 px-4 py-3 bg-red-50 border border-red-200 rounded text-sm text-red-700 font-semibold">
+                {{ error }}
+            </div>
+            {% endif %}
+
+            <form method="post" id="obForm">
+                {% csrf_token %}
+
+                <div class="mb-4">
+                    <label class="block text-xs font-semibold text-text-muted uppercase tracking-wide mb-1">Opening Date</label>
+                    <input type="date" name="ob_date" value="{{ today|date:'Y-m-d' }}" class="form-control w-48" required>
+                </div>
+
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead class="border-b-2 border-gray-300">
+                            <tr>
+                                <th class="text-left py-2 pr-4 text-xs font-semibold text-text-muted uppercase">Code</th>
+                                <th class="text-left py-2 pr-4 text-xs font-semibold text-text-muted uppercase">Account</th>
+                                <th class="text-left py-2 pr-4 text-xs font-semibold text-text-muted uppercase">Type</th>
+                                <th class="text-right py-2 pr-4 text-xs font-semibold text-blue-700 uppercase">Debit (UGX)</th>
+                                <th class="text-right py-2 text-xs font-semibold text-purple-700 uppercase">Credit (UGX)</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-100" id="obBody">
+                            {% for acc in accounts %}
+                            <tr class="hover:bg-gray-50">
+                                <td class="py-2 pr-4 font-mono text-xs text-text-muted">{{ acc.code }}</td>
+                                <td class="py-2 pr-4 text-text-main font-medium">{{ acc.name }}</td>
+                                <td class="py-2 pr-4 text-xs text-text-muted">{{ acc.get_account_type_display }}</td>
+                                <td class="py-2 pr-2">
+                                    <input type="number" name="dr_{{ acc.pk }}" min="0" step="1"
+                                           placeholder="0"
+                                           class="form-control text-right text-sm py-1 w-full font-mono ob-dr"
+                                           data-row="{{ acc.pk }}" oninput="recalcBalance()">
+                                </td>
+                                <td class="py-2">
+                                    <input type="number" name="cr_{{ acc.pk }}" min="0" step="1"
+                                           placeholder="0"
+                                           class="form-control text-right text-sm py-1 w-full font-mono ob-cr"
+                                           data-row="{{ acc.pk }}" oninput="recalcBalance()">
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                        <tfoot class="border-t-2 border-gray-300 bg-gray-50">
+                            <tr>
+                                <td colspan="3" class="py-2 pr-4 font-bold text-text-main">TOTALS</td>
+                                <td class="py-2 pr-2 text-right font-mono font-bold text-blue-700" id="totalDr">0</td>
+                                <td class="py-2 text-right font-mono font-bold text-purple-700" id="totalCr">0</td>
+                            </tr>
+                            <tr id="balanceRow">
+                                <td colspan="5" class="py-2 text-right text-xs font-semibold" id="balanceMsg"></td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+
+                <button type="submit" class="btn btn-primary mt-4" id="submitBtn">
+                    Post Opening Balances
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Right: Guide + History -->
+    <div class="space-y-4">
+
+        <div class="card bg-blue-50 border border-blue-200">
+            <h3 class="text-sm font-bold text-blue-800 mb-3">How to fill this in</h3>
+            <div class="space-y-2 text-xs text-blue-700">
+                <div class="flex gap-2">
+                    <span class="font-bold w-24 flex-shrink-0">Cash on Hand</span>
+                    <span>→ Debit — put the actual cash in your safe/drawer</span>
+                </div>
+                <div class="flex gap-2">
+                    <span class="font-bold w-24 flex-shrink-0">Bank Account</span>
+                    <span>→ Debit — your bank statement closing balance</span>
+                </div>
+                <div class="flex gap-2">
+                    <span class="font-bold w-24 flex-shrink-0">A/R</span>
+                    <span>→ Debit — total owed by patients (if any pre-existed)</span>
+                </div>
+                <div class="flex gap-2">
+                    <span class="font-bold w-24 flex-shrink-0">A/P</span>
+                    <span>→ Credit — what you owe suppliers</span>
+                </div>
+                <div class="flex gap-2">
+                    <span class="font-bold w-24 flex-shrink-0">Owner's Equity</span>
+                    <span>→ Credit — balancing figure (assets minus liabilities)</span>
+                </div>
+            </div>
+            <p class="text-xs text-blue-600 mt-3 font-semibold">Debits must equal Credits before you can save.</p>
+        </div>
+
+        {% if existing %}
+        <div class="card">
+            <h3 class="text-sm font-bold text-text-main mb-3">Previously Posted</h3>
+            <div class="space-y-2">
+                {% for entry in existing %}
+                <div class="text-xs border-b border-gray-100 pb-2">
+                    <div class="font-semibold text-text-main">{{ entry.reference }}</div>
+                    <div class="text-text-muted">{{ entry.date|date:"M d, Y" }} — {{ entry.description }}</div>
+                    <div class="font-mono text-text-main">UGX {{ entry.total_debit|floatformat:0|intcomma }}</div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+function formatNum(n) {
+    return n.toLocaleString('en-UG', {maximumFractionDigits: 0});
+}
+
+function recalcBalance() {
+    let totalDr = 0, totalCr = 0;
+    document.querySelectorAll('.ob-dr').forEach(el => {
+        totalDr += parseFloat(el.value || 0);
+    });
+    document.querySelectorAll('.ob-cr').forEach(el => {
+        totalCr += parseFloat(el.value || 0);
+    });
+
+    document.getElementById('totalDr').textContent = formatNum(totalDr);
+    document.getElementById('totalCr').textContent = formatNum(totalCr);
+
+    const msg = document.getElementById('balanceMsg');
+    const btn = document.getElementById('submitBtn');
+    const diff = Math.abs(totalDr - totalCr);
+
+    if (totalDr === 0 && totalCr === 0) {
+        msg.textContent = '';
+        msg.className = '';
+    } else if (totalDr === totalCr) {
+        msg.textContent = 'Balanced ✓';
+        msg.className = 'py-2 text-right text-xs font-semibold text-emerald-600';
+        btn.disabled = false;
+    } else {
+        msg.textContent = `Out of balance by UGX ${formatNum(diff)} — ${totalDr > totalCr ? 'Debits exceed Credits' : 'Credits exceed Debits'}`;
+        msg.className = 'py-2 text-right text-xs font-semibold text-red-600';
+    }
+}
+</script>
+{% endblock %}

@@ -187,7 +187,7 @@ class Prescription(models.Model):
     def is_liquid(self):
         return self.drug.category in {
             "syrup",
-            "iv",
+            "iv_fluid",
             "im",
             "reagent",
         }
@@ -214,6 +214,8 @@ class Prescription(models.Model):
         dose_unit = "mg"
         if self.is_liquid:
             dose_unit = "ml"
+        elif self.drug.category == "iv_med":
+            dose_unit = "mg/vial"
         elif self.is_tube:
             dose_unit = "application unit(s)"
         return f"{self.dosage_mg} {dose_unit} x {self.frequency_per_day}/day for {self.duration_days} day(s)"

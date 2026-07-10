@@ -296,6 +296,7 @@ class ExpenseForm(forms.ModelForm):
     class Meta:
         model = Expense
         fields = (
+            "date",
             "description",
             "category",
             "amount",
@@ -305,6 +306,9 @@ class ExpenseForm(forms.ModelForm):
             "cash_drawer",
             "notes",
         )
+        widgets = {
+            "date": forms.DateInput(attrs={"type": "date", "class": "form-control"}),
+        }
 
     def __init__(self, *args, hospital=None, **kwargs):
         super().__init__(*args, **kwargs)
@@ -482,7 +486,7 @@ class InventoryItemForm(forms.ModelForm):
         if units_per_pack is not None and units_per_pack <= 0:
             self.add_error("units_per_pack", "Units per pack must be greater than zero.")
 
-        if category in {InventoryItem.CATEGORY_SYRUP, InventoryItem.CATEGORY_IV, InventoryItem.CATEGORY_IM}:
+        if category in {InventoryItem.CATEGORY_SYRUP, InventoryItem.CATEGORY_IV_FLUID, InventoryItem.CATEGORY_IM}:
             if not units_per_pack:
                 self.add_error("units_per_pack", "This medicine form needs the pack volume in ml.")
             if not base_unit:
@@ -490,10 +494,17 @@ class InventoryItemForm(forms.ModelForm):
             if not pack_type or pack_type == "unit":
                 if category == InventoryItem.CATEGORY_IM:
                     cleaned_data["unit"] = "vial"
-                elif category == InventoryItem.CATEGORY_IV:
+                elif category == InventoryItem.CATEGORY_IV_FLUID:
                     cleaned_data["unit"] = "bag"
                 else:
                     cleaned_data["unit"] = "bottle"
+
+        if category == InventoryItem.CATEGORY_IV_MED:
+            # IV medication (powder vials) — uses same math as tablets; pack = one vial
+            if not pack_type or pack_type == "unit":
+                cleaned_data["unit"] = "vial"
+            if not base_unit:
+                cleaned_data["base_unit"] = "mg"
 
         if category == InventoryItem.CATEGORY_SYRUP and (not pack_type or pack_type == "unit"):
                 cleaned_data["unit"] = "bottle"

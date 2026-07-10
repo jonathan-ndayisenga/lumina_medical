@@ -304,6 +304,10 @@
                             <p class="font-semibold text-text-main">{{ prescription.drug.name }}</p>
                             <p class="text-xs text-text-muted mt-1">{{ prescription.regimen_display }}</p>
                             <p class="text-xs text-text-muted mt-1">Dispense {{ prescription.quantity_display }}</p>
+                            {% if prescription.notes %}
+                                <button type="button" class="mt-1 text-xs text-blue-600 hover:underline notes-toggle" data-target="notes-{{ prescription.pk }}">Notes ▾</button>
+                                <p id="notes-{{ prescription.pk }}" class="hidden mt-1 text-xs text-text-muted italic border-l-2 border-blue-300 pl-2">{{ prescription.notes }}</p>
+                            {% endif %}
                         </div>
                         <div class="text-right">
                             <p class="text-xs font-semibold text-text-muted">{{ prescription.billing_label }}</p>
@@ -985,11 +989,18 @@
       if (!dosageLabel || !frequencyLabel || !durationLabel || !dosageInput) {
         return;
       }
-      if (['syrup', 'iv', 'im'].includes(category)) {
+      if (['syrup', 'iv_fluid', 'im'].includes(category)) {
         dosageLabel.textContent = 'Dose / Intake (ml)';
         frequencyLabel.textContent = 'Times / Day';
         durationLabel.textContent = 'Days';
         dosageInput.placeholder = '10';
+        return;
+      }
+      if (category === 'iv_med') {
+        dosageLabel.textContent = 'Dose / Intake (mg/vial)';
+        frequencyLabel.textContent = 'Times / Day';
+        durationLabel.textContent = 'Days';
+        dosageInput.placeholder = '1000';
         return;
       }
       if (category === 'tube') {
@@ -1036,12 +1047,18 @@
       let label = `${Number.isInteger(quantity) ? quantity : quantity.toFixed(2)} ${unit}(s)`;
       let totalPrice = quantity * price;
 
-      if (['syrup', 'iv', 'im'].includes(category)) {
+      if (['syrup', 'iv_fluid', 'im'].includes(category)) {
         const totalMl = dosage * frequency * duration;
         packs = Math.ceil(totalMl / Math.max(unitsPerPack, 1));
         quantity = packs;
         label = `${packs} ${unit}(s) covering ${totalMl.toFixed(2)} ${baseUnit}`;
         totalPrice = packs * price;
+      } else if (category === 'iv_med') {
+        const unitsPerDose = strength > 0 ? (dosage / strength) : 1;
+        quantity = Math.ceil(unitsPerDose * frequency * duration);
+        packs = quantity;
+        label = `${quantity} vial(s)`;
+        totalPrice = quantity * (unitsPerPack > 0 ? price / unitsPerPack : price);
       } else if (category === 'tube') {
         const coverageDays = daysCovered > 0 ? daysCovered : 1;
         packs = Math.ceil(duration / coverageDays);
@@ -1547,6 +1564,17 @@
     renderSelectedLabServices();
     syncPrescriptionLabels();
     calculatePrescriptionPreview();
+
+    // Notes toggle on existing prescription cards
+    document.addEventListener('click', function(e) {
+      const btn = e.target.closest('.notes-toggle');
+      if (!btn) return;
+      const el = document.getElementById(btn.dataset.target);
+      if (!el) return;
+      const open = !el.classList.contains('hidden');
+      el.classList.toggle('hidden', open);
+      btn.textContent = open ? 'Notes ▾' : 'Notes ▴';
+    });
   });
 })();
 </script>

@@ -1,0 +1,67 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}Trial Balance — {{ hospital.name }}{% endblock %}
+{% block page_title %}Trial Balance{% endblock %}
+{% block page_subtitle %}As of {{ as_of }}{% endblock %}
+
+{% block content %}
+<div class="space-y-4">
+    <div class="flex flex-wrap gap-3 items-center justify-between">
+        <a href="{% url 'finance_dashboard' %}" class="btn btn-secondary">&larr; Dashboard</a>
+        <form method="get" class="flex gap-2 items-center">
+            <label class="text-sm text-text-muted">As of:</label>
+            <input type="date" name="as_of" value="{{ as_of }}" class="form-control text-sm py-1.5">
+            <button type="submit" class="btn btn-primary text-sm py-1.5">Refresh</button>
+        </form>
+    </div>
+
+    {% if not balanced %}
+    <div class="bg-red-50 border border-red-200 rounded p-4 text-sm text-red-700 font-semibold">
+        Warning: Trial balance does not balance. Total debits ≠ Total credits. Please review journal entries.
+    </div>
+    {% else %}
+    <div class="bg-emerald-50 border border-emerald-200 rounded p-3 text-sm text-emerald-700 font-semibold">
+        Balanced — Debits = Credits = UGX {{ total_dr|floatformat:0|intcomma }}
+    </div>
+    {% endif %}
+
+    <div class="card">
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead class="border-b-2 border-gray-300">
+                    <tr>
+                        <th class="text-left py-2 pr-4 text-xs font-semibold text-text-muted uppercase">Code</th>
+                        <th class="text-left py-2 pr-4 text-xs font-semibold text-text-muted uppercase">Account Name</th>
+                        <th class="text-left py-2 pr-4 text-xs font-semibold text-text-muted uppercase">Type</th>
+                        <th class="text-right py-2 pr-4 text-xs font-semibold text-text-muted uppercase">Debit (UGX)</th>
+                        <th class="text-right py-2 text-xs font-semibold text-text-muted uppercase">Credit (UGX)</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-100">
+                    {% for row in rows %}
+                    <tr class="hover:bg-gray-50">
+                        <td class="py-2 pr-4 font-mono text-xs text-text-muted">{{ row.account.code }}</td>
+                        <td class="py-2 pr-4 text-text-main">{{ row.account.name }}</td>
+                        <td class="py-2 pr-4 text-xs text-text-muted">{{ row.account.get_account_type_display }}</td>
+                        <td class="py-2 pr-4 text-right font-mono {% if row.debit %}text-text-main{% else %}text-gray-300{% endif %}">
+                            {% if row.debit %}{{ row.debit|floatformat:0|intcomma }}{% else %}—{% endif %}
+                        </td>
+                        <td class="py-2 text-right font-mono {% if row.credit %}text-text-main{% else %}text-gray-300{% endif %}">
+                            {% if row.credit %}{{ row.credit|floatformat:0|intcomma }}{% else %}—{% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot class="border-t-2 border-gray-300 bg-gray-50 font-bold">
+                    <tr>
+                        <td colspan="3" class="py-2 pr-4 text-sm font-bold text-text-main">TOTALS</td>
+                        <td class="py-2 pr-4 text-right font-mono text-text-main">{{ total_dr|floatformat:0|intcomma }}</td>
+                        <td class="py-2 text-right font-mono text-text-main">{{ total_cr|floatformat:0|intcomma }}</td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

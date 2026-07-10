@@ -18,6 +18,7 @@ urlpatterns = [
     path('nurse/', include('nurse.urls')),
     path('accounts/', include('django.contrib.auth.urls')),
     path('lab/', include('lab.urls')),  # Lab moved to /lab/ prefix
+    path('finance/', include('finance.urls')),
     path('homecare/', include('homecare.urls')),
     # Serve uploaded media files (hospital logos etc.) in all environments
     re_path(r'^media/(?P<path>.*)$', serve, {'document_root': settings.MEDIA_ROOT}),

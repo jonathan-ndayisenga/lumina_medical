@@ -1,0 +1,311 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}Expense Journal — {{ hospital.name }}{% endblock %}
+{% block page_title %}Expense Journal{% endblock %}
+{% block page_subtitle %}Record and track all hospital operating expenses{% endblock %}
+
+{% block content %}
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+    <!-- LEFT: Record Expense Form -->
+    <div class="lg:col-span-1 space-y-4">
+
+        <div class="card">
+            <h2 class="text-base font-bold text-text-main mb-4">Record Expense</h2>
+
+            {% if messages %}
+            {% for msg in messages %}
+            <div class="mb-3 px-3 py-2 rounded text-sm font-medium
+                {% if msg.tags == 'success' %}bg-emerald-50 text-emerald-700 border border-emerald-200
+                {% else %}bg-red-50 text-red-700 border border-red-200{% endif %}">
+                {{ msg }}
+            </div>
+            {% endfor %}
+            {% endif %}
+
+            {% if error %}
+            <div class="mb-3 px-3 py-2 rounded text-sm font-medium bg-red-50 text-red-700 border border-red-200">{{ error }}</div>
+            {% endif %}
+
+            <form method="post" id="expenseForm">
+                {% csrf_token %}
+                <div class="space-y-4">
+
+                    <div>
+                        <label class="block text-xs font-semibold text-text-muted uppercase tracking-wide mb-1">Date</label>
+                        <input type="date" name="date" value="{{ today|date:'Y-m-d' }}" class="form-control" required>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-semibold text-text-muted uppercase tracking-wide mb-1">Description</label>
+                        <input type="text" name="description"
+                               value="{{ form.description.value|default:'' }}"
+                               placeholder="e.g. June rent payment, MTN Uganda invoice"
+                               class="form-control {% if form.description.errors %}border-red-400{% endif %}" required>
+                        {% if form.description.errors %}<p class="text-xs text-red-600 mt-1">{{ form.description.errors.0 }}</p>{% endif %}
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-semibold text-text-muted uppercase tracking-wide mb-1">Category</label>
+                        <select name="category" class="form-control {% if form.category.errors %}border-red-400{% endif %}" required>
+                            <option value="">— Select category —</option>
+                            {% for value, label in category_choices %}
+                            <option value="{{ value }}" {% if form.category.value == value %}selected{% endif %}>{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                        {% if form.category.errors %}<p class="text-xs text-red-600 mt-1">{{ form.category.errors.0 }}</p>{% endif %}
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-semibold text-text-muted uppercase tracking-wide mb-1">Amount (UGX)</label>
+                        <input type="number" name="amount" min="1" step="1"
+                               value="{{ form.amount.value|default:'' }}"
+                               placeholder="0"
+                               class="form-control {% if form.amount.errors %}border-red-400{% endif %}" required>
+                        {% if form.amount.errors %}<p class="text-xs text-red-600 mt-1">{{ form.amount.errors.0 }}</p>{% endif %}
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-semibold text-text-muted uppercase tracking-wide mb-1">Paid From</label>
+                        <select name="source" id="sourceSelect"
+                                class="form-control {% if form.source.errors %}border-red-400{% endif %}"
+                                onchange="toggleSourceFields(this.value)" required>
+                            <option value="">— Select source —</option>
+                            <option value="cash_drawer" {% if form.source.value == 'cash_drawer' %}selected{% endif %}>Cash Drawer</option>
+                            <option value="bank_account" {% if form.source.value == 'bank_account' %}selected{% endif %}>Bank Account</option>
+                            <option value="mobile_money" {% if form.source.value == 'mobile_money' %}selected{% endif %}>Mobile Money</option>
+                        </select>
+                        {% if form.source.errors %}<p class="text-xs text-red-600 mt-1">{{ form.source.errors.0 }}</p>{% endif %}
+                    </div>
+
+                    <!-- Cash drawer picker (shown only when source = cash_drawer) -->
+                    <div id="cashDrawerField" class="hidden">
+                        <label class="block text-xs font-semibold text-text-muted uppercase tracking-wide mb-1">Cash Drawer</label>
+                        <select name="cash_drawer" class="form-control">
+                            <option value="">— Auto-assign today's drawer —</option>
+                            {% for drawer in form.cash_drawer.field.queryset %}
+                            <option value="{{ drawer.pk }}" {% if form.cash_drawer.value == drawer.pk|stringformat:"s" %}selected{% endif %}>
+                                {{ drawer.date|date:"M d, Y" }}{% if drawer.is_closed %} (closed){% endif %}
+                            </option>
+                            {% endfor %}
+                        </select>
+                        {% if form.cash_drawer.errors %}<p class="text-xs text-red-600 mt-1">{{ form.cash_drawer.errors.0 }}</p>{% endif %}
+                    </div>
+
+                    <!-- Bank account picker -->
+                    <div id="bankAccountField" class="hidden">
+                        <label class="block text-xs font-semibold text-text-muted uppercase tracking-wide mb-1">Bank Account</label>
+                        <select name="bank_account" class="form-control">
+                            <option value="">— Select bank account —</option>
+                            {% for acc in form.bank_account.field.queryset %}
+                            <option value="{{ acc.pk }}" {% if form.bank_account.value == acc.pk|stringformat:"s" %}selected{% endif %}>
+                                {{ acc.bank_name }} — {{ acc.account_name }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                        {% if form.bank_account.errors %}<p class="text-xs text-red-600 mt-1">{{ form.bank_account.errors.0 }}</p>{% endif %}
+                    </div>
+
+                    <!-- Mobile money picker -->
+                    <div id="mobileMoneyField" class="hidden">
+                        <label class="block text-xs font-semibold text-text-muted uppercase tracking-wide mb-1">Mobile Money Account</label>
+                        <select name="mobile_money_account" class="form-control">
+                            <option value="">— Select account —</option>
+                            {% for acc in form.mobile_money_account.field.queryset %}
+                            <option value="{{ acc.pk }}" {% if form.mobile_money_account.value == acc.pk|stringformat:"s" %}selected{% endif %}>
+                                {{ acc.provider }} — {{ acc.number }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                        {% if form.mobile_money_account.errors %}<p class="text-xs text-red-600 mt-1">{{ form.mobile_money_account.errors.0 }}</p>{% endif %}
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-semibold text-text-muted uppercase tracking-wide mb-1">Notes <span class="font-normal">(optional)</span></label>
+                        <textarea name="notes" rows="2" class="form-control" placeholder="Reference number, supplier name, invoice #…">{{ form.notes.value|default:'' }}</textarea>
+                    </div>
+
+                </div>
+
+                <!-- Double-entry preview -->
+                <div class="mt-4 bg-blue-50 border border-blue-200 rounded p-3 text-xs text-blue-800">
+                    <div class="font-semibold mb-1">Ledger posting (auto)</div>
+                    <div class="font-mono space-y-0.5">
+                        <div>DR &nbsp;[Expense Account] &nbsp;&nbsp;&nbsp;&nbsp;amount</div>
+                        <div>&nbsp;&nbsp;&nbsp;&nbsp;CR &nbsp;[Cash / Bank / Mobile] &nbsp;amount</div>
+                    </div>
+                </div>
+
+                <button type="submit" class="btn btn-primary w-full mt-4">
+                    Post Expense to Ledger
+                </button>
+            </form>
+        </div>
+
+        <!-- Category summary -->
+        {% if category_summary %}
+        <div class="card">
+            <h3 class="text-xs font-semibold text-text-muted uppercase tracking-widest mb-3">Period Breakdown</h3>
+            <div class="space-y-2">
+                {% with max_total=category_summary.0.total %}
+                {% for row in category_summary %}
+                <div>
+                    <div class="flex justify-between text-xs mb-0.5">
+                        <span class="text-text-main font-medium">{{ row.label }}</span>
+                        <span class="font-mono font-semibold text-text-muted">{{ row.total|floatformat:0|intcomma }}</span>
+                    </div>
+                    <div class="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                        <div class="h-1.5 bg-red-400 rounded-full" style="width:{% widthratio row.total max_total 100 %}%"></div>
+                    </div>
+                </div>
+                {% endfor %}
+                {% endwith %}
+            </div>
+            <div class="mt-3 pt-3 border-t flex justify-between text-sm font-semibold">
+                <span class="text-text-main">Period Total</span>
+                <span class="text-red-600 font-mono">UGX {{ period_total|floatformat:0|intcomma }}</span>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- RIGHT: Expense Ledger -->
+    <div class="lg:col-span-2 space-y-4">
+
+        <!-- Filters -->
+        <div class="card py-3">
+            <form method="get" class="flex flex-wrap gap-2 items-center">
+                <input type="date" name="from" value="{{ date_from }}" class="form-control text-sm py-1.5 w-36">
+                <span class="text-text-muted text-sm">to</span>
+                <input type="date" name="to" value="{{ date_to }}" class="form-control text-sm py-1.5 w-36">
+                <select name="category" class="form-control text-sm py-1.5">
+                    <option value="">All categories</option>
+                    {% for value, label in category_choices %}
+                    <option value="{{ value }}" {% if category_filter == value %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+                <button type="submit" class="btn btn-primary text-sm py-1.5">Filter</button>
+                {% if category_filter or date_from or date_to %}
+                <a href="{% url 'finance_expenses' %}" class="btn btn-secondary text-sm py-1.5">Clear</a>
+                {% endif %}
+            </form>
+        </div>
+
+        <!-- Expense table -->
+        <div class="card">
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead class="border-b border-gray-200">
+                        <tr>
+                            <th class="text-left py-2 pr-3 text-xs font-semibold text-text-muted uppercase">Date</th>
+                            <th class="text-left py-2 pr-3 text-xs font-semibold text-text-muted uppercase">Description</th>
+                            <th class="text-left py-2 pr-3 text-xs font-semibold text-text-muted uppercase">Category</th>
+                            <th class="text-left py-2 pr-3 text-xs font-semibold text-text-muted uppercase">Paid From</th>
+                            <th class="text-right py-2 pr-3 text-xs font-semibold text-text-muted uppercase">Amount</th>
+                            <th class="text-center py-2 text-xs font-semibold text-text-muted uppercase">Journal</th>
+                            <th class="py-2"></th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-100">
+                        {% for expense in expenses %}
+                        {% with jnl=expense.journal_entries.filter %}
+                        <tr class="hover:bg-gray-50">
+                            <td class="py-2 pr-3 text-text-muted whitespace-nowrap">{{ expense.date|date:"M d, Y" }}</td>
+                            <td class="py-2 pr-3 text-text-main font-medium">
+                                {{ expense.description }}
+                                {% if expense.notes %}
+                                <span class="block text-xs text-text-muted font-normal truncate max-w-xs">{{ expense.notes }}</span>
+                                {% endif %}
+                            </td>
+                            <td class="py-2 pr-3">
+                                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium
+                                    {% if expense.category == 'salary' %}bg-purple-100 text-purple-700
+                                    {% elif expense.category == 'rent' %}bg-blue-100 text-blue-700
+                                    {% elif expense.category == 'utilities' %}bg-amber-100 text-amber-700
+                                    {% elif expense.category == 'consumables' %}bg-teal-100 text-teal-700
+                                    {% elif expense.category == 'medicine' %}bg-green-100 text-green-700
+                                    {% elif expense.category == 'maintenance' %}bg-orange-100 text-orange-700
+                                    {% else %}bg-gray-100 text-gray-600{% endif %}">
+                                    {{ expense.get_category_display }}
+                                </span>
+                            </td>
+                            <td class="py-2 pr-3 text-xs text-text-muted">
+                                {% if expense.source == 'cash_drawer' %}
+                                    <span class="inline-flex items-center gap-1">
+                                        <svg class="w-3 h-3 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"/></svg>
+                                        Cash
+                                    </span>
+                                {% elif expense.source == 'bank_account' %}
+                                    <span class="inline-flex items-center gap-1">
+                                        <svg class="w-3 h-3 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 14v3m4-3v3m4-3v3M3 21h18M3 10h18M3 7l9-4 9 4M4 10h16v11H4V10z"/></svg>
+                                        {{ expense.bank_account.bank_name|default:"Bank" }}
+                                    </span>
+                                {% elif expense.source == 'mobile_money' %}
+                                    <span class="inline-flex items-center gap-1">
+                                        <svg class="w-3 h-3 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
+                                        {{ expense.mobile_money_account.provider|default:"Mobile" }}
+                                    </span>
+                                {% else %}
+                                    {{ expense.get_source_display }}
+                                {% endif %}
+                            </td>
+                            <td class="py-2 pr-3 text-right font-mono font-semibold text-red-600">
+                                {{ expense.amount|floatformat:0|intcomma }}
+                            </td>
+                            <td class="py-2 pr-3 text-center">
+                                {% if expense.journal_entries.exists %}
+                                <span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-semibold bg-emerald-100 text-emerald-700" title="Posted to ledger">
+                                    <svg class="w-3 h-3 mr-0.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+                                    Posted
+                                </span>
+                                {% else %}
+                                <span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-semibold bg-amber-100 text-amber-700">Pending</span>
+                                {% endif %}
+                            </td>
+                            <td class="py-2 text-right">
+                                <form method="post" action="{% url 'finance_expense_delete' expense.pk %}"
+                                      onsubmit="return confirm('Delete this expense? The journal entry will be reversed.')">
+                                    {% csrf_token %}
+                                    <button type="submit" class="text-xs text-red-500 hover:text-red-700 font-medium">Delete</button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% endwith %}
+                        {% empty %}
+                        <tr>
+                            <td colspan="7" class="py-10 text-center text-sm text-text-muted">
+                                No expenses recorded for this period.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                    {% if expenses %}
+                    <tfoot class="border-t-2 border-gray-200 bg-gray-50">
+                        <tr>
+                            <td colspan="4" class="py-2 pr-3 text-sm font-bold text-text-main">Period Total</td>
+                            <td class="py-2 pr-3 text-right font-mono font-bold text-red-600">{{ period_total|floatformat:0|intcomma }}</td>
+                            <td colspan="2"></td>
+                        </tr>
+                    </tfoot>
+                    {% endif %}
+                </table>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<script>
+function toggleSourceFields(source) {
+    document.getElementById('cashDrawerField').classList.toggle('hidden', source !== 'cash_drawer');
+    document.getElementById('bankAccountField').classList.toggle('hidden', source !== 'bank_account');
+    document.getElementById('mobileMoneyField').classList.toggle('hidden', source !== 'mobile_money');
+}
+// Re-apply on page load in case form re-renders with errors
+document.addEventListener('DOMContentLoaded', function() {
+    const sel = document.getElementById('sourceSelect');
+    if (sel) toggleSourceFields(sel.value);
+});
+</script>
+{% endblock %}

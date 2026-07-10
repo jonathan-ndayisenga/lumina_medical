@@ -1,0 +1,47 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}Chart of Accounts — {{ hospital.name }}{% endblock %}
+{% block page_title %}Chart of Accounts{% endblock %}
+{% block page_subtitle %}{{ accounts|length }} accounts configured{% endblock %}
+
+{% block content %}
+<div class="space-y-4">
+    <div class="flex justify-between items-center">
+        <a href="{% url 'finance_dashboard' %}" class="btn btn-secondary">&larr; Dashboard</a>
+        <a href="{% url 'finance_account_create' %}" class="btn btn-primary">+ Add Account</a>
+    </div>
+
+    {% regroup accounts by get_account_type_display as type_groups %}
+    {% for group in type_groups %}
+    <div class="card">
+        <h2 class="text-sm font-bold text-text-main uppercase tracking-widest mb-3 border-b pb-2">{{ group.grouper }}</h2>
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead>
+                    <tr class="border-b border-gray-100">
+                        <th class="text-left py-1.5 pr-4 text-xs font-semibold text-text-muted uppercase">Code</th>
+                        <th class="text-left py-1.5 pr-4 text-xs font-semibold text-text-muted uppercase">Account Name</th>
+                        <th class="text-left py-1.5 pr-4 text-xs font-semibold text-text-muted uppercase">Sub Type</th>
+                        <th class="text-right py-1.5 text-xs font-semibold text-text-muted uppercase">Balance (UGX)</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-50">
+                    {% for acc in group.list %}
+                    <tr class="hover:bg-gray-50">
+                        <td class="py-2 pr-4 font-mono text-xs text-text-muted">{{ acc.code }}</td>
+                        <td class="py-2 pr-4 font-medium text-text-main">
+                            {{ acc.name }}
+                            {% if acc.is_system %}<span class="ml-1 text-xs text-gray-400">(system)</span>{% endif %}
+                        </td>
+                        <td class="py-2 pr-4 text-text-muted text-xs">{{ acc.get_sub_type_display }}</td>
+                        <td class="py-2 text-right font-mono font-semibold text-text-main">{{ acc.balance|floatformat:0|intcomma }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}

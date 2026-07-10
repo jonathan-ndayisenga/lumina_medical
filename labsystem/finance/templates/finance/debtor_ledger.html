@@ -1,0 +1,50 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}Debtor Ledger — {{ hospital.name }}{% endblock %}
+{% block page_title %}Debtor Ledger{% endblock %}
+{% block page_subtitle %}{{ debtors|length }} patient{{ debtors|length|pluralize }} with outstanding balances{% endblock %}
+
+{% block content %}
+<div class="space-y-4">
+    <div class="flex justify-between items-center">
+        <a href="{% url 'finance_dashboard' %}" class="btn btn-secondary">&larr; Dashboard</a>
+        <div class="text-sm font-semibold text-text-main">Total Outstanding: <span class="text-red-600">UGX {{ total_outstanding|floatformat:0|intcomma }}</span></div>
+    </div>
+
+    <div class="card">
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead class="border-b border-gray-200">
+                    <tr>
+                        <th class="text-left py-2 pr-4 text-xs font-semibold text-text-muted uppercase">Patient</th>
+                        <th class="text-left py-2 pr-4 text-xs font-semibold text-text-muted uppercase">Visit Date</th>
+                        <th class="text-right py-2 pr-4 text-xs font-semibold text-text-muted uppercase">Billed</th>
+                        <th class="text-right py-2 pr-4 text-xs font-semibold text-text-muted uppercase">Paid</th>
+                        <th class="text-right py-2 pr-4 text-xs font-semibold text-red-600 uppercase">Balance</th>
+                        <th class="py-2 text-xs font-semibold text-text-muted uppercase"></th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-100">
+                    {% for visit in debtors %}
+                    {% with days=visit.visit_date|timesince %}
+                    <tr class="hover:bg-gray-50">
+                        <td class="py-2 pr-4 font-medium text-text-main">{{ visit.patient.name }}</td>
+                        <td class="py-2 pr-4 text-text-muted">{{ visit.visit_date|date:"M d, Y" }}</td>
+                        <td class="py-2 pr-4 text-right font-mono">{{ visit.total_amount|floatformat:0|intcomma }}</td>
+                        <td class="py-2 pr-4 text-right font-mono text-emerald-600">{{ visit.total_paid|floatformat:0|intcomma }}</td>
+                        <td class="py-2 pr-4 text-right font-mono font-bold text-red-600">{{ visit.balance_due|floatformat:0|intcomma }}</td>
+                        <td class="py-2 text-right">
+                            <a href="{% url 'finance_debtor_patient' visit.patient.pk %}" class="text-xs text-blue-600 hover:underline font-medium">View Ledger</a>
+                        </td>
+                    </tr>
+                    {% endwith %}
+                    {% empty %}
+                    <tr><td colspan="6" class="py-8 text-center text-sm text-text-muted">All accounts are settled.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

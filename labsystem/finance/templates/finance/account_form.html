@@ -1,0 +1,46 @@
+{% extends 'base.html' %}
+
+{% block title %}Add Account — {{ hospital.name }}{% endblock %}
+{% block page_title %}Add Account{% endblock %}
+
+{% block content %}
+<div class="max-w-lg">
+    <div class="card">
+        {% if error %}<div class="alert alert-danger mb-4">{{ error }}</div>{% endif %}
+        <form method="post">
+            {% csrf_token %}
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-text-main mb-1">Account Code</label>
+                    <input name="code" type="text" class="form-control" placeholder="e.g. 6001" required>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-text-main mb-1">Account Name</label>
+                    <input name="name" type="text" class="form-control" placeholder="e.g. Bank Charges" required>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-text-main mb-1">Type</label>
+                    <select name="account_type" class="form-control" required>
+                        <option value="">— Select type —</option>
+                        {% for value, label in account_types %}
+                        <option value="{{ value }}">{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-text-main mb-1">Sub Type</label>
+                    <select name="sub_type" class="form-control">
+                        {% for value, label in sub_types %}
+                        <option value="{{ value }}">{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+            <div class="flex gap-3 mt-6">
+                <button type="submit" class="btn btn-primary">Save Account</button>
+                <a href="{% url 'finance_accounts' %}" class="btn btn-secondary">Cancel</a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

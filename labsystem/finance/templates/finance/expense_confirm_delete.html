@@ -1,0 +1,30 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}Delete Expense — {{ hospital.name }}{% endblock %}
+{% block page_title %}Delete Expense{% endblock %}
+
+{% block content %}
+<div class="max-w-md">
+    <div class="card border border-red-200">
+        <h2 class="text-base font-bold text-red-700 mb-3">Confirm Deletion</h2>
+        <p class="text-sm text-text-main mb-2">You are about to delete this expense:</p>
+        <div class="bg-red-50 rounded p-3 mb-4 text-sm space-y-1">
+            <div><span class="font-semibold">Description:</span> {{ expense.description }}</div>
+            <div><span class="font-semibold">Category:</span> {{ expense.get_category_display }}</div>
+            <div><span class="font-semibold">Amount:</span> UGX {{ expense.amount|floatformat:0|intcomma }}</div>
+            <div><span class="font-semibold">Date:</span> {{ expense.date|date:"M d, Y" }}</div>
+        </div>
+        <p class="text-sm text-text-muted mb-5">
+            The corresponding journal entry (DR {{ expense.get_category_display }} / CR Cash/Bank) will be automatically reversed. This cannot be undone.
+        </p>
+        <div class="flex gap-3">
+            <form method="post">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-danger">Yes, Delete & Reverse</button>
+            </form>
+            <a href="{% url 'finance_expenses' %}" class="btn btn-secondary">Cancel</a>
+        </div>
+    </div>
+</div>
+{% endblock %}

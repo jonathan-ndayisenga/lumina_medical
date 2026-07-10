@@ -1,0 +1,158 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}Balance Sheet — {{ hospital.name }}{% endblock %}
+{% block page_title %}Balance Sheet{% endblock %}
+{% block page_subtitle %}As of {{ as_of }}{% endblock %}
+
+{% block content %}
+<div class="space-y-4">
+
+    <div class="flex flex-wrap gap-3 items-center justify-between">
+        <a href="{% url 'finance_dashboard' %}" class="btn btn-secondary print-hidden">&larr; Dashboard</a>
+        <form method="get" class="flex gap-2 items-center print-hidden">
+            <label class="text-sm text-text-muted">As of:</label>
+            <input type="date" name="as_of" value="{{ as_of }}" class="form-control text-sm py-1.5">
+            <button type="submit" class="btn btn-primary text-sm py-1.5">Refresh</button>
+        </form>
+        <button onclick="window.print()" class="btn btn-secondary print-hidden">Print</button>
+    </div>
+
+    {% include "partials/print_header.html" with hospital=hospital print_title="BALANCE SHEET" print_subtitle="As of "|add:as_of %}
+
+    {% if not balanced %}
+    <div class="bg-amber-50 border border-amber-300 rounded p-3 text-sm text-amber-800 font-semibold print-hidden">
+        Note: Assets (UGX {{ total_assets|floatformat:0|intcomma }}) do not equal Liabilities + Equity (UGX {{ total_liabilities_and_equity|floatformat:0|intcomma }}). Post opening balances to correct this.
+    </div>
+    {% endif %}
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+        <!-- ASSETS -->
+        <div class="card">
+            <h2 class="text-sm font-bold text-text-main uppercase tracking-widest mb-4 pb-2 border-b">Assets</h2>
+            <table class="w-full text-sm">
+                <tbody>
+                    {% for row in asset_rows %}
+                    <tr class="border-b border-gray-100">
+                        <td class="py-1.5 pl-3 text-text-main">
+                            <span class="text-xs text-text-muted font-mono mr-2">{{ row.account.code }}</span>
+                            {{ row.account.name }}
+                        </td>
+                        <td class="py-1.5 text-right font-mono font-semibold text-text-main">
+                            {{ row.balance|floatformat:0|intcomma }}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="2" class="py-4 text-sm text-text-muted italic">No asset balances.</td></tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot class="border-t-2 border-gray-800">
+                    <tr>
+                        <td class="py-2 font-bold text-text-main">Total Assets</td>
+                        <td class="py-2 text-right font-mono font-bold text-blue-700 text-base">
+                            UGX {{ total_assets|floatformat:0|intcomma }}
+                        </td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+
+        <!-- LIABILITIES + EQUITY -->
+        <div class="space-y-4">
+
+            <div class="card">
+                <h2 class="text-sm font-bold text-text-main uppercase tracking-widest mb-4 pb-2 border-b">Liabilities</h2>
+                <table class="w-full text-sm">
+                    <tbody>
+                        {% for row in liability_rows %}
+                        <tr class="border-b border-gray-100">
+                            <td class="py-1.5 pl-3 text-text-main">
+                                <span class="text-xs text-text-muted font-mono mr-2">{{ row.account.code }}</span>
+                                {{ row.account.name }}
+                            </td>
+                            <td class="py-1.5 text-right font-mono font-semibold text-text-main">
+                                {{ row.balance|floatformat:0|intcomma }}
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="2" class="py-4 text-sm text-text-muted italic">No liability balances.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                    <tfoot class="border-t border-gray-300">
+                        <tr>
+                            <td class="py-2 font-semibold text-text-main">Total Liabilities</td>
+                            <td class="py-2 text-right font-mono font-semibold text-text-main">
+                                {{ total_liabilities|floatformat:0|intcomma }}
+                            </td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+
+            <div class="card">
+                <h2 class="text-sm font-bold text-text-main uppercase tracking-widest mb-4 pb-2 border-b">Equity</h2>
+                <table class="w-full text-sm">
+                    <tbody>
+                        {% for row in equity_rows %}
+                        <tr class="border-b border-gray-100">
+                            <td class="py-1.5 pl-3 text-text-main">
+                                <span class="text-xs text-text-muted font-mono mr-2">{{ row.account.code }}</span>
+                                {{ row.account.name }}
+                            </td>
+                            <td class="py-1.5 text-right font-mono font-semibold text-text-main">
+                                {{ row.balance|floatformat:0|intcomma }}
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="2" class="py-2 text-xs text-text-muted italic">No equity accounts posted.</td></tr>
+                        {% endfor %}
+
+                        <!-- Retained Earnings (computed from P&L) -->
+                        <tr class="border-b border-gray-100">
+                            <td class="py-1.5 pl-3 text-text-main">
+                                <span class="text-xs text-text-muted font-mono mr-2">3020</span>
+                                Retained Earnings (Net Profit to date)
+                            </td>
+                            <td class="py-1.5 text-right font-mono font-semibold {% if retained_earnings >= 0 %}text-emerald-700{% else %}text-red-600{% endif %}">
+                                {{ retained_earnings|floatformat:0|intcomma }}
+                            </td>
+                        </tr>
+                    </tbody>
+                    <tfoot class="border-t border-gray-300">
+                        <tr>
+                            <td class="py-2 font-semibold text-text-main">Total Equity</td>
+                            <td class="py-2 text-right font-mono font-semibold text-text-main">
+                                {{ total_equity_and_retained|floatformat:0|intcomma }}
+                            </td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+
+            <!-- Total L + E -->
+            <div class="card bg-gray-50 border-t-4 {% if balanced %}border-emerald-500{% else %}border-amber-400{% endif %}">
+                <div class="flex justify-between items-center">
+                    <span class="font-bold text-text-main">Total Liabilities + Equity</span>
+                    <span class="text-xl font-bold font-mono {% if balanced %}text-emerald-700{% else %}text-amber-700{% endif %}">
+                        UGX {{ total_liabilities_and_equity|floatformat:0|intcomma }}
+                    </span>
+                </div>
+                {% if balanced %}
+                <p class="text-xs text-emerald-600 mt-1 font-medium">Balanced — Assets = Liabilities + Equity</p>
+                {% else %}
+                <p class="text-xs text-amber-600 mt-1">Post opening balances to bring this into balance.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    {% include "partials/print_footer.html" with hospital=hospital %}
+</div>
+
+<style media="print">
+    .print-hidden { display: none; }
+    .grid { display: block; }
+    .card { break-inside: avoid; margin-bottom: 16px; }
+</style>
+{% endblock %}

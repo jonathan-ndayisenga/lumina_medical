@@ -1,0 +1,1425 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Finance Dashboard — Lumina Medical Services</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  /* ── CSS Variables ── */
+  :root {
+    --sidebar-bg: #1B1E3A;
+    --sidebar-active: #2D3158;
+    --sidebar-text: #A5B4D0;
+    --sidebar-text-active: #FFFFFF;
+    --sidebar-section-label: #5B6C8A;
+    --accent: #0D9488;
+    --accent-light: #CCFBF1;
+    --accent-hover: #0F766E;
+    --page-bg: #F1F5F9;
+    --card-bg: #FFFFFF;
+    --border: #E2E8F0;
+    --text-main: #0F172A;
+    --text-muted: #64748B;
+    --revenue-color: #0D9488;
+    --expense-color: #F59E0B;
+    --warning-color: #EF4444;
+    --success-color: #22C55E;
+    --topbar-bg: #FFFFFF;
+    --topbar-border: #E2E8F0;
+    --table-hover: #F8FAFC;
+    --shadow-sm: 0 1px 2px rgba(0,0,0,0.05);
+    --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.07), 0 2px 4px -1px rgba(0,0,0,0.04);
+    --shadow-lg: 0 10px 15px -3px rgba(0,0,0,0.08), 0 4px 6px -2px rgba(0,0,0,0.04);
+  }
+
+  [data-theme="dark"] {
+    --page-bg: #0F172A;
+    --card-bg: #1E293B;
+    --border: #334155;
+    --text-main: #F1F5F9;
+    --text-muted: #94A3B8;
+    --topbar-bg: #1E293B;
+    --topbar-border: #334155;
+    --table-hover: #263044;
+    --shadow-sm: 0 1px 2px rgba(0,0,0,0.3);
+    --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.4), 0 2px 4px -1px rgba(0,0,0,0.3);
+    --shadow-lg: 0 10px 15px -3px rgba(0,0,0,0.5), 0 4px 6px -2px rgba(0,0,0,0.3);
+    --accent-light: #134E4A;
+  }
+
+  /* ── Reset & Base ── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    height: 100%;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    background: var(--page-bg);
+    color: var(--text-main);
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ── Layout Shell ── */
+  .app-shell {
+    display: flex;
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  /* ════════════════════════════
+     SIDEBAR
+  ════════════════════════════ */
+  .sidebar {
+    width: 240px;
+    min-width: 240px;
+    background: var(--sidebar-bg);
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    overflow-x: hidden;
+    position: relative;
+    z-index: 10;
+  }
+
+  .sidebar::-webkit-scrollbar { width: 4px; }
+  .sidebar::-webkit-scrollbar-track { background: transparent; }
+  .sidebar::-webkit-scrollbar-thumb { background: #3a3f6a; border-radius: 2px; }
+
+  /* Logo Area */
+  .sidebar-logo {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    padding: 20px 18px 18px;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+  }
+
+  .logo-badge {
+    width: 36px;
+    height: 36px;
+    min-width: 36px;
+    background: var(--accent);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 16px;
+    color: #fff;
+    letter-spacing: -0.5px;
+    box-shadow: 0 0 0 2px rgba(13,148,136,0.3);
+  }
+
+  .logo-text { overflow: hidden; }
+  .logo-name {
+    font-size: 0.88rem;
+    font-weight: 700;
+    color: #fff;
+    line-height: 1.2;
+    white-space: nowrap;
+    letter-spacing: -0.01em;
+  }
+  .logo-sub {
+    font-size: 0.68rem;
+    color: var(--sidebar-text);
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    margin-top: 2px;
+  }
+
+  /* Nav */
+  .sidebar-nav { padding: 10px 0; flex: 1; }
+
+  .nav-section { margin-bottom: 4px; }
+
+  .nav-section-label {
+    font-size: 0.68rem;
+    font-weight: 600;
+    color: var(--sidebar-section-label);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    padding: 12px 18px 5px;
+  }
+
+  .nav-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 18px;
+    cursor: pointer;
+    color: var(--sidebar-text);
+    font-size: 0.82rem;
+    font-weight: 500;
+    border-radius: 0;
+    transition: background 0.15s, color 0.15s;
+    position: relative;
+    user-select: none;
+  }
+
+  .nav-item:hover {
+    background: rgba(255,255,255,0.05);
+    color: #fff;
+  }
+
+  .nav-item.active {
+    background: var(--sidebar-active);
+    color: var(--sidebar-text-active);
+  }
+
+  .nav-item.active::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    background: var(--accent);
+    border-radius: 0 2px 2px 0;
+  }
+
+  .nav-item svg {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+    opacity: 0.8;
+  }
+
+  .nav-item.active svg { opacity: 1; color: var(--accent); }
+
+  /* Sidebar Footer */
+  .sidebar-footer {
+    border-top: 1px solid rgba(255,255,255,0.06);
+    padding: 14px 18px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .user-avatar {
+    width: 32px;
+    height: 32px;
+    min-width: 32px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #2D3158, #4a5080);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: #fff;
+    border: 1.5px solid rgba(255,255,255,0.12);
+  }
+
+  .user-info { flex: 1; overflow: hidden; }
+  .user-name {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: #fff;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .user-role {
+    font-size: 0.68rem;
+    color: var(--sidebar-text);
+  }
+
+  .gear-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--sidebar-text);
+    padding: 4px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    transition: color 0.15s, background 0.15s;
+  }
+  .gear-btn:hover { color: #fff; background: rgba(255,255,255,0.08); }
+  .gear-btn svg { width: 15px; height: 15px; }
+
+  /* ════════════════════════════
+     MAIN CONTENT AREA
+  ════════════════════════════ */
+  .main-area {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    min-width: 0;
+  }
+
+  /* ── Top Bar ── */
+  .topbar {
+    background: var(--topbar-bg);
+    border-bottom: 1px solid var(--topbar-border);
+    padding: 0 28px;
+    height: 64px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+    box-shadow: var(--shadow-sm);
+    position: relative;
+    z-index: 5;
+  }
+
+  .topbar-left {}
+  .page-title {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: var(--text-main);
+    line-height: 1.2;
+    letter-spacing: -0.02em;
+  }
+  .page-subtitle {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-top: 1px;
+  }
+
+  .topbar-right {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .date-pill {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    background: var(--page-bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 0.78rem;
+    font-weight: 500;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+    white-space: nowrap;
+  }
+  .date-pill:hover { border-color: var(--accent); color: var(--text-main); }
+  .date-pill svg { width: 14px; height: 14px; color: var(--accent); }
+
+  .btn-primary {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 14px;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s, transform 0.1s;
+    white-space: nowrap;
+  }
+  .btn-primary:hover { background: var(--accent-hover); transform: translateY(-1px); }
+  .btn-primary:active { transform: translateY(0); }
+  .btn-primary svg { width: 14px; height: 14px; }
+
+  .bell-btn {
+    position: relative;
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: var(--text-muted);
+    transition: color 0.15s, border-color 0.15s, background 0.15s;
+    background: var(--page-bg);
+  }
+  .bell-btn:hover { color: var(--text-main); border-color: var(--accent); background: var(--card-bg); }
+  .bell-btn svg { width: 16px; height: 16px; }
+
+  .badge {
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    background: var(--warning-color);
+    color: #fff;
+    font-size: 0.6rem;
+    font-weight: 700;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1.5px solid var(--topbar-bg);
+  }
+
+  .theme-toggle {
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: var(--text-muted);
+    transition: color 0.15s, border-color 0.15s, background 0.15s;
+    background: var(--page-bg);
+  }
+  .theme-toggle:hover { color: var(--text-main); border-color: var(--accent); background: var(--card-bg); }
+  .theme-toggle svg { width: 16px; height: 16px; }
+
+  /* ── Page Content ── */
+  .page-content {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 24px 28px 32px;
+  }
+
+  .page-content::-webkit-scrollbar { width: 6px; }
+  .page-content::-webkit-scrollbar-track { background: transparent; }
+  .page-content::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  /* ════════════════════════════
+     KPI TILES
+  ════════════════════════════ */
+  .kpi-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    margin-bottom: 20px;
+  }
+
+  .kpi-tile {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 18px 20px;
+    box-shadow: var(--shadow-sm);
+    transition: box-shadow 0.2s, transform 0.2s;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .kpi-tile:hover {
+    box-shadow: var(--shadow-md);
+    transform: translateY(-2px);
+  }
+
+  .kpi-tile::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    border-radius: 10px 10px 0 0;
+  }
+  .kpi-tile.kpi-green::after { background: var(--success-color); }
+  .kpi-tile.kpi-amber::after { background: var(--expense-color); }
+  .kpi-tile.kpi-teal::after { background: var(--accent); }
+  .kpi-tile.kpi-orange::after { background: var(--expense-color); }
+
+  .kpi-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    margin-bottom: 10px;
+  }
+
+  .kpi-label {
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+
+  .kpi-icon {
+    width: 30px;
+    height: 30px;
+    border-radius: 7px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .kpi-icon.green { background: #DCFCE7; color: #16A34A; }
+  .kpi-icon.amber { background: #FEF3C7; color: #D97706; }
+  .kpi-icon.teal { background: var(--accent-light); color: var(--accent); }
+  .kpi-icon svg { width: 16px; height: 16px; }
+
+  [data-theme="dark"] .kpi-icon.green { background: rgba(22,163,74,0.2); }
+  [data-theme="dark"] .kpi-icon.amber { background: rgba(217,119,6,0.2); }
+
+  .kpi-amount {
+    font-size: 1.75rem;
+    font-weight: 700;
+    color: var(--text-main);
+    letter-spacing: -0.03em;
+    line-height: 1.1;
+    font-variant-numeric: tabular-nums;
+    margin-bottom: 8px;
+  }
+
+  .kpi-amount .currency {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    margin-right: 3px;
+    vertical-align: middle;
+  }
+
+  .kpi-meta {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .trend-up {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--success-color);
+  }
+  .trend-up svg { width: 12px; height: 12px; }
+
+  .tag-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    font-weight: 600;
+  }
+  .tag-badge.amber { background: #FEF3C7; color: #92400E; }
+  .tag-badge.teal { background: var(--accent-light); color: #065F46; }
+  .tag-badge.muted { background: var(--page-bg); color: var(--text-muted); border: 1px solid var(--border); }
+
+  [data-theme="dark"] .tag-badge.amber { background: rgba(245,158,11,0.15); color: #FCD34D; }
+  [data-theme="dark"] .tag-badge.teal { background: rgba(13,148,136,0.2); color: #5EEAD4; }
+  [data-theme="dark"] .tag-badge.muted { background: #1E293B; color: var(--text-muted); }
+
+  .kpi-meta-label {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+  }
+
+  .progress-wrap { margin-top: 10px; }
+  .progress-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 5px;
+  }
+  .progress-label { font-size: 0.68rem; color: var(--text-muted); }
+  .progress-pct { font-size: 0.68rem; font-weight: 700; color: var(--accent); }
+
+  .progress-bar-track {
+    height: 4px;
+    background: var(--page-bg);
+    border-radius: 999px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+  }
+  .progress-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent), #14B8A6);
+    border-radius: 999px;
+    transition: width 0.6s ease;
+  }
+
+  /* ════════════════════════════
+     MIDDLE ROW
+  ════════════════════════════ */
+  .middle-row {
+    display: grid;
+    grid-template-columns: 3fr 2fr;
+    gap: 16px;
+    margin-bottom: 20px;
+  }
+
+  .card {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    box-shadow: var(--shadow-sm);
+  }
+
+  .card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 20px 12px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .card-title {
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: var(--text-main);
+    letter-spacing: -0.01em;
+  }
+
+  .card-period {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    font-weight: 500;
+  }
+
+  .card-body { padding: 16px 20px; }
+
+  /* ── Bar Chart ── */
+  .chart-wrap {
+    position: relative;
+  }
+
+  #revenueChart {
+    width: 100%;
+    display: block;
+  }
+
+  /* ── Activity Feed ── */
+  .activity-list { display: flex; flex-direction: column; gap: 0; }
+
+  .activity-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 11px 0;
+    border-bottom: 1px solid var(--border);
+    transition: background 0.15s;
+    cursor: pointer;
+  }
+
+  .activity-item:last-child { border-bottom: none; }
+
+  .activity-item:hover { background: var(--table-hover); margin: 0 -20px; padding-left: 20px; padding-right: 20px; }
+
+  .activity-dot {
+    width: 32px;
+    height: 32px;
+    min-width: 32px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  .activity-dot.in { background: #DCFCE7; color: #16A34A; }
+  .activity-dot.out { background: #FEE2E2; color: #DC2626; }
+  .activity-dot.journal { background: #EFF6FF; color: #2563EB; }
+  .activity-dot svg { width: 15px; height: 15px; }
+
+  [data-theme="dark"] .activity-dot.in { background: rgba(22,163,74,0.18); }
+  [data-theme="dark"] .activity-dot.out { background: rgba(220,38,38,0.18); }
+  [data-theme="dark"] .activity-dot.journal { background: rgba(37,99,235,0.18); }
+
+  .activity-info { flex: 1; min-width: 0; }
+  .activity-desc {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--text-main);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .activity-sub {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    margin-top: 1px;
+  }
+
+  .activity-right { text-align: right; flex-shrink: 0; }
+  .activity-amount {
+    font-size: 0.78rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  .activity-amount.positive { color: var(--success-color); }
+  .activity-amount.negative { color: var(--warning-color); }
+  .activity-amount.neutral { color: var(--text-muted); }
+  .activity-time {
+    font-size: 0.66rem;
+    color: var(--text-muted);
+    margin-top: 2px;
+  }
+
+  /* ════════════════════════════
+     BOTTOM TABLE
+  ════════════════════════════ */
+  .table-card {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    box-shadow: var(--shadow-sm);
+    overflow: hidden;
+  }
+
+  .table-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .table-link {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--accent);
+    text-decoration: none;
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    transition: color 0.15s;
+  }
+  .table-link:hover { color: var(--accent-hover); }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  thead th {
+    font-size: 0.7rem;
+    font-weight: 700;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    padding: 10px 16px;
+    background: var(--page-bg);
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+
+  [data-theme="dark"] thead th { background: #162032; }
+
+  tbody tr {
+    border-bottom: 1px solid var(--border);
+    transition: background 0.12s;
+    cursor: pointer;
+  }
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:hover { background: var(--table-hover); }
+
+  tbody td {
+    padding: 11px 16px;
+    font-size: 0.8rem;
+    color: var(--text-main);
+    font-variant-numeric: tabular-nums;
+    vertical-align: middle;
+  }
+
+  .td-patient { font-weight: 600; }
+  .td-date { color: var(--text-muted); white-space: nowrap; }
+  .td-services { color: var(--text-muted); font-size: 0.75rem; max-width: 160px; }
+
+  .td-balance { color: var(--warning-color); font-weight: 700; }
+  .td-balance.zero { color: var(--text-muted); }
+
+  .days-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+  .days-badge.green { background: #DCFCE7; color: #15803D; }
+  .days-badge.amber { background: #FEF3C7; color: #92400E; }
+  .days-badge.red { background: #FEE2E2; color: #B91C1C; }
+
+  [data-theme="dark"] .days-badge.green { background: rgba(21,128,61,0.2); color: #4ADE80; }
+  [data-theme="dark"] .days-badge.amber { background: rgba(146,64,14,0.2); color: #FCD34D; }
+  [data-theme="dark"] .days-badge.red { background: rgba(185,28,28,0.2); color: #FCA5A5; }
+
+  .btn-collect {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 10px;
+    border: 1.5px solid var(--accent);
+    border-radius: 5px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: var(--accent);
+    background: none;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+    white-space: nowrap;
+  }
+  .btn-collect:hover { background: var(--accent); color: #fff; }
+
+  .link-view {
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-decoration: none;
+    padding: 4px 8px;
+    border-radius: 4px;
+    transition: color 0.15s, background 0.15s;
+  }
+  .link-view:hover { color: var(--accent); background: var(--accent-light); }
+
+  .td-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  /* ── Stagger animations ── */
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(12px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .kpi-tile {
+    animation: fadeUp 0.4s ease both;
+  }
+  .kpi-tile:nth-child(1) { animation-delay: 0.05s; }
+  .kpi-tile:nth-child(2) { animation-delay: 0.12s; }
+  .kpi-tile:nth-child(3) { animation-delay: 0.19s; }
+  .kpi-tile:nth-child(4) { animation-delay: 0.26s; }
+
+  .middle-row > * {
+    animation: fadeUp 0.4s ease both;
+    animation-delay: 0.32s;
+  }
+  .middle-row > *:nth-child(2) { animation-delay: 0.4s; }
+
+  .table-card {
+    animation: fadeUp 0.4s ease both;
+    animation-delay: 0.46s;
+  }
+</style>
+</head>
+<body>
+
+<div class="app-shell">
+
+  <!-- ══════════════════════════════════
+       SIDEBAR
+  ══════════════════════════════════ -->
+  <aside class="sidebar">
+    <!-- Logo -->
+    <div class="sidebar-logo">
+      <div class="logo-badge">L</div>
+      <div class="logo-text">
+        <div class="logo-name">Lumina Medical</div>
+        <div class="logo-sub">Finance Module</div>
+      </div>
+    </div>
+
+    <!-- Navigation -->
+    <nav class="sidebar-nav">
+
+      <!-- OVERVIEW -->
+      <div class="nav-section">
+        <div class="nav-section-label">Overview</div>
+        <div class="nav-item active">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z"/>
+          </svg>
+          Dashboard
+        </div>
+      </div>
+
+      <!-- TRANSACTIONS -->
+      <div class="nav-section">
+        <div class="nav-section-label">Transactions</div>
+        <div class="nav-item">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 18.75a60.07 60.07 0 0115.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 013 6h-.75m0 0v-.375c0-.621.504-1.125 1.125-1.125H20.25M2.25 6v9m18-10.5v.75c0 .414.336.75.75.75h.75m-1.5-1.5h.375c.621 0 1.125.504 1.125 1.125v9.75c0 .621-.504 1.125-1.125 1.125h-.375m1.5-1.5H21a.75.75 0 00-.75.75v.75m0 0H3.75m0 0h-.375a1.125 1.125 0 01-1.125-1.125V15m1.5 1.5v-.75A.75.75 0 003 15h-.75M15 10.5a3 3 0 11-6 0 3 3 0 016 0z"/>
+          </svg>
+          Record Payment
+        </div>
+        <div class="nav-item">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25"/>
+          </svg>
+          Journal Entry
+        </div>
+        <div class="nav-item">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 10.5L12 3m0 0l7.5 7.5M12 3v18"/>
+          </svg>
+          Expense Cashier
+        </div>
+      </div>
+
+      <!-- LEDGERS -->
+      <div class="nav-section">
+        <div class="nav-section-label">Ledgers</div>
+        <div class="nav-item">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 6.75h12M8.25 12h12m-12 5.25h12M3.75 6.75h.007v.008H3.75V6.75zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zM3.75 12h.007v.008H3.75V12zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm-.375 5.25h.007v.008H3.75v-.008zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z"/>
+          </svg>
+          Chart of Accounts
+        </div>
+        <div class="nav-item">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M21 12a2.25 2.25 0 00-2.25-2.25H15a3 3 0 11-6 0H5.25A2.25 2.25 0 003 12m18 0v6a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 18v-6m18 0V9M3 12V9m18-3a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v3h18V6z"/>
+          </svg>
+          Cashbook
+        </div>
+        <div class="nav-item">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M17.982 18.725A7.488 7.488 0 0012 15.75a7.488 7.488 0 00-5.982 2.975m11.963 0a9 9 0 10-11.963 0m11.963 0A8.966 8.966 0 0112 21a8.966 8.966 0 01-5.982-2.275M15 9.75a3 3 0 11-6 0 3 3 0 016 0z"/>
+          </svg>
+          Debtor Ledger
+        </div>
+        <div class="nav-item">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 21h16.5M4.5 3h15M5.25 3v18m13.5-18v18M9 6.75h1.5m-1.5 3h1.5m-1.5 3h1.5m3-6H15m-1.5 3H15m-1.5 3H15M9 21v-3.375c0-.621.504-1.125 1.125-1.125h3.75c.621 0 1.125.504 1.125 1.125V21"/>
+          </svg>
+          Creditor Ledger
+        </div>
+      </div>
+
+      <!-- REPORTS -->
+      <div class="nav-section">
+        <div class="nav-section-label">Reports</div>
+        <div class="nav-item">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z"/>
+          </svg>
+          Revenue Summary
+        </div>
+        <div class="nav-item">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v17.25m0 0c-1.472 0-2.882.265-4.185.75M12 20.25c1.472 0 2.882.265 4.185.75M18.75 4.97A48.416 48.416 0 0012 4.5c-2.291 0-4.545.16-6.75.47m13.5 0c1.01.143 2.01.317 3 .52m-3-.52l2.62 10.726c.122.499-.106 1.028-.589 1.202a5.988 5.988 0 01-2.031.352 5.988 5.988 0 01-2.031-.352c-.483-.174-.711-.703-.59-1.202L18.75 4.971zm-16.5.52c.99-.203 1.99-.377 3-.52m0 0l2.62 10.726c.122.499-.106 1.028-.589 1.202a5.989 5.989 0 01-2.031.352 5.989 5.989 0 01-2.031-.352c-.483-.174-.711-.703-.59-1.202L5.25 4.971z"/>
+          </svg>
+          Trial Balance
+        </div>
+        <div class="nav-item">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 18L9 11.25l4.306 4.307a11.95 11.95 0 015.814-5.519l2.74-1.22m0 0l-5.94-2.28m5.94 2.28l-2.28 5.941"/>
+          </svg>
+          Profit &amp; Loss
+        </div>
+        <div class="nav-item">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M6.429 9.75L2.25 12l4.179 2.25m0-4.5l5.571 3 5.571-3m-11.142 0L2.25 7.5 12 2.25l9.75 5.25-4.179 2.25m0 0L21.75 12l-4.179 2.25m0 0l4.179 2.25L12 21.75 2.25 16.5l4.179-2.25m11.142 0l-5.571 3-5.571-3"/>
+          </svg>
+          Balance Sheet
+        </div>
+        <div class="nav-item">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 14.25l6-6m4.5-3.493V21.75l-3.75-1.5-3.75 1.5-3.75-1.5-3.75 1.5V4.757c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0111.186 0c1.1.128 1.907 1.077 1.907 2.185zM9.75 9h.008v.008H9.75V9zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm4.125 4.5h.008v.008h-.008V13.5zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z"/>
+          </svg>
+          VAT Return
+        </div>
+      </div>
+    </nav>
+
+    <!-- User -->
+    <div class="sidebar-footer">
+      <div class="user-avatar">JN</div>
+      <div class="user-info">
+        <div class="user-name">Jane Nakato</div>
+        <div class="user-role">Finance Officer</div>
+      </div>
+      <button class="gear-btn" title="Settings">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.24-.438.613-.431.992a6.759 6.759 0 010 .255c-.007.378.138.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 010-.255c.007-.378-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z"/>
+          <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+        </svg>
+      </button>
+    </div>
+  </aside>
+
+  <!-- ══════════════════════════════════
+       MAIN AREA
+  ══════════════════════════════════ -->
+  <div class="main-area">
+
+    <!-- Top Bar -->
+    <div class="topbar">
+      <div class="topbar-left">
+        <div class="page-title">Finance Dashboard</div>
+        <div class="page-subtitle">Lumina Medical Services &nbsp;·&nbsp; July 2026</div>
+      </div>
+      <div class="topbar-right">
+        <button class="theme-toggle" id="themeToggle" title="Toggle theme">
+          <svg id="sunIcon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v2.25m6.364.386l-1.591 1.591M21 12h-2.25m-.386 6.364l-1.591-1.591M12 18.75V21m-4.773-4.227l-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0z"/>
+          </svg>
+          <svg id="moonIcon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" style="display:none">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M21.752 15.002A9.718 9.718 0 0118 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 003 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 009.002-5.998z"/>
+          </svg>
+        </button>
+        <div class="date-pill">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5"/>
+          </svg>
+          Jul 1 – Jul 10, 2026
+        </div>
+        <button class="btn-primary">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15"/>
+          </svg>
+          New Journal Entry
+        </button>
+        <button class="bell-btn" title="Notifications">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0"/>
+          </svg>
+          <span class="badge">3</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Page Content -->
+    <div class="page-content">
+
+      <!-- KPI Row -->
+      <div class="kpi-row">
+
+        <!-- Tile 1: Today's Collections -->
+        <div class="kpi-tile kpi-green">
+          <div class="kpi-header">
+            <div class="kpi-label">Today's Collections</div>
+            <div class="kpi-icon green">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+              </svg>
+            </div>
+          </div>
+          <div class="kpi-amount"><span class="currency">UGX</span>1,240,000</div>
+          <div class="kpi-meta">
+            <span class="trend-up">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 18L9 11.25l4.306 4.307a11.95 11.95 0 015.814-5.519l2.74-1.22m0 0l-5.94-2.28m5.94 2.28l-2.28 5.941"/>
+              </svg>
+              +12%
+            </span>
+            <span class="kpi-meta-label">vs yesterday</span>
+          </div>
+        </div>
+
+        <!-- Tile 2: Outstanding Receivables -->
+        <div class="kpi-tile kpi-amber">
+          <div class="kpi-header">
+            <div class="kpi-label">Outstanding Receivables</div>
+            <div class="kpi-icon amber">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z"/>
+              </svg>
+            </div>
+          </div>
+          <div class="kpi-amount"><span class="currency">UGX</span>8,370,000</div>
+          <div class="kpi-meta">
+            <span class="tag-badge amber">47 patients</span>
+          </div>
+        </div>
+
+        <!-- Tile 3: Month Revenue -->
+        <div class="kpi-tile kpi-teal">
+          <div class="kpi-header">
+            <div class="kpi-label">Month Revenue</div>
+            <div class="kpi-icon teal">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z"/>
+              </svg>
+            </div>
+          </div>
+          <div class="kpi-amount"><span class="currency">UGX</span>34,580,000</div>
+          <div class="progress-wrap">
+            <div class="progress-header">
+              <span class="progress-label">Target: UGX 40,000,000</span>
+              <span class="progress-pct">86%</span>
+            </div>
+            <div class="progress-bar-track">
+              <div class="progress-bar-fill" style="width: 86%"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tile 4: Month Expenses -->
+        <div class="kpi-tile kpi-orange">
+          <div class="kpi-header">
+            <div class="kpi-label">Month Expenses</div>
+            <div class="kpi-icon amber">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 6L9 12.75l4.286-4.286a11.948 11.948 0 014.306 6.43l.776 2.898m0 0l3.182-5.511m-3.182 5.51l-5.511-3.181"/>
+              </svg>
+            </div>
+          </div>
+          <div class="kpi-amount"><span class="currency">UGX</span>11,220,000</div>
+          <div class="kpi-meta">
+            <span class="tag-badge muted">Salaries · Reagents · Utilities</span>
+          </div>
+        </div>
+
+      </div><!-- /kpi-row -->
+
+      <!-- Middle Row -->
+      <div class="middle-row">
+
+        <!-- Revenue Bar Chart -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">Revenue Breakdown</div>
+            <div class="card-period">July 2026</div>
+          </div>
+          <div class="card-body">
+            <div class="chart-wrap">
+              <canvas id="revenueChart" height="230"></canvas>
+            </div>
+          </div>
+        </div>
+
+        <!-- Recent Activity -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">Recent Transactions</div>
+            <div class="card-period">Today</div>
+          </div>
+          <div class="card-body" style="padding-top: 4px; padding-bottom: 4px;">
+            <div class="activity-list">
+
+              <div class="activity-item">
+                <div class="activity-dot in">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 18.75a60.07 60.07 0 0115.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 013 6h-.75m0 0v-.375c0-.621.504-1.125 1.125-1.125H20.25M2.25 6v9m18-10.5v.75c0 .414.336.75.75.75h.75m-1.5-1.5h.375c.621 0 1.125.504 1.125 1.125v9.75c0 .621-.504 1.125-1.125 1.125h-.375m1.5-1.5H21a.75.75 0 00-.75.75v.75m0 0H3.75m0 0h-.375a1.125 1.125 0 01-1.125-1.125V15m1.5 1.5v-.75A.75.75 0 003 15h-.75M15 10.5a3 3 0 11-6 0 3 3 0 016 0z"/>
+                  </svg>
+                </div>
+                <div class="activity-info">
+                  <div class="activity-desc">Payment received</div>
+                  <div class="activity-sub">Namukasa Sarah</div>
+                </div>
+                <div class="activity-right">
+                  <div class="activity-amount positive">+UGX 85,000</div>
+                  <div class="activity-time">2 min ago</div>
+                </div>
+              </div>
+
+              <div class="activity-item">
+                <div class="activity-dot out">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 10.5L12 3m0 0l7.5 7.5M12 3v18"/>
+                  </svg>
+                </div>
+                <div class="activity-info">
+                  <div class="activity-desc">Expense posted</div>
+                  <div class="activity-sub">Reagent supplier</div>
+                </div>
+                <div class="activity-right">
+                  <div class="activity-amount negative">−UGX 320,000</div>
+                  <div class="activity-time">18 min ago</div>
+                </div>
+              </div>
+
+              <div class="activity-item">
+                <div class="activity-dot in">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 18.75a60.07 60.07 0 0115.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 013 6h-.75m0 0v-.375c0-.621.504-1.125 1.125-1.125H20.25M2.25 6v9m18-10.5v.75c0 .414.336.75.75.75h.75m-1.5-1.5h.375c.621 0 1.125.504 1.125 1.125v9.75c0 .621-.504 1.125-1.125 1.125h-.375m1.5-1.5H21a.75.75 0 00-.75.75v.75m0 0H3.75m0 0h-.375a1.125 1.125 0 01-1.125-1.125V15m1.5 1.5v-.75A.75.75 0 003 15h-.75M15 10.5a3 3 0 11-6 0 3 3 0 016 0z"/>
+                  </svg>
+                </div>
+                <div class="activity-info">
+                  <div class="activity-desc">Payment received</div>
+                  <div class="activity-sub">Ssemakula John</div>
+                </div>
+                <div class="activity-right">
+                  <div class="activity-amount positive">+UGX 150,000</div>
+                  <div class="activity-time">34 min ago</div>
+                </div>
+              </div>
+
+              <div class="activity-item">
+                <div class="activity-dot in">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 21h16.5M4.5 3h15M5.25 3v18m13.5-18v18M9 6.75h1.5m-1.5 3h1.5m-1.5 3h1.5m3-6H15m-1.5 3H15m-1.5 3H15M9 21v-3.375c0-.621.504-1.125 1.125-1.125h3.75c.621 0 1.125.504 1.125 1.125V21"/>
+                  </svg>
+                </div>
+                <div class="activity-info">
+                  <div class="activity-desc">Payment received</div>
+                  <div class="activity-sub">Corporate — NSSF</div>
+                </div>
+                <div class="activity-right">
+                  <div class="activity-amount positive">+UGX 480,000</div>
+                  <div class="activity-time">1h ago</div>
+                </div>
+              </div>
+
+              <div class="activity-item">
+                <div class="activity-dot journal">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25"/>
+                  </svg>
+                </div>
+                <div class="activity-info">
+                  <div class="activity-desc">Journal Entry</div>
+                  <div class="activity-sub">Accrual posting</div>
+                </div>
+                <div class="activity-right">
+                  <div class="activity-amount neutral">—</div>
+                  <div class="activity-time">2h ago</div>
+                </div>
+              </div>
+
+              <div class="activity-item">
+                <div class="activity-dot out">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 10.5L12 3m0 0l7.5 7.5M12 3v18"/>
+                  </svg>
+                </div>
+                <div class="activity-info">
+                  <div class="activity-desc">Expense posted</div>
+                  <div class="activity-sub">Uganda Power</div>
+                </div>
+                <div class="activity-right">
+                  <div class="activity-amount negative">−UGX 210,000</div>
+                  <div class="activity-time">3h ago</div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        </div>
+
+      </div><!-- /middle-row -->
+
+      <!-- Outstanding Patient Balances Table -->
+      <div class="table-card">
+        <div class="table-card-header">
+          <div class="card-title">Outstanding Patient Balances</div>
+          <a href="#" class="table-link">
+            View Debtor Ledger
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" style="width:13px;height:13px">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3"/>
+            </svg>
+          </a>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Patient Name</th>
+              <th>Visit Date</th>
+              <th>Services</th>
+              <th style="text-align:right">Total Bill</th>
+              <th style="text-align:right">Paid</th>
+              <th style="text-align:right">Balance</th>
+              <th>Days Outstanding</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="td-patient">Nakabugo Immaculate</td>
+              <td class="td-date">Jul 8, 2026</td>
+              <td class="td-services">Consultation + Lab</td>
+              <td style="text-align:right">UGX 145,000</td>
+              <td style="text-align:right; color:var(--text-muted)">UGX 100,000</td>
+              <td style="text-align:right" class="td-balance">UGX 45,000</td>
+              <td><span class="days-badge green">2 days</span></td>
+              <td>
+                <div class="td-actions">
+                  <button class="btn-collect">Collect</button>
+                  <a href="#" class="link-view">View</a>
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td class="td-patient">Wasswa David</td>
+              <td class="td-date">Jul 5, 2026</td>
+              <td class="td-services">Lab + Pharmacy</td>
+              <td style="text-align:right">UGX 280,000</td>
+              <td style="text-align:right; color:var(--text-muted)">UGX 0</td>
+              <td style="text-align:right" class="td-balance">UGX 280,000</td>
+              <td><span class="days-badge green">5 days</span></td>
+              <td>
+                <div class="td-actions">
+                  <button class="btn-collect">Collect</button>
+                  <a href="#" class="link-view">View</a>
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td class="td-patient">Nantongo Grace</td>
+              <td class="td-date">Jun 28, 2026</td>
+              <td class="td-services">Scan + Consultation</td>
+              <td style="text-align:right">UGX 320,000</td>
+              <td style="text-align:right; color:var(--text-muted)">UGX 200,000</td>
+              <td style="text-align:right" class="td-balance">UGX 120,000</td>
+              <td><span class="days-badge amber">12 days</span></td>
+              <td>
+                <div class="td-actions">
+                  <button class="btn-collect">Collect</button>
+                  <a href="#" class="link-view">View</a>
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td class="td-patient">Mukasa Robert</td>
+              <td class="td-date">Jun 15, 2026</td>
+              <td class="td-services">Procedure + Lab</td>
+              <td style="text-align:right">UGX 650,000</td>
+              <td style="text-align:right; color:var(--text-muted)">UGX 300,000</td>
+              <td style="text-align:right" class="td-balance">UGX 350,000</td>
+              <td><span class="days-badge amber">25 days</span></td>
+              <td>
+                <div class="td-actions">
+                  <button class="btn-collect">Collect</button>
+                  <a href="#" class="link-view">View</a>
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td class="td-patient">Nakayiza Prossy</td>
+              <td class="td-date">May 20, 2026</td>
+              <td class="td-services">Consultation (×3)</td>
+              <td style="text-align:right">UGX 180,000</td>
+              <td style="text-align:right; color:var(--text-muted)">UGX 0</td>
+              <td style="text-align:right" class="td-balance">UGX 180,000</td>
+              <td><span class="days-badge red">51 days</span></td>
+              <td>
+                <div class="td-actions">
+                  <button class="btn-collect">Collect</button>
+                  <a href="#" class="link-view">View</a>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+    </div><!-- /page-content -->
+  </div><!-- /main-area -->
+</div><!-- /app-shell -->
+
+<script>
+  /* ── Theme Toggle ── */
+  const html = document.documentElement;
+  const toggle = document.getElementById('themeToggle');
+  const sunIcon = document.getElementById('sunIcon');
+  const moonIcon = document.getElementById('moonIcon');
+
+  function setTheme(dark) {
+    html.setAttribute('data-theme', dark ? 'dark' : 'light');
+    sunIcon.style.display = dark ? 'none' : '';
+    moonIcon.style.display = dark ? '' : 'none';
+    drawChart();
+  }
+
+  // Check system preference
+  const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  setTheme(prefersDark);
+
+  toggle.addEventListener('click', () => {
+    const isDark = html.getAttribute('data-theme') === 'dark';
+    setTheme(!isDark);
+  });
+
+  /* ── Revenue Bar Chart (Canvas) ── */
+  const chartData = [
+    { label: 'Consultation',    value: 12400000 },
+    { label: 'Laboratory',      value:  9800000 },
+    { label: 'Pharmacy',        value:  5600000 },
+    { label: 'Procedures',      value:  4200000 },
+    { label: 'Scan / Ultrasound', value: 1980000 },
+    { label: 'Other',           value:   600000 },
+  ];
+
+  function formatUGX(v) {
+    if (v >= 1000000) return 'UGX ' + (v / 1000000).toFixed(1) + 'M';
+    return 'UGX ' + v.toLocaleString();
+  }
+
+  function drawChart() {
+    const canvas = document.getElementById('revenueChart');
+    const isDark = html.getAttribute('data-theme') === 'dark';
+
+    // Responsive width
+    const parent = canvas.parentElement;
+    const W = parent.clientWidth || 480;
+    const H = 230;
+    canvas.width = W;
+    canvas.height = H;
+
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, W, H);
+
+    const LABEL_W  = 130;
+    const BAR_AREA = W - LABEL_W - 90; // right margin for value text
+    const BAR_H    = 22;
+    const ROW_H    = 34;
+    const TOP_PAD  = 8;
+    const BAR_RADIUS = 4;
+
+    const maxVal = chartData[0].value;
+
+    // Colors
+    const textMain  = isDark ? '#F1F5F9' : '#0F172A';
+    const textMuted = isDark ? '#94A3B8' : '#64748B';
+    const accentColor = '#0D9488';
+    const accentFade  = isDark ? '#134E4A' : '#CCFBF1';
+
+    chartData.forEach((item, i) => {
+      const y = TOP_PAD + i * ROW_H;
+      const ratio = item.value / maxVal;
+      const barW = Math.max(BAR_RADIUS * 2, ratio * BAR_AREA);
+
+      // Label
+      ctx.fillStyle = textMuted;
+      ctx.font = '500 11.5px Inter, system-ui, sans-serif';
+      ctx.textBaseline = 'middle';
+      ctx.textAlign = 'right';
+      ctx.fillText(item.label, LABEL_W - 10, y + BAR_H / 2);
+
+      // Track
+      ctx.fillStyle = isDark ? '#263044' : '#F1F5F9';
+      ctx.beginPath();
+      roundRect(ctx, LABEL_W, y, BAR_AREA, BAR_H, BAR_RADIUS);
+      ctx.fill();
+
+      // Bar gradient
+      const grad = ctx.createLinearGradient(LABEL_W, 0, LABEL_W + barW, 0);
+      grad.addColorStop(0, accentColor);
+      grad.addColorStop(1, '#14B8A6');
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      roundRect(ctx, LABEL_W, y, barW, BAR_H, BAR_RADIUS);
+      ctx.fill();
+
+      // Value text
+      ctx.fillStyle = textMain;
+      ctx.font = '600 11px Inter, system-ui, sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillText(formatUGX(item.value), LABEL_W + barW + 8, y + BAR_H / 2);
+    });
+  }
+
+  function roundRect(ctx, x, y, w, h, r) {
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+    ctx.lineTo(x + w, y + h - r);
+    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    ctx.lineTo(x + r, y + h);
+    ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+    ctx.lineTo(x, y + r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+    ctx.closePath();
+  }
+
+  // Draw on load and resize
+  window.addEventListener('load', drawChart);
+  window.addEventListener('resize', drawChart);
+</script>
+</body>
+</html>

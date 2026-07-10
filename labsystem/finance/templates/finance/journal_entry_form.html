@@ -1,0 +1,52 @@
+{% extends 'base.html' %}
+
+{% block title %}Manual Journal Entry — {{ hospital.name }}{% endblock %}
+{% block page_title %}New Manual Journal Entry{% endblock %}
+
+{% block content %}
+<div class="max-w-lg">
+    <div class="card">
+        {% if error %}<div class="alert alert-danger mb-4">{{ error }}</div>{% endif %}
+        <p class="text-sm text-text-muted mb-4">Manual entries are for adjustments, corrections, and opening balances. Day-to-day charges and payments post automatically.</p>
+        <form method="post">
+            {% csrf_token %}
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-text-main mb-1">Date</label>
+                    <input name="date" type="date" value="{{ today|date:'Y-m-d' }}" class="form-control" required>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-text-main mb-1">Description</label>
+                    <input name="description" type="text" class="form-control" placeholder="e.g. Opening balance adjustment" required>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-text-main mb-1">Debit Account</label>
+                    <select name="debit_account" class="form-control" required>
+                        <option value="">— Select account —</option>
+                        {% for acc in accounts %}
+                        <option value="{{ acc.pk }}">{{ acc.code }} — {{ acc.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-text-main mb-1">Credit Account</label>
+                    <select name="credit_account" class="form-control" required>
+                        <option value="">— Select account —</option>
+                        {% for acc in accounts %}
+                        <option value="{{ acc.pk }}">{{ acc.code }} — {{ acc.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-text-main mb-1">Amount (UGX)</label>
+                    <input name="amount" type="number" min="1" class="form-control" placeholder="0" required>
+                </div>
+            </div>
+            <div class="flex gap-3 mt-6">
+                <button type="submit" class="btn btn-primary">Post Entry</button>
+                <a href="{% url 'finance_journal' %}" class="btn btn-secondary">Cancel</a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

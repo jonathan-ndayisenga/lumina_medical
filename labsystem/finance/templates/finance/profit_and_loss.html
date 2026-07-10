@@ -1,0 +1,81 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}Profit & Loss — {{ hospital.name }}{% endblock %}
+{% block page_title %}Profit & Loss Statement{% endblock %}
+{% block page_subtitle %}{{ date_from }} to {{ date_to }}{% endblock %}
+
+{% block content %}
+<div class="space-y-4">
+    <div class="flex flex-wrap gap-3 items-center justify-between">
+        <a href="{% url 'finance_dashboard' %}" class="btn btn-secondary">&larr; Dashboard</a>
+        <form method="get" class="flex gap-2 items-center">
+            <input type="date" name="from" value="{{ date_from }}" class="form-control text-sm py-1.5">
+            <span class="text-text-muted text-sm">to</span>
+            <input type="date" name="to" value="{{ date_to }}" class="form-control text-sm py-1.5">
+            <button type="submit" class="btn btn-primary text-sm py-1.5">Filter</button>
+        </form>
+    </div>
+
+    {% include "partials/print_header.html" with hospital=hospital print_title="PROFIT & LOSS STATEMENT" print_subtitle=date_from|add:" to "|add:date_to %}
+
+    <div class="card">
+        <!-- Revenue Section -->
+        <h2 class="text-sm font-bold text-text-main uppercase tracking-widest mb-3">Revenue</h2>
+        <table class="w-full text-sm mb-6">
+            <tbody>
+                {% for row in revenue_rows %}
+                <tr class="border-b border-gray-100">
+                    <td class="py-1.5 text-text-main pl-4">{{ row.account.name }}</td>
+                    <td class="py-1.5 text-right font-mono text-text-main">{{ row.total|floatformat:0|intcomma }}</td>
+                </tr>
+                {% endfor %}
+                <tr class="border-t-2 border-gray-300 font-bold">
+                    <td class="py-2 text-text-main">Total Revenue</td>
+                    <td class="py-2 text-right font-mono text-teal-700">UGX {{ total_revenue|floatformat:0|intcomma }}</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <!-- Expenses Section -->
+        <h2 class="text-sm font-bold text-text-main uppercase tracking-widest mb-3">Expenses</h2>
+        <table class="w-full text-sm mb-6">
+            <tbody>
+                {% for row in expense_rows %}
+                <tr class="border-b border-gray-100">
+                    <td class="py-1.5 text-text-main pl-4">{{ row.account.name }}</td>
+                    <td class="py-1.5 text-right font-mono text-text-main">{{ row.total|floatformat:0|intcomma }}</td>
+                </tr>
+                {% endfor %}
+                {% if not expense_rows %}
+                <tr><td colspan="2" class="py-3 text-sm text-text-muted italic pl-4">No expenses recorded in this period.</td></tr>
+                {% endif %}
+                <tr class="border-t-2 border-gray-300 font-bold">
+                    <td class="py-2 text-text-main">Total Expenses</td>
+                    <td class="py-2 text-right font-mono text-red-600">UGX {{ total_expenses|floatformat:0|intcomma }}</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <!-- Net Profit -->
+        <div class="border-t-4 border-gray-800 pt-4">
+            <div class="flex justify-between items-center">
+                <span class="text-base font-bold text-text-main">NET {% if net_profit >= 0 %}PROFIT{% else %}LOSS{% endif %}</span>
+                <span class="text-xl font-bold {% if net_profit >= 0 %}text-emerald-700{% else %}text-red-600{% endif %} font-mono">
+                    UGX {{ net_profit|floatformat:0|intcomma }}
+                </span>
+            </div>
+        </div>
+    </div>
+
+    {% include "partials/print_footer.html" with hospital=hospital %}
+
+    <div class="print-hidden">
+        <button onclick="window.print()" class="btn btn-secondary">Print P&L</button>
+    </div>
+</div>
+
+<style media="print">
+    .print-hidden { display: none; }
+</style>
+{% endblock %}

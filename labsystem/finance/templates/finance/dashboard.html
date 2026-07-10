@@ -1,0 +1,166 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}Finance Dashboard — {{ hospital.name }}{% endblock %}
+{% block page_title %}Finance Dashboard{% endblock %}
+{% block page_subtitle %}{{ hospital.name }} &middot; {{ month_start|date:"F Y" }}{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+
+    <!-- KPI Row -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+
+        <div class="card border-t-4 border-emerald-500">
+            <div class="text-xs font-semibold text-text-muted uppercase tracking-widest mb-1">Today's Collections</div>
+            <div class="text-2xl font-bold text-text-main">UGX {{ todays_collections|floatformat:0|intcomma }}</div>
+            <div class="text-xs text-emerald-600 mt-1 font-medium">Cash received today</div>
+        </div>
+
+        <div class="card border-t-4 border-amber-500">
+            <div class="text-xs font-semibold text-text-muted uppercase tracking-widest mb-1">Outstanding Receivables</div>
+            <div class="text-2xl font-bold text-text-main">UGX {{ total_outstanding|floatformat:0|intcomma }}</div>
+            <div class="text-xs text-amber-600 mt-1 font-medium">{{ outstanding_visits|length }} patients with balances</div>
+        </div>
+
+        <div class="card border-t-4 border-blue-500">
+            <div class="text-xs font-semibold text-text-muted uppercase tracking-widest mb-1">Month Revenue</div>
+            <div class="text-2xl font-bold text-text-main">UGX {{ month_revenue|floatformat:0|intcomma }}</div>
+            <div class="text-xs text-text-muted mt-1">{{ month_start|date:"M 1" }} – {{ today|date:"M d, Y" }}</div>
+        </div>
+
+        <div class="card border-t-4 border-red-400">
+            <div class="text-xs font-semibold text-text-muted uppercase tracking-widest mb-1">Month Expenses</div>
+            <div class="text-2xl font-bold text-text-main">UGX {{ month_expenses|floatformat:0|intcomma }}</div>
+            <div class="text-xs text-text-muted mt-1">Net: UGX {{ month_net|floatformat:0|intcomma }}</div>
+        </div>
+    </div>
+
+    <!-- Middle Row: Revenue by Category + Recent Journal Entries -->
+    <div class="grid grid-cols-1 lg:grid-cols-5 gap-6">
+
+        <!-- Revenue by Category -->
+        <div class="lg:col-span-3 card">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-base font-bold text-text-main">Revenue by Category — {{ month_start|date:"F Y" }}</h2>
+                <a href="{% url 'finance_revenue' %}" class="text-xs text-blue-600 hover:underline font-medium">Full report &rarr;</a>
+            </div>
+            {% if revenue_by_category %}
+            {% with max_val=revenue_by_category.0.total %}
+            <div class="space-y-3">
+                {% for row in revenue_by_category %}
+                <div>
+                    <div class="flex justify-between text-xs mb-1">
+                        <span class="font-medium text-text-main">{{ row.account.name }}</span>
+                        <span class="font-semibold text-text-main font-mono">UGX {{ row.total|floatformat:0|intcomma }}</span>
+                    </div>
+                    <div class="h-2 bg-gray-100 rounded-full overflow-hidden">
+                        <div class="h-2 bg-teal-500 rounded-full" style="width:{% widthratio row.total max_val 100 %}%"></div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% endwith %}
+            {% else %}
+            <p class="text-sm text-text-muted">No revenue posted this month yet.</p>
+            {% endif %}
+        </div>
+
+        <!-- Recent Journal Entries -->
+        <div class="lg:col-span-2 card">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-base font-bold text-text-main">Recent Journal Entries</h2>
+                <a href="{% url 'finance_journal' %}" class="text-xs text-blue-600 hover:underline font-medium">All &rarr;</a>
+            </div>
+            <div class="space-y-2">
+                {% for entry in recent_entries %}
+                <div class="flex items-start gap-3 py-2 border-b border-gray-100 last:border-0">
+                    <div class="flex-shrink-0 w-2 h-2 mt-1.5 rounded-full {% if entry.source_type == 'payment' %}bg-emerald-500{% elif entry.source_type == 'expense' %}bg-red-400{% elif entry.source_type == 'reversal' %}bg-gray-400{% else %}bg-blue-400{% endif %}"></div>
+                    <div class="min-w-0 flex-1">
+                        <p class="text-xs font-medium text-text-main truncate">{{ entry.description }}</p>
+                        <p class="text-xs text-text-muted">{{ entry.reference }} &middot; {{ entry.date|date:"M d" }}</p>
+                    </div>
+                    <span class="text-xs font-mono font-semibold text-text-muted flex-shrink-0">
+                        UGX {{ entry.total_debit|floatformat:0|intcomma }}
+                    </span>
+                </div>
+                {% empty %}
+                <p class="text-sm text-text-muted">No journal entries yet.</p>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Outstanding Patient Balances -->
+    <div class="card">
+        <div class="flex justify-between items-center mb-4">
+            <h2 class="text-base font-bold text-text-main">Outstanding Patient Balances</h2>
+            <a href="{% url 'finance_debtors' %}" class="text-xs text-blue-600 hover:underline font-medium">View Debtor Ledger &rarr;</a>
+        </div>
+        {% if outstanding_visits %}
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead class="border-b border-gray-200">
+                    <tr>
+                        <th class="text-left py-2 pr-4 text-xs font-semibold uppercase text-text-muted">Patient</th>
+                        <th class="text-left py-2 pr-4 text-xs font-semibold uppercase text-text-muted">Visit Date</th>
+                        <th class="text-right py-2 pr-4 text-xs font-semibold uppercase text-text-muted">Billed</th>
+                        <th class="text-right py-2 pr-4 text-xs font-semibold uppercase text-text-muted">Paid</th>
+                        <th class="text-right py-2 pr-4 text-xs font-semibold uppercase text-text-muted text-red-600">Balance</th>
+                        <th class="py-2 text-xs font-semibold uppercase text-text-muted"></th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-100">
+                    {% for visit in outstanding_visits %}
+                    <tr class="hover:bg-gray-50">
+                        <td class="py-2 pr-4 font-medium text-text-main">{{ visit.patient.name }}</td>
+                        <td class="py-2 pr-4 text-text-muted">{{ visit.visit_date|date:"M d, Y" }}</td>
+                        <td class="py-2 pr-4 text-right font-mono text-text-main">{{ visit.total_amount|floatformat:0|intcomma }}</td>
+                        <td class="py-2 pr-4 text-right font-mono text-emerald-600">{{ visit.total_paid|floatformat:0|intcomma }}</td>
+                        <td class="py-2 pr-4 text-right font-mono font-semibold text-red-600">{{ visit.balance_due|floatformat:0|intcomma }}</td>
+                        <td class="py-2 text-right">
+                            <a href="{% url 'finance_debtor_patient' visit.patient.pk %}" class="text-xs text-blue-600 hover:underline">View</a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p class="text-sm text-text-muted">All patient accounts are settled.</p>
+        {% endif %}
+    </div>
+
+    <!-- Quick Links Row -->
+    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+        <a href="{% url 'finance_accounts' %}" class="card text-center hover:shadow-md transition-shadow p-4 border border-gray-200 hover:border-gray-400">
+            <div class="text-xs font-semibold text-gray-700">Chart of Accounts</div>
+        </a>
+        <a href="{% url 'finance_journal' %}" class="card text-center hover:shadow-md transition-shadow p-4 border border-blue-200 hover:border-blue-400">
+            <div class="text-xs font-semibold text-blue-700">Journal Entries</div>
+        </a>
+        <a href="{% url 'finance_cashbook' %}" class="card text-center hover:shadow-md transition-shadow p-4 border border-teal-200 hover:border-teal-400">
+            <div class="text-xs font-semibold text-teal-700">Cashbook</div>
+        </a>
+        <a href="{% url 'finance_debtors' %}" class="card text-center hover:shadow-md transition-shadow p-4 border border-amber-200 hover:border-amber-400">
+            <div class="text-xs font-semibold text-amber-700">Debtor Ledger</div>
+        </a>
+        <a href="{% url 'finance_trial_balance' %}" class="card text-center hover:shadow-md transition-shadow p-4 border border-purple-200 hover:border-purple-400">
+            <div class="text-xs font-semibold text-purple-700">Trial Balance</div>
+        </a>
+        <a href="{% url 'finance_pnl' %}" class="card text-center hover:shadow-md transition-shadow p-4 border border-indigo-200 hover:border-indigo-400">
+            <div class="text-xs font-semibold text-indigo-700">Profit & Loss</div>
+        </a>
+        <a href="{% url 'finance_revenue' %}" class="card text-center hover:shadow-md transition-shadow p-4 border border-emerald-200 hover:border-emerald-400">
+            <div class="text-xs font-semibold text-emerald-700">Revenue Report</div>
+        </a>
+        <a href="{% url 'finance_balance_sheet' %}" class="card text-center hover:shadow-md transition-shadow p-4 border border-blue-200 hover:border-blue-400">
+            <div class="text-xs font-semibold text-blue-700">Balance Sheet</div>
+        </a>
+        <a href="{% url 'finance_opening_balances' %}" class="card text-center hover:shadow-md transition-shadow p-4 border border-gray-200 hover:border-gray-400">
+            <div class="text-xs font-semibold text-gray-700">Opening Balances</div>
+        </a>
+    </div>
+
+</div>
+{% endblock %}
