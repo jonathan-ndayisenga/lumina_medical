@@ -208,15 +208,38 @@ def journal_list(request):
         return guard
 
     hospital = _hospital(request)
-    entries = (
-        JournalEntry.objects.filter(hospital=hospital)
-        .prefetch_related("lines__account")
-        .order_by("-date", "-id")[:100]
-    )
+    today = timezone.localdate()
+
+    date_from_str = request.GET.get("date_from", "")
+    date_to_str = request.GET.get("date_to", "")
+    source_type = request.GET.get("source_type", "")
+
+    qs = JournalEntry.objects.filter(hospital=hospital).prefetch_related("lines__account")
+
+    if date_from_str:
+        try:
+            qs = qs.filter(date__gte=date.fromisoformat(date_from_str))
+        except ValueError:
+            pass
+    if date_to_str:
+        try:
+            qs = qs.filter(date__lte=date.fromisoformat(date_to_str))
+        except ValueError:
+            pass
+    if source_type:
+        qs = qs.filter(source_type=source_type)
+
+    entries = qs.order_by("-date", "-id")[:100]
+
     return render(request, "finance/journal_list.html", {
         "active_nav": "finance_journal",
         "hospital": hospital,
         "entries": entries,
+        "date_from": date_from_str,
+        "date_to": date_to_str,
+        "source_type": source_type,
+        "source_type_choices": JournalEntry.SOURCE_CHOICES,
+        "today": today,
     })
 
 
