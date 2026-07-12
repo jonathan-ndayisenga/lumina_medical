@@ -446,6 +446,44 @@ def revenue_report(request):
 
 
 @login_required
+def revenue_report_print(request):
+    guard = _require_finance(request)
+    if guard:
+        return guard
+
+    hospital = _hospital(request)
+    today = timezone.localdate()
+    date_from = request.GET.get("from", today.replace(day=1).isoformat())
+    date_to = request.GET.get("to", today.isoformat())
+
+    revenue_accounts = Account.objects.filter(
+        hospital=hospital, account_type=Account.TYPE_REVENUE, is_active=True
+    ).order_by("code")
+
+    rows = []
+    grand_total = Decimal("0")
+    for acc in revenue_accounts:
+        total = (
+            JournalLine.objects.filter(
+                account=acc,
+                entry__date__gte=date_from,
+                entry__date__lte=date_to,
+                entry__is_reversal=False,
+            ).aggregate(t=Sum("credit"))["t"] or Decimal("0")
+        )
+        rows.append({"account": acc, "total": total})
+        grand_total += total
+
+    return render(request, "finance/revenue_report_print.html", {
+        "hospital": hospital,
+        "rows": rows,
+        "grand_total": grand_total,
+        "date_from": date_from,
+        "date_to": date_to,
+    })
+
+
+@login_required
 def trial_balance(request):
     guard = _require_finance(request)
     if guard:

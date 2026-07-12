@@ -23,6 +23,7 @@ urlpatterns = [
     path("visits/<int:visit_id>/terminate/", views.visit_terminate, name="visit_terminate"),
     path("visits/<int:visit_id>/report/", views.view_visit_report, name="view_visit_report"),
     path("complete/<int:visit_id>/", views.complete_visit, name="complete_visit"),
+    path("complete/<int:visit_id>/void/", views.void_dispense_visit, name="void_dispense_visit"),
     path("complete/<int:visit_id>/prescriptions/<int:prescription_id>/dispense/", views.dispense_prescription, name="reception_dispense_prescription"),
     path("receipt/<int:visit_id>/", views.print_receipt, name="print_receipt"),
     path("receipt/payment/<int:payment_id>/", views.print_payment_receipt, name="print_payment_receipt"),

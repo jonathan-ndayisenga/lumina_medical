@@ -114,6 +114,7 @@ class HospitalModuleSubscription(models.Model):
 class User(AbstractUser):
     ROLE_SUPERADMIN = "superadmin"
     ROLE_HOSPITAL_ADMIN = "hospital_admin"
+    ROLE_ACCOUNTANT = "accountant"
     ROLE_RECEPTIONIST = "receptionist"
     ROLE_LAB_ATTENDANT = "lab_attendant"
     ROLE_DOCTOR = "doctor"
@@ -122,6 +123,7 @@ class User(AbstractUser):
     ROLE_CHOICES = [
         (ROLE_SUPERADMIN, "Super Admin"),
         (ROLE_HOSPITAL_ADMIN, "Hospital Admin"),
+        (ROLE_ACCOUNTANT, "Accountant"),
         (ROLE_RECEPTIONIST, "Receptionist"),
         (ROLE_LAB_ATTENDANT, "Lab Attendant"),
         (ROLE_DOCTOR, "Doctor"),
@@ -207,10 +209,14 @@ class User(AbstractUser):
         return eligible and self._hospital_has_module("inventory")
 
     @property
+    def is_accountant(self):
+        return self.role == self.ROLE_ACCOUNTANT
+
+    @property
     def can_access_finance(self):
         if self.is_superadmin:
             return True
-        eligible = self.is_hospital_admin or self.has_module_group("Finance")
+        eligible = self.is_hospital_admin or self.is_accountant or self.has_module_group("Finance")
         return eligible and self._hospital_has_module("finance")
 
     @property
@@ -259,6 +265,7 @@ class User(AbstractUser):
             self.is_superuser = True
         elif self.role in {
             self.ROLE_HOSPITAL_ADMIN,
+            self.ROLE_ACCOUNTANT,
             self.ROLE_RECEPTIONIST,
             self.ROLE_LAB_ATTENDANT,
             self.ROLE_DOCTOR,

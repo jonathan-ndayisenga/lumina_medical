@@ -810,9 +810,9 @@ def visit_create(request, patient_id):
                         price_at_time=service.price,
                     )
                     for queue_type in queue_types_for_service(service):
-                        QueueEntry.objects.create(
-                            hospital=hospital,
+                        ensure_pending_queue_entry(
                             visit=visit,
+                            hospital=hospital,
                             queue_type=queue_type,
                             reason=queue_reason_for_service(service),
                             requested_by=request.user,
@@ -1182,6 +1182,64 @@ def complete_visit(request, visit_id):
             "adjustment_origin_prescription": visit.adjustment_origin_prescription,
         },
     )
+
+
+@reception_role_required
+@transaction.atomic
+def void_dispense_visit(request, visit_id):
+    """Cancel a walk-in / quick-dispense visit with no payments yet.
+    Removes all drugs (restores stock if dispensed, reverses journal entries),
+    deletes remaining services, closes queue entries, marks visit cancelled."""
+    hospital = get_active_hospital(request)
+    visit = get_object_or_404(
+        Visit.objects.select_related("patient", "hospital"),
+        pk=visit_id,
+        hospital=hospital,
+    )
+
+    if request.method != "POST":
+        raise PermissionDenied("This action requires a POST request.")
+    if visit.status == Visit.STATUS_COMPLETED:
+        messages.error(request, "Completed visits cannot be voided.")
+        return redirect("complete_visit", visit_id=visit.pk)
+    if visit.status == Visit.STATUS_CANCELLED:
+        messages.info(request, "This visit is already cancelled.")
+        return redirect("reception_dashboard")
+    if visit.total_paid > 0:
+        messages.error(
+            request,
+            "This visit already has payments recorded and cannot be voided here. Contact the administrator.",
+        )
+        return redirect("complete_visit", visit_id=visit.pk)
+
+    from doctor.views import remove_prescription_workflow
+
+    # Remove every prescription — restores stock if dispensed, deletes billing_visit_service
+    # which fires on_visit_service_delete → journal reversal for each pharmacy charge.
+    for prescription in list(visit.prescriptions.select_related("drug", "billing_visit_service").all()):
+        remove_prescription_workflow(prescription=prescription, actor=request.user)
+
+    # Delete any remaining visit services (consultation, triage, lab, etc.).
+    # on_visit_service_delete fires for each one → reversal posted automatically.
+    visit.visit_services.all().delete()
+
+    # Close open queue entries
+    visit.queue_entries.filter(processed=False).update(
+        processed=True, processed_at=timezone.now()
+    )
+
+    actor_name = request.user.get_full_name() or request.user.username
+    note_line = f"[Visit voided by {actor_name} on {timezone.now():%Y-%m-%d %H:%M}]"
+    visit.status = Visit.STATUS_CANCELLED
+    visit.total_amount = Decimal("0")
+    visit.notes = f"{visit.notes}\n{note_line}".strip() if visit.notes else note_line
+    visit.save(update_fields=["status", "total_amount", "notes"])
+
+    messages.success(
+        request,
+        f"Visit for {visit.patient.name} has been cancelled. All drugs, billing lines, and journal entries have been reversed.",
+    )
+    return redirect("reception_dashboard")
 
 
 @reception_role_required

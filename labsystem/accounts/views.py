@@ -63,6 +63,9 @@ def app_home(request):
     if getattr(user, "role", "") == "hospital_admin":
         return redirect(_hospital_admin_home(user))
 
+    if getattr(user, "role", "") == "accountant":
+        return redirect("finance_dashboard")
+
     # Multi-role support via groups (non-breaking: role-based still works).
     if user.groups.filter(name="Reception").exists():
         return redirect("reception_dashboard")

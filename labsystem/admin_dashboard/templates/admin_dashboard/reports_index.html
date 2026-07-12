@@ -1,31 +1,118 @@
 {% extends 'base.html' %}
-{% block title %}Reports - Lumina{% endblock %}
+{% load humanize %}
+{% block title %}Reports — {{ hospital.name }}{% endblock %}
 {% block page_title %}Reports{% endblock %}
 {% block page_subtitle %}Data insights and exports for clinical and financial analysis.{% endblock %}
-{% block content_container_classes %}max-w-[90rem] mx-auto px-4 lg:px-8 py-6{% endblock %}
 
 {% block content %}
-<div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">
+<div class="space-y-8">
 
-    <a href="{% url 'report_consultations' %}" class="card hover:shadow-md transition-shadow cursor-pointer group">
-        <div class="flex items-start gap-4">
-            <div class="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center flex-shrink-0">
-                <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                          d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
-                </svg>
+    <!-- ── Clinical Reports ── -->
+    <div>
+        <h2 class="text-sm font-bold uppercase tracking-widest text-text-muted mb-4">Clinical</h2>
+        <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+            <a href="{% url 'report_consultations' %}" class="card hover:shadow-md transition-shadow cursor-pointer group">
+                <div class="flex items-start gap-4">
+                    <div class="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center flex-shrink-0">
+                        <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                  d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
+                        </svg>
+                    </div>
+                    <div>
+                        <h3 class="text-sm font-bold text-text-main group-hover:text-blue-600 transition-colors">Doctor Consultations</h3>
+                        <p class="text-xs text-text-muted mt-1">All patients seen by doctors — filter by doctor and date range. Export to CSV.</p>
+                    </div>
+                </div>
+            </a>
+        </div>
+    </div>
+
+    <!-- ── Finance Reports ── -->
+    {% if finance_enabled %}
+    <div>
+        <h2 class="text-sm font-bold uppercase tracking-widest text-text-muted mb-4">Finance Reports</h2>
+
+        <!-- Date filter -->
+        <form method="get" class="flex gap-2 items-center flex-wrap mb-5">
+            <label class="text-xs font-semibold text-text-muted uppercase tracking-wide">Period:</label>
+            <input type="date" name="from" value="{{ date_from }}" class="form-control text-sm py-1.5 w-36">
+            <span class="text-text-muted text-sm">to</span>
+            <input type="date" name="to" value="{{ date_to }}" class="form-control text-sm py-1.5 w-36">
+            <button type="submit" class="btn btn-primary text-sm py-1.5">Apply</button>
+        </form>
+
+        <!-- Revenue summary card -->
+        <div class="card mb-5">
+            <div class="flex items-center justify-between mb-4 flex-wrap gap-3">
+                <div>
+                    <h3 class="text-base font-bold text-text-main">Revenue Report</h3>
+                    <p class="text-xs text-text-muted mt-0.5">{{ date_from }} → {{ date_to }}</p>
+                </div>
+                <div class="flex gap-2 flex-wrap">
+                    <a href="{% url 'finance_revenue' %}?from={{ date_from }}&to={{ date_to }}"
+                       class="btn btn-secondary text-xs py-1.5">Full Report</a>
+                    <a href="{% url 'finance_revenue_print' %}?from={{ date_from }}&to={{ date_to }}"
+                       target="_blank"
+                       class="btn btn-sm border border-teal-200 text-teal-700 bg-white hover:bg-teal-50 text-xs font-semibold px-3 py-1.5 rounded-lg flex items-center gap-1.5">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                  d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/>
+                        </svg>
+                        Print / PDF
+                    </a>
+                </div>
             </div>
-            <div>
-                <h3 class="text-base font-bold text-text-main group-hover:text-blue-600 transition-colors">Doctor Consultations</h3>
-                <p class="text-sm text-text-muted mt-1">All patients seen by doctors — filter by doctor and date range. Export to CSV.</p>
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead class="border-b border-gray-200">
+                        <tr>
+                            <th class="text-left py-2 pr-4 text-xs font-semibold text-text-muted uppercase w-20">Code</th>
+                            <th class="text-left py-2 pr-4 text-xs font-semibold text-text-muted uppercase">Category</th>
+                            <th class="text-right py-2 text-xs font-semibold text-text-muted uppercase">Amount (UGX)</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-100">
+                        {% for row in finance_rows %}
+                        <tr class="{% if not row.total %}opacity-40{% endif %}">
+                            <td class="py-2 pr-4 font-mono text-xs text-text-muted">{{ row.account.code }}</td>
+                            <td class="py-2 pr-4 text-text-main">{{ row.account.name }}</td>
+                            <td class="py-2 text-right font-mono font-semibold text-text-main">{{ row.total|floatformat:0|intcomma }}</td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="3" class="py-6 text-center text-sm text-text-muted">No revenue data for this period.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                    {% if finance_rows %}
+                    <tfoot class="border-t-2 border-gray-300 bg-gray-50">
+                        <tr>
+                            <td colspan="2" class="py-2 pr-4 font-bold text-text-main">TOTAL REVENUE</td>
+                            <td class="py-2 text-right font-mono font-bold text-teal-700 text-base">UGX {{ finance_total|floatformat:0|intcomma }}</td>
+                        </tr>
+                    </tfoot>
+                    {% endif %}
+                </table>
             </div>
         </div>
-    </a>
 
-    {# More reports will be added here #}
-    <div class="card border-dashed border-2 border-gray-200 bg-gray-50 flex items-center justify-center min-h-[100px]">
-        <p class="text-sm text-text-muted italic">More reports coming soon…</p>
+        <!-- Ledger & Books quick links -->
+        <h3 class="text-xs font-bold uppercase tracking-widest text-text-muted mb-3">Ledger &amp; Books</h3>
+        <div class="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3">
+            {% for name, url_name, icon_d in ledger_links %}
+            <a href="{% url url_name %}" class="card hover:shadow-md transition-shadow group py-3 px-4 flex items-center gap-3">
+                <svg class="w-5 h-5 text-blue-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="{{ icon_d }}"/>
+                </svg>
+                <span class="text-xs font-semibold text-text-main group-hover:text-blue-600 transition-colors leading-tight">{{ name }}</span>
+            </a>
+            {% endfor %}
+        </div>
     </div>
+    {% else %}
+    <div class="card border-dashed border-2 border-gray-200 bg-gray-50 text-center py-10">
+        <p class="text-sm text-text-muted">Finance module is not enabled for this hospital. Contact your platform administrator.</p>
+    </div>
+    {% endif %}
 
 </div>
 {% endblock %}

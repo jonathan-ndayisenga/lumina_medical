@@ -18,14 +18,26 @@
 </div>
 {% endif %}
 
+<!-- Mobile: toggle button for the create form -->
+<button id="toggle-form-btn"
+    class="xl:hidden w-full mb-4 flex items-center justify-center gap-2 btn btn-primary py-3 text-sm font-semibold rounded-xl">
+    <svg id="toggle-form-icon" class="w-4 h-4 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+    </svg>
+    <span id="toggle-form-text">Add Team Member</span>
+</button>
+
 <div class="grid grid-cols-1 xl:grid-cols-5 gap-6 items-start">
 
     <!-- ── CREATE FORM ── -->
     <div class="xl:col-span-2">
-        <div class="card">
+        <div class="card" id="form-panel">
             <div class="flex items-center gap-3 mb-6">
                 <div class="w-9 h-9 rounded-lg bg-blue-600 flex items-center justify-center flex-shrink-0">
-                    <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"/></svg>
+                    <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                              d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"/>
+                    </svg>
                 </div>
                 <div>
                     <h2 class="text-base font-bold text-text-main">Add Team Member</h2>
@@ -37,7 +49,9 @@
                 {% csrf_token %}
 
                 {% if form.non_field_errors %}
-                <div class="rounded-lg px-4 py-3 bg-red-50 border border-red-200 text-sm text-red-700">{{ form.non_field_errors }}</div>
+                <div class="rounded-lg px-4 py-3 bg-red-50 border border-red-200 text-sm text-red-700">
+                    {{ form.non_field_errors }}
+                </div>
                 {% endif %}
 
                 <!-- Name row -->
@@ -132,7 +146,7 @@
                     </div>
                 </div>
 
-                <button type="submit" class="btn btn-primary w-full">Create Account</button>
+                <button type="submit" class="btn btn-primary w-full py-3">Create Account</button>
             </form>
         </div>
     </div>
@@ -149,69 +163,81 @@
 
             <div class="space-y-3">
                 {% for u in page_obj %}
-                <div class="flex items-center gap-4 p-3 rounded-xl border border-gray-100 hover:border-gray-200 hover:bg-gray-50 transition-all">
-                    <!-- Avatar -->
-                    <div class="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 font-bold text-sm text-white
-                        {% if u.role == 'doctor' %}bg-blue-500
-                        {% elif u.role == 'nurse' %}bg-purple-500
-                        {% elif u.role == 'lab_attendant' %}bg-teal-500
-                        {% elif u.role == 'hospital_admin' %}bg-orange-500
-                        {% else %}bg-gray-400{% endif %}">
-                        {{ u.first_name|first|upper|default:u.username|first|upper }}
+                <div class="p-3 rounded-xl border border-gray-100 hover:border-gray-200 hover:bg-gray-50 transition-all
+                            flex flex-col xl:flex-row xl:items-center xl:gap-4">
+
+                    <!-- Avatar + Info -->
+                    <div class="flex items-center gap-3 xl:gap-4 flex-1 min-w-0">
+                        <div class="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 font-bold text-sm text-white
+                            {% if u.role == 'doctor' %}bg-blue-500
+                            {% elif u.role == 'nurse' %}bg-purple-500
+                            {% elif u.role == 'lab_attendant' %}bg-teal-500
+                            {% elif u.role == 'hospital_admin' %}bg-orange-500
+                            {% elif u.role == 'accountant' %}bg-yellow-500
+                            {% else %}bg-gray-400{% endif %}">
+                            {{ u.first_name|first|upper|default:u.username|first|upper }}
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <div class="flex items-center gap-2 flex-wrap">
+                                <p class="text-sm font-semibold text-text-main truncate">{{ u.get_full_name|default:u.username }}</p>
+                                {% if not u.is_active %}
+                                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-500">Inactive</span>
+                                {% endif %}
+                            </div>
+                            <p class="text-xs text-text-muted">@{{ u.username }}{% if u.email %} · {{ u.email }}{% endif %}</p>
+                            <div class="flex items-center gap-2 mt-1.5 flex-wrap">
+                                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold
+                                    {% if u.role == 'doctor' %}bg-blue-50 text-blue-700
+                                    {% elif u.role == 'nurse' %}bg-purple-50 text-purple-700
+                                    {% elif u.role == 'lab_attendant' %}bg-teal-50 text-teal-700
+                                    {% elif u.role == 'hospital_admin' %}bg-orange-50 text-orange-700
+                                    {% elif u.role == 'accountant' %}bg-yellow-50 text-yellow-700
+                                    {% else %}bg-gray-100 text-gray-600{% endif %}">
+                                    {{ u.get_role_display }}
+                                </span>
+                                {% for group in u.groups.all %}
+                                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-600">{{ group.name }}</span>
+                                {% endfor %}
+                            </div>
+                        </div>
                     </div>
 
-                    <!-- Info -->
-                    <div class="flex-1 min-w-0">
-                        <div class="flex items-center gap-2 flex-wrap">
-                            <p class="text-sm font-semibold text-text-main truncate">{{ u.get_full_name|default:u.username }}</p>
-                            {% if not u.is_active %}
-                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-500">Inactive</span>
-                            {% endif %}
-                        </div>
-                        <p class="text-xs text-text-muted">@{{ u.username }}{% if u.email %} · {{ u.email }}{% endif %}</p>
-                        <div class="flex items-center gap-2 mt-1.5 flex-wrap">
-                            <!-- Role badge -->
-                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold
-                                {% if u.role == 'doctor' %}bg-blue-50 text-blue-700
-                                {% elif u.role == 'nurse' %}bg-purple-50 text-purple-700
-                                {% elif u.role == 'lab_attendant' %}bg-teal-50 text-teal-700
-                                {% elif u.role == 'hospital_admin' %}bg-orange-50 text-orange-700
-                                {% else %}bg-gray-100 text-gray-600{% endif %}">
-                                {{ u.get_role_display }}
-                            </span>
-                            <!-- Group pills -->
-                            {% for group in u.groups.all %}
-                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-600">{{ group.name }}</span>
-                            {% endfor %}
-                        </div>
-                    </div>
-
-                    <!-- Actions -->
-                    <div class="flex items-center gap-2 flex-shrink-0 flex-wrap justify-end">
-                        <a href="{% url 'edit_user' u.pk %}" class="btn btn-secondary btn-sm">Edit</a>
+                    <!-- Actions: 2-col grid on mobile, flex row on xl -->
+                    <div class="mt-3 xl:mt-0 grid grid-cols-2 gap-1.5 xl:flex xl:items-center xl:gap-2 xl:flex-shrink-0">
+                        <a href="{% url 'edit_user' u.pk %}"
+                           class="user-action-btn border-gray-200 text-gray-700 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700">
+                            Edit
+                        </a>
                         <a href="{% url 'reset_user_password' u.pk %}"
-                           class="btn btn-sm border border-amber-200 text-amber-700 bg-white hover:bg-amber-50 text-xs font-semibold px-3 py-1.5 rounded-lg">
-                           Reset Password
+                           class="user-action-btn border-amber-200 text-amber-700 hover:bg-amber-50">
+                            Reset&nbsp;Password
                         </a>
                         {% if u.is_active %}
                         <a href="{% url 'deactivate_user' u.pk %}"
-                           class="btn btn-sm border border-red-200 text-red-600 bg-white hover:bg-red-50 text-xs font-semibold px-3 py-1.5 rounded-lg">
-                           Deactivate
+                           class="user-action-btn border-red-200 text-red-600 hover:bg-red-50">
+                            Deactivate
                         </a>
+                        {% else %}
+                        <div></div>
                         {% endif %}
                         {% if u != request.user %}
                         <a href="{% url 'delete_user' u.pk %}"
-                           class="btn btn-sm border border-gray-200 text-gray-500 bg-white hover:bg-red-50 hover:border-red-200 hover:text-red-600 text-xs font-semibold px-3 py-1.5 rounded-lg"
+                           class="user-action-btn border-gray-200 text-gray-400 hover:border-red-200 hover:bg-red-50 hover:text-red-600"
                            title="Permanently delete">
-                           Delete
+                            Delete
                         </a>
+                        {% else %}
+                        <div></div>
                         {% endif %}
                     </div>
                 </div>
                 {% empty %}
                 <div class="py-12 text-center">
                     <div class="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-3">
-                        <svg class="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                        <svg class="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                  d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/>
+                        </svg>
                     </div>
                     <p class="text-sm text-text-muted">No team members yet. Add your first staff account.</p>
                 </div>
@@ -220,32 +246,26 @@
 
             <!-- Pagination -->
             {% if page_obj.has_other_pages %}
-            <div class="flex items-center justify-between mt-5 pt-4 border-t border-gray-100">
-                <p class="text-xs text-text-muted">
+            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mt-5 pt-4 border-t border-gray-100">
+                <p class="text-xs text-text-muted text-center sm:text-left">
                     Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
+                    &mdash; {{ page_obj.paginator.count }} member{{ page_obj.paginator.count|pluralize }}
                 </p>
-                <div class="flex items-center gap-1">
+                <div class="flex items-center justify-center gap-1.5 flex-wrap">
                     {% if page_obj.has_previous %}
                     <a href="?page={{ page_obj.previous_page_number }}"
-                       class="px-3 py-1.5 text-xs font-semibold rounded-lg border border-gray-200 bg-white text-text-muted hover:border-blue-300 hover:text-blue-700 transition-all">
-                        ← Prev
-                    </a>
+                       class="pagination-btn">← Prev</a>
                     {% endif %}
                     {% for num in page_obj.paginator.page_range %}
                         {% if num == page_obj.number %}
-                        <span class="px-3 py-1.5 text-xs font-bold rounded-lg bg-blue-600 text-white">{{ num }}</span>
+                        <span class="pagination-btn pagination-btn--active">{{ num }}</span>
                         {% elif num >= page_obj.number|add:"-2" and num <= page_obj.number|add:"2" %}
-                        <a href="?page={{ num }}"
-                           class="px-3 py-1.5 text-xs font-semibold rounded-lg border border-gray-200 bg-white text-text-muted hover:border-blue-300 hover:text-blue-700 transition-all">
-                            {{ num }}
-                        </a>
+                        <a href="?page={{ num }}" class="pagination-btn">{{ num }}</a>
                         {% endif %}
                     {% endfor %}
                     {% if page_obj.has_next %}
                     <a href="?page={{ page_obj.next_page_number }}"
-                       class="px-3 py-1.5 text-xs font-semibold rounded-lg border border-gray-200 bg-white text-text-muted hover:border-blue-300 hover:text-blue-700 transition-all">
-                        Next →
-                    </a>
+                       class="pagination-btn">Next →</a>
                     {% endif %}
                 </div>
             </div>
@@ -256,6 +276,7 @@
 </div>
 
 <style>
+  /* Group module toggles */
   .group-toggle-input:checked + .group-toggle-pill {
     background-color: #EFF6FF;
     border-color: #3B82F6;
@@ -264,6 +285,97 @@
   .group-toggle-input:checked + .group-toggle-pill .toggle-dot {
     background-color: #3B82F6;
   }
+
+  /* Shared user action button style */
+  .user-action-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.5rem 0.5rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    border-radius: 0.5rem;
+    border-width: 1px;
+    border-style: solid;
+    background-color: white;
+    transition: background-color 0.15s, border-color 0.15s, color 0.15s;
+    text-align: center;
+    white-space: nowrap;
+    min-height: 36px;
+  }
+  @media (min-width: 1280px) {
+    .user-action-btn {
+      padding: 0.375rem 0.75rem;
+      min-height: unset;
+    }
+  }
+
+  /* Pagination buttons */
+  .pagination-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 2.5rem;
+    min-height: 2.5rem;
+    padding: 0.375rem 0.75rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    border-radius: 0.5rem;
+    border: 1px solid #e5e7eb;
+    background-color: white;
+    color: #6b7280;
+    transition: border-color 0.15s, color 0.15s;
+  }
+  .pagination-btn:hover {
+    border-color: #93c5fd;
+    color: #1d4ed8;
+  }
+  .pagination-btn--active {
+    background-color: #2563eb;
+    border-color: #2563eb;
+    color: white;
+    cursor: default;
+  }
+  .pagination-btn--active:hover {
+    border-color: #2563eb;
+    color: white;
+  }
 </style>
+
+<script>
+(function () {
+  var btn = document.getElementById('toggle-form-btn');
+  var panel = document.getElementById('form-panel');
+  var text = document.getElementById('toggle-form-text');
+  var icon = document.getElementById('toggle-form-icon');
+  var isXl = window.matchMedia('(min-width: 1280px)');
+
+  function applyMobileState(open) {
+    panel.style.display = open ? 'block' : 'none';
+    text.textContent = open ? 'Hide Form' : 'Add Team Member';
+    icon.style.transform = open ? 'rotate(45deg)' : '';
+  }
+
+  function onBreakpoint() {
+    if (isXl.matches) {
+      panel.style.display = '';
+      btn.style.display = 'none';
+    } else {
+      btn.style.display = '';
+      // On mobile: open if there are form errors, else closed
+      var hasErrors = {{ form.errors|yesno:'true,false' }};
+      applyMobileState(hasErrors);
+    }
+  }
+
+  btn.addEventListener('click', function () {
+    var open = panel.style.display === 'none' || panel.style.display === '';
+    applyMobileState(open);
+  });
+
+  isXl.addEventListener('change', onBreakpoint);
+  onBreakpoint();
+})();
+</script>
 
 {% endblock %}

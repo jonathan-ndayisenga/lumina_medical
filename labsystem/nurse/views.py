@@ -209,6 +209,36 @@ def perform_nursing(request, queue_entry_id):
 
 @nurse_role_required
 @transaction.atomic
+def remove_prescription_from_nurse(request, queue_entry_id, prescription_id):
+    from django.http import JsonResponse
+    from doctor.views import remove_prescription_workflow
+
+    hospital = get_active_hospital(request)
+    queue_entries = QueueEntry.objects.select_related("visit__hospital").filter(queue_type=QueueEntry.TYPE_NURSE)
+    if hospital and getattr(request.user, "role", "") != User.ROLE_SUPERADMIN:
+        queue_entries = queue_entries.filter(hospital=hospital)
+    queue_entry = get_object_or_404(queue_entries, pk=queue_entry_id)
+
+    prescription_qs = Prescription.objects.select_related("drug", "visit", "billing_visit_service").filter(
+        visit=queue_entry.visit
+    )
+    if hospital and getattr(request.user, "role", "") != User.ROLE_SUPERADMIN:
+        prescription_qs = prescription_qs.filter(visit__hospital=hospital)
+    prescription = get_object_or_404(prescription_qs, pk=prescription_id)
+
+    if request.method != "POST":
+        raise PermissionDenied("Removing a prescription requires a POST request.")
+    if prescription.dispensed:
+        messages.error(request, f"{prescription.drug.name} has already been dispensed and cannot be removed here.")
+        return redirect("perform_nursing", queue_entry_id=queue_entry.pk)
+
+    payload = remove_prescription_workflow(prescription=prescription, actor=request.user)
+    messages.success(request, payload["message"])
+    return redirect("perform_nursing", queue_entry_id=queue_entry.pk)
+
+
+@nurse_role_required
+@transaction.atomic
 def dispense_prescription(request, queue_entry_id, prescription_id):
     hospital = get_active_hospital(request)
     queue_entries = QueueEntry.objects.select_related("visit__hospital").filter(queue_type=QueueEntry.TYPE_NURSE)

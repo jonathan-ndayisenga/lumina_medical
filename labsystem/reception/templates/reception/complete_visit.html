@@ -8,7 +8,23 @@
 <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
     <div class="xl:col-span-2 space-y-6">
         <div class="card">
-            <h3 class="text-sm font-semibold text-text-main mb-4">Visit Summary</h3>
+            <div class="flex items-start justify-between gap-4 mb-4 flex-wrap">
+                <h3 class="text-sm font-semibold text-text-main">Visit Summary</h3>
+                {% if total_paid == 0 and visit.status != 'completed' and visit.status != 'cancelled' %}
+                <form method="post" action="{% url 'void_dispense_visit' visit.pk %}"
+                      onsubmit="return confirm('Cancel this visit?\n\nAll added drugs will be removed, stock restored, and all billing entries reversed.\n\nThis cannot be undone.');">
+                    {% csrf_token %}
+                    <button type="submit"
+                            class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-red-200 text-red-600 bg-white hover:bg-red-50 transition-colors">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                  d="M6 18L18 6M6 6l12 12"/>
+                        </svg>
+                        Cancel Visit
+                    </button>
+                </form>
+                {% endif %}
+            </div>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
                 <div class="space-y-2">
                     <p><strong class="text-text-main">Patient:</strong> <span class="text-text-muted">{{ visit.patient.name }}</span></p>
@@ -577,12 +593,18 @@
         card.className = prescription.dispensed
             ? 'rounded-xl border border-green-200 bg-green-50 p-3'
             : 'rounded-xl border border-blue-200 bg-blue-50 p-3';
+        const rxNotesId = `rxnotes-${prescription.id}`;
+        const notesHtml = prescription.notes
+            ? `<button type="button" class="mt-1 text-xs text-blue-600 hover:underline notes-toggle" data-target="${rxNotesId}">Notes ▾</button>
+               <p id="${rxNotesId}" class="hidden mt-1 text-xs text-text-muted italic border-l-2 border-blue-300 pl-2">${prescription.notes.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</p>`
+            : '';
         card.innerHTML = `
             <div class="flex items-start justify-between gap-3 flex-wrap">
                 <div>
                     <p class="font-semibold text-text-main">${prescription.drug_name}</p>
                     <p class="text-xs text-text-muted mt-1">${prescription.regimen}</p>
                     <p class="text-xs text-text-muted mt-1">Dispense ${prescription.quantity_display}</p>
+                    ${notesHtml}
                 </div>
                 <div class="text-right">
                     <p class="text-xs font-semibold text-text-muted">${prescription.billing_label || `UGX ${prescription.total_price}`}</p>
