@@ -2,9 +2,14 @@ from django.contrib import admin
 from django.contrib.auth import views as auth_views
 from django.conf import settings
 from django.urls import include, path, re_path
+from django.views.generic.base import RedirectView
 from django.views.static import serve
 
 urlpatterns = [
+    path(
+        'accounts/login/',
+        RedirectView.as_view(pattern_name='login', permanent=False),
+    ),
     path('admin/', admin.site.urls),
     path(
         'accounts/logout/',
