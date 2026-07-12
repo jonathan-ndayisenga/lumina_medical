@@ -143,12 +143,12 @@
             <div class="flex items-center justify-between mb-5">
                 <div>
                     <h2 class="text-base font-bold text-text-main">Staff Accounts</h2>
-                    <p class="text-xs text-text-muted mt-0.5">{{ users|length }} member{{ users|length|pluralize }}</p>
+                    <p class="text-xs text-text-muted mt-0.5">{{ page_obj.paginator.count }} member{{ page_obj.paginator.count|pluralize }}</p>
                 </div>
             </div>
 
             <div class="space-y-3">
-                {% for u in users %}
+                {% for u in page_obj %}
                 <div class="flex items-center gap-4 p-3 rounded-xl border border-gray-100 hover:border-gray-200 hover:bg-gray-50 transition-all">
                     <!-- Avatar -->
                     <div class="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 font-bold text-sm text-white
@@ -199,6 +199,13 @@
                            Deactivate
                         </a>
                         {% endif %}
+                        {% if u != request.user %}
+                        <a href="{% url 'delete_user' u.pk %}"
+                           class="btn btn-sm border border-gray-200 text-gray-500 bg-white hover:bg-red-50 hover:border-red-200 hover:text-red-600 text-xs font-semibold px-3 py-1.5 rounded-lg"
+                           title="Permanently delete">
+                           Delete
+                        </a>
+                        {% endif %}
                     </div>
                 </div>
                 {% empty %}
@@ -210,6 +217,39 @@
                 </div>
                 {% endfor %}
             </div>
+
+            <!-- Pagination -->
+            {% if page_obj.has_other_pages %}
+            <div class="flex items-center justify-between mt-5 pt-4 border-t border-gray-100">
+                <p class="text-xs text-text-muted">
+                    Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
+                </p>
+                <div class="flex items-center gap-1">
+                    {% if page_obj.has_previous %}
+                    <a href="?page={{ page_obj.previous_page_number }}"
+                       class="px-3 py-1.5 text-xs font-semibold rounded-lg border border-gray-200 bg-white text-text-muted hover:border-blue-300 hover:text-blue-700 transition-all">
+                        ← Prev
+                    </a>
+                    {% endif %}
+                    {% for num in page_obj.paginator.page_range %}
+                        {% if num == page_obj.number %}
+                        <span class="px-3 py-1.5 text-xs font-bold rounded-lg bg-blue-600 text-white">{{ num }}</span>
+                        {% elif num >= page_obj.number|add:"-2" and num <= page_obj.number|add:"2" %}
+                        <a href="?page={{ num }}"
+                           class="px-3 py-1.5 text-xs font-semibold rounded-lg border border-gray-200 bg-white text-text-muted hover:border-blue-300 hover:text-blue-700 transition-all">
+                            {{ num }}
+                        </a>
+                        {% endif %}
+                    {% endfor %}
+                    {% if page_obj.has_next %}
+                    <a href="?page={{ page_obj.next_page_number }}"
+                       class="px-3 py-1.5 text-xs font-semibold rounded-lg border border-gray-200 bg-white text-text-muted hover:border-blue-300 hover:text-blue-700 transition-all">
+                        Next →
+                    </a>
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
         </div>
     </div>
 

@@ -297,8 +297,8 @@
                                 {% endif %}
 
                                 {% if user.can_access_finance %}
-                                <details class="space-y-1" {% if active_nav == 'hospital_financials' or active_nav == 'hospital_expenses' or active_nav == 'hospital_salaries' or active_nav == 'hospital_financial_statements' or active_nav == 'hospital_receipts' or active_nav == 'hospital_bank_accounts' or active_nav == 'hospital_mobile_money' or active_nav == 'hospital_bank_reconciliation' or active_nav == 'hospital_three_way_reconciliation' or active_nav|slice:":8" == 'finance_' %}open{% endif %}>
-                                    <summary class="sidebar-link cursor-pointer {% if active_nav == 'hospital_financials' or active_nav == 'hospital_expenses' or active_nav == 'hospital_salaries' or active_nav == 'hospital_financial_statements' or active_nav == 'hospital_receipts' or active_nav == 'hospital_bank_accounts' or active_nav == 'hospital_mobile_money' or active_nav == 'hospital_bank_reconciliation' or active_nav == 'hospital_three_way_reconciliation' or active_nav|slice:":8" == 'finance_' %}active{% endif %}">
+                                <details class="space-y-1" {% if active_nav == 'hospital_financials' or active_nav == 'hospital_expenses' or active_nav == 'hospital_salaries' or active_nav == 'hospital_receipts' or active_nav == 'hospital_bank_accounts' or active_nav == 'hospital_mobile_money' or active_nav|slice:":8" == 'finance_' %}open{% endif %}>
+                                    <summary class="sidebar-link cursor-pointer {% if active_nav == 'hospital_financials' or active_nav == 'hospital_expenses' or active_nav == 'hospital_salaries' or active_nav == 'hospital_receipts' or active_nav == 'hospital_bank_accounts' or active_nav == 'hospital_mobile_money' or active_nav|slice:":8" == 'finance_' %}active{% endif %}">
                                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-5 h-5">
                                             <path stroke-linecap="round" stroke-linejoin="round" d="M12 1v22M17 5H9a4 4 0 0 0 0 8h6a4 4 0 1 1 0 8H6" />
                                         </svg>
@@ -311,9 +311,7 @@
                                         <a href="{% url 'financial_report' %}" class="sidebar-sublink {% if active_nav == 'hospital_financials' %}active{% endif %}">Financial Report</a>
                                         <a href="{% url 'manage_expenses' %}" class="sidebar-sublink {% if active_nav == 'hospital_expenses' %}active{% endif %}">Expenses</a>
                                         <a href="{% url 'manage_salaries' %}" class="sidebar-sublink {% if active_nav == 'hospital_salaries' %}active{% endif %}">Salaries</a>
-                                        <a href="{% url 'financial_statements' %}" class="sidebar-sublink {% if active_nav == 'hospital_financial_statements' %}active{% endif %}">Financial Statements</a>
                                         <a href="{% url 'receipts_list' %}" class="sidebar-sublink {% if active_nav == 'hospital_receipts' %}active{% endif %}">Receipts List</a>
-                                        <a href="{% url 'bank_reconciliation' %}" class="sidebar-sublink {% if active_nav == 'hospital_bank_reconciliation' or active_nav == 'hospital_three_way_reconciliation' %}active{% endif %}">Reconciliation</a>
                                         <div class="mx-4 my-2 border-t border-white/10"></div>
                                         <div class="pt-1 pb-1">
                                             <div class="text-[0.7rem] uppercase tracking-widest text-white/60 px-4">Ledger & Books</div>

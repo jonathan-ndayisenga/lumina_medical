@@ -1,10 +1,13 @@
-# Lumina Medical Services (Hospital EMR) - System Documentation
+# Ternah Health System (Hospital EMR) — System Documentation
 
-Last Updated: 2026-04-25
+Last Updated: 2026-07-12
 Django Version: 6.0.3
-Primary DB: SQLite (development) / PostgreSQL (production via DATABASE_URL)
+Primary DB: PostgreSQL (production via DATABASE_URL) / SQLite (development)
+Deployment: DigitalOcean App Platform
 
-This document describes the current state of the codebase (models, modules, routing, and workflows).
+This document describes the current state of the codebase — models, modules, routing, workflows, and recent feature additions.
+
+---
 
 ## Table of Contents
 
@@ -14,31 +17,31 @@ This document describes the current state of the codebase (models, modules, rout
 4. Module Breakdown
 5. URL Routing Map
 6. End-to-End Workflows
-7. Financial Sync Rules (Receipts -> Statements)
+7. Finance Module
+8. Home Care Module
+9. Pharmacy — Inventory Categories & Dispensing Math
+10. Prescription Notes
+11. User Management
+12. Deployment Notes
 
 ---
 
-## 1. System Overview 
+## 1. System Overview
 
-The system is a multi-tenant Hospital EMR centered on a single "Visit" object that connects:
+Multi-tenant Hospital EMR. Every record is scoped to a `Hospital` FK — no data crosses between hospitals. The central object is the `Visit`, connecting reception, nursing, doctor, lab, pharmacy, and billing.
 
-- Reception: patient registration, visit creation, billing/receipts
-- Nurse: shared triage (vitals) and nursing notes, queue handoff
-- Doctor: consultation, lab requests, queue visibility
-- Lab: lab queue, lab reports tied to visit, send results back to doctor
-- Hospital Admin: user management, services/pricing, accounting, financial statements and reconciliation tooling
-- Developer (Superadmin): platform-level hospital onboarding and subscription management
-
-Project structure (high level):
+Project structure:
 
 ```
 labsystem/
-  accounts/         auth + multi-tenant hospital/user models
-  admin_dashboard/  developer + hospital admin operations (services, expenses, salaries, financials)
-  reception/        patients, visits, billing (receipts), queue routing
-  nurse/            triage + nursing notes + handoff
-  doctor/           consultation + lab request workflow
-  lab/              lab reports + lab queue
+  accounts/         auth + multi-tenant Hospital/User models
+  admin_dashboard/  hospital admin: inventory, users, services, expenses, salaries, financials
+  reception/        patients, visits, billing (receipts), queue routing, pharmacy dispensing
+  nurse/            triage, nursing notes, IV/IM dispensing queue, sonographer queue
+  doctor/           consultation, prescribing, lab requests
+  lab/              lab queue, test results, lab reports
+  finance/          double-entry accounting ledger (Chart of Accounts, Journal Entries, reports)
+  homecare/         home care placement management (nurses, clients, contracts, receipts)
   templates/        shared templates (base + shared print partials)
   static/           static assets
 ```
@@ -50,47 +53,47 @@ labsystem/
 ### 2.1 Multi-tenancy
 
 - Tenant root model: `accounts.Hospital`
-- Tenant selection middleware: `labsystem.middleware.HospitalMiddleware`
-  - Typically sets `request.hospital` by subdomain (production) or by `request.user.hospital` (local/dev usage).
+- Tenant middleware: `labsystem.middleware.HospitalMiddleware`
+  - Sets `request.hospital` by subdomain (production) or by `request.user.hospital` (local/dev).
 
 ### 2.2 Authentication
 
 - Custom user model: `accounts.User` (extends `AbstractUser`)
 - Login view: `accounts.views.RoleAwareLoginView`
-- Default landing/router: `accounts.views.app_home` (also used by `LOGIN_REDIRECT_URL`)
+- Default router after login: `accounts.views.app_home`
 
-### 2.3 Authorization model (current transitional state)
+### 2.3 Authorization model
 
-The system currently supports BOTH:
+Hybrid: single primary role (stored on `User.role`) + optional Django Group membership for multi-module access.
 
-1) **Single primary role** (stored on `User.role`)
-2) **Optional multi-module access** via Django `Group` membership
+Roles:
+- `superadmin` / `developer` — platform-level (DigitalOcean console only)
+- `hospital_admin` — manages users, inventory, services, expenses, salaries
+- `doctor` — consultation + prescribing
+- `nurse` — triage, nursing notes, IV/IM dispensing
+- `receptionist` — patient registration, visits, payments
+- `lab_attendant` — lab queue + report entry
 
-Module Groups currently used:
+Module Groups (additive, stored as Django Groups):
+- Reception, Doctor, Nurse, Lab
 
-- Reception
-- Lab
-- Doctor
-- Nurse
+Module access decorators accept: `(role in allowed set) OR (member of module group)`.
 
-Important notes:
+Group seeding migration: `accounts/migrations/0003_create_default_module_groups.py`
 
-- Roles still exist and remain the primary policy for superadmin/hospital_admin.
-- Groups are additive: they allow one user to access multiple modules without replacing roles yet.
-- Module access decorators now accept: (role in allowed set) OR (member of module group).
+### 2.4 User Management (Hospital Admin)
 
-Where this is implemented:
+All user management at `/platform/hospital/users/`:
 
-- Reception gating: `reception.views.reception_role_required`
-- Doctor gating: `doctor.views.doctor_role_required`
-- Nurse gating: `nurse.views.nurse_role_required`
-- Lab gating: `lab.views.staff_required` (role OR group OR staff)
+| Action | URL | Notes |
+|---|---|---|
+| Create | POST `/platform/hospital/users/` | pill toggles for module groups |
+| Edit | `/platform/hospital/users/<id>/edit/` | |
+| Deactivate | `/platform/hospital/users/<id>/deactivate/` | preserves history |
+| Reset Password | `/platform/hospital/users/<id>/reset-password/` | 8-char min, strength bar |
+| Delete | `/platform/hospital/users/<id>/delete/` | permanent, confirmation screen |
 
-### 2.4 Group seeding / legacy mapping
-
-A data migration creates default module groups and assigns existing users based on their `role`:
-
-- `accounts/migrations/0003_create_default_module_groups.py`
+Staff list is paginated — 10 members per page.
 
 ---
 
@@ -98,332 +101,453 @@ A data migration creates default module groups and assigns existing users based 
 
 ### 3.1 Tenant + users
 
-- `SubscriptionPlan` 1 -> N `Hospital`
-- `Hospital` 1 -> N `User`
+- `SubscriptionPlan` 1 → N `Hospital`
+- `Hospital` 1 → N `User`
 
-`Hospital` includes extended metadata used on printouts:
+`Hospital` metadata used on printouts: location, box_number, phone_number, email, logo.
 
-- location, box_number, phone_number, email, logo
-
-### 3.2 Reception / clinical hub models
+### 3.2 Reception / clinical hub
 
 #### Patient (`reception.Patient`)
-
-- hospital (FK)
-- name (string)
-- registration_date (date, required in UI)
-- date_of_birth (date, optional)
-- age (string, stored as "22YRS" or "6MTH")
-- sex, contact, weight_kg
-- optional biodata: email, address, next_of_kin, next_of_kin_contact, nin, id_verified, insurance_provider, insurance_policy_number
-
-Validation rules (form-layer):
-
-- Either `date_of_birth` OR age (value+unit) is required.
-- Form synchronizes DOB <-> age:
-  - If DOB is entered: age is computed and stored.
-  - If age is entered: DOB is approximated (Jan 1 for years, 1st of month for months).
+- hospital (FK), name, registration_date, date_of_birth, age (stored as "22YRS"/"6MTH"), sex, contact, weight_kg
+- Optional: email, address, next_of_kin, NIN, insurance_provider, insurance_policy_number
+- Validation: either DOB or age required; form syncs DOB↔age.
 
 #### Visit (`reception.Visit`)
-
-- patient (FK), hospital (FK)
-- visit_date (auto)
-- status:
-  - in_progress
-  - ready_for_billing
-  - completed
-  - cancelled
-- total_amount (sum of services at time of creation / edits)
-- created_by (FK to User)
-
-Computed properties:
-
-- `Visit.total_paid`: SUM(payments.amount_paid) excluding waived
-- `Visit.balance_due`: total_amount - total_paid
-- `Visit.is_fully_paid`: balance_due <= 0
+- patient (FK), hospital (FK), visit_date, status (in_progress / ready_for_billing / completed / cancelled)
+- `total_paid` = SUM(payments.amount_paid) excluding waived
+- `balance_due` = total_amount − total_paid
+- `is_fully_paid` = balance_due ≤ 0
 
 #### Triage (`reception.Triage`)
-
-Shared vital signs per visit (doctor + nurse share the same record):
-
-- visit (OneToOne)
-- weight_kg, BP sys/dia, pulse, resp_rate, temp, spo2, glucose
-- recorded_by/updated_by + timestamps
-
-Minimum required (nurse sign-off):
-
-- weight_kg + bp_systolic + bp_diastolic
-
-Legacy migration:
-
-- Prior doctor vitals stored in `doctor.Consultation.vitals` JSON are migrated into `Triage`
-  - `reception/migrations/0010_migrate_consultation_vitals_to_triage.py`
+- visit (OneToOne) — shared record between doctor and nurse
+- Fields: weight_kg, bp_systolic, bp_diastolic, pulse, resp_rate, temp, spo2, glucose
+- Required for nurse sign-off: weight_kg + bp_systolic + bp_diastolic
 
 #### Service (`reception.Service`)
-
-Billable items (hospital-scoped):
-
-- hospital (FK)
-- name (unique per hospital)
-- category:
-  - consultation
-  - lab
-  - triage
-  - procedure
-  - pharmacy
-  - other
-- price, is_active
-- optional `test_profile` (FK to `lab.TestProfile`) for lab services
+- hospital (FK), name (unique per hospital), category, price, is_active
+- Categories: consultation, lab, triage, procedure, pharmacy, other, scan
+- Optional `test_profile` FK (lab services)
 
 #### VisitService (`reception.VisitService`)
-
-Join table for visit billing:
-
-- visit (FK)
-- service (FK)
-- price_at_time
-- performed (bool) + notes
+- visit (FK), service (FK), price_at_time, performed (bool), notes
 
 #### QueueEntry (`reception.QueueEntry`)
-
-Unified queue system (hospital-scoped):
-
-- hospital (FK), visit (FK)
-- queue_type:
-  - lab_reception
-  - lab_doctor
-  - doctor
-  - nurse
-- reason (text)
-- requested_by (FK to User, optional)
-- processed + timestamps + notes
+- hospital (FK), visit (FK), queue_type (lab_reception / lab_doctor / doctor / nurse), reason, processed
 
 #### Payment (`reception.Payment`)
+- visit (FK), amount_paid, mode (cash / card / mobile_money / insurance)
+- bank_account FK (required for card), mobile_account FK (required for mobile_money)
+- `receipt_number` derived from date + PK
 
-Receipts are stored as individual Payment rows (supports partial payments):
+### 3.3 Pharmacy (admin_dashboard.InventoryItem)
 
-- visit (FK)  (NOTE: one visit can have MANY payments)
-- amount (billed total at time of receipt; used for printing context)
-- amount_paid (receipt amount)
-- mode: cash / card / mobile_money / insurance
-- bank_account (FK, required when mode=card)
-- mobile_account (FK, required when mode=mobile_money)
-- recorded_by (FK), paid_at, notes
+See Section 9 for category/math detail.
 
-Receipt identification:
+Key fields: name, category, base_unit, units_per_pack, strength_mg_per_unit, concentration_mg_per_ml, current_quantity, selling_price.
 
-- `Payment.receipt_number` property (derived from date + PK)
+### 3.4 Prescription (doctor.Prescription)
+- visit (FK), drug (FK → InventoryItem), dosage_mg, frequency, duration_days, notes
+- `total_quantity` — computed by `calculate_totals()` based on category math
+- `dispensed` — True once stock deducted
+- `nursing_managed` — True for IV/IM handled by nurse rather than pharmacy
 
-Cash drawer mirroring:
+### 3.5 Finance (finance app)
+See Section 7.
 
-- On save, if mode=cash and there is an open cash drawer, a matching `CashTransaction` (cash_in) is created/updated.
-
-Important: reconciliation statement lines are NOT auto-created from receipts for bank/mobile.
-Instead, external statement lines are entered/imported under financials and matched against receipts.
-
-### 3.3 Lab models (hospital + visit scoped)
-
-- `lab.LabReport` is tied to `Visit` (FK) and hospital (FK) and contains many `TestResult`.
-- `lab.TestProfile` + `TestProfileParameter` define templates (CBC, Urinalysis, etc).
-- `lab.TestCatalog` is the test dictionary used by results.
-
-### 3.4 Financial / accounting models (hospital admin)
-
-Core:
-
-- `admin_dashboard.HospitalAccount` (one per hospital; balance synced from receipts/expenses/salaries)
-- `admin_dashboard.Expense` (supports tracking payout source: bank/mobile/cash drawer)
-- `admin_dashboard.Salary`
-
-Statements / reconciliation inputs:
-
-- `admin_dashboard.BankAccount`
-- `admin_dashboard.MobileMoneyAccount`
-- `admin_dashboard.CashDrawer` + `admin_dashboard.CashTransaction`
-- `admin_dashboard.BankTransaction` (external statement line, can be matched to a Payment)
-- `admin_dashboard.MobileMoneyTransaction` (external statement line, can be matched to a Payment)
-- `admin_dashboard.ReconciliationStatement` (generated statement summaries)
+### 3.6 Home Care (homecare app)
+See Section 8.
 
 ---
 
 ## 4. Module Breakdown
 
 ### 4.1 accounts
-
-Key files:
-
-- `accounts/models.py`: Hospital + User
-- `accounts/views.py`: login redirect + `app_home` router
-
-Routing logic:
-
-- Superadmin -> developer dashboard
-- Hospital admin -> hospital dashboard
-- Else: groups (Reception/Doctor/Lab/Nurse) -> module dashboard
-- Else: role-based fallback
+- `models.py`: Hospital + User
+- `views.py`: login redirect + `app_home` router
+- Routing: superadmin → developer dashboard; hospital_admin → hospital dashboard; groups → module dashboard; role fallback.
 
 ### 4.2 admin_dashboard
 
-Hospital admin:
-
-- Users: create/edit/deactivate users; now supports selecting multiple module groups
-- Services: manage billable services (including triage category)
-- Financials:
-  - Financial report
-  - Financial statements (bank/mobile/cash drawer statements)
-  - Receipts list (audit trail of Payment receipts)
-  - Bank accounts + Mobile money settings
-  - Cash drawer open/close + transactions
-  - Bank/mobile external transaction entry + matching
-  - Expenses + salaries + inventory
+Hospital admin features:
+- **Users**: create/edit/deactivate/delete staff; module group pill toggles; 10-per-page pagination; password reset.
+- **Services**: manage billable services by category.
+- **Inventory**: drug catalogue (8 categories), batch tracking, CSV import, FEFO dispensing.
+- **Expenses / Salaries**: record operational costs; salary payment auto-posts to ledger.
+- **Financials (legacy)**: bank accounts, mobile money, cash drawer, reconciliation statements. These co-exist with the new `finance` app ledger.
+- **Reports**: consultation reports, inventory insights.
 
 Developer (superadmin):
-
-- Manage hospitals, subscription plans, subscription payments, audit logs
-- Dedicated developer base navigation templates
+- Manage hospitals, subscription plans, subscription payments, audit logs.
 
 ### 4.3 reception
-
-Key workflows:
-
-- Register patient (smart age/DOB + grouped optional biodata)
-- Create visit with services (NO upfront payment)
-  - services add to bill
-  - queue entries created per service category (doctor/lab/nurse triage)
-- Billing/receipts:
-  - `complete_visit` records a Payment receipt and prints it
-  - partial receipts are allowed until balance is 0
+- Register patient (smart age/DOB, grouped optional biodata).
+- Create visit with services (no upfront payment).
+- Pharmacy dispensing window: dispense pending prescriptions, FEFO batch selection.
+- Record payments — partial receipts allowed until balance = 0.
 
 ### 4.4 nurse
-
-- Nurse queue shows queued patients for triage and nursing work
-- Nurse form includes triage capture (required weight + BP) and optional notes
-- Nurse can route:
-  - triage -> doctor
-  - triage -> reception (if desired)
-  - nursing -> doctor
-  - nursing -> reception billing
+- Nurse queue: triage capture (weight + BP required) + nursing notes.
+- IV/IM dispensing via nursing_managed prescriptions.
+- Sonographer queue: scan requests from doctor, scan report entry.
+- Routing options: → doctor, → reception billing.
 
 ### 4.5 doctor
-
-- Doctor queue shows active queue entries
-- Consultation form supports:
-  - shared triage fields (writes to Triage unless "Send to Nurse" is checked)
-  - requesting additional lab services (dropdown + "Add other" creates new Service)
-  - routing to nurse or billing
+- Doctor queue → consultation form.
+- Prescribing: drug search, category-aware label, live quantity preview, optional notes.
+- Lab requests, referrals to nurse/billing.
+- Scan requests to sonographer queue.
 
 ### 4.6 lab
+- Lab queue, lab report entry, send results to doctor queue.
+- Test profiles (CBC, Urinalysis, etc.) with templated parameters.
 
-- Lab queue shows reason + requested_by
-- Lab report entry tied to Visit
-- "Send to doctor" action sends results back by creating/keeping a doctor queue entry (reason includes "Lab results ready...")
+### 4.7 finance *(new — 2026-07)*
+Full double-entry ledger. See Section 7.
+
+### 4.8 homecare *(new — 2026-07)*
+Home care placement management. See Section 8.
 
 ---
 
-## 5. URL Routing Map (Current)
-
-Root:
-
-- `/` -> login (accounts)
-- `/home/` -> role/group router (`app_home`)
+## 5. URL Routing Map
 
 Platform (admin_dashboard):
 
-- `/platform/superadmin/` -> developer dashboard
-- `/platform/hospital/` -> hospital admin dashboard
-- `/platform/hospital/financials/` -> financial report
-- `/platform/hospital/financials/statements/` -> unified statements
-- `/platform/hospital/financials/receipts/` -> receipts list
-- `/platform/hospital/financials/bank-accounts/` -> bank accounts
-- `/platform/hospital/financials/mobile-money/` -> mobile accounts
-- `/platform/hospital/financials/cash-drawer/` -> cash drawer
+```
+/platform/superadmin/                        developer dashboard
+/platform/hospital/                          hospital admin dashboard
+/platform/hospital/users/                   manage staff (paginated, 10/page)
+/platform/hospital/users/<id>/edit/
+/platform/hospital/users/<id>/deactivate/
+/platform/hospital/users/<id>/reset-password/
+/platform/hospital/users/<id>/delete/
+/platform/hospital/inventory/               drug catalogue
+/platform/hospital/services/
+/platform/hospital/expenses/
+/platform/hospital/salaries/
+/platform/hospital/financials/              legacy financial report
+```
 
 Reception:
 
-- `/reception/` -> dashboard
-- `/reception/patients/` -> list/search
-- `/reception/patients/new/` -> register patient
-- `/reception/patients/<patient_id>/visits/` -> visit history
-- `/reception/patients/<patient_id>/visit/new/` -> create visit
-- `/reception/complete/<visit_id>/` -> record payment (receipt)
-- `/reception/receipt/payment/<payment_id>/` -> print a specific receipt
+```
+/reception/                                 dashboard
+/reception/patients/                        list/search
+/reception/patients/new/                    register patient
+/reception/patients/<id>/visits/            visit history
+/reception/patients/<id>/visit/new/         create visit
+/reception/complete/<visit_id>/             record payment
+/reception/receipt/payment/<id>/            print receipt
+```
 
 Doctor:
 
-- `/doctor/` -> doctor queue
-- `/doctor/visit/<visit_id>/consultation/` -> consultation form
-- `/doctor/api/add-lab-service/` -> create lab service on-the-fly
+```
+/doctor/                                    doctor queue
+/doctor/visit/<visit_id>/consultation/      consultation form
+/doctor/api/add-prescription/              AJAX — add prescription
+/doctor/api/remove-prescription/<id>/      AJAX — remove prescription
+/doctor/api/add-lab-service/               AJAX — on-the-fly lab service
+```
 
 Nurse:
 
-- `/nurse/` -> nurse queue
-- `/nurse/queue/<queue_entry_id>/care/` -> triage + nursing note form
+```
+/nurse/                                     nurse queue
+/nurse/queue/<id>/care/                     triage + nursing note form
+```
 
 Lab:
 
-- `/lab/` -> lab reports list
-- `/lab/queue/` -> lab queue
-- `/lab/<report_id>/edit/` -> edit report
-- `/lab/<report_id>/send-to-doctor/` -> send results to doctor
+```
+/lab/                                       lab reports list
+/lab/queue/                                 lab queue
+/lab/<report_id>/edit/
+/lab/<report_id>/send-to-doctor/
+```
+
+Finance:
+
+```
+/finance/                                   finance dashboard
+/finance/journal/                           journal entries (filterable)
+/finance/cashbook/
+/finance/debtors/
+/finance/expenses/
+/finance/opening-balances/
+/finance/reports/revenue/
+/finance/reports/trial-balance/
+/finance/reports/profit-loss/
+/finance/reports/balance-sheet/
+```
+
+Home Care:
+
+```
+/homecare/                                  homecare dashboard
+/homecare/nurses/                           nurse list
+/homecare/nurses/register/
+/homecare/nurses/<id>/
+/homecare/nurses/<id>/delete/
+/homecare/clients/                          client list
+/homecare/clients/register/
+/homecare/clients/<id>/
+/homecare/clients/<id>/delete/
+/homecare/placements/
+/homecare/placements/create/
+/homecare/placements/<id>/
+/homecare/placements/<id>/terminate/
+/homecare/placements/<id>/receipt/
+/homecare/contracts/
+/homecare/contracts/<id>/print/
+/homecare/receipts/
+/homecare/receipts/<id>/print/
+```
 
 ---
 
 ## 6. End-to-End Workflows
 
-### 6.1 Reception -> Nurse (Triage) -> Doctor -> (Lab optional) -> Billing
+### 6.1 Standard Visit Flow
 
-1) Reception registers patient
-2) Reception creates visit and selects services
-   - If a triage service is selected, a nurse queue entry is created
-3) Nurse captures triage (required weight + BP)
-   - Nurse sends patient to doctor queue
-4) Doctor consults
-   - Can request additional lab services (adds to bill + lab queue)
-5) Lab completes report
-   - Sends results back to doctor queue
-6) Reception records payment(s)
-   - Each payment creates a receipt (Payment row)
-   - Visit becomes completed only when balance_due reaches 0
+1. Reception registers patient → creates visit with services.
+2. If triage service selected → nurse queue entry created.
+3. Nurse captures vitals → routes to doctor.
+4. Doctor consults → prescribes drugs, requests labs.
+5. Lab completes report → sends results back to doctor.
+6. Pharmacy (reception) dispenses prescriptions (FEFO batch selection).
+7. Reception records payment → visit complete when balance = 0.
 
----
+Finance signals fire automatically at each billing step (see Section 7).
 
-## 7. Financial Sync Rules (Receipts -> Statements)
+### 6.2 Prescription Dispensing Path
 
-### 7.1 Receipts list is the source of truth for internal income
-
-Internal income is computed from:
-
-- SUM(`Payment.amount_paid`) per hospital per time period
-
-Receipts always show:
-
-- payment mode (cash/card/mobile)
-- the account used (bank account or mobile money account when applicable)
-- recorded_by + timestamp
-
-### 7.2 Cash drawer syncing
-
-When a cash receipt is recorded and a drawer is open:
-
-- A `CashTransaction(cash_in)` is created/updated for that Payment.
-
-### 7.3 Bank/mobile reconciliation
-
-External statement lines are stored separately:
-
-- Bank: `BankTransaction`
-- Mobile: `MobileMoneyTransaction`
-
-Reconciliation matches those external credits against internal receipts (`Payment`) using:
-
-- receipt reference first, then amount/date fallback (as implemented in admin_dashboard reconciliation flows)
+- Pharmacy (reception): pending prescriptions on visit page → "Dispense Now" → FEFO batch deducted → `dispensed=True`.
+- Nurse (IV/IM): `nursing_managed=True` prescriptions appear in nurse queue instead.
 
 ---
 
-Appendix: Shared Print Templates
+## 7. Finance Module
 
-Shared print header/footer partials used by receipts:
+Added 2026-07. Full double-entry accounting for each hospital tenant.
 
-- `templates/partials/print_header.html`
+### 7.1 Setup
+
+Run once per hospital:
+
+```bash
+python manage.py setup_finance
+```
+
+This seeds 24 Chart of Accounts entries and backfills all historical VisitServices, Payments, and Expenses as journal entries.
+
+### 7.2 Key Models (`finance/models.py`)
+
+- **Account**: 5 types (Asset, Liability, Equity, Revenue, Expense), sub_type, balance computed from journal lines.
+- **JournalEntry**: date, description, source_type, source FKs, `is_reversal`, `reversed_entry` FK. Auto-reference: JNL-YYYYMMDD-NNNN.
+- **JournalLine**: entry FK, account FK, debit, credit. `clean()` enforces exactly one per line.
+
+### 7.3 Auto-Posting (signals in `finance/signals.py`)
+
+All posting wrapped in `_safe_post()` — ledger errors never block clinical workflow.
+
+| Event | Debit | Credit |
+|---|---|---|
+| Visit service added | Accounts Receivable | Category Revenue |
+| Payment received | Cash / Bank / Mobile | Accounts Receivable |
+| Expense recorded | Expense Account | Cash / Bank / Mobile |
+| Salary paid (paid=True) | Staff Salaries (5001) | Bank |
+| Any above deleted/edited | Reversal posted (Dr↔Cr swap) | — |
+
+### 7.4 Reversals
+
+A reversal is a mirror-image journal entry — every Debit becomes a Credit and vice versa. The two entries cancel mathematically, but the original and reversal both remain in the audit trail. The system **never edits or deletes** journal entries.
+
+Reversal triggers:
+1. Doctor removes a prescription → VisitService deleted → reversal fires.
+2. Prescription regimen edited → old VisitService deleted (reversal) + new one posted.
+3. Any visit service removed (lab, procedure, consultation fee).
+4. Payment voided or waived → cash receipt reversed, A/R balance restored.
+5. Expense edited or deleted → old entry reversed, new one posted at corrected amount.
+
+### 7.5 Journal Entry Filters
+
+`GET /finance/journal/` accepts:
+
+```
+date_from=2026-07-01   # ISO date, inclusive
+date_to=2026-07-10     # ISO date, inclusive
+source_type=payment    # visit_charge | payment | expense | manual | reversal
+```
+
+Quick-link buttons on page: Today, This Month, This Year. Returns at most 100 entries — narrow the date range to go deeper.
+
+### 7.6 Reports
+
+| Report | URL |
+|---|---|
+| Finance Dashboard | /finance/ |
+| Cashbook | /finance/cashbook/ |
+| Debtor Ledger | /finance/debtors/ |
+| Revenue Report | /finance/reports/revenue/ |
+| Trial Balance | /finance/reports/trial-balance/ |
+| Profit & Loss | /finance/reports/profit-loss/ |
+| Balance Sheet | /finance/reports/balance-sheet/ |
+| Expense Journal | /finance/expenses/ |
+| Opening Balances | /finance/opening-balances/ |
+
+---
+
+## 8. Home Care Module
+
+Manages the deployment of home care nurses to private clients.
+
+### 8.1 Models (`homecare/models.py`)
+
+**HomeCareNurse** — nurse registry: name, age, tribe, religion, address, qualification, NIN, contact, notes, is_active.
+
+**HomeCareClient** — client registry: name, location, contact, NIN, notes.
+
+**HomeCarePlacement** — active assignment linking nurse ↔ client:
+- service_type: `live_in` (24hr) or `live_out` (10hr)
+- rate_period: per day / per week / per month
+- nurse_rate (amount paid to nurse), client_rate (amount charged to client)
+- contract_start, contract_end, status (active / completed / terminated)
+- `margin` = client_rate − nurse_rate
+- `total_billed` = SUM of receipts for this placement
+- `balance_due` = client_rate − total_billed (floored at 0)
+
+**HomeCareContract** — auto-numbered printable contract (one per placement). Number format: `{INITIALS}{YYYYMMDD}-{NNNN}`. Stores a `terms_snapshot` at generation time — frozen even if rates are later edited.
+
+**HomeCareReceipt** — payment records per placement. Auto-numbered `{INITIALS}{YYYYMMDD}-{NNNN}`. Records: amount_paid, period_covered (e.g. "July 2026"), paid_at.
+
+### 8.2 Workflow
+
+1. Register nurse → register client → create placement (set rates, service type, contract dates).
+2. Generate contract (printable PDF-style page).
+3. Record receipts as client payments come in.
+4. Terminate placement when service ends.
+
+---
+
+## 9. Pharmacy — Inventory Categories & Dispensing Math
+
+### 9.1 Category constants (`admin_dashboard/models.py`)
+
+| Key | Description |
+|---|---|
+| `drug` | Tablet / capsule |
+| `syrup` | Liquid bottle |
+| `iv_fluid` | IV bag (Normal Saline, Ringer's, Dextrose, etc.) |
+| `iv_med` | IV powder-vial medication (Ceftriaxone, Ampicillin, etc.) |
+| `im` | IM injection vial |
+| `tube` | Cream / ointment / tube |
+| `reagent` | Lab reagent (non-prescribable) |
+| `sundry` | Other supplies (non-prescribable) |
+
+`iv` was split into `iv_fluid` + `iv_med` in migration `0016_split_iv_category`. All pre-existing `iv` items were migrated to `iv_fluid`.
+
+### 9.2 Dispensing math (`doctor/models.py :: calculate_totals()`)
+
+| Category | Dose unit | Formula | Dispense unit |
+|---|---|---|---|
+| drug | mg | ⌈(dose ÷ strength) × freq × days⌉ | tablet |
+| syrup | ml | ⌈(dose × freq × days) ÷ ml_per_bottle⌉ | bottle |
+| iv_fluid | ml | ⌈(dose × freq × days) ÷ ml_per_bag⌉ | bag |
+| iv_med | mg/vial | ⌈(dose ÷ strength_per_vial) × freq × days⌉ | vial |
+| im | ml | ⌈(dose × freq × days) ÷ ml_per_vial⌉ | vial |
+| tube | application | ⌈days ÷ days_covered_per_tube⌉ | tube |
+
+**iv_med uses the same math branch as tablets.** `is_liquid` on Prescription excludes `iv_med`, so it falls through to the mg/strength formula. `strength_mg_per_unit` stores mg per vial for iv_med.
+
+### 9.3 Concentration fields in inventory form
+
+- `iv_med`: shows "Concentration (mg per vial)" — maps to `strength_mg_per_unit`.
+- `iv_fluid`, `syrup`, `im`: shows "Concentration mg/ml — optional" — maps to `concentration_mg_per_ml`.
+- Tablets and tubes: concentration field hidden entirely.
+
+### 9.4 Batch tracking (FEFO)
+
+Each stock receipt creates a `BatchItem`. Stock on hand = sum of batch quantities. Dispense always picks the batch expiring soonest first. Pharmacist can override via dropdown when multiple batches exist.
+
+---
+
+## 10. Prescription Notes
+
+`Prescription.notes` — `TextField(blank=True)`. Set by the doctor at creation time. Read-only downstream.
+
+| View | Behaviour |
+|---|---|
+| Doctor consultation form | Textarea in add-prescription panel. After AJAX save, card renders immediately with "Notes ▾" toggle if notes are present (notes returned in JSON response). |
+| Pharmacy / reception | "Notes ▾" collapsible toggle on each pending prescription card. |
+| Nurse view | Inline "Notes: …" below the regimen line. |
+
+The AJAX response from `add_prescription_api` includes `"notes": prescription.notes or ""` so the card builder can render the toggle without a page reload.
+
+---
+
+## 11. User Management
+
+Page: `/platform/hospital/users/` — Hospital Admin role required.
+
+### 11.1 Create form features
+- Name, username, email, role (required), active status (CSS toggle switch).
+- Module access rendered as clickable pill toggles (blue filled = active, grey = inactive). Underlying field is `CheckboxSelectMultiple`; CSS transforms it into a pill UI.
+- Password + confirm fields.
+
+### 11.2 Staff card list
+- Paginated 10 per page. Pagination controls appear when total > 10.
+- Each card: role-coloured avatar circle (initial), full name, username, email, role badge, group pills.
+- Actions per card: **Edit** · **Reset Password** · **Deactivate** (if active) · **Delete** (hidden for self).
+
+### 11.3 Password reset (`/platform/hospital/users/<id>/reset-password/`)
+- Two password fields with show/hide eye toggle.
+- Live strength bar (5 levels: weak → very strong).
+- Live match indicator updates as user types.
+- Server validates: not empty, both match, ≥ 8 characters.
+
+### 11.4 Delete user (`/platform/hospital/users/<id>/delete/`)
+- Confirmation screen with danger note.
+- Cannot delete yourself (blocked both in view and hidden in template).
+- Permanent — linked records lose their user FK reference. Prefer Deactivate to preserve history.
+
+---
+
+## 12. Deployment Notes
+
+### 12.1 Platform
+DigitalOcean App Platform. Database: managed PostgreSQL.
+
+### 12.2 Running management commands
+Use the DigitalOcean App Platform console (App → Console tab):
+
+```bash
+# Seed finance chart of accounts + backfill historical data
+python manage.py setup_finance
+
+# Run migrations after deployment
+python manage.py migrate
+```
+
+### 12.3 Migration workflow
+When the server auto-generates a migration (e.g. from a `makemigrations` run on the server console), replicate it locally before pushing:
+
+```bash
+python manage.py makemigrations <app_name>
+git add .
+git commit -m "replicate server-generated migration"
+git push
+```
+
+This keeps local and server migration history in sync and avoids `InconsistentMigrationHistory` errors.
+
+---
+
+## Appendix: Shared Print Templates
+
+- `templates/partials/print_header.html` — hospital name, logo, address
 - `templates/partials/print_footer.html`
-
+- `nurse/templates/nurse/scan_report_print.html` — sonographer scan report with hospital header
+- `homecare/templates/homecare/contract_print.html` — home care contract printout
+- `homecare/templates/homecare/receipt_print.html` — home care receipt

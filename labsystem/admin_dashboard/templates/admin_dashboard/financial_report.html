@@ -7,10 +7,7 @@
 {% block content %}
 <div class="space-y-6">
     <div class="flex flex-wrap gap-3 justify-between items-center no-print">
-        <div class="flex gap-3 flex-wrap">
-            <a href="{% url 'receipts_list' %}" class="btn btn-secondary">Receipts List</a>
-            <a href="{% url 'financial_statements' %}" class="btn btn-secondary">Financial Statements</a>
-        </div>
+        <a href="{% url 'receipts_list' %}" class="btn btn-secondary">Receipts List</a>
         <a href="{% url 'hospital_dashboard' %}" class="btn btn-secondary">Back to Hospital Dashboard</a>
     </div>
 
@@ -190,32 +187,28 @@
     </div>
     {% endif %}
 
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4">
-        <a href="{% url 'financial_metric_detail' 'income_period' %}?start_date={{ period_start|date:'Y-m-d' }}&end_date={{ period_end|date:'Y-m-d' }}" class="card block hover:bg-surface-muted focus:outline-none focus:ring-2 focus:ring-brand-dark/30">
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+        <div class="card">
             <h3 class="text-sm text-text-muted mb-2">Total Collected (Period)</h3>
             <p class="text-3xl font-bold text-text-main">{{ income_period }}</p>
             <p class="text-xs text-text-muted mt-2">{{ period_start }} - {{ period_end }}</p>
-        </a>
-        <a href="{% url 'financial_metric_detail' 'expenses_period' %}?start_date={{ period_start|date:'Y-m-d' }}&end_date={{ period_end|date:'Y-m-d' }}" class="card block hover:bg-surface-muted focus:outline-none focus:ring-2 focus:ring-brand-dark/30">
+        </div>
+        <div class="card">
             <h3 class="text-sm text-text-muted mb-2">Expenses (Period)</h3>
             <p class="text-3xl font-bold text-text-main">{{ expenses_period }}</p>
-        </a>
-        <a href="{% url 'financial_metric_detail' 'salaries_period' %}?start_date={{ period_start|date:'Y-m-d' }}&end_date={{ period_end|date:'Y-m-d' }}" class="card block hover:bg-surface-muted focus:outline-none focus:ring-2 focus:ring-brand-dark/30">
+        </div>
+        <div class="card">
             <h3 class="text-sm text-text-muted mb-2">Salaries (Period)</h3>
             <p class="text-3xl font-bold text-text-main">{{ salaries_period }}</p>
-        </a>
-        <a href="{% url 'financial_metric_detail' 'net_profit_period' %}?start_date={{ period_start|date:'Y-m-d' }}&end_date={{ period_end|date:'Y-m-d' }}" class="card block hover:bg-surface-muted focus:outline-none focus:ring-2 focus:ring-brand-dark/30">
+        </div>
+        <div class="card">
             <h3 class="text-sm text-text-muted mb-2">Net Profit (Period)</h3>
             <p class="text-3xl font-bold text-text-main">{{ net_profit_period }}</p>
-        </a>
-        <a href="{% url 'financial_metric_detail' 'outstanding_balance' %}" class="card block hover:bg-surface-muted focus:outline-none focus:ring-2 focus:ring-brand-dark/30">
+        </div>
+        <div class="card">
             <h3 class="text-sm text-text-muted mb-2">Outstanding Balances</h3>
             <p class="text-3xl font-bold text-text-main">{{ outstanding_balance }}</p>
-        </a>
-        <a href="{% url 'financial_metric_detail' 'reconciliation_variance' %}" class="card block hover:bg-surface-muted focus:outline-none focus:ring-2 focus:ring-brand-dark/30">
-            <h3 class="text-sm text-text-muted mb-2">Reconciliation Variance</h3>
-            <p class="text-3xl font-bold text-text-main">{{ reconciliation_discrepancy_total }}</p>
-        </a>
+        </div>
     </div>
 
     <div class="card no-print">
