@@ -176,18 +176,18 @@
         <!-- Filters -->
         <div class="card py-3">
             <form method="get" class="flex flex-wrap gap-2 items-center">
-                <input type="date" name="from" value="{{ date_from }}" class="form-control text-sm py-1.5 w-36">
-                <span class="text-text-muted text-sm">to</span>
-                <input type="date" name="to" value="{{ date_to }}" class="form-control text-sm py-1.5 w-36">
-                <select name="category" class="form-control text-sm py-1.5">
+                <input type="date" name="from" value="{{ date_from }}" class="form-control text-sm py-1.5 flex-1 min-w-[130px]">
+                <span class="text-text-muted text-sm shrink-0">to</span>
+                <input type="date" name="to" value="{{ date_to }}" class="form-control text-sm py-1.5 flex-1 min-w-[130px]">
+                <select name="category" class="form-control text-sm py-1.5 flex-1 min-w-[150px]">
                     <option value="">All categories</option>
                     {% for value, label in category_choices %}
                     <option value="{{ value }}" {% if category_filter == value %}selected{% endif %}>{{ label }}</option>
                     {% endfor %}
                 </select>
-                <button type="submit" class="btn btn-primary text-sm py-1.5">Filter</button>
+                <button type="submit" class="btn btn-primary text-sm py-1.5 shrink-0">Filter</button>
                 {% if category_filter or date_from or date_to %}
-                <a href="{% url 'finance_expenses' %}" class="btn btn-secondary text-sm py-1.5">Clear</a>
+                <a href="{% url 'finance_expenses' %}" class="btn btn-secondary text-sm py-1.5 shrink-0">Clear</a>
                 {% endif %}
             </form>
         </div>

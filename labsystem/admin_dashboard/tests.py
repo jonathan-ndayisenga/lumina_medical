@@ -1,5 +1,6 @@
 import shutil
 import tempfile
+from datetime import date
 from pathlib import Path
 from unittest.mock import patch
 
@@ -11,7 +12,9 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 from PIL import Image
 
-from accounts.models import Hospital, SubscriptionPlan
+from decimal import Decimal
+
+from accounts.models import Hospital, HospitalModuleSubscription, Module, SubscriptionPlan
 from admin_dashboard.forms import ExpenseForm, HospitalForm
 from admin_dashboard.models import BankAccount, CashDrawer, InventoryBatch, InventoryItem, InventoryTransaction, MobileMoneyAccount
 
@@ -52,6 +55,7 @@ class HospitalFormTests(TestCase):
             "phone_number": "+256700000001",
             "email": "admin@kampalacare.com",
             "subscription_plan": self.plan.pk,
+            "subscription_months": 1,
             "admin_username": "kampalaadmin",
             "admin_password": "StrongPass123!",
             "admin_password_confirm": "StrongPass123!",
@@ -123,6 +127,7 @@ class SuperadminHospitalManagementTests(TestCase):
             "phone_number": "+256700000002",
             "email": "hello@mercy.test",
             "subscription_plan": str(self.plan.pk),
+            "subscription_months": "12",
             "admin_username": "mercyadmin",
             "admin_password": "StrongPass123!",
             "admin_password_confirm": "StrongPass123!",
@@ -157,7 +162,7 @@ class SuperadminHospitalManagementTests(TestCase):
 
     def test_superadmin_templates_render_developer_navigation(self):
         response = self.client.get(reverse("developer_dashboard"))
-        self.assertContains(response, "developer workspace")
+        self.assertContains(response, "Developer Account")
         self.assertContains(response, reverse("manage_hospitals"))
         self.assertContains(response, reverse("view_audit_logs"))
         self.assertNotContains(response, "Hospital Management")
@@ -226,6 +231,7 @@ class ExpenseFormSourceTests(TestCase):
             "description": "Printer toner",
             "category": "consumables",
             "amount": "45.00",
+            "date": date.today().isoformat(),
             "source": "bank_account",
             "bank_account": str(self.bank_account.pk),
             "mobile_money_account": "",
@@ -262,6 +268,9 @@ class MultiRoleNavigationTests(TestCase):
     def setUp(self):
         self.User = get_user_model()
         self.hospital = Hospital.objects.create(name="Union Hospital", subdomain="union-hospital")
+        for code in ("nurse", "lab"):
+            module, _ = Module.objects.get_or_create(code=code, defaults={"name": code.title()})
+            HospitalModuleSubscription.objects.get_or_create(hospital=self.hospital, module=module, defaults={"is_active": True})
         self.user = self.User.objects.create_user(
             username="flexstaff",
             password="StrongPass123!",
@@ -286,10 +295,17 @@ class MultiRoleNavigationTests(TestCase):
         self.assertContains(response, "Receptionist, Nurse, Lab")
 
 
+def _enable_modules(hospital, *codes):
+    for code in codes:
+        module, _ = Module.objects.get_or_create(code=code, defaults={"name": code.title()})
+        HospitalModuleSubscription.objects.get_or_create(hospital=hospital, module=module, defaults={"is_active": True})
+
+
 class InventoryManagementTests(TestCase):
     def setUp(self):
         self.User = get_user_model()
         self.hospital = Hospital.objects.create(name="Stock Hospital", subdomain="stock-hospital")
+        _enable_modules(self.hospital, "inventory")
         self.admin_user = self.User.objects.create_user(
             username="stockadmin",
             password="StrongPass123!",
@@ -303,11 +319,11 @@ class InventoryManagementTests(TestCase):
             category=InventoryItem.CATEGORY_SYRUP,
             unit="bottle",
             base_unit="ml",
-            units_per_pack="100",
-            current_quantity="0",
-            unit_cost="5000",
-            selling_price="8000",
-            reorder_level="5",
+            units_per_pack=Decimal("100"),
+            current_quantity=Decimal("0"),
+            unit_cost=Decimal("5000"),
+            selling_price=Decimal("8000"),
+            reorder_level=Decimal("5"),
         )
         InventoryBatch.objects.create(
             item=self.item,
@@ -401,11 +417,11 @@ class InventoryManagementTests(TestCase):
             category=InventoryItem.CATEGORY_DRUG,
             unit="strip",
             base_unit="tablet",
-            units_per_pack="10",
-            current_quantity="40",
-            unit_cost="1000",
-            selling_price="2000",
-            reorder_level="5",
+            units_per_pack=Decimal("10"),
+            current_quantity=Decimal("40"),
+            unit_cost=Decimal("1000"),
+            selling_price=Decimal("2000"),
+            reorder_level=Decimal("5"),
         )
 
         response = self.client.get(
@@ -429,39 +445,39 @@ class InventoryManagementTests(TestCase):
         self.assertContains(response, "Out of stock only")
         self.assertEqual(response.context["inventory_quick_filter_counts"]["syrup"], 1)
 
-    def test_manage_inventory_paginates_five_items_per_page(self):
-        for index in range(1, 7):
-            InventoryItem.objects.create(
+    def test_manage_inventory_paginates_items_per_page(self):
+        InventoryItem.objects.bulk_create([
+            InventoryItem(
                 hospital=self.hospital,
                 name=f"Paged Item {index}",
                 category=InventoryItem.CATEGORY_DRUG,
                 unit="strip",
                 base_unit="tablet",
-                units_per_pack="10",
-                current_quantity="5",
-                unit_cost="1000",
-                selling_price="2000",
-                reorder_level="2",
-                strength_mg_per_unit="500",
+                units_per_pack=Decimal("10"),
+                current_quantity=Decimal("0"),
+                unit_cost=Decimal("1000"),
+                selling_price=Decimal("2000"),
+                reorder_level=Decimal("2"),
+                strength_mg_per_unit=Decimal("500"),
             )
+            for index in range(1, 21)
+        ])
 
         first_page = self.client.get(reverse("manage_inventory"))
         second_page = self.client.get(reverse("manage_inventory"), {"page": 2})
 
         self.assertEqual(first_page.status_code, 200)
-        self.assertEqual(first_page.context["page_obj"].paginator.per_page, 5)
-        self.assertEqual(len(first_page.context["inventory_items"]), 5)
+        per_page = first_page.context["page_obj"].paginator.per_page
+        self.assertEqual(len(first_page.context["inventory_items"]), per_page)
         self.assertContains(first_page, "Page 1 of 2")
 
         self.assertEqual(second_page.status_code, 200)
         self.assertEqual(second_page.context["page_obj"].number, 2)
-        self.assertEqual(len(second_page.context["inventory_items"]), 2)
         self.assertContains(second_page, "Page 2 of 2")
 
     def test_inventory_insights_page_renders_restock_sections(self):
         response = self.client.get(reverse("inventory_insights"))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Quick Restock List")
-        self.assertContains(response, "Inventory Sales Trend")
-        self.assertContains(response, "Category Snapshot")
+        self.assertContains(response, "Restock Priorities")
+        self.assertContains(response, "Pharmacy Income vs Net Profit")

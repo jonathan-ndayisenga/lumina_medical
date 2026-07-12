@@ -5,7 +5,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 
-from accounts.models import Hospital
+from accounts.models import Hospital, HospitalModuleSubscription, Module
 from admin_dashboard.models import InventoryBatch, InventoryItem, InventoryTransaction
 from doctor.models import Prescription
 from lab.models import LabReport, TestCatalog, TestResult
@@ -14,10 +14,17 @@ from reception.models import Patient, QueueEntry, Service, Visit, VisitService
 from lab.views import mark_lab_queue_complete
 
 
+def _enable_modules(hospital, *codes):
+    for code in codes:
+        module, _ = Module.objects.get_or_create(code=code, defaults={"name": code.title()})
+        HospitalModuleSubscription.objects.get_or_create(hospital=hospital, module=module, defaults={"is_active": True})
+
+
 class LabWorkflowTests(TestCase):
     def setUp(self):
         self.User = get_user_model()
         self.hospital = Hospital.objects.create(name="Lumina Central", subdomain="lumina-lab")
+        _enable_modules(self.hospital, "doctor", "lab", "nurse")
         self.doctor = self.User.objects.create_user(
             username="doctorlab",
             password="StrongPass123!",
@@ -66,6 +73,7 @@ class NurseWorkflowTests(TestCase):
     def setUp(self):
         self.User = get_user_model()
         self.hospital = Hospital.objects.create(name="Lumina Central", subdomain="lumina-nurse")
+        _enable_modules(self.hospital, "doctor", "lab", "nurse")
         self.nurse = self.User.objects.create_user(
             username="nurse1",
             password="StrongPass123!",
@@ -80,12 +88,12 @@ class NurseWorkflowTests(TestCase):
             category=InventoryItem.CATEGORY_DRUG,
             unit="strip",
             base_unit="tablet",
-            units_per_pack="10",
-            current_quantity="12",
-            unit_cost="5.00",
-            selling_price="20.00",
-            reorder_level="2",
-            strength_mg_per_unit="500",
+            units_per_pack=Decimal("10"),
+            current_quantity=Decimal("0"),
+            unit_cost=Decimal("5.00"),
+            selling_price=Decimal("20.00"),
+            reorder_level=Decimal("2"),
+            strength_mg_per_unit=Decimal("500"),
         )
         InventoryBatch.objects.create(
             item=self.drug,
@@ -193,11 +201,11 @@ class NurseWorkflowTests(TestCase):
             name="Acetic Acid Reagent",
             category=InventoryItem.CATEGORY_REAGENT,
             unit="unit",
-            pack_size_ml="5",
-            current_quantity="10",
-            unit_cost="1000.00",
-            selling_price="1500.00",
-            reorder_level="2",
+            pack_size_ml=Decimal("5"),
+            current_quantity=Decimal("0"),
+            unit_cost=Decimal("1000.00"),
+            selling_price=Decimal("1500.00"),
+            reorder_level=Decimal("2"),
         )
         InventoryBatch.objects.create(
             item=reagent_drug,
@@ -244,11 +252,11 @@ class NurseWorkflowTests(TestCase):
             name="Larger Reagent",
             category=InventoryItem.CATEGORY_REAGENT,
             unit="unit",
-            pack_size_ml="5",
-            current_quantity="10",
-            unit_cost="1000.00",
-            selling_price="1500.00",
-            reorder_level="2",
+            pack_size_ml=Decimal("5"),
+            current_quantity=Decimal("0"),
+            unit_cost=Decimal("1000.00"),
+            selling_price=Decimal("1500.00"),
+            reorder_level=Decimal("2"),
         )
         InventoryBatch.objects.create(
             item=reagent_drug,
@@ -290,12 +298,12 @@ class NurseWorkflowTests(TestCase):
         self.assertEqual(transaction.quantity, Decimal("2.00"))
 
     def test_nurse_cannot_dispense_when_insufficient_stock(self):
-        # Reduce stock to zero for this item
-        self.drug.current_quantity = Decimal("0")
-        self.drug.save(update_fields=["current_quantity", "quantity"])
+        # Zero the batch first, then recalculate — avoids the InventoryItem.save()
+        # override that resets current_quantity from self.quantity when quantity is non-zero.
         batch = InventoryBatch.objects.get(item=self.drug)
         batch.quantity = Decimal("0")
         batch.save()
+        self.drug.recalculate_current_quantity()
 
         response = self.client.post(
             reverse("dispense_prescription", args=[self.queue_entry.pk, self.prescription.pk]),

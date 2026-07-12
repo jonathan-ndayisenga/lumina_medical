@@ -4,17 +4,24 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 
-from accounts.models import AuditLog, Hospital
+from accounts.models import AuditLog, Hospital, HospitalModuleSubscription, Module
 from lab.models import LabReport, ReferenceRangeDefault, TestCatalog, TestProfile, TestResult
 from lab.templatetags.lab_extras import range_flag
 from lab.views import report_needs_doctor_send, send_report_results_to_doctor
 from reception.models import Patient, QueueEntry, Service, Visit, VisitService
 
 
+def _enable_modules(hospital, *codes):
+    for code in codes:
+        module, _ = Module.objects.get_or_create(code=code, defaults={"name": code.title()})
+        HospitalModuleSubscription.objects.get_or_create(hospital=hospital, module=module, defaults={"is_active": True})
+
+
 class LabDoctorHandoffTests(TestCase):
     def setUp(self):
         self.User = get_user_model()
         self.hospital = Hospital.objects.create(name="Lumina Lab", subdomain="lumina-lab-handoff")
+        _enable_modules(self.hospital, "doctor", "lab", "nurse")
         self.doctor = self.User.objects.create_user(
             username="labdoctor",
             password="StrongPass123!",
@@ -346,6 +353,7 @@ class LabReportAdminOverrideTests(TestCase):
     def setUp(self):
         self.User = get_user_model()
         self.hospital = Hospital.objects.create(name="Lumina Admin Lab", subdomain="lumina-admin-lab")
+        _enable_modules(self.hospital, "hospital_mgmt")
         self.lab_user = self.User.objects.create_user(
             username="labdelete",
             password="StrongPass123!",

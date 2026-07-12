@@ -7,13 +7,13 @@
 
 {% block content %}
 <div class="space-y-4">
-    <div class="flex flex-wrap gap-3 items-center justify-between">
-        <a href="{% url 'finance_dashboard' %}" class="btn btn-secondary">&larr; Dashboard</a>
-        <form method="get" class="flex gap-2 items-center">
-            <input type="date" name="from" value="{{ date_from }}" class="form-control text-sm py-1.5">
-            <span class="text-text-muted text-sm">to</span>
-            <input type="date" name="to" value="{{ date_to }}" class="form-control text-sm py-1.5">
-            <button type="submit" class="btn btn-primary text-sm py-1.5">Filter</button>
+    <div class="flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
+        <a href="{% url 'finance_dashboard' %}" class="btn btn-secondary self-start">&larr; Dashboard</a>
+        <form method="get" class="flex flex-wrap gap-2 items-center">
+            <input type="date" name="from" value="{{ date_from }}" class="form-control text-sm py-1.5 flex-1 min-w-[130px]">
+            <span class="text-text-muted text-sm shrink-0">to</span>
+            <input type="date" name="to" value="{{ date_to }}" class="form-control text-sm py-1.5 flex-1 min-w-[130px]">
+            <button type="submit" class="btn btn-primary text-sm py-1.5 shrink-0">Filter</button>
         </form>
     </div>
 

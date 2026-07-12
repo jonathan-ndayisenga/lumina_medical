@@ -218,9 +218,9 @@ if importlib.util.find_spec("whitenoise") is not None and not DEBUG:
     }
 
 
-LOGIN_URL = "login"
+LOGIN_URL = "/"
 LOGIN_REDIRECT_URL = "app_home"  # Role-based router that checks user role
-LOGOUT_REDIRECT_URL = "login"
+LOGOUT_REDIRECT_URL = "/"
 SESSION_IDLE_TIMEOUT_SECONDS = int(env("DJANGO_SESSION_IDLE_TIMEOUT_SECONDS", "1800"))
 SESSION_COOKIE_AGE = SESSION_IDLE_TIMEOUT_SECONDS
 SESSION_SAVE_EVERY_REQUEST = True

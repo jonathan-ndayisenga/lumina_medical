@@ -4,16 +4,23 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 
-from accounts.models import AuditLog, Hospital
+from accounts.models import AuditLog, Hospital, HospitalModuleSubscription, Module
 from admin_dashboard.models import InventoryItem
 from doctor.models import Consultation, Prescription
 from reception.models import Patient, QueueEntry, Service, Visit, VisitService
+
+
+def _enable_modules(hospital, *codes):
+    for code in codes:
+        module, _ = Module.objects.get_or_create(code=code, defaults={"name": code.title()})
+        HospitalModuleSubscription.objects.get_or_create(hospital=hospital, module=module, defaults={"is_active": True})
 
 
 class DoctorWorkflowTests(TestCase):
     def setUp(self):
         self.User = get_user_model()
         self.hospital = Hospital.objects.create(name="Lumina Central", subdomain="lumina-doc")
+        _enable_modules(self.hospital, "doctor", "lab", "nurse")
         self.doctor = self.User.objects.create_user(
             username="doctor1",
             password="StrongPass123!",
@@ -56,12 +63,12 @@ class DoctorWorkflowTests(TestCase):
             category=InventoryItem.CATEGORY_DRUG,
             unit="strip",
             base_unit="tablet",
-            units_per_pack="10",
-            strength_mg_per_unit="500",
-            current_quantity="12",
-            unit_cost="5.00",
-            selling_price="20.00",
-            reorder_level="20",
+            units_per_pack=Decimal("10"),
+            strength_mg_per_unit=Decimal("500"),
+            current_quantity=Decimal("0"),
+            unit_cost=Decimal("5.00"),
+            selling_price=Decimal("20.00"),
+            reorder_level=Decimal("20"),
         )
         self.syrup_drug = InventoryItem.objects.create(
             hospital=self.hospital,
@@ -69,11 +76,11 @@ class DoctorWorkflowTests(TestCase):
             category=InventoryItem.CATEGORY_SYRUP,
             unit="bottle",
             base_unit="ml",
-            units_per_pack="100",
-            current_quantity="20",
-            unit_cost="5000.00",
-            selling_price="10.00",
-            reorder_level="5",
+            units_per_pack=Decimal("100"),
+            current_quantity=Decimal("0"),
+            unit_cost=Decimal("5000.00"),
+            selling_price=Decimal("10.00"),
+            reorder_level=Decimal("5"),
         )
         self.tube_drug = InventoryItem.objects.create(
             hospital=self.hospital,
@@ -81,12 +88,12 @@ class DoctorWorkflowTests(TestCase):
             category=InventoryItem.CATEGORY_TUBE,
             unit="tube",
             base_unit="g",
-            units_per_pack="30",
-            current_quantity="12",
-            unit_cost="3.00",
-            selling_price="8.00",
-            reorder_level="2",
-            days_covered_per_pack="7.00",
+            units_per_pack=Decimal("30"),
+            current_quantity=Decimal("0"),
+            unit_cost=Decimal("3.00"),
+            selling_price=Decimal("8.00"),
+            reorder_level=Decimal("2"),
+            days_covered_per_pack=Decimal("7.00"),
         )
         self.iv_drug = InventoryItem.objects.create(
             hospital=self.hospital,
@@ -94,11 +101,11 @@ class DoctorWorkflowTests(TestCase):
             category=InventoryItem.CATEGORY_IV_FLUID,
             unit="bag",
             base_unit="ml",
-            units_per_pack="500",
-            current_quantity="10",
-            unit_cost="3000.00",
-            selling_price="6000.00",
-            reorder_level="2",
+            units_per_pack=Decimal("500"),
+            current_quantity=Decimal("0"),
+            unit_cost=Decimal("3000.00"),
+            selling_price=Decimal("6000.00"),
+            reorder_level=Decimal("2"),
         )
         self.im_drug = InventoryItem.objects.create(
             hospital=self.hospital,
@@ -106,11 +113,11 @@ class DoctorWorkflowTests(TestCase):
             category=InventoryItem.CATEGORY_IM,
             unit="vial",
             base_unit="ml",
-            units_per_pack="3",
-            current_quantity="30",
-            unit_cost="800.00",
-            selling_price="1500.00",
-            reorder_level="5",
+            units_per_pack=Decimal("3"),
+            current_quantity=Decimal("0"),
+            unit_cost=Decimal("800.00"),
+            selling_price=Decimal("1500.00"),
+            reorder_level=Decimal("5"),
         )
         self.visit = Visit.objects.create(
             patient=self.patient,
@@ -180,8 +187,9 @@ class DoctorWorkflowTests(TestCase):
         self.assertEqual(self.visit.total_amount, Decimal("40.00"))
         visit_service = VisitService.objects.get(visit=self.visit, service=self.lab_service)
         self.assertFalse(visit_service.performed)
-        lab_queue = QueueEntry.objects.get(visit=self.visit, queue_type=QueueEntry.TYPE_LAB_DOCTOR, processed=False)
-        self.assertEqual(lab_queue.reason, "Doctor requested: CBC")
+        # Lab requests go through reception for approval before routing to lab
+        reception_queue = QueueEntry.objects.get(visit=self.visit, queue_type=QueueEntry.TYPE_RECEPTION, processed=False)
+        self.assertIn("Lab approval required", reception_queue.reason)
 
         payload = response.json()
         self.assertEqual(payload["service"]["service_name"], "CBC")
@@ -198,8 +206,9 @@ class DoctorWorkflowTests(TestCase):
         self.assertEqual(self.visit.total_amount, Decimal("52.00"))
         self.assertTrue(VisitService.objects.filter(visit=self.visit, service=self.lab_service).exists())
         self.assertTrue(VisitService.objects.filter(visit=self.visit, service=self.second_lab_service).exists())
-        lab_queue = QueueEntry.objects.get(visit=self.visit, queue_type=QueueEntry.TYPE_LAB_DOCTOR, processed=False)
-        self.assertEqual(lab_queue.reason, "Doctor requested: CBC, Urinalysis")
+        # Lab requests go through reception for approval before routing to lab
+        reception_queue = QueueEntry.objects.get(visit=self.visit, queue_type=QueueEntry.TYPE_RECEPTION, processed=False)
+        self.assertIn("Lab approval required", reception_queue.reason)
 
         payload = response.json()
         self.assertEqual(len(payload["services"]), 2)
@@ -290,11 +299,11 @@ class DoctorWorkflowTests(TestCase):
             name="Acetic Acid Reagent",
             category=InventoryItem.CATEGORY_REAGENT,
             unit="unit",
-            pack_size_ml="5",
-            current_quantity="12",
-            unit_cost="1000.00",
-            selling_price="1500.00",
-            reorder_level="2",
+            pack_size_ml=Decimal("5"),
+            current_quantity=Decimal("0"),
+            unit_cost=Decimal("1000.00"),
+            selling_price=Decimal("1500.00"),
+            reorder_level=Decimal("2"),
         )
 
         response = self.client.post(
@@ -459,6 +468,7 @@ class ConsultationAdminOverrideTests(TestCase):
     def setUp(self):
         self.User = get_user_model()
         self.hospital = Hospital.objects.create(name="Lumina Admin Doctor", subdomain="lumina-admin-doctor")
+        _enable_modules(self.hospital, "hospital_mgmt")
         self.doctor = self.User.objects.create_user(
             username="doctor2",
             password="StrongPass123!",

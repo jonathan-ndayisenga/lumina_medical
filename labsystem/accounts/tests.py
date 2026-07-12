@@ -11,7 +11,7 @@ class LoginCsrfTests(TestCase):
     def test_login_page_sets_csrf_cookie(self):
         client = Client(enforce_csrf_checks=True)
 
-        response = client.get(reverse("login"))
+        response = client.get("/")
 
         self.assertEqual(response.status_code, 200)
         self.assertIn("csrftoken", client.cookies)
@@ -69,5 +69,6 @@ class SessionIdleTimeoutTests(TestCase):
         response = client.get(reverse("reception_dashboard"))
 
         self.assertEqual(response.status_code, 302)
-        self.assertIn(reverse("login"), response.headers["Location"])
+        # LOGIN_URL = "/" so the redirect goes to /?next=... (the root custom login page)
+        self.assertIn("/?next=", response.headers["Location"])
         self.assertNotIn("_auth_user_id", client.session)

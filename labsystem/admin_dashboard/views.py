@@ -131,10 +131,11 @@ def parse_date_param(value, fallback):
 
 
 def payment_from_receipt_reference(reference, hospital, mode=None):
-    """Best-effort match when a statement line includes our receipt number (RCT-YYYYMMDD-000123)."""
+    """Best-effort match when a statement line includes our receipt number (INITIALS-YYYYMMDD-000123)."""
     if not reference or not hospital:
         return None
-    match = re.search(r"RCT-\d{8}-(\d+)", str(reference).strip(), re.IGNORECASE)
+    # Format: {INITIALS}{YYYYMMDD}-{ZEROPADDED_ID}  e.g. LTH20250712-000001 or RCT20250712-000001
+    match = re.search(r"[A-Z]+\d{8}-(\d+)", str(reference).strip(), re.IGNORECASE)
     if not match:
         return None
     try:
@@ -1948,11 +1949,23 @@ def upload_inventory_bulk(request):
         expiry_date = cleaned.get("opening_expiry_date")
 
         if existing_item:
-            # Use the form to save changes to existing item so batch sync is triggered
-            validation_form.instance = existing_item
-            existing_item = validation_form.save()
-            
-            if opening_stock > 0:
+            # ModelForm._post_clean() set current_quantity to the CSV value on the instance.
+            # Restore it so save() doesn't see a change and trigger sync_batches_to_stock —
+            # stock is added below via add_or_update_batch instead.
+            existing_item.refresh_from_db(fields=["current_quantity"])
+            for attr in ["unit_cost", "selling_price", "reorder_level", "is_active", "units_per_pack",
+                         "concentration_mg_per_ml", "pack_size_ml", "days_covered_per_pack", "strength_mg_per_unit"]:
+                val = cleaned.get(attr)
+                if val is not None:
+                    setattr(existing_item, attr, val)
+            existing_item.save()
+
+            if opening_stock > 0 and batch_number:
+                existing_item.add_or_update_batch(
+                    batch_number, opening_stock,
+                    expiry_date=expiry_date,
+                    unit_cost=existing_item.unit_cost or Decimal("0"),
+                )
                 InventoryTransaction.objects.create(
                     hospital=hospital,
                     item=existing_item,

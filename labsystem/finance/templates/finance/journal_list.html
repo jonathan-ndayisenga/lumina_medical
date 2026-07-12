@@ -8,37 +8,40 @@
 {% block content %}
 <div class="space-y-4">
 
-    <div class="flex justify-between items-center">
+    <div class="flex flex-wrap gap-3 items-center justify-between">
         <a href="{% url 'finance_dashboard' %}" class="btn btn-secondary">&larr; Dashboard</a>
         <a href="{% url 'finance_journal_create' %}" class="btn btn-primary">+ Manual Entry</a>
     </div>
 
     <!-- Filter bar -->
     <div class="card">
-        <form method="get" class="flex flex-wrap gap-3 items-end">
-            <div>
-                <label class="block text-xs font-semibold text-text-muted uppercase tracking-wide mb-1">From</label>
-                <input type="date" name="date_from" value="{{ date_from }}" class="form-control text-sm py-1.5">
-            </div>
-            <div>
-                <label class="block text-xs font-semibold text-text-muted uppercase tracking-wide mb-1">To</label>
-                <input type="date" name="date_to" value="{{ date_to }}" class="form-control text-sm py-1.5">
-            </div>
-            <div>
-                <label class="block text-xs font-semibold text-text-muted uppercase tracking-wide mb-1">Type</label>
-                <select name="source_type" class="form-control text-sm py-1.5">
-                    <option value="">All types</option>
-                    {% for val, label in source_type_choices %}
-                        <option value="{{ val }}" {% if source_type == val %}selected{% endif %}>{{ label }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-            <div class="flex gap-2">
-                <button type="submit" class="btn btn-primary text-sm py-1.5">Filter</button>
-                <a href="{% url 'finance_journal' %}" class="btn btn-secondary text-sm py-1.5">Reset</a>
+        <form method="get" class="space-y-3">
+            <div class="flex flex-wrap gap-3 items-end">
+                <div class="flex-1 min-w-[120px]">
+                    <label class="block text-xs font-semibold text-text-muted uppercase tracking-wide mb-1">From</label>
+                    <input type="date" name="date_from" value="{{ date_from }}" class="form-control text-sm py-1.5 w-full">
+                </div>
+                <div class="flex-1 min-w-[120px]">
+                    <label class="block text-xs font-semibold text-text-muted uppercase tracking-wide mb-1">To</label>
+                    <input type="date" name="date_to" value="{{ date_to }}" class="form-control text-sm py-1.5 w-full">
+                </div>
+                <div class="flex-1 min-w-[140px]">
+                    <label class="block text-xs font-semibold text-text-muted uppercase tracking-wide mb-1">Type</label>
+                    <select name="source_type" class="form-control text-sm py-1.5 w-full">
+                        <option value="">All types</option>
+                        {% for val, label in source_type_choices %}
+                            <option value="{{ val }}" {% if source_type == val %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="flex gap-2 shrink-0">
+                    <button type="submit" class="btn btn-primary text-sm py-1.5">Filter</button>
+                    <a href="{% url 'finance_journal' %}" class="btn btn-secondary text-sm py-1.5">Reset</a>
+                </div>
             </div>
             <!-- Quick date shortcuts -->
-            <div class="flex gap-2 items-end ml-auto flex-wrap">
+            <div class="flex gap-2 flex-wrap border-t border-gray-100 pt-3">
+                <span class="text-xs text-text-muted self-center">Jump to:</span>
                 <a href="?date_from={{ today|date:'Y-m-d' }}&date_to={{ today|date:'Y-m-d' }}" class="btn btn-secondary text-xs py-1">Today</a>
                 <a href="?date_from={{ today|date:'Y-m' }}-01&date_to={{ today|date:'Y-m-d' }}" class="btn btn-secondary text-xs py-1">This Month</a>
                 <a href="?date_from={{ today|date:'Y' }}-01-01&date_to={{ today|date:'Y-m-d' }}" class="btn btn-secondary text-xs py-1">This Year</a>

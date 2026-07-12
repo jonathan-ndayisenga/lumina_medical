@@ -7,9 +7,9 @@
 
 {% block content %}
 <div class="space-y-4">
-    <div class="flex justify-between items-center">
+    <div class="flex flex-wrap gap-3 items-center justify-between">
         <a href="{% url 'finance_dashboard' %}" class="btn btn-secondary">&larr; Dashboard</a>
-        <div class="text-sm font-semibold text-text-main">Total Outstanding: <span class="text-red-600">UGX {{ total_outstanding|floatformat:0|intcomma }}</span></div>
+        <div class="text-sm font-semibold text-text-main">Total Outstanding: <span class="text-red-600 font-mono tabular-nums">UGX {{ total_outstanding|floatformat:0|intcomma }}</span></div>
     </div>
 
     <div class="card">

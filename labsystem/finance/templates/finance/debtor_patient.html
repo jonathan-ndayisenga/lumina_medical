@@ -10,30 +10,30 @@
     <a href="{% url 'finance_debtors' %}" class="btn btn-secondary">&larr; Debtor Ledger</a>
 
     <!-- Summary -->
-    <div class="grid grid-cols-3 gap-4">
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div class="card text-center border-t-4 border-blue-400">
             <div class="text-xs text-text-muted uppercase font-semibold mb-1">Total Billed</div>
-            <div class="text-xl font-bold text-text-main">UGX {{ total_billed|floatformat:0|intcomma }}</div>
+            <div class="text-xl font-bold text-text-main font-mono tabular-nums">UGX {{ total_billed|floatformat:0|intcomma }}</div>
         </div>
         <div class="card text-center border-t-4 border-emerald-500">
             <div class="text-xs text-text-muted uppercase font-semibold mb-1">Total Paid</div>
-            <div class="text-xl font-bold text-emerald-700">UGX {{ total_paid|floatformat:0|intcomma }}</div>
+            <div class="text-xl font-bold text-emerald-700 font-mono tabular-nums">UGX {{ total_paid|floatformat:0|intcomma }}</div>
         </div>
         <div class="card text-center border-t-4 border-red-400">
             <div class="text-xs text-text-muted uppercase font-semibold mb-1">Balance Due</div>
-            <div class="text-xl font-bold text-red-600">UGX {{ total_balance|floatformat:0|intcomma }}</div>
+            <div class="text-xl font-bold text-red-600 font-mono tabular-nums">UGX {{ total_balance|floatformat:0|intcomma }}</div>
         </div>
     </div>
 
     {% for visit in visits %}
     <div class="card">
-        <div class="flex justify-between items-start mb-3">
+        <div class="flex flex-wrap gap-2 justify-between items-start mb-3">
             <div>
                 <h3 class="font-bold text-text-main">Visit — {{ visit.visit_date|date:"M d, Y" }}</h3>
                 <p class="text-xs text-text-muted">{{ visit.get_status_display }}</p>
             </div>
-            <div class="text-right">
-                <div class="text-sm font-semibold {% if visit.balance_due %}text-red-600{% else %}text-emerald-600{% endif %}">
+            <div class="text-right shrink-0">
+                <div class="text-sm font-semibold font-mono tabular-nums {% if visit.balance_due %}text-red-600{% else %}text-emerald-600{% endif %}">
                     {% if visit.balance_due %}Balance: UGX {{ visit.balance_due|floatformat:0|intcomma }}{% else %}Settled{% endif %}
                 </div>
             </div>

@@ -305,8 +305,7 @@
                             <p class="text-xs text-text-muted mt-1">{{ prescription.regimen_display }}</p>
                             <p class="text-xs text-text-muted mt-1">Dispense {{ prescription.quantity_display }}</p>
                             {% if prescription.notes %}
-                                <button type="button" class="mt-1 text-xs text-blue-600 hover:underline notes-toggle" data-target="notes-{{ prescription.pk }}">Notes ▾</button>
-                                <p id="notes-{{ prescription.pk }}" class="hidden mt-1 text-xs text-text-muted italic border-l-2 border-blue-300 pl-2">{{ prescription.notes }}</p>
+                                <p class="mt-1 text-xs text-text-muted italic border-l-2 border-blue-300 pl-2">{{ prescription.notes }}</p>
                             {% endif %}
                         </div>
                         <div class="text-right">
