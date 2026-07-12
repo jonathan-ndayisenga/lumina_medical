@@ -1839,6 +1839,35 @@ def deactivate_user(request, user_id):
 
 
 @role_required(User.ROLE_HOSPITAL_ADMIN)
+def reset_user_password(request, user_id):
+    user = hospital_owned_or_404(User, request, pk=user_id)
+
+    if request.method == "POST":
+        password1 = request.POST.get("password1", "").strip()
+        password2 = request.POST.get("password2", "").strip()
+        if not password1:
+            messages.error(request, "Password cannot be empty.")
+        elif password1 != password2:
+            messages.error(request, "Passwords do not match.")
+        elif len(password1) < 8:
+            messages.error(request, "Password must be at least 8 characters.")
+        else:
+            user.set_password(password1)
+            user.save(update_fields=["password"])
+            messages.success(request, f"Password for {user.get_full_name() or user.username} has been reset.")
+            return redirect("manage_users")
+
+    context = hospital_admin_context(
+        request,
+        "hospital_users",
+        "Reset Password",
+        f"Set a new password for {user.get_full_name() or user.username}.",
+    )
+    context["target_user"] = user
+    return render(request, "admin_dashboard/reset_user_password.html", context)
+
+
+@role_required(User.ROLE_HOSPITAL_ADMIN)
 def manage_services(request):
     hospital = active_hospital(request)
     services_qs = Service.objects.filter(hospital=hospital).order_by("category", "name") if hospital else Service.objects.none()

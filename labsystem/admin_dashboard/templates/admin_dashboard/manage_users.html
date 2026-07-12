@@ -187,8 +187,12 @@
                     </div>
 
                     <!-- Actions -->
-                    <div class="flex items-center gap-2 flex-shrink-0">
+                    <div class="flex items-center gap-2 flex-shrink-0 flex-wrap justify-end">
                         <a href="{% url 'edit_user' u.pk %}" class="btn btn-secondary btn-sm">Edit</a>
+                        <a href="{% url 'reset_user_password' u.pk %}"
+                           class="btn btn-sm border border-amber-200 text-amber-700 bg-white hover:bg-amber-50 text-xs font-semibold px-3 py-1.5 rounded-lg">
+                           Reset Password
+                        </a>
                         {% if u.is_active %}
                         <a href="{% url 'deactivate_user' u.pk %}"
                            class="btn btn-sm border border-red-200 text-red-600 bg-white hover:bg-red-50 text-xs font-semibold px-3 py-1.5 rounded-lg">

@@ -48,6 +48,7 @@ urlpatterns = [
     path("hospital/users/", views.manage_users, name="manage_users"),
     path("hospital/users/<int:user_id>/edit/", views.edit_user, name="edit_user"),
     path("hospital/users/<int:user_id>/deactivate/", views.deactivate_user, name="deactivate_user"),
+    path("hospital/users/<int:user_id>/reset-password/", views.reset_user_password, name="reset_user_password"),
     path("hospital/services/", views.manage_services, name="manage_services"),
     path("hospital/services/<int:service_id>/edit/", views.edit_service, name="edit_service"),
     path("hospital/services/<int:service_id>/delete/", views.delete_service, name="delete_service"),
