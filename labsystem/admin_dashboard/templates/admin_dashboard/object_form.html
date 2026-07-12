@@ -48,22 +48,35 @@
                 {% endfor %}
             </div>
 
-            {# Multi-select checkbox fields (ModelMultipleChoiceField / CheckboxSelectMultiple) #}
+            {# Multi-select checkbox fields (ModelMultipleChoiceField / CheckboxSelectMultiple) — pill toggle style #}
             {% for field in form %}
                 {% if field.field.widget.input_type == "checkbox" and field.field.widget.allow_multiple_selected %}
                 <div class="mt-2">
-                    <p class="block text-sm font-semibold text-text-main mb-1">{{ field.label }}</p>
-                    {% if field.help_text %}<p class="text-xs text-text-muted mb-2">{{ field.help_text }}</p>{% endif %}
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        {% for choice in field %}
-                        <label class="flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 hover:bg-gray-50 cursor-pointer text-sm">
-                            {{ choice.tag }}
-                            <span class="font-medium text-text-main">{{ choice.choice_label }}</span>
+                    <p class="block text-sm font-semibold text-text-main mb-2">{{ field.label }}</p>
+                    {% if field.help_text %}<p class="text-xs text-text-muted mb-3">{{ field.help_text }}</p>{% endif %}
+                    <div class="flex flex-wrap gap-2">
+                        {% for choice_value, choice_label in field.field.choices %}
+                        <label class="group-toggle-label cursor-pointer select-none">
+                            <input
+                                type="checkbox"
+                                name="{{ field.html_name }}"
+                                value="{{ choice_value }}"
+                                class="sr-only group-toggle-input"
+                                {% if choice_value in field.value %}checked{% endif %}
+                            >
+                            <span class="group-toggle-pill inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-sm font-semibold transition-all duration-150 border-gray-200 bg-white text-text-muted hover:border-blue-300 hover:text-blue-700">
+                                <span class="toggle-dot w-2 h-2 rounded-full bg-gray-300 transition-colors duration-150"></span>
+                                {{ choice_label }}
+                            </span>
                         </label>
                         {% endfor %}
                     </div>
                     {% for error in field.errors %}<div class="text-xs text-red-600 mt-1">{{ error }}</div>{% endfor %}
                 </div>
+                <style>
+                  .group-toggle-input:checked + .group-toggle-pill { background-color:#EFF6FF; border-color:#3B82F6; color:#1D4ED8; }
+                  .group-toggle-input:checked + .group-toggle-pill .toggle-dot { background-color:#3B82F6; }
+                </style>
                 {% endif %}
             {% endfor %}
 
