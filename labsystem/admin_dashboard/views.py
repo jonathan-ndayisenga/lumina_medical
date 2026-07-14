@@ -19,7 +19,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from accounts.forms import HospitalSubscriptionPaymentForm, SubscriptionPlanForm
-from accounts.models import Hospital, HospitalInvoice, HospitalModuleSubscription, HospitalSubscriptionPayment, InternalNotification, Module, PlatformSettings, SubscriptionPlan, SystemNotification, User
+from accounts.models import Hospital, HospitalInvoice, HospitalModuleSubscription, HospitalSubscriptionPayment, InternalNotification, Module, PlatformSettings, SubscriptionPlan, SupportToken, SupportTokenMessage, SystemNotification, User
 from lab.models import LabReport
 from reception.models import Patient, Payment, QueueEntry, Service, Visit
 from .forms import (
@@ -42,6 +42,9 @@ from .forms import (
     OpenCashDrawerForm,
     PlatformSettingsForm,
     SalaryForm,
+    SupportTokenForm,
+    SupportTokenReplyForm,
+    SupportTokenStatusForm,
     ThreeWayReconciliationForm,
 )
 from .models import (
@@ -3540,4 +3543,155 @@ def platform_settings(request):
         "base_template": "admin_dashboard/developer_base.html",
         "dashboard_title": "Platform Settings",
         "dashboard_intro": "Configure platform-wide features and behaviour.",
+    })
+
+
+# ── Hospital Admin — Support Tokens ──────────────────────────────────────────
+
+@role_required(User.ROLE_HOSPITAL_ADMIN)
+def hospital_token_list(request):
+    hospital = active_hospital(request)
+    if not hospital:
+        return HttpResponseForbidden()
+    tokens = SupportToken.objects.filter(hospital=hospital).prefetch_related("thread")
+    context = hospital_admin_context(
+        request, "hospital_tokens", "Support Tokens",
+        "File a complaint, report a bug, or send a message to the platform provider.",
+    )
+    context["tokens"] = tokens
+    return render(request, "admin_dashboard/hospital_token_list.html", context)
+
+
+@role_required(User.ROLE_HOSPITAL_ADMIN)
+def hospital_token_create(request):
+    hospital = active_hospital(request)
+    if not hospital:
+        return HttpResponseForbidden()
+    if request.method == "POST":
+        form = SupportTokenForm(request.POST)
+        body = request.POST.get("body", "").strip()
+        if form.is_valid() and body:
+            token = form.save(commit=False)
+            token.hospital = hospital
+            token.submitted_by = request.user
+            token.save()
+            SupportTokenMessage.objects.create(
+                token=token,
+                sender=request.user,
+                body=body,
+                is_from_provider=False,
+            )
+            messages.success(request, "Token submitted. We will get back to you shortly.")
+            return redirect("hospital_token_detail", pk=token.pk)
+        elif not body:
+            messages.error(request, "Please describe your issue in the message field.")
+    else:
+        form = SupportTokenForm()
+    context = hospital_admin_context(
+        request, "hospital_tokens", "New Support Token",
+        "Describe your issue and we will look into it.",
+    )
+    context["form"] = form
+    return render(request, "admin_dashboard/hospital_token_create.html", context)
+
+
+@role_required(User.ROLE_HOSPITAL_ADMIN)
+def hospital_token_detail(request, pk):
+    hospital = active_hospital(request)
+    token = get_object_or_404(SupportToken, pk=pk, hospital=hospital)
+    # Mark provider replies as read
+    token.thread.filter(is_from_provider=True, read_by_recipient=False).update(read_by_recipient=True)
+
+    if request.method == "POST" and token.is_open:
+        body = request.POST.get("body", "").strip()
+        if body:
+            SupportTokenMessage.objects.create(
+                token=token,
+                sender=request.user,
+                body=body,
+                is_from_provider=False,
+            )
+            token.status = SupportToken.STATUS_OPEN
+            token.save(update_fields=["status", "updated_at"])
+            return redirect("hospital_token_detail", pk=pk)
+
+    context = hospital_admin_context(
+        request, "hospital_tokens", f"Token #{token.pk}",
+        token.subject,
+    )
+    context["token"] = token
+    context["reply_form"] = SupportTokenReplyForm()
+    return render(request, "admin_dashboard/hospital_token_detail.html", context)
+
+
+# ── Super Admin — Support Tokens ──────────────────────────────────────────────
+
+@login_required
+def superadmin_tokens(request):
+    if not (request.user.is_superuser or getattr(request.user, "is_superadmin", False)):
+        return HttpResponseForbidden()
+    status_filter = request.GET.get("status", "open")
+    qs = SupportToken.objects.select_related("hospital", "submitted_by").prefetch_related("thread")
+    if status_filter == "open":
+        qs = qs.filter(status__in=[SupportToken.STATUS_OPEN, SupportToken.STATUS_IN_PROGRESS])
+    elif status_filter == "resolved":
+        qs = qs.filter(status__in=[SupportToken.STATUS_RESOLVED, SupportToken.STATUS_CLOSED])
+    paginator = Paginator(qs, 15)
+    page_obj = paginator.get_page(request.GET.get("page"))
+    open_count = SupportToken.objects.filter(
+        status__in=[SupportToken.STATUS_OPEN, SupportToken.STATUS_IN_PROGRESS]
+    ).count()
+    return render(request, "admin_dashboard/superadmin_token_list.html", {
+        "active_nav": "superadmin_tokens",
+        "base_template": "admin_dashboard/developer_base.html",
+        "dashboard_title": "Support Tokens",
+        "dashboard_intro": "Messages and complaints filed by hospital administrators.",
+        "page_obj": page_obj,
+        "status_filter": status_filter,
+        "open_count": open_count,
+    })
+
+
+@login_required
+def superadmin_token_detail(request, pk):
+    if not (request.user.is_superuser or getattr(request.user, "is_superadmin", False)):
+        return HttpResponseForbidden()
+    token = get_object_or_404(SupportToken, pk=pk)
+    # Mark hospital messages as read by provider
+    token.thread.filter(is_from_provider=False, read_by_recipient=False).update(read_by_recipient=True)
+
+    status_form = SupportTokenStatusForm(instance=token)
+
+    if request.method == "POST":
+        action = request.POST.get("action")
+        if action == "reply":
+            body = request.POST.get("body", "").strip()
+            if body:
+                SupportTokenMessage.objects.create(
+                    token=token,
+                    sender=request.user,
+                    body=body,
+                    is_from_provider=True,
+                )
+                if token.status == SupportToken.STATUS_OPEN:
+                    token.status = SupportToken.STATUS_IN_PROGRESS
+                    token.save(update_fields=["status", "updated_at"])
+                messages.success(request, "Reply sent.")
+                return redirect("superadmin_token_detail", pk=pk)
+
+        elif action == "update_status":
+            status_form = SupportTokenStatusForm(request.POST, instance=token)
+            if status_form.is_valid():
+                status_form.save()
+                messages.success(request, "Token updated.")
+                return redirect("superadmin_token_detail", pk=pk)
+
+    return render(request, "admin_dashboard/superadmin_token_detail.html", {
+        "active_nav": "superadmin_tokens",
+        "base_template": "admin_dashboard/developer_base.html",
+        "dashboard_title": f"Token #{token.pk}",
+        "dashboard_intro": token.subject,
+        "token": token,
+        "reply_form": SupportTokenReplyForm(),
+        "status_form": status_form,
     })

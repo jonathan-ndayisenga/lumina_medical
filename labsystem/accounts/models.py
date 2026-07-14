@@ -446,6 +446,96 @@ class DirectMessage(models.Model):
         return f"{self.sender} → {self.recipient}: {self.subject or self.body[:40]}"
 
 
+class SupportToken(models.Model):
+    """Support ticket filed by a hospital admin to the platform provider."""
+
+    CATEGORY_COMPLAINT = "complaint"
+    CATEGORY_INQUIRY = "inquiry"
+    CATEGORY_BUG = "bug_report"
+    CATEGORY_FEATURE = "feature_request"
+    CATEGORY_OTHER = "other"
+    CATEGORY_CHOICES = [
+        (CATEGORY_COMPLAINT, "Complaint"),
+        (CATEGORY_INQUIRY, "General Inquiry"),
+        (CATEGORY_BUG, "Bug Report"),
+        (CATEGORY_FEATURE, "Feature Request"),
+        (CATEGORY_OTHER, "Other"),
+    ]
+
+    STATUS_OPEN = "open"
+    STATUS_IN_PROGRESS = "in_progress"
+    STATUS_RESOLVED = "resolved"
+    STATUS_CLOSED = "closed"
+    STATUS_CHOICES = [
+        (STATUS_OPEN, "Open"),
+        (STATUS_IN_PROGRESS, "In Progress"),
+        (STATUS_RESOLVED, "Resolved"),
+        (STATUS_CLOSED, "Closed"),
+    ]
+
+    PRIORITY_LOW = "low"
+    PRIORITY_NORMAL = "normal"
+    PRIORITY_HIGH = "high"
+    PRIORITY_URGENT = "urgent"
+    PRIORITY_CHOICES = [
+        (PRIORITY_LOW, "Low"),
+        (PRIORITY_NORMAL, "Normal"),
+        (PRIORITY_HIGH, "High"),
+        (PRIORITY_URGENT, "Urgent"),
+    ]
+
+    hospital = models.ForeignKey(
+        Hospital, on_delete=models.CASCADE, related_name="support_tokens"
+    )
+    submitted_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="submitted_tokens",
+    )
+    subject = models.CharField(max_length=200)
+    category = models.CharField(max_length=20, choices=CATEGORY_CHOICES, default=CATEGORY_INQUIRY)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_OPEN)
+    priority = models.CharField(max_length=10, choices=PRIORITY_CHOICES, default=PRIORITY_NORMAL)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-updated_at"]
+
+    def __str__(self):
+        return f"[{self.get_status_display()}] {self.hospital.name} — {self.subject}"
+
+    @property
+    def is_open(self):
+        return self.status in (self.STATUS_OPEN, self.STATUS_IN_PROGRESS)
+
+
+class SupportTokenMessage(models.Model):
+    """A single message in a support token thread."""
+
+    token = models.ForeignKey(
+        SupportToken, on_delete=models.CASCADE, related_name="thread"
+    )
+    sender = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="support_token_messages",
+    )
+    body = models.TextField()
+    is_from_provider = models.BooleanField(default=False)
+    read_by_recipient = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["created_at"]
+
+    def __str__(self):
+        role = "Provider" if self.is_from_provider else "Hospital"
+        return f"[{role}] {self.token_id} — {self.created_at:%Y-%m-%d %H:%M}"
+
+
 class AuditLog(models.Model):
     user = models.ForeignKey(
         User,

@@ -8,7 +8,7 @@ from django.contrib.auth.models import Group
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 
-from accounts.models import Hospital, HospitalModuleSubscription, Module, PlatformSettings, User
+from accounts.models import Hospital, HospitalModuleSubscription, Module, PlatformSettings, SupportToken, User
 from lab.models import TestProfile
 from reception.models import Service
 
@@ -801,4 +801,31 @@ class PlatformSettingsForm(forms.ModelForm):
             "message_retention_days": forms.NumberInput(
                 attrs={"class": "form-control", "min": "0", "max": "365", "placeholder": "e.g. 7"}
             ),
+        }
+
+
+class SupportTokenForm(forms.ModelForm):
+    class Meta:
+        model = SupportToken
+        fields = ("subject", "category")
+        widgets = {
+            "subject": forms.TextInput(attrs={"class": "form-control", "placeholder": "Brief description of your issue"}),
+            "category": forms.Select(attrs={"class": "form-control"}),
+        }
+
+
+class SupportTokenReplyForm(forms.Form):
+    body = forms.CharField(
+        widget=forms.Textarea(attrs={"class": "form-control", "rows": "4", "placeholder": "Write your reply…"}),
+        label="Reply",
+    )
+
+
+class SupportTokenStatusForm(forms.ModelForm):
+    class Meta:
+        model = SupportToken
+        fields = ("status", "priority")
+        widgets = {
+            "status": forms.Select(attrs={"class": "form-control"}),
+            "priority": forms.Select(attrs={"class": "form-control"}),
         }

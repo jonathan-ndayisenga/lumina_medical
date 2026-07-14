@@ -70,4 +70,9 @@ urlpatterns = [
     path("hospital/broadcast/", views.hospital_broadcast, name="hospital_broadcast"),
     path("hospital/broadcast/<int:pk>/delete/", views.hospital_broadcast_delete, name="hospital_broadcast_delete"),
     path("superadmin/settings/", views.platform_settings, name="platform_settings"),
+    path("superadmin/tokens/", views.superadmin_tokens, name="superadmin_tokens"),
+    path("superadmin/tokens/<int:pk>/", views.superadmin_token_detail, name="superadmin_token_detail"),
+    path("hospital/tokens/", views.hospital_token_list, name="hospital_token_list"),
+    path("hospital/tokens/new/", views.hospital_token_create, name="hospital_token_create"),
+    path("hospital/tokens/<int:pk>/", views.hospital_token_detail, name="hospital_token_detail"),
 ]

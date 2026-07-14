@@ -28,6 +28,12 @@
         <div class="text-xs font-bold uppercase tracking-widest text-white/60 mb-2">Messaging</div>
         <div class="space-y-1">
             <a href="{% url 'manage_notifications' %}" class="sidebar-link {% if active_nav == 'superadmin_notifications' %}active{% endif %}">Notifications</a>
+            <a href="{% url 'superadmin_tokens' %}" class="sidebar-link {% if active_nav == 'superadmin_tokens' %}active{% endif %}">
+                Support Tokens
+                {% if superadmin_open_token_count %}
+                <span class="ml-auto inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold text-white bg-red-500 rounded-full">{{ superadmin_open_token_count }}</span>
+                {% endif %}
+            </a>
         </div>
     </div>
 

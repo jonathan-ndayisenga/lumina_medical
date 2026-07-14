@@ -2,7 +2,7 @@ from datetime import date
 
 from django.db.models import Q
 
-from .models import DirectMessage, InternalNotification, InternalNotificationRead, NotificationRead, PlatformSettings, SystemNotification
+from .models import DirectMessage, InternalNotification, InternalNotificationRead, NotificationRead, PlatformSettings, SupportToken, SupportTokenMessage, SystemNotification
 
 _LEVEL_RANK = {"warning": 1, "urgent": 2, "expired": 3}
 
@@ -65,9 +65,27 @@ def notifications(request):
 
     total_unread = sys_unread_count + internal_unread_count + direct_unread_count + (1 if expiry_alert else 0)
 
+    # ── Support token badge (hospital admins: unread provider replies) ────────
+    token_unread_count = 0
+    if hospital and getattr(request.user, "is_hospital_admin", False):
+        token_unread_count = SupportTokenMessage.objects.filter(
+            token__hospital=hospital,
+            is_from_provider=True,
+            read_by_recipient=False,
+        ).count()
+
+    # ── Support token badge (super admin: total open tokens) ─────────────────
+    superadmin_open_token_count = 0
+    if getattr(request.user, "is_superadmin", False) or request.user.is_superuser:
+        superadmin_open_token_count = SupportToken.objects.filter(
+            status__in=[SupportToken.STATUS_OPEN, SupportToken.STATUS_IN_PROGRESS]
+        ).count()
+
     return {
         "expiry_alert": expiry_alert,
         "unread_notifications": list(sys_unread_qs[:5]),
         "notification_unread_count": total_unread,
         "message_unread_count": total_unread,
+        "token_unread_count": token_unread_count,
+        "superadmin_open_token_count": superadmin_open_token_count,
     }

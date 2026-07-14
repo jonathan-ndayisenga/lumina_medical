@@ -1,0 +1,58 @@
+{% extends 'base.html' %}
+{% block title %}Token #{{ token.pk }} — {{ token.subject }}{% endblock %}
+{% block page_title %}Token #{{ token.pk }}{% endblock %}
+{% block page_subtitle %}{{ token.subject }}{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl space-y-5">
+
+    {# ── Status bar ── #}
+    <div class="card flex flex-wrap items-center gap-3 py-3">
+        <span class="text-[11px] font-bold uppercase tracking-wider px-3 py-1 rounded-full
+            {% if token.status == 'open' %}bg-blue-100 text-blue-700
+            {% elif token.status == 'in_progress' %}bg-amber-100 text-amber-700
+            {% elif token.status == 'resolved' %}bg-green-100 text-green-700
+            {% else %}bg-gray-100 text-gray-500{% endif %}">
+            {{ token.get_status_display }}
+        </span>
+        <span class="text-xs text-text-muted">{{ token.get_category_display }}</span>
+        <span class="text-xs text-text-muted">· Priority: {{ token.get_priority_display }}</span>
+        <span class="text-xs text-text-muted">· Opened {{ token.created_at|date:"d M Y H:i" }}</span>
+        <a href="{% url 'hospital_token_list' %}" class="ml-auto text-xs text-brand-dark font-semibold hover:underline">← All Tokens</a>
+    </div>
+
+    {# ── Thread ── #}
+    <div class="space-y-3">
+        {% for msg in token.thread.all %}
+        <div class="card {% if msg.is_from_provider %}border-l-4 border-l-indigo-400{% endif %}">
+            <div class="flex items-center gap-2 mb-2">
+                {% if msg.is_from_provider %}
+                <span class="text-xs font-bold text-indigo-600">Platform Support</span>
+                {% else %}
+                <span class="text-xs font-bold text-text-main">{{ msg.sender.get_full_name|default:msg.sender.username }}</span>
+                {% endif %}
+                <span class="text-xs text-text-muted">· {{ msg.created_at|date:"d M Y H:i" }}</span>
+            </div>
+            <p class="text-sm text-text-muted whitespace-pre-wrap leading-relaxed">{{ msg.body }}</p>
+        </div>
+        {% endfor %}
+    </div>
+
+    {# ── Reply (only if token is still open) ── #}
+    {% if token.is_open %}
+    <div class="card space-y-3">
+        <h3 class="text-sm font-bold text-text-main">Add a Reply</h3>
+        <form method="post" class="space-y-3">
+            {% csrf_token %}
+            <textarea name="body" rows="4" class="form-control" placeholder="Write your reply…" required></textarea>
+            <button type="submit" class="btn btn-primary btn-sm">Send Reply</button>
+        </form>
+    </div>
+    {% else %}
+    <div class="p-3 rounded-xl bg-gray-50 border border-gray-200 text-sm text-text-muted text-center">
+        This token is {{ token.get_status_display|lower }}. No further replies can be added.
+    </div>
+    {% endif %}
+
+</div>
+{% endblock %}

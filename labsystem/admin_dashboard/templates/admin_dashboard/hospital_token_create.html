@@ -1,0 +1,40 @@
+{% extends 'base.html' %}
+{% block title %}New Support Token{% endblock %}
+{% block page_title %}New Support Token{% endblock %}
+{% block page_subtitle %}Describe your issue and the platform team will respond.{% endblock %}
+
+{% block content %}
+<div class="max-w-xl space-y-5">
+
+    {% if messages %}
+    {% for message in messages %}
+    <div class="p-3 rounded-xl text-sm font-medium bg-red-50 border border-red-200 text-red-700">{{ message }}</div>
+    {% endfor %}
+    {% endif %}
+
+    <div class="card space-y-4">
+        <form method="post" class="space-y-4">
+            {% csrf_token %}
+            <div>
+                <label class="block text-sm font-semibold text-text-main mb-1">Category</label>
+                {{ form.category }}
+                {% for error in form.category.errors %}<div class="text-xs text-red-600 mt-1">{{ error }}</div>{% endfor %}
+            </div>
+            <div>
+                <label class="block text-sm font-semibold text-text-main mb-1">Subject</label>
+                {{ form.subject }}
+                {% for error in form.subject.errors %}<div class="text-xs text-red-600 mt-1">{{ error }}</div>{% endfor %}
+            </div>
+            <div>
+                <label class="block text-sm font-semibold text-text-main mb-1">Message</label>
+                <textarea name="body" rows="6" class="form-control" placeholder="Describe your issue in as much detail as possible…" required></textarea>
+            </div>
+            <div class="flex gap-3 pt-1">
+                <button type="submit" class="btn btn-primary">Submit Token</button>
+                <a href="{% url 'hospital_token_list' %}" class="btn btn-secondary">Cancel</a>
+            </div>
+        </form>
+    </div>
+
+</div>
+{% endblock %}
