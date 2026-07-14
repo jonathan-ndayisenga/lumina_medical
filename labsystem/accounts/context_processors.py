@@ -4,6 +4,16 @@ from django.db.models import Q
 
 from .models import SystemNotification
 
+_LEVEL_RANK = {"warning": 1, "urgent": 2, "expired": 3}
+
+
+def _expiry_level(days):
+    if days < 0:
+        return "expired"
+    if days <= 7:
+        return "urgent"
+    return "warning"
+
 
 def notifications(request):
     if not request.user.is_authenticated or getattr(request.user, "is_superadmin", False):
@@ -11,15 +21,21 @@ def notifications(request):
 
     hospital = getattr(request.user, "hospital", None)
 
-    # Subscription expiry alert
+    # Subscription expiry alert — suppressed if the user already dismissed this level
     expiry_alert = None
     if hospital and hospital.subscription_end_date:
         days = (hospital.subscription_end_date - date.today()).days
-        expiry_alert = {
-            "days": days,
-            "expired": days < 0,
-            "urgent": days <= 7,
-        }
+        if days <= 30:
+            level = _expiry_level(days)
+            dismissed = request.session.get("expiry_dismissed", "")
+            # Show if not dismissed, or if current level is more severe than dismissed level
+            if not dismissed or _LEVEL_RANK.get(level, 0) > _LEVEL_RANK.get(dismissed, 0):
+                expiry_alert = {
+                    "days": days,
+                    "expired": days < 0,
+                    "urgent": days <= 7,
+                    "level": level,
+                }
 
     # Unread system notifications visible to this user
     qs = SystemNotification.objects.filter(is_active=True).filter(

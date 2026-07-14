@@ -1,0 +1,112 @@
+{% extends base_template %}
+
+{% block title %}Notifications — Super Admin{% endblock %}
+{% block page_title %}Notifications{% endblock %}
+{% block page_subtitle %}Compose and send messages to hospital tenants.{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+
+    {% if messages %}
+        {% for message in messages %}
+        <div class="p-4 rounded-lg {% if message.tags == 'error' %}bg-red-50 border border-red-200 text-red-800{% else %}bg-emerald-50 border border-emerald-200 text-emerald-800{% endif %}">
+            {{ message }}
+        </div>
+        {% endfor %}
+    {% endif %}
+
+    <!-- Compose form -->
+    <div class="card">
+        <h2 class="text-lg font-bold text-text-main mb-1">Send a Notification</h2>
+        <p class="text-sm text-text-muted mb-5">Sends immediately. The message appears in the recipient's notification bell and on their notifications page.</p>
+
+        <form method="post" class="space-y-4">
+            {% csrf_token %}
+
+            <div>
+                <label class="block text-xs font-semibold uppercase tracking-wide text-text-muted mb-1">Target</label>
+                <select name="hospital_id" class="form-control">
+                    <option value="">All hospitals (broadcast)</option>
+                    {% for h in hospitals %}
+                    <option value="{{ h.pk }}">{{ h.name }}</option>
+                    {% endfor %}
+                </select>
+                <p class="mt-1 text-xs text-text-muted">Leave as "All hospitals" to send to every active tenant.</p>
+            </div>
+
+            <div>
+                <label class="block text-xs font-semibold uppercase tracking-wide text-text-muted mb-1">Title</label>
+                <input type="text" name="title" class="form-control" placeholder="e.g. Scheduled maintenance on Saturday" maxlength="200" required>
+            </div>
+
+            <div>
+                <label class="block text-xs font-semibold uppercase tracking-wide text-text-muted mb-1">Message</label>
+                <textarea name="body" class="form-control" rows="5" placeholder="Write the full message here…" required></textarea>
+            </div>
+
+            <div class="pt-2">
+                <button type="submit" class="btn btn-primary">Send Notification</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Sent notifications list -->
+    <div class="card">
+        <h2 class="text-lg font-bold text-text-main mb-4">Sent Notifications</h2>
+
+        {% if notifications %}
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead>
+                    <tr>
+                        <th class="text-left px-3 py-2 text-xs font-semibold uppercase">Title</th>
+                        <th class="text-left px-3 py-2 text-xs font-semibold uppercase">Target</th>
+                        <th class="text-left px-3 py-2 text-xs font-semibold uppercase">Sent</th>
+                        <th class="text-left px-3 py-2 text-xs font-semibold uppercase">Status</th>
+                        <th class="text-left px-3 py-2 text-xs font-semibold uppercase">Reads</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y">
+                    {% for n in notifications %}
+                    <tr class="hover:bg-gray-50 {% if not n.is_active %}opacity-50{% endif %}">
+                        <td class="px-3 py-3">
+                            <div class="font-semibold text-text-main">{{ n.title }}</div>
+                            <div class="text-xs text-text-muted mt-0.5 line-clamp-1">{{ n.body|truncatechars:80 }}</div>
+                        </td>
+                        <td class="px-3 py-3">
+                            {% if n.hospital %}
+                                <span class="inline-flex items-center px-2 py-0.5 rounded-full bg-blue-50 border border-blue-200 text-blue-800 text-xs font-medium">{{ n.hospital.name }}</span>
+                            {% else %}
+                                <span class="inline-flex items-center px-2 py-0.5 rounded-full bg-purple-50 border border-purple-200 text-purple-800 text-xs font-medium">All hospitals</span>
+                            {% endif %}
+                        </td>
+                        <td class="px-3 py-3 text-text-muted whitespace-nowrap">{{ n.created_at|date:"d M Y, H:i" }}</td>
+                        <td class="px-3 py-3">
+                            {% if n.is_active %}
+                                <span class="inline-flex items-center px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-medium">Active</span>
+                            {% else %}
+                                <span class="inline-flex items-center px-2 py-0.5 rounded-full bg-gray-100 border border-gray-200 text-gray-500 text-xs font-medium">Removed</span>
+                            {% endif %}
+                        </td>
+                        <td class="px-3 py-3 text-text-muted">{{ n.reads.count }}</td>
+                        <td class="px-3 py-3">
+                            {% if n.is_active %}
+                            <form method="post" action="{% url 'delete_notification' n.pk %}" onsubmit="return confirm('Remove this notification from all tenants?')">
+                                {% csrf_token %}
+                                <button type="submit" class="text-xs text-red-600 hover:underline">Remove</button>
+                            </form>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p class="text-sm text-text-muted py-4">No notifications sent yet.</p>
+        {% endif %}
+    </div>
+
+</div>
+{% endblock %}

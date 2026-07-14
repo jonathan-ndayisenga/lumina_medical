@@ -34,14 +34,14 @@
         line-height: 1.4;
     }
 
-    /* ── Stool Analysis card-per-parameter layout ────────────────────── */
+    /* ── Stool Analysis — consultation-style card per parameter ────────── */
     table.stool-mode thead { display: none; }
 
     table.stool-mode tr.result-row {
         display: grid;
-        grid-template-columns: 1fr 160px 40px;
+        grid-template-columns: 1fr 36px;
         grid-template-rows: auto auto;
-        column-gap: 0.75rem;
+        column-gap: 0.5rem;
         border: 1px solid #e5e7eb;
         border-radius: 0.75rem;
         margin-bottom: 0.625rem;
@@ -49,59 +49,60 @@
         background: #fff;
         box-shadow: 0 1px 3px rgba(15,23,42,0.04);
     }
-    /* Cell 1: hidden fields + test name */
+    /* Cell 1: parameter name label — row 1 */
     table.stool-mode tr.result-row td:nth-child(1) {
         grid-column: 1; grid-row: 1; padding: 0; align-self: center;
     }
-    /* Cell 2: result_value (the Finding) */
+    /* Cell 2: result_value textarea — full width, row 2 */
     table.stool-mode tr.result-row td:nth-child(2) {
-        grid-column: 2; grid-row: 1; padding: 0; align-self: center;
+        grid-column: 1 / span 2; grid-row: 2; padding: 0.5rem 0 0;
     }
-    /* Cell 3 & 4: range + unit — hidden */
+    /* Cells 3, 4, 5: range, unit, comment — all hidden */
     table.stool-mode tr.result-row td:nth-child(3),
-    table.stool-mode tr.result-row td:nth-child(4) { display: none !important; }
-    /* Cell 5: description (comment) — full width, second row */
-    table.stool-mode tr.result-row td:nth-child(5) {
-        grid-column: 1 / span 3; grid-row: 2; padding: 0.5rem 0 0;
-    }
-    /* Cell 6: delete button */
+    table.stool-mode tr.result-row td:nth-child(4),
+    table.stool-mode tr.result-row td:nth-child(5) { display: none !important; }
+    /* Cell 6: delete button — row 1, right column */
     table.stool-mode tr.result-row td:nth-child(6) {
-        grid-column: 3; grid-row: 1; padding: 0; align-self: center; text-align: center;
+        grid-column: 2; grid-row: 1; padding: 0; align-self: center; text-align: center;
     }
-    /* Test name looks like a bold label, not an editable input */
+    /* Parameter name: bold label, no input chrome */
     table.stool-mode .test-name-field {
-        font-weight: 600;
+        font-weight: 700;
         font-size: 0.875rem;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
         border: none !important;
         background: transparent !important;
         padding: 0 !important;
         box-shadow: none !important;
         outline: none !important;
-        color: #1f2a37;
+        color: #1d3557;
         cursor: default;
         width: 100%;
     }
-    /* Section pill hidden in card mode (section dividers do the job) */
+    /* Section pill hidden — section dividers do the job */
     table.stool-mode .section-pill { display: none !important; }
-    /* Description textarea */
-    table.stool-mode .stool-desc-ta {
+    /* The single textarea for stool findings */
+    table.stool-mode .stool-result-ta {
         width: 100%;
-        min-height: 72px;
+        min-height: 80px;
         resize: vertical;
         border-radius: 0.5rem;
         border: 1px solid #e5e7eb;
-        padding: 0.45rem 0.65rem;
+        padding: 0.5rem 0.75rem;
         font-size: 0.875rem;
         font-family: inherit;
-        line-height: 1.5;
+        line-height: 1.55;
         background: #f9fafb;
         color: #1f2a37;
         transition: border-color 0.15s;
+        box-sizing: border-box;
     }
-    table.stool-mode .stool-desc-ta:focus {
+    table.stool-mode .stool-result-ta:focus {
         outline: none;
         border-color: #1d3557;
         background: #fff;
+        box-shadow: 0 0 0 3px rgba(29,53,87,0.07);
     }
     /* ── end stool card layout ──────────────────────────────────────── */
 
@@ -707,51 +708,32 @@ document.addEventListener('DOMContentLoaded', () => {
         tbody.querySelectorAll('.section-divider').forEach(row => row.remove());
     }
 
-    function applyStoolDescriptionField(row) {
-        if (row.dataset.stoolDesc) return;
-        row.dataset.stoolDesc = '1';
-
-        const commentCell = row.querySelector('.comment-field')?.closest('td');
-        if (!commentCell) return;
-        const existing = commentCell.querySelector('.comment-field');
-        if (!existing) return;
-
-        // Add "Description" label once
-        if (!commentCell.querySelector('.stool-desc-label')) {
-            const lbl = document.createElement('p');
-            lbl.className = 'stool-desc-label text-xs font-semibold uppercase tracking-wide text-text-muted mb-1';
-            lbl.textContent = 'Description';
-            commentCell.insertBefore(lbl, existing);
-        }
-
-        // Swap the text <input> for a <textarea>
-        if (existing.tagName === 'INPUT') {
-            const ta = document.createElement('textarea');
-            ta.name = existing.name;
-            ta.id = existing.id;
-            ta.value = existing.value;
-            ta.className = 'comment-field stool-desc-ta';
-            ta.placeholder = 'Describe findings in detail…';
-            existing.replaceWith(ta);
-            ta.addEventListener('input', () => markUserEdited(ta));
-        }
+    function applyStoolResultField(row) {
+        // Convert result_value input → single textarea (idempotent)
+        const existing = row.querySelector('.result-field');
+        if (!existing || existing.tagName === 'TEXTAREA') return;
+        const ta = document.createElement('textarea');
+        ta.name = existing.name;
+        ta.id = existing.id;
+        ta.value = existing.value;
+        ta.className = 'result-field stool-result-ta';
+        ta.placeholder = 'Enter findings…';
+        existing.replaceWith(ta);
+        ta.addEventListener('input', () => markUserEdited(ta));
     }
 
-    function removeStoolDescriptionField(row) {
-        if (!row.dataset.stoolDesc) return;
-        delete row.dataset.stoolDesc;
-        row.querySelector('.stool-desc-label')?.remove();
-        const ta = row.querySelector('textarea.comment-field');
-        if (ta) {
-            const inp = document.createElement('input');
-            inp.type = 'text';
-            inp.name = ta.name;
-            inp.id = ta.id;
-            inp.value = ta.value;
-            inp.className = 'form-control comment-field';
-            ta.replaceWith(inp);
-            inp.addEventListener('input', () => markUserEdited(inp));
-        }
+    function removeStoolResultField(row) {
+        // Restore result_value textarea → text input (idempotent)
+        const ta = row.querySelector('textarea.result-field');
+        if (!ta) return;
+        const inp = document.createElement('input');
+        inp.type = 'text';
+        inp.name = ta.name;
+        inp.id = ta.id;
+        inp.value = ta.value;
+        inp.className = 'form-control result-field';
+        ta.replaceWith(inp);
+        inp.addEventListener('input', () => markUserEdited(inp));
     }
 
     function updateRowAppearance(row) {
@@ -836,17 +818,17 @@ document.addEventListener('DOMContentLoaded', () => {
             const manualRow = isSimpleManualProfile(rowConfig);
             row.classList.toggle('manual-simple-row', manualRow);
 
-            // Stool mode: apply card description field; otherwise restore plain input.
+            // Stool mode: convert result_value to a single textarea; otherwise restore input.
             if (stoolMode) {
-                applyStoolDescriptionField(row);
+                applyStoolResultField(row);
             } else {
-                removeStoolDescriptionField(row);
+                removeStoolResultField(row);
             }
 
-            // Keep cells for alignment, but hide optional inputs on manual rows.
+            // Hide range, unit and comment cells in stool mode.
             setCellVisible(rangeCell, !stoolMode);
             setCellVisible(unitCell, !stoolMode);
-            setCellVisible(commentCell, true);
+            setCellVisible(commentCell, !stoolMode);
             [row.querySelector('.range-field'), row.querySelector('.unit-field'), row.querySelector('.comment-field')].forEach(field => {
                 if (!field) return;
                 field.classList.toggle('hidden', manualRow);

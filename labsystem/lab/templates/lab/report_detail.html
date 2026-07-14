@@ -216,12 +216,9 @@
         <div class="divide-y divide-gray-100">
             {% for result in group.results %}
             <div class="px-4 py-3">
-                <div class="flex items-baseline justify-between gap-4">
-                    <span class="font-semibold text-sm text-text-main">{{ result.test.name }}</span>
-                    <span class="text-sm text-text-main" style="white-space: pre-wrap;">{{ result.result_value|default:"" }}</span>
-                </div>
-                {% if result.comment %}
-                <div class="mt-1 text-xs text-text-muted leading-relaxed" style="white-space: pre-wrap;">{{ result.comment }}</div>
+                <div class="text-xs font-bold uppercase tracking-wide text-brand-dark mb-1">{{ result.test.name }}</div>
+                {% if result.result_value %}
+                <div class="text-sm text-text-main" style="white-space: pre-wrap; line-height: 1.55;">{{ result.result_value }}</div>
                 {% endif %}
             </div>
             {% endfor %}

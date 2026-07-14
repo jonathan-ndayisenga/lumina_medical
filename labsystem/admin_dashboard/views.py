@@ -19,7 +19,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from accounts.forms import HospitalSubscriptionPaymentForm, SubscriptionPlanForm
-from accounts.models import Hospital, HospitalInvoice, HospitalModuleSubscription, HospitalSubscriptionPayment, Module, SubscriptionPlan, User
+from accounts.models import Hospital, HospitalInvoice, HospitalModuleSubscription, HospitalSubscriptionPayment, Module, SubscriptionPlan, SystemNotification, User
 from lab.models import LabReport
 from reception.models import Patient, Payment, QueueEntry, Service, Visit
 from .forms import (
@@ -3398,3 +3398,54 @@ def view_audit_logs(request):
         }
     )
     return render(request, "admin_dashboard/audit_logs.html", context)
+
+
+@login_required
+def manage_notifications(request):
+    if not (request.user.is_superuser or getattr(request.user, "role", "") == User.ROLE_SUPERADMIN):
+        return HttpResponseForbidden("Superadmin access required.")
+
+    hospitals = Hospital.objects.filter(is_active=True).order_by("name")
+    notifications = SystemNotification.objects.select_related("hospital", "created_by").order_by("-created_at")
+
+    if request.method == "POST":
+        title = request.POST.get("title", "").strip()
+        body = request.POST.get("body", "").strip()
+        hospital_id = request.POST.get("hospital_id", "").strip()
+
+        if not title or not body:
+            messages.error(request, "Both title and message body are required.")
+        else:
+            hospital_obj = None
+            if hospital_id:
+                hospital_obj = get_object_or_404(Hospital, pk=hospital_id)
+            SystemNotification.objects.create(
+                title=title,
+                body=body,
+                hospital=hospital_obj,
+                created_by=request.user,
+            )
+            target = hospital_obj.name if hospital_obj else "all hospitals"
+            messages.success(request, f"Notification sent to {target}.")
+            return redirect("manage_notifications")
+
+    return render(request, "admin_dashboard/manage_notifications.html", {
+        "active_nav": "superadmin_notifications",
+        "dashboard_title": "Notifications",
+        "dashboard_intro": "Send messages to hospital tenants from the platform.",
+        "base_template": "admin_dashboard/developer_base.html",
+        "hospitals": hospitals,
+        "notifications": notifications,
+    })
+
+
+@login_required
+def delete_notification(request, notification_id):
+    if not (request.user.is_superuser or getattr(request.user, "role", "") == User.ROLE_SUPERADMIN):
+        return HttpResponseForbidden("Superadmin access required.")
+    if request.method == "POST":
+        notif = get_object_or_404(SystemNotification, pk=notification_id)
+        notif.is_active = False
+        notif.save(update_fields=["is_active"])
+        messages.success(request, "Notification removed.")
+    return redirect("manage_notifications")

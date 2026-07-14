@@ -127,6 +127,17 @@ def notification_mark_read(request, pk):
 
 @login_required
 @require_POST
+def dismiss_expiry_banner(request):
+    """Store which urgency level the user dismissed so the banner goes away."""
+    level = request.POST.get("level", "")
+    if level in ("warning", "urgent", "expired"):
+        request.session["expiry_dismissed"] = level
+    next_url = request.POST.get("next") or request.META.get("HTTP_REFERER") or "/"
+    return redirect(next_url)
+
+
+@login_required
+@require_POST
 def notification_mark_all_read(request):
     hospital = getattr(request.user, "hospital", None)
     qs = SystemNotification.objects.filter(is_active=True).filter(

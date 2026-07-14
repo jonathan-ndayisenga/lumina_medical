@@ -65,4 +65,6 @@ urlpatterns = [
     path("hospital/inventory/batch/<int:batch_id>/delete/", views.delete_inventory_batch, name="delete_inventory_batch"),
     path("hospital/reports/", views.hospital_reports, name="hospital_reports"),
     path("hospital/reports/consultations/", views.report_consultations, name="report_consultations"),
+    path("superadmin/notifications/", views.manage_notifications, name="manage_notifications"),
+    path("superadmin/notifications/<int:notification_id>/delete/", views.delete_notification, name="delete_notification"),
 ]

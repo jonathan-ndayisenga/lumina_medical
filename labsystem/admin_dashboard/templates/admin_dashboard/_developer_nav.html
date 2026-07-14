@@ -23,4 +23,11 @@
             <a href="{% url 'view_audit_logs' %}" class="sidebar-link {% if active_nav == 'superadmin_audit' %}active{% endif %}">Audit Logs</a>
         </div>
     </div>
+
+    <div>
+        <div class="text-xs font-bold uppercase tracking-widest text-white/60 mb-2">Messaging</div>
+        <div class="space-y-1">
+            <a href="{% url 'manage_notifications' %}" class="sidebar-link {% if active_nav == 'superadmin_notifications' %}active{% endif %}">Notifications</a>
+        </div>
+    </div>
 </nav>

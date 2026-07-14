@@ -564,15 +564,27 @@
 
                 {% if expiry_alert and user.is_authenticated and not user.is_superadmin %}
                 <div class="no-print px-4 lg:px-8 py-2 {% if expiry_alert.expired %}bg-red-50 border-b border-red-200{% elif expiry_alert.urgent %}bg-orange-50 border-b border-orange-200{% else %}bg-amber-50 border-b border-amber-200{% endif %}">
-                    <div class="flex items-center gap-2 text-sm {% if expiry_alert.expired %}text-red-800{% elif expiry_alert.urgent %}text-orange-800{% else %}text-amber-800{% endif %}">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="flex-shrink-0">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
-                        </svg>
-                        {% if expiry_alert.expired %}
-                            <strong>Subscription expired.</strong> Your hospital's subscription has lapsed. Contact your administrator to renew access.
-                        {% else %}
-                            <strong>Subscription expiring in {{ expiry_alert.days }} day{{ expiry_alert.days|pluralize }}.</strong> Contact your administrator to avoid interruption.
-                        {% endif %}
+                    <div class="flex items-center justify-between gap-2">
+                        <div class="flex items-center gap-2 text-sm {% if expiry_alert.expired %}text-red-800{% elif expiry_alert.urgent %}text-orange-800{% else %}text-amber-800{% endif %}">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="flex-shrink-0">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+                            </svg>
+                            {% if expiry_alert.expired %}
+                                <strong>Subscription expired.</strong> Your hospital's subscription has lapsed. Contact your administrator to renew access.
+                            {% else %}
+                                <strong>Subscription expiring in {{ expiry_alert.days }} day{{ expiry_alert.days|pluralize }}.</strong> Contact your administrator to avoid interruption.
+                            {% endif %}
+                        </div>
+                        <form method="post" action="{% url 'dismiss_expiry_banner' %}" class="flex-shrink-0">
+                            {% csrf_token %}
+                            <input type="hidden" name="level" value="{{ expiry_alert.level }}">
+                            <input type="hidden" name="next" value="{{ request.path }}">
+                            <button type="submit" class="p-1 rounded hover:bg-black/10 transition-colors {% if expiry_alert.expired %}text-red-600{% elif expiry_alert.urgent %}text-orange-600{% else %}text-amber-600{% endif %}" title="Dismiss">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                    <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                                </svg>
+                            </button>
+                        </form>
                     </div>
                 </div>
                 {% endif %}
