@@ -1,0 +1,101 @@
+{% extends 'admin_dashboard/developer_base.html' %}
+{% block title %}Platform Settings{% endblock %}
+{% block page_title %}Platform Settings{% endblock %}
+{% block page_subtitle %}Control platform-wide features and messaging behaviour.{% endblock %}
+
+{% block developer_content %}
+<style>
+    .toggle-row {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 1.5rem;
+        padding: 1rem 0;
+        border-bottom: 1px solid #f0f2f5;
+    }
+    .toggle-row:last-child { border-bottom: none; }
+    .toggle-row-text { flex: 1; min-width: 0; }
+    .toggle-row-text strong { display: block; font-size: 0.875rem; font-weight: 600; color: #1f2a37; margin-bottom: 0.2rem; }
+    .toggle-row-text span { font-size: 0.8rem; color: #5f6b7a; line-height: 1.4; }
+
+    .sw { position: relative; display: inline-block; width: 2.75rem; height: 1.5rem; flex-shrink: 0; margin-top: 2px; }
+    .sw input { opacity: 0; width: 0; height: 0; }
+    .sw-track { position: absolute; inset: 0; background: #d1d5db; border-radius: 9999px; transition: background .2s; cursor: pointer; }
+    .sw-track::before { content: ""; position: absolute; width: 1.1rem; height: 1.1rem; top: 0.2rem; left: 0.2rem; background: #fff; border-radius: 50%; transition: transform .2s; box-shadow: 0 1px 3px rgba(0,0,0,.2); }
+    .sw input:checked + .sw-track { background: #4f46e5; }
+    .sw input:checked + .sw-track::before { transform: translateX(1.25rem); }
+</style>
+
+<form method="post" class="space-y-6 max-w-2xl">
+    {% csrf_token %}
+
+    {% if messages %}
+    {% for message in messages %}
+    <div class="p-3 rounded-xl text-sm font-medium
+        {% if message.tags == 'success' %}bg-green-50 border border-green-200 text-green-700
+        {% else %}bg-red-50 border border-red-200 text-red-700{% endif %}">
+        {{ message }}
+    </div>
+    {% endfor %}
+    {% endif %}
+
+    {# ── Messaging ── #}
+    <div class="card space-y-1">
+        <h3 class="text-sm font-bold text-text-main pb-3 border-b border-gray-100">Messaging</h3>
+
+        <div class="toggle-row">
+            <div class="toggle-row-text">
+                <strong>Broadcast notifications</strong>
+                <span>Super-admin can send platform-wide announcements to hospital tenants. These appear in each hospital's Messages inbox under the Broadcast tab.</span>
+            </div>
+            <label class="sw">
+                <input type="checkbox" name="broadcast_enabled" {% if form.broadcast_enabled.value %}checked{% endif %}>
+                <span class="sw-track"></span>
+            </label>
+        </div>
+
+        <div class="toggle-row">
+            <div class="toggle-row-text">
+                <strong>Internal messages</strong>
+                <span>Hospital admins can send announcements to all their staff or a specific team member. Visible under the Internal tab in each user's Messages inbox.</span>
+            </div>
+            <label class="sw">
+                <input type="checkbox" name="internal_messages_enabled" {% if form.internal_messages_enabled.value %}checked{% endif %}>
+                <span class="sw-track"></span>
+            </label>
+        </div>
+
+        <div class="toggle-row">
+            <div class="toggle-row-text">
+                <strong>Private (direct) messages</strong>
+                <span>Staff members can send private messages to each other within the same hospital. Visible under the Private tab in each user's Messages inbox.</span>
+            </div>
+            <label class="sw">
+                <input type="checkbox" name="direct_messages_enabled" {% if form.direct_messages_enabled.value %}checked{% endif %}>
+                <span class="sw-track"></span>
+            </label>
+        </div>
+    </div>
+
+    {# ── Retention ── #}
+    <div class="card space-y-4">
+        <h3 class="text-sm font-bold text-text-main">Message Retention</h3>
+        <div class="max-w-xs">
+            <label for="{{ form.message_retention_days.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">
+                Auto-purge after (days)
+            </label>
+            {{ form.message_retention_days }}
+            <p class="text-xs text-text-muted mt-1">
+                Broadcasts, internal messages, and private messages older than this many days are deleted automatically when the <code>purge_old_messages</code> management command runs. Set to <strong>0</strong> to disable auto-purge.
+            </p>
+            {% for error in form.message_retention_days.errors %}
+            <div class="text-xs text-red-600 mt-1">{{ error }}</div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <div class="flex gap-3">
+        <button type="submit" class="btn btn-primary">Save Settings</button>
+    </div>
+</form>
+{% endblock %}

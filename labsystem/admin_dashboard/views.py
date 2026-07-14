@@ -19,7 +19,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from accounts.forms import HospitalSubscriptionPaymentForm, SubscriptionPlanForm
-from accounts.models import Hospital, HospitalInvoice, HospitalModuleSubscription, HospitalSubscriptionPayment, Module, SubscriptionPlan, SystemNotification, User
+from accounts.models import Hospital, HospitalInvoice, HospitalModuleSubscription, HospitalSubscriptionPayment, InternalNotification, Module, PlatformSettings, SubscriptionPlan, SystemNotification, User
 from lab.models import LabReport
 from reception.models import Patient, Payment, QueueEntry, Service, Visit
 from .forms import (
@@ -40,6 +40,7 @@ from .forms import (
     MobileMoneyStatementForm,
     MobileMoneyTransactionForm,
     OpenCashDrawerForm,
+    PlatformSettingsForm,
     SalaryForm,
     ThreeWayReconciliationForm,
 )
@@ -3449,3 +3450,94 @@ def delete_notification(request, notification_id):
         notif.save(update_fields=["is_active"])
         messages.success(request, "Notification removed.")
     return redirect("manage_notifications")
+
+
+# ── Hospital Admin — Internal Broadcast ──────────────────────────────────────
+
+@role_required(User.ROLE_HOSPITAL_ADMIN)
+def hospital_broadcast(request):
+    """Hospital admin sends internal notifications to all staff or a specific user."""
+    hospital = active_hospital(request)
+    if not hospital:
+        return HttpResponseForbidden("No hospital found.")
+
+    staff_qs = User.objects.filter(hospital=hospital, is_active=True).exclude(
+        role=User.ROLE_HOSPITAL_ADMIN
+    ).order_by("first_name", "last_name")
+
+    if request.method == "POST":
+        title = request.POST.get("title", "").strip()
+        body = request.POST.get("body", "").strip()
+        recipient_id = request.POST.get("recipient_id", "").strip()
+
+        if not title or not body:
+            messages.error(request, "Title and message body are required.")
+        else:
+            recipient = None
+            if recipient_id:
+                recipient = User.objects.filter(pk=recipient_id, hospital=hospital).first()
+
+            InternalNotification.objects.create(
+                hospital=hospital,
+                sent_by=request.user,
+                recipient=recipient,
+                title=title,
+                body=body,
+            )
+            target = recipient.get_full_name() if recipient else "all staff"
+            messages.success(request, f"Message sent to {target}.")
+            return redirect("hospital_broadcast")
+
+    sent_qs = InternalNotification.objects.filter(hospital=hospital).order_by("-created_at")
+    paginator = Paginator(sent_qs, 10)
+    page_obj = paginator.get_page(request.GET.get("page"))
+
+    context = hospital_admin_context(
+        request,
+        "hospital_broadcast",
+        "Broadcast Messages",
+        "Send messages to your staff — all at once or to a specific person.",
+    )
+    context.update({
+        "staff": staff_qs,
+        "sent_page": page_obj,
+    })
+    return render(request, "admin_dashboard/hospital_broadcast.html", context)
+
+
+@role_required(User.ROLE_HOSPITAL_ADMIN)
+def hospital_broadcast_delete(request, pk):
+    hospital = active_hospital(request)
+    notif = get_object_or_404(InternalNotification, pk=pk, hospital=hospital)
+    if request.method == "POST":
+        notif.is_active = False
+        notif.save(update_fields=["is_active"])
+        messages.success(request, "Message removed.")
+    return redirect("hospital_broadcast")
+
+
+# ── Super Admin — Platform Settings ──────────────────────────────────────────
+
+@login_required
+def platform_settings(request):
+    if not (request.user.is_superuser or getattr(request.user, "is_superadmin", False)):
+        return HttpResponseForbidden("Superadmin access required.")
+
+    settings_obj = PlatformSettings.get()
+
+    if request.method == "POST":
+        form = PlatformSettingsForm(request.POST, instance=settings_obj)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "Settings saved.")
+            return redirect("platform_settings")
+    else:
+        form = PlatformSettingsForm(instance=settings_obj)
+
+    return render(request, "admin_dashboard/platform_settings.html", {
+        "form": form,
+        "active_nav": "superadmin_settings",
+        "base_template": "admin_dashboard/developer_base.html",
+        "dashboard_title": "Platform Settings",
+        "dashboard_intro": "Configure platform-wide features and behaviour.",
+    })

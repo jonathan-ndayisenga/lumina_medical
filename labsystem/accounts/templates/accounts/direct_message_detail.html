@@ -1,0 +1,30 @@
+{% extends 'base.html' %}
+{% block title %}Message from {{ dm.sender.get_full_name|default:dm.sender.username }}{% endblock %}
+{% block page_title %}Message{% endblock %}
+{% block page_subtitle %}From {{ dm.sender.get_full_name|default:dm.sender.username }} · {{ dm.created_at|date:"d M Y H:i" }}{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl space-y-4">
+
+    <div class="card space-y-3">
+        {% if dm.subject %}
+        <h2 class="text-base font-bold text-text-main">{{ dm.subject }}</h2>
+        {% endif %}
+        <p class="text-sm text-text-muted whitespace-pre-wrap leading-relaxed">{{ dm.body }}</p>
+        <div class="pt-2 border-t border-gray-100 flex items-center gap-3 text-xs text-text-muted">
+            <span>From: <strong class="text-text-main">{{ dm.sender.get_full_name|default:dm.sender.username }}</strong></span>
+            <span>· {{ dm.created_at|date:"d M Y H:i" }}</span>
+        </div>
+    </div>
+
+    <div class="flex gap-3 flex-wrap">
+        <a href="{% url 'direct_message_compose' %}?to={{ dm.sender.pk }}" class="btn btn-primary">Reply</a>
+        <a href="{% url 'messages_inbox' %}?tab=private" class="btn btn-secondary">Back to Inbox</a>
+        <form method="post" action="{% url 'direct_message_delete' dm.pk %}">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger" onclick="return confirm('Delete this message?')">Delete</button>
+        </form>
+    </div>
+
+</div>
+{% endblock %}

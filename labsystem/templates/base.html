@@ -300,6 +300,12 @@
                                     </svg>
                                     Reports
                                 </a>
+                                <a href="{% url 'hospital_broadcast' %}" class="sidebar-link {% if active_nav == 'hospital_broadcast' %}active{% endif %}">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-5 h-5">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75"/>
+                                    </svg>
+                                    Broadcast
+                                </a>
                                 {% endif %}
 
                                 {% if user.can_access_finance %}
@@ -546,14 +552,14 @@
                         </div>
 
                         {% if user.is_authenticated and not user.is_superadmin %}
-                        <div class="relative flex-shrink-0" id="notif-menu-wrap">
-                            <a href="{% url 'notification_list' %}" class="relative inline-flex items-center justify-center w-10 h-10 rounded-full hover:bg-gray-100 transition-colors" title="Notifications" id="notif-bell-btn">
+                        <div class="flex items-center gap-1 flex-shrink-0">
+                            <a href="{% url 'messages_inbox' %}" class="relative inline-flex items-center justify-center w-10 h-10 rounded-full hover:bg-gray-100 transition-colors" title="Messages">
                                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="text-text-main">
-                                    <path stroke-linecap="round" stroke-linejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/>
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75"/>
                                 </svg>
-                                {% if notification_unread_count %}
+                                {% if message_unread_count %}
                                 <span class="absolute -top-0.5 -right-0.5 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold leading-none text-white bg-red-500 rounded-full">
-                                    {{ notification_unread_count }}
+                                    {{ message_unread_count }}
                                 </span>
                                 {% endif %}
                             </a>

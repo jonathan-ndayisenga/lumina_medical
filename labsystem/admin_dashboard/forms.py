@@ -8,7 +8,7 @@ from django.contrib.auth.models import Group
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 
-from accounts.models import Hospital, HospitalModuleSubscription, Module, User
+from accounts.models import Hospital, HospitalModuleSubscription, Module, PlatformSettings, User
 from lab.models import TestProfile
 from reception.models import Service
 
@@ -61,6 +61,7 @@ class HospitalForm(forms.ModelForm):
             "email",
             "logo",
             "subscription_plan",
+            "reactivation_alert_days",
         )
         widgets = {
             "name": forms.TextInput(attrs={"placeholder": "Hospital name", "class": "form-control"}),
@@ -73,6 +74,7 @@ class HospitalForm(forms.ModelForm):
             "email": forms.EmailInput(attrs={"placeholder": "hospital@example.com", "class": "form-control"}),
             "logo": forms.ClearableFileInput(attrs={"class": "form-control"}),
             "subscription_plan": forms.Select(attrs={"class": "form-control"}),
+            "reactivation_alert_days": forms.NumberInput(attrs={"class": "form-control", "min": "0", "max": "90", "placeholder": "e.g. 7"}),
         }
 
     def __init__(self, *args, require_admin_credentials=True, **kwargs):
@@ -80,6 +82,8 @@ class HospitalForm(forms.ModelForm):
         self.require_admin_credentials = require_admin_credentials
         for field_name in ("location", "box_number", "phone_number"):
             self.fields[field_name].required = True
+        self.fields["reactivation_alert_days"].required = False
+        self.fields["reactivation_alert_days"].initial = 7
 
         core_module_ids = list(Module.objects.filter(is_core=True).values_list("pk", flat=True))
         if self.instance.pk:
@@ -782,3 +786,19 @@ class ThreeWayReconciliationForm(forms.Form):
         today = timezone.localdate()
         self.fields["period_end"].initial = today
         self.fields["period_start"].initial = today.replace(day=1)
+
+
+class PlatformSettingsForm(forms.ModelForm):
+    class Meta:
+        model = PlatformSettings
+        fields = (
+            "broadcast_enabled",
+            "internal_messages_enabled",
+            "direct_messages_enabled",
+            "message_retention_days",
+        )
+        widgets = {
+            "message_retention_days": forms.NumberInput(
+                attrs={"class": "form-control", "min": "0", "max": "365", "placeholder": "e.g. 7"}
+            ),
+        }

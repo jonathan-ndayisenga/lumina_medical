@@ -1,0 +1,44 @@
+{% extends 'base.html' %}
+{% block title %}New Message{% endblock %}
+{% block page_title %}New Message{% endblock %}
+{% block page_subtitle %}Send a private message to a colleague.{% endblock %}
+
+{% block content %}
+<div class="max-w-xl space-y-5">
+
+    {% if error %}
+    <div class="p-4 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm font-medium">{{ error }}</div>
+    {% endif %}
+
+    <div class="card space-y-4">
+        <form method="post" class="space-y-4">
+            {% csrf_token %}
+            <div>
+                <label class="block text-sm font-semibold text-text-main mb-1">To</label>
+                <select name="recipient_id" class="form-control" required>
+                    <option value="">— Select recipient —</option>
+                    {% for member in staff %}
+                    <option value="{{ member.pk }}" {% if preselect == member.pk|stringformat:"s" %}selected{% endif %}>
+                        {{ member.get_full_name|default:member.username }}
+                        {% if member.role %} ({{ member.get_role_display }}){% endif %}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="block text-sm font-semibold text-text-main mb-1">Subject <span class="font-normal text-text-muted">(optional)</span></label>
+                <input type="text" name="subject" maxlength="200" class="form-control" placeholder="e.g. Patient handover for Ward 3" value="{{ subject|default:'' }}">
+            </div>
+            <div>
+                <label class="block text-sm font-semibold text-text-main mb-1">Message</label>
+                <textarea name="body" rows="5" class="form-control" placeholder="Write your message…" required>{{ body|default:'' }}</textarea>
+            </div>
+            <div class="flex gap-3 pt-1">
+                <button type="submit" class="btn btn-primary">Send</button>
+                <a href="{% url 'messages_inbox' %}?tab=private" class="btn btn-secondary">Cancel</a>
+            </div>
+        </form>
+    </div>
+
+</div>
+{% endblock %}

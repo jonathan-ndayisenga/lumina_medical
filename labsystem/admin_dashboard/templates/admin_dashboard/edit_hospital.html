@@ -26,7 +26,7 @@
         <h4 class="text-sm font-semibold text-text-main">Hospital Details</h4>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             {% for field in form %}
-                {% if field.field.widget.input_type != "checkbox" and field.name != "modules" and field.name != "subscription_months" %}
+                {% if field.field.widget.input_type != "checkbox" and field.name != "modules" and field.name != "subscription_months" and field.name != "reactivation_alert_days" %}
                 <div class="{% if field.name == 'logo' or field.name == 'subscription_plan' %}md:col-span-2{% endif %}">
                     <label for="{{ field.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">{{ field.label }}</label>
                     {{ field }}
@@ -68,6 +68,14 @@
             {{ form.subscription_months }}
             <p class="text-xs text-text-muted mt-1">{{ form.subscription_months.help_text }}</p>
             {% for error in form.subscription_months.errors %}<div class="text-xs text-red-600 mt-1">{{ error }}</div>{% endfor %}
+        </div>
+        <div class="max-w-xs">
+            <label for="{{ form.reactivation_alert_days.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">
+                {{ form.reactivation_alert_days.label }}
+            </label>
+            {{ form.reactivation_alert_days }}
+            <p class="text-xs text-text-muted mt-1">Days before expiry to start showing the reactivation alert to the hospital. Set to 0 to disable.</p>
+            {% for error in form.reactivation_alert_days.errors %}<div class="text-xs text-red-600 mt-1">{{ error }}</div>{% endfor %}
         </div>
     </div>
 

@@ -41,6 +41,10 @@ class Hospital(models.Model):
     )
     is_active = models.BooleanField(default=True)
     subscription_end_date = models.DateField(null=True, blank=True)
+    reactivation_alert_days = models.PositiveSmallIntegerField(
+        default=7,
+        help_text="Days before expiry to start showing the reactivation alert. Set to 0 to disable.",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -276,6 +280,39 @@ class User(AbstractUser):
         super().save(*args, **kwargs)
 
 
+class PlatformSettings(models.Model):
+    """Singleton (pk=1). Platform-wide configuration controlled by the super admin."""
+
+    # ── Messaging ────────────────────────────────────────────────────────────
+    broadcast_enabled = models.BooleanField(
+        default=True,
+        help_text="Super-admin can send broadcast notifications to hospitals.",
+    )
+    internal_messages_enabled = models.BooleanField(
+        default=True,
+        help_text="Hospital admins can send internal announcements to their staff.",
+    )
+    direct_messages_enabled = models.BooleanField(
+        default=True,
+        help_text="Staff members can send private messages to each other.",
+    )
+    message_retention_days = models.PositiveSmallIntegerField(
+        default=7,
+        help_text="Days before messages and notifications are automatically purged. 0 = never purge.",
+    )
+
+    class Meta:
+        verbose_name = "Platform Settings"
+
+    @classmethod
+    def get(cls):
+        obj, _ = cls.objects.get_or_create(pk=1)
+        return obj
+
+    def __str__(self):
+        return "Platform Settings"
+
+
 class SystemNotification(models.Model):
     """Broadcast from super-admin to one hospital or all hospitals."""
     hospital = models.ForeignKey(
@@ -322,6 +359,91 @@ class NotificationRead(models.Model):
 
     class Meta:
         unique_together = ("notification", "user")
+
+
+class InternalNotification(models.Model):
+    """Message from a hospital admin to all staff or a specific user within the hospital."""
+    hospital = models.ForeignKey(
+        Hospital,
+        on_delete=models.CASCADE,
+        related_name="internal_notifications",
+    )
+    sent_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="sent_internal_notifications",
+    )
+    # null recipient = broadcast to entire hospital
+    recipient = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="received_internal_notifications",
+        help_text="Leave blank to send to all staff in this hospital.",
+    )
+    title = models.CharField(max_length=200)
+    body = models.TextField()
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        target = self.recipient.get_full_name() if self.recipient_id else "ALL STAFF"
+        return f"[{self.hospital.name} → {target}] {self.title}"
+
+
+class InternalNotificationRead(models.Model):
+    """Tracks which users have read an internal notification."""
+    notification = models.ForeignKey(
+        InternalNotification,
+        on_delete=models.CASCADE,
+        related_name="reads",
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="internal_notification_reads",
+    )
+    read_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ("notification", "user")
+
+
+class DirectMessage(models.Model):
+    """Private message from one user to another within the same hospital."""
+    hospital = models.ForeignKey(
+        Hospital,
+        on_delete=models.CASCADE,
+        related_name="direct_messages",
+    )
+    sender = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="sent_direct_messages",
+    )
+    recipient = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="received_direct_messages",
+    )
+    subject = models.CharField(max_length=200, blank=True)
+    body = models.TextField()
+    is_read = models.BooleanField(default=False)
+    deleted_by_sender = models.BooleanField(default=False)
+    deleted_by_recipient = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.sender} → {self.recipient}: {self.subject or self.body[:40]}"
 
 
 class AuditLog(models.Model):

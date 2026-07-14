@@ -30,4 +30,11 @@
             <a href="{% url 'manage_notifications' %}" class="sidebar-link {% if active_nav == 'superadmin_notifications' %}active{% endif %}">Notifications</a>
         </div>
     </div>
+
+    <div>
+        <div class="text-xs font-bold uppercase tracking-widest text-white/60 mb-2">Configuration</div>
+        <div class="space-y-1">
+            <a href="{% url 'platform_settings' %}" class="sidebar-link {% if active_nav == 'superadmin_settings' %}active{% endif %}">Settings</a>
+        </div>
+    </div>
 </nav>

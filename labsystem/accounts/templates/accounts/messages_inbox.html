@@ -1,0 +1,185 @@
+{% extends 'base.html' %}
+{% block title %}Messages — {{ user.get_full_name|default:user.username }}{% endblock %}
+{% block page_title %}Messages{% endblock %}
+{% block page_subtitle %}Broadcast announcements and internal staff messages.{% endblock %}
+
+{% block content %}
+<div class="space-y-5 max-w-4xl">
+
+    {# ── Expiry Alert ──────────────────────────────────────────────────────── #}
+    {% if expiry_alert %}
+    <div class="p-4 rounded-xl border text-sm font-medium
+        {% if expiry_alert.expired %}bg-red-50 border-red-300 text-red-700
+        {% elif expiry_alert.urgent %}bg-orange-50 border-orange-300 text-orange-700
+        {% else %}bg-amber-50 border-amber-200 text-amber-700{% endif %}">
+        {% if expiry_alert.expired %}
+            Your hospital subscription has expired. Contact the platform administrator to reactivate.
+        {% elif expiry_alert.urgent %}
+            Your subscription expires in <strong>{{ expiry_alert.days }} day{{ expiry_alert.days|pluralize }}</strong>. Please arrange reactivation soon.
+        {% else %}
+            Subscription reminder: <strong>{{ expiry_alert.days }} day{{ expiry_alert.days|pluralize }}</strong> remaining. Arrange renewal to avoid interruption.
+        {% endif %}
+    </div>
+    {% endif %}
+
+    {# ── Sent confirmation ─────────────────────────────────────────────────── #}
+    {% if request.GET.sent %}
+    <div class="p-3 rounded-xl bg-green-50 border border-green-200 text-green-700 text-sm font-medium">
+        Message sent successfully.
+    </div>
+    {% endif %}
+
+    {# ── Tabs ──────────────────────────────────────────────────────────────── #}
+    <div class="flex items-center gap-1 border-b border-gray-200 pb-0">
+        <a href="?tab=broadcast"
+           class="px-4 py-2.5 text-sm font-semibold border-b-2 -mb-px transition-colors
+                  {% if tab == 'broadcast' %}border-brand-dark text-brand-dark{% else %}border-transparent text-text-muted hover:text-text-main{% endif %}">
+            Broadcast
+            {% if sys_unread_count %}
+            <span class="ml-1.5 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold text-white bg-red-500 rounded-full">{{ sys_unread_count }}</span>
+            {% endif %}
+        </a>
+        {% if user.hospital and ps.internal_messages_enabled %}
+        <a href="?tab=internal"
+           class="px-4 py-2.5 text-sm font-semibold border-b-2 -mb-px transition-colors
+                  {% if tab == 'internal' %}border-brand-dark text-brand-dark{% else %}border-transparent text-text-muted hover:text-text-main{% endif %}">
+            Internal
+            {% if int_unread_count %}
+            <span class="ml-1.5 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold text-white bg-red-500 rounded-full">{{ int_unread_count }}</span>
+            {% endif %}
+        </a>
+        {% endif %}
+        {% if user.hospital and ps.direct_messages_enabled %}
+        <a href="?tab=private"
+           class="px-4 py-2.5 text-sm font-semibold border-b-2 -mb-px transition-colors
+                  {% if tab == 'private' %}border-brand-dark text-brand-dark{% else %}border-transparent text-text-muted hover:text-text-main{% endif %}">
+            Private
+            {% if priv_unread_count %}
+            <span class="ml-1.5 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold text-white bg-red-500 rounded-full">{{ priv_unread_count }}</span>
+            {% endif %}
+        </a>
+        {% endif %}
+        {% if tab == 'private' and user.hospital and ps.direct_messages_enabled %}
+        <a href="{% url 'direct_message_compose' %}" class="ml-auto btn btn-primary btn-sm">+ New Message</a>
+        {% endif %}
+    </div>
+
+    {# ── Mark All Read (broadcast/internal only) ───────────────────────────── #}
+    {% if page_obj and tab != 'private' %}
+    <div class="flex justify-end">
+        <form method="post" action="{% url 'message_mark_all_read' %}">
+            {% csrf_token %}
+            <input type="hidden" name="kind" value="{% if tab == 'internal' %}internal{% else %}system{% endif %}">
+            <button type="submit" class="btn btn-secondary btn-sm">Mark all as read</button>
+        </form>
+    </div>
+    {% endif %}
+
+    {# ── Message List ──────────────────────────────────────────────────────── #}
+    {% if page_obj %}
+    <div class="space-y-3">
+        {% for msg in page_obj %}
+
+        {# Private message card #}
+        {% if tab == 'private' %}
+        <div class="card {% if not msg.is_read %}border-l-4 border-l-indigo-500{% else %}opacity-80{% endif %}">
+            <div class="flex items-start justify-between gap-4">
+                <div class="flex-1 min-w-0">
+                    <div class="flex items-center gap-2 flex-wrap mb-1">
+                        <a href="{% url 'direct_message_detail' msg.pk %}" class="text-sm font-bold text-text-main hover:text-brand-dark">
+                            {{ msg.subject|default:"(no subject)" }}
+                        </a>
+                        {% if not msg.is_read %}
+                        <span class="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700">New</span>
+                        {% endif %}
+                    </div>
+                    <p class="text-sm text-text-muted line-clamp-2">{{ msg.body }}</p>
+                    <div class="mt-1.5 flex items-center gap-3 text-xs text-text-muted flex-wrap">
+                        <span>From: <strong>{{ msg.sender.get_full_name|default:msg.sender.username }}</strong></span>
+                        <span>· {{ msg.created_at|date:"d M Y H:i" }}</span>
+                    </div>
+                </div>
+                <div class="flex-shrink-0 flex gap-2">
+                    <a href="{% url 'direct_message_detail' msg.pk %}" class="btn btn-secondary btn-sm">Open</a>
+                    <form method="post" action="{% url 'direct_message_delete' msg.pk %}">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-danger btn-sm" onclick="return confirm('Delete this message?')">Delete</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        {# Broadcast / Internal card #}
+        {% else %}
+        <div class="card
+            {% if tab == 'broadcast' and msg.id not in sys_read_ids %}border-l-4 border-l-indigo-500
+            {% elif tab == 'internal' and msg.id not in int_read_ids %}border-l-4 border-l-indigo-500
+            {% else %}opacity-75{% endif %}">
+
+            <div class="flex items-start justify-between gap-4">
+                <div class="flex-1 min-w-0">
+                    <div class="flex items-center gap-2 flex-wrap mb-1">
+                        <h3 class="text-sm font-bold text-text-main">{{ msg.title }}</h3>
+                        {% if tab == 'broadcast' and msg.id not in sys_read_ids %}
+                            <span class="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700">New</span>
+                        {% elif tab == 'internal' and msg.id not in int_read_ids %}
+                            <span class="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700">New</span>
+                        {% endif %}
+                    </div>
+                    <p class="text-sm text-text-muted whitespace-pre-wrap">{{ msg.body }}</p>
+                    <div class="mt-2 flex items-center gap-3 text-xs text-text-muted flex-wrap">
+                        {% if tab == 'broadcast' %}
+                            <span>From: <strong>{{ msg.created_by.get_full_name|default:"Platform" }}</strong></span>
+                            {% if msg.hospital %}<span>· To: {{ msg.hospital.name }}</span>{% else %}<span>· To: All hospitals</span>{% endif %}
+                        {% elif tab == 'internal' %}
+                            <span>From: <strong>{{ msg.sent_by.get_full_name|default:"Admin" }}</strong></span>
+                            {% if msg.recipient %}<span>· To: {{ msg.recipient.get_full_name }}</span>{% else %}<span>· To: All staff</span>{% endif %}
+                        {% endif %}
+                        <span>· {{ msg.created_at|date:"d M Y H:i" }}</span>
+                    </div>
+                </div>
+                {% if tab == 'broadcast' and msg.id not in sys_read_ids %}
+                <form method="post" action="{% url 'message_mark_read' %}" class="flex-shrink-0">
+                    {% csrf_token %}
+                    <input type="hidden" name="pk" value="{{ msg.id }}">
+                    <input type="hidden" name="kind" value="system">
+                    <button type="submit" class="btn btn-secondary btn-sm whitespace-nowrap">Mark read</button>
+                </form>
+                {% elif tab == 'internal' and msg.id not in int_read_ids %}
+                <form method="post" action="{% url 'message_mark_read' %}" class="flex-shrink-0">
+                    {% csrf_token %}
+                    <input type="hidden" name="pk" value="{{ msg.id }}">
+                    <input type="hidden" name="kind" value="internal">
+                    <button type="submit" class="btn btn-secondary btn-sm whitespace-nowrap">Mark read</button>
+                </form>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+
+        {% endfor %}
+    </div>
+
+    {# ── Pagination ────────────────────────────────────────────────────────── #}
+    {% if page_obj.has_other_pages %}
+    <div class="flex items-center justify-center gap-2 pt-2 flex-wrap">
+        {% if page_obj.has_previous %}
+        <a href="?tab={{ tab }}&page={{ page_obj.previous_page_number }}" class="btn btn-secondary btn-sm">&laquo; Previous</a>
+        {% endif %}
+        <span class="text-sm text-text-muted">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+        {% if page_obj.has_next %}
+        <a href="?tab={{ tab }}&page={{ page_obj.next_page_number }}" class="btn btn-secondary btn-sm">Next &raquo;</a>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    {% else %}
+    <div class="card text-center py-12 text-text-muted text-sm">
+        <svg class="mx-auto mb-3 w-10 h-10 opacity-30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
+        </svg>
+        No messages yet.
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

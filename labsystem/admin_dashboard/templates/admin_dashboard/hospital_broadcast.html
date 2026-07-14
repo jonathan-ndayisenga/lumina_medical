@@ -1,0 +1,101 @@
+{% extends 'base.html' %}
+{% block title %}Broadcast Messages{% endblock %}
+{% block page_title %}Broadcast Messages{% endblock %}
+{% block page_subtitle %}Send announcements to all staff or a specific team member.{% endblock %}
+
+{% block content %}
+<div class="space-y-6 max-w-3xl">
+
+    {# ── Django messages ─────────────────────────────────────────────────── #}
+    {% if messages %}
+        {% for message in messages %}
+        <div class="p-4 rounded-xl border text-sm font-medium
+            {% if message.tags == 'success' %}bg-green-50 border-green-200 text-green-700
+            {% elif message.tags == 'error' %}bg-red-50 border-red-200 text-red-700
+            {% else %}bg-blue-50 border-blue-200 text-blue-700{% endif %}">
+            {{ message }}
+        </div>
+        {% endfor %}
+    {% endif %}
+
+    {# ── Compose Form ───────────────────────────────────────────────────── #}
+    <div class="card space-y-4">
+        <h3 class="text-sm font-bold text-text-main">Compose Message</h3>
+        <form method="post" class="space-y-4">
+            {% csrf_token %}
+            <div>
+                <label class="block text-sm font-semibold text-text-main mb-1">Recipient</label>
+                <select name="recipient_id" class="form-control">
+                    <option value="">— All staff —</option>
+                    {% for member in staff %}
+                    <option value="{{ member.pk }}">{{ member.get_full_name|default:member.username }} ({{ member.role }})</option>
+                    {% endfor %}
+                </select>
+                <p class="text-xs text-text-muted mt-1">Leave blank to send to everyone in your hospital.</p>
+            </div>
+            <div>
+                <label class="block text-sm font-semibold text-text-main mb-1">Title</label>
+                <input type="text" name="title" maxlength="200" class="form-control" placeholder="e.g. Shift change reminder" required>
+            </div>
+            <div>
+                <label class="block text-sm font-semibold text-text-main mb-1">Message</label>
+                <textarea name="body" rows="4" class="form-control" placeholder="Write your message here…" required></textarea>
+            </div>
+            <div class="flex justify-end">
+                <button type="submit" class="btn btn-primary">Send Message</button>
+            </div>
+        </form>
+    </div>
+
+    {# ── Sent Messages ──────────────────────────────────────────────────── #}
+    <div class="card space-y-3">
+        <h3 class="text-sm font-bold text-text-main">Sent Messages</h3>
+
+        {% if sent_page %}
+        <div class="space-y-3">
+            {% for notif in sent_page %}
+            <div class="p-4 border border-gray-200 rounded-xl {% if not notif.is_active %}opacity-50{% endif %}">
+                <div class="flex items-start justify-between gap-4">
+                    <div class="flex-1 min-w-0">
+                        <p class="text-sm font-bold text-text-main">{{ notif.title }}</p>
+                        <p class="text-sm text-text-muted mt-0.5 whitespace-pre-wrap">{{ notif.body }}</p>
+                        <div class="mt-1.5 text-xs text-text-muted flex flex-wrap gap-3">
+                            {% if notif.recipient %}
+                            <span>To: <strong>{{ notif.recipient.get_full_name|default:notif.recipient.username }}</strong></span>
+                            {% else %}
+                            <span>To: <strong>All staff</strong></span>
+                            {% endif %}
+                            <span>· {{ notif.created_at|date:"d M Y H:i" }}</span>
+                            {% if not notif.is_active %}<span class="text-red-500 font-semibold">· Removed</span>{% endif %}
+                        </div>
+                    </div>
+                    {% if notif.is_active %}
+                    <form method="post" action="{% url 'hospital_broadcast_delete' notif.pk %}" class="flex-shrink-0">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-danger btn-sm" onclick="return confirm('Remove this message?')">Remove</button>
+                    </form>
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+
+        {% if sent_page.has_other_pages %}
+        <div class="flex items-center justify-center gap-2 pt-2 flex-wrap">
+            {% if sent_page.has_previous %}
+            <a href="?page={{ sent_page.previous_page_number }}" class="btn btn-secondary btn-sm">&laquo; Previous</a>
+            {% endif %}
+            <span class="text-sm text-text-muted">Page {{ sent_page.number }} of {{ sent_page.paginator.num_pages }}</span>
+            {% if sent_page.has_next %}
+            <a href="?page={{ sent_page.next_page_number }}" class="btn btn-secondary btn-sm">Next &raquo;</a>
+            {% endif %}
+        </div>
+        {% endif %}
+
+        {% else %}
+        <p class="text-sm text-text-muted text-center py-6">No messages sent yet.</p>
+        {% endif %}
+    </div>
+
+</div>
+{% endblock %}

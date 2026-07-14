@@ -67,4 +67,7 @@ urlpatterns = [
     path("hospital/reports/consultations/", views.report_consultations, name="report_consultations"),
     path("superadmin/notifications/", views.manage_notifications, name="manage_notifications"),
     path("superadmin/notifications/<int:notification_id>/delete/", views.delete_notification, name="delete_notification"),
+    path("hospital/broadcast/", views.hospital_broadcast, name="hospital_broadcast"),
+    path("hospital/broadcast/<int:pk>/delete/", views.hospital_broadcast_delete, name="hospital_broadcast_delete"),
+    path("superadmin/settings/", views.platform_settings, name="platform_settings"),
 ]
