@@ -510,7 +510,7 @@ class Payment(models.Model):
 
         # If a cash drawer is open, mirror cash receipts as drawer cash-in transactions (idempotent per payment).
         if self.mode == self.MODE_CASH and self.paid_at and self.amount_paid > 0 and self.status != self.STATUS_WAIVED:
-            paid_date = (self.paid_at or timezone.now()).date()
+            paid_date = timezone.localdate(self.paid_at)
             open_drawer = CashDrawer.objects.filter(hospital=self.visit.hospital, date=paid_date).order_by("-id").first()
             if not open_drawer:
                 last_with_balance = (

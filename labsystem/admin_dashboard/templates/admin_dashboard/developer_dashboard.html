@@ -25,6 +25,42 @@
         </div>
     </div>
 
+    {% if token_notifications %}
+    <div class="card border-l-4 border-l-amber-400">
+        <div class="flex items-center justify-between mb-4">
+            <div class="flex items-center gap-2">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-5 h-5 text-amber-500">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M16.5 6v.75m0 3v.75m0 3v.75m0 3V18m-9-5.25h5.25M7.5 15h3M3.375 5.25c-.621 0-1.125.504-1.125 1.125v3.026a2.999 2.999 0 010 5.198v3.026c0 .621.504 1.125 1.125 1.125h17.25c.621 0 1.125-.504 1.125-1.125v-3.026a3 3 0 010-5.198V6.375c0-.621-.504-1.125-1.125-1.125H3.375z"/>
+                </svg>
+                <h4 class="text-sm font-semibold text-text-main">Support Tokens — Awaiting Your Reply</h4>
+                <span class="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 text-[11px] font-bold text-white bg-amber-500 rounded-full">{{ token_notifications|length }}</span>
+            </div>
+            <a href="{% url 'superadmin_tokens' %}" class="text-xs text-brand-dark font-semibold hover:underline">View all →</a>
+        </div>
+        <div class="space-y-2">
+            {% for token in token_notifications %}
+            <a href="{% url 'superadmin_token_detail' token.pk %}" class="flex items-start gap-3 p-3 rounded-xl bg-amber-50 border border-amber-100 hover:bg-amber-100 transition-colors no-underline">
+                <div class="flex-1 min-w-0">
+                    <div class="flex items-center gap-2 flex-wrap">
+                        <span class="text-sm font-semibold text-text-main truncate">{{ token.subject }}</span>
+                        <span class="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full
+                            {% if token.priority == 'urgent' %}bg-red-100 text-red-700
+                            {% elif token.priority == 'high' %}bg-orange-100 text-orange-700
+                            {% else %}bg-gray-100 text-gray-500{% endif %}">
+                            {{ token.get_priority_display }}
+                        </span>
+                    </div>
+                    <p class="text-xs text-text-muted mt-0.5">{{ token.hospital.name }} · {{ token.get_category_display }} · {{ token.updated_at|date:"d M H:i" }}</p>
+                </div>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-4 h-4 text-text-muted flex-shrink-0 mt-1">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="m9 18 6-6-6-6"/>
+                </svg>
+            </a>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <div class="card">
             <div class="flex items-center justify-between mb-4">

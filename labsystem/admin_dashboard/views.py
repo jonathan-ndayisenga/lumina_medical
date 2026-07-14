@@ -747,6 +747,19 @@ def developer_dashboard(request):
         )
         onboarding_counts.append(count)
 
+    # Tokens with unread hospital messages (the super admin hasn't read yet)
+    token_notifications = (
+        SupportToken.objects
+        .filter(
+            status__in=[SupportToken.STATUS_OPEN, SupportToken.STATUS_IN_PROGRESS],
+            thread__is_from_provider=False,
+            thread__read_by_recipient=False,
+        )
+        .select_related("hospital", "submitted_by")
+        .distinct()
+        .order_by("-updated_at")[:8]
+    )
+
     context = {
         "active_nav": "superadmin",
         "dashboard_title": "Super Admin Dashboard",
@@ -763,6 +776,7 @@ def developer_dashboard(request):
         "month_labels_json": json.dumps(month_labels),
         "income_datasets_json": json.dumps(income_datasets),
         "onboarding_counts_json": json.dumps(onboarding_counts),
+        "token_notifications": token_notifications,
     }
     return render(request, "admin_dashboard/developer_dashboard.html", context)
 
@@ -817,6 +831,18 @@ def hospital_dashboard(request):
         "recent_visits": visits.order_by("-visit_date")[:6],
         "recent_reports": reports.select_related("visit__patient").order_by("-created_at")[:6],
         "low_stock_items": low_stock_items.order_by("quantity", "name")[:6] if hospital else [],
+        # Tokens with unread provider replies
+        "token_notifications": (
+            SupportToken.objects
+            .filter(
+                hospital=hospital,
+                thread__is_from_provider=True,
+                thread__read_by_recipient=False,
+            )
+            .select_related("hospital")
+            .distinct()
+            .order_by("-updated_at")[:8]
+        ) if hospital else [],
     }
     return render(request, "admin_dashboard/hospital_dashboard.html", context)
 
