@@ -155,6 +155,7 @@ class TestProfileParameter(models.Model):
         ('text', 'Text'),
         ('numeric', 'Numeric'),
         ('choice', 'Choice'),
+        ('textarea', 'Text Area'),
     ]
 
     profile = models.ForeignKey(TestProfile, on_delete=models.CASCADE, related_name='parameters')
@@ -194,7 +195,7 @@ class TestResult(models.Model):
     test = models.ForeignKey(TestCatalog, on_delete=models.CASCADE)
     section_name = models.CharField(max_length=100, blank=True)
     display_order = models.PositiveIntegerField(default=0)
-    result_value = models.CharField(max_length=50)
+    result_value = models.TextField(blank=True, default='')
     reference_range = models.CharField(max_length=50, blank=True)
     unit = models.CharField(max_length=20, blank=True)
     comment = models.CharField(max_length=255, blank=True)

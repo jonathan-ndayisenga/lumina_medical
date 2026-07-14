@@ -184,3 +184,25 @@ def mark_queue_entries_processed(*, visit: Visit, queue_type: str) -> int:
         processed=True,
         processed_at=timezone.now(),
     )
+
+
+# Queues that must be closed before the key queue type may open.
+_COMPETING_TYPES: dict = {
+    QueueEntry.TYPE_NURSE: [QueueEntry.TYPE_DOCTOR],
+    QueueEntry.TYPE_DOCTOR: [QueueEntry.TYPE_NURSE],
+    QueueEntry.TYPE_RECEPTION: [QueueEntry.TYPE_NURSE, QueueEntry.TYPE_DOCTOR],
+}
+
+
+def close_competing_queue_entries(visit: Visit, new_type: str) -> int:
+    """Close any open queue entries that conflict with the queue type about to open.
+
+    E.g. opening TYPE_NURSE closes TYPE_DOCTOR; opening TYPE_RECEPTION closes both.
+    Returns the number of entries closed.
+    """
+    types_to_close = _COMPETING_TYPES.get(new_type, [])
+    if not types_to_close:
+        return 0
+    return visit.queue_entries.filter(
+        queue_type__in=types_to_close, processed=False
+    ).update(processed=True, processed_at=timezone.now())

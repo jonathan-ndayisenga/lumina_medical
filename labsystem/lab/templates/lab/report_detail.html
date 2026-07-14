@@ -229,7 +229,7 @@
                     <tr class="hover:bg-gray-50">
                         {% with flag=result.result_value|range_flag:result.reference_range %}
                         <td class="px-3 py-2"><strong>{{ result.test.name }}</strong></td>
-                        <td class="px-3 py-2">{{ result.result_value|default:"-" }}</td>
+                        <td class="px-3 py-2" style="white-space: pre-wrap;">{{ result.result_value|default:"-" }}</td>
                         <td class="px-3 py-2">{{ result.reference_range|default:"-" }}</td>
                         <td class="px-3 py-2">
                             {% if flag == "HIGH" %}

@@ -538,6 +538,21 @@
                         </span>
                     </button>
 
+                    {% if nurse_queue_is_open %}
+                    <div class="flex items-center gap-3 rounded-xl border-2 border-amber-300 bg-amber-50 px-4 py-3 cursor-not-allowed select-none" title="Billing locked — patient is in nurse queue">
+                        <span class="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full border-2 border-amber-400 text-amber-500">
+                            <svg class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clip-rule="evenodd"/></svg>
+                        </span>
+                        <span>
+                            <span class="block font-semibold text-amber-800">Reception / Billing</span>
+                            <span class="block text-xs font-normal text-amber-600">Locked — patient is in nurse queue</span>
+                        </span>
+                    </div>
+                    <div class="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                        <svg class="h-4 w-4 flex-shrink-0 mt-0.5 text-amber-500" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>
+                        <span><strong>Why is billing locked?</strong> This patient is currently waiting in the nurse queue. The nurse must send the patient to billing or back to the doctor before you can proceed.</span>
+                    </div>
+                    {% else %}
                     <button type="button"
                         data-target="{{ form.send_to_reception.id_for_label }}"
                         class="handoff-btn flex items-center gap-3 rounded-xl border-2 border-gray-200 bg-white px-4 py-3 text-left text-sm font-medium text-text-main transition-all hover:border-blue-300 hover:bg-blue-50">
@@ -549,6 +564,7 @@
                             <span class="block text-xs font-normal text-text-muted">Patient ready for payment</span>
                         </span>
                     </button>
+                    {% endif %}
                 </div>
 
                 <script>

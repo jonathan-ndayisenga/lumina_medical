@@ -104,9 +104,15 @@ def _cash_account_for_expense(hospital, expense):
 def _reverse_existing(hospital, source_visit_service=None, source_payment=None, source_expense=None):
     """
     If a prior journal entry exists for this source, post a reversal and mark it.
+    Only touches entries not yet reversed (reversal_of__isnull=True) to prevent
+    double-reversal accumulation on repeated saves of the same source record.
     Returns True if a reversal was posted.
     """
-    qs = JournalEntry.objects.filter(hospital=hospital, is_reversal=False)
+    qs = JournalEntry.objects.filter(
+        hospital=hospital,
+        is_reversal=False,
+        reversal_of__isnull=True,  # skip entries already reversed by a later posting
+    )
     if source_visit_service:
         qs = qs.filter(source_visit_service=source_visit_service)
     elif source_payment:
@@ -116,7 +122,9 @@ def _reverse_existing(hospital, source_visit_service=None, source_payment=None, 
     else:
         return False
 
+    reversed_any = False
     for old_entry in qs:
+        reversed_any = True
         reversal = JournalEntry.objects.create(
             hospital=hospital,
             date=timezone.localdate(),
@@ -133,7 +141,7 @@ def _reverse_existing(hospital, source_visit_service=None, source_payment=None, 
             )
         reversal.reversed_entry = old_entry
         reversal.save(update_fields=["reversed_entry"])
-    return qs.exists()
+    return reversed_any
 
 
 # ---------------------------------------------------------------------------

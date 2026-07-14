@@ -12,7 +12,7 @@ from admin_dashboard.models import InventoryTransaction
 from doctor.models import Consultation, Prescription
 from lab.models import LabReport
 from reception.models import QueueEntry, Triage, Visit
-from reception.workflow import ensure_pending_queue_entry, send_to_reception_queue, sync_visit_status
+from reception.workflow import close_competing_queue_entries, ensure_pending_queue_entry, send_to_reception_queue, sync_visit_status
 
 from .forms import NurseNoteForm, TriageForm
 from .models import NurseNote, NursingAdmission, NursingCareItem, NursingDose, ScanReport
@@ -109,6 +109,7 @@ def perform_nursing(request, queue_entry_id):
                 nurse_note.save()
 
             if action == "triage_to_doctor":
+                close_competing_queue_entries(visit, QueueEntry.TYPE_DOCTOR)
                 ensure_pending_queue_entry(
                     visit=visit,
                     hospital=visit.hospital,
@@ -118,6 +119,7 @@ def perform_nursing(request, queue_entry_id):
                     notes="Patient routed to doctor after triage.",
                 )
             elif action == "triage_to_reception":
+                close_competing_queue_entries(visit, QueueEntry.TYPE_RECEPTION)
                 send_to_reception_queue(
                     visit=visit,
                     hospital=visit.hospital,
@@ -128,6 +130,7 @@ def perform_nursing(request, queue_entry_id):
                 )
                 messages.info(request, "Triage saved. Patient handed back to receptionist queue.")
             elif action == "back_to_doctor":
+                close_competing_queue_entries(visit, QueueEntry.TYPE_DOCTOR)
                 ensure_pending_queue_entry(
                     visit=visit,
                     hospital=visit.hospital,
@@ -137,6 +140,7 @@ def perform_nursing(request, queue_entry_id):
                     notes="Patient sent back to doctor after nursing care.",
                 )
             elif action == "to_billing":
+                close_competing_queue_entries(visit, QueueEntry.TYPE_RECEPTION)
                 send_to_reception_queue(
                     visit=visit,
                     hospital=visit.hospital,

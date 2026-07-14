@@ -16,6 +16,7 @@ from lab.models import LabReport
 from nurse.models import NurseNote
 from reception.models import QueueEntry, Service, Triage, Visit, VisitService
 from reception.workflow import (
+    close_competing_queue_entries,
     ensure_pending_queue_entry,
     mark_queue_entries_processed,
     record_admin_override,
@@ -842,6 +843,7 @@ def consultation(request, visit_id):
     lab_reports = LabReport.objects.filter(visit=visit).prefetch_related("results__test")
     scan_reports = ScanReport.objects.filter(visit=visit).select_related("sonographer").order_by("-created_at")
     nurse_queue_entries = visit.queue_entries.filter(queue_type=QueueEntry.TYPE_NURSE).order_by("-created_at")
+    nurse_queue_is_open = nurse_queue_entries.filter(processed=False).exists()
     nurse_notes = NurseNote.objects.filter(visit=visit).select_related("created_by")
     prescriptions = list(
         visit.prescriptions.select_related("drug", "dispensed_by", "parent_prescription__drug").order_by("-prescribed_at", "-id")
@@ -934,6 +936,7 @@ def consultation(request, visit_id):
                 triage_obj.save()
 
             if form.cleaned_data.get("send_to_nurse"):
+                close_competing_queue_entries(visit, QueueEntry.TYPE_NURSE)
                 ensure_pending_queue_entry(
                     visit=visit,
                     hospital=visit.hospital,
@@ -979,16 +982,24 @@ def consultation(request, visit_id):
                 close_doctor_queue = False
 
             if form.cleaned_data.get("send_to_reception"):
-                send_to_reception_queue(
-                    visit=visit,
-                    hospital=visit.hospital,
-                    source="Doctor",
-                    detail="Consultation completed and returned to reception.",
-                    notes="Doctor has completed consultation. Reception should finalize the next step.",
-                    requested_by=request.user,
-                )
-                close_doctor_queue = True
-                feedback.append("Patient returned to receptionist queue.")
+                if visit.queue_entries.filter(queue_type=QueueEntry.TYPE_NURSE, processed=False).exists():
+                    form.add_error(
+                        None,
+                        "Billing blocked: this patient is currently waiting in the nurse queue. "
+                        "The nurse must send the patient to billing or back to the doctor before you can proceed.",
+                    )
+                else:
+                    close_competing_queue_entries(visit, QueueEntry.TYPE_RECEPTION)
+                    send_to_reception_queue(
+                        visit=visit,
+                        hospital=visit.hospital,
+                        source="Doctor",
+                        detail="Consultation completed and returned to reception.",
+                        notes="Doctor has completed consultation. Reception should finalize the next step.",
+                        requested_by=request.user,
+                    )
+                    close_doctor_queue = True
+                    feedback.append("Patient returned to receptionist queue.")
 
             if close_doctor_queue:
                 mark_queue_entries_processed(visit=visit, queue_type=QueueEntry.TYPE_DOCTOR)
@@ -1010,6 +1021,7 @@ def consultation(request, visit_id):
             "form": form,
             "consultation_instance": consultation_instance,
             "nurse_queue_entries": nurse_queue_entries,
+            "nurse_queue_is_open": nurse_queue_is_open,
             "nurse_notes": nurse_notes,
             "available_lab_services": available_lab_services,
             "available_billable_services": available_billable_services,

@@ -144,7 +144,7 @@
                     <tr>
                         {% with flag=result.result_value|range_flag:result.reference_range %}
                         <td style="border-bottom: 1px solid #e6ecf3; padding: 0.22rem 0.35rem; vertical-align: top; text-align: left;">{{ result.test.name }}</td>
-                        <td style="border-bottom: 1px solid #e6ecf3; padding: 0.22rem 0.35rem; vertical-align: top; text-align: left;">{{ result.result_value|default:"-" }}</td>
+                        <td style="border-bottom: 1px solid #e6ecf3; padding: 0.22rem 0.35rem; vertical-align: top; text-align: left; white-space: pre-wrap;">{{ result.result_value|default:"-" }}</td>
                         <td style="border-bottom: 1px solid #e6ecf3; padding: 0.22rem 0.35rem; vertical-align: top; text-align: left;">{{ result.reference_range|default:"-" }}</td>
                         <td style="border-bottom: 1px solid #e6ecf3; padding: 0.22rem 0.35rem; vertical-align: top; text-align: left;{% if flag == 'HIGH' %} color: #dc2626; font-weight: 700;{% elif flag == 'LOW' %} color: #2563eb; font-weight: 700;{% elif flag == 'NORMAL' %} font-weight: 700;{% endif %}">{% if flag %}{{ flag }}{% else %}-{% endif %}</td>
                         <td style="border-bottom: 1px solid #e6ecf3; padding: 0.22rem 0.35rem; vertical-align: top; text-align: left;">{{ result.unit|default:"-" }}</td>

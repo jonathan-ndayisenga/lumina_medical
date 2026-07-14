@@ -24,6 +24,29 @@
             min-width: 760px !important;
         }
     }
+
+    /* Textarea result fields stay compact inside the results table */
+    #results-body textarea.result-field {
+        min-height: 3.5rem;
+        max-height: 8rem;
+        resize: vertical;
+        font-size: 0.875rem;
+        line-height: 1.4;
+    }
+
+    /* Auto-fill badge micro-label */
+    .autofill-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 3px;
+        font-size: 10px;
+        font-weight: 500;
+        padding: 1px 5px;
+        border-radius: 3px;
+        vertical-align: middle;
+        margin-left: 4px;
+        line-height: 1.6;
+    }
 </style>
 {% endblock %}
 
@@ -90,8 +113,27 @@
                 {% if form.profile.errors %}
                     <div class="text-xs text-red-600 mt-1">{{ form.profile.errors }}</div>
                 {% endif %}
-                <p class="mt-2 text-xs text-text-muted">Choose a template and it will load immediately. Use "Manual Entry (Simple)" to capture only the test name and result.</p>
+                <p class="mt-2 text-xs text-text-muted">Choose a template and it will load immediately. Select nothing (Manual Entry) to add rows freely.</p>
             </div>
+        </div>
+
+        {# Session name — visible only in manual mode (no template selected) #}
+        <div id="manual-session-wrap" class="hidden mb-4 p-4 rounded-xl border border-amber-200 bg-amber-50">
+            <label for="manual-session-name" class="block text-sm font-semibold text-text-main mb-1">
+                Test Name
+                <span class="ml-1 text-xs font-normal text-text-muted">(becomes the section heading on the report)</span>
+            </label>
+            <input
+                type="text"
+                id="manual-session-name"
+                class="form-control"
+                placeholder="e.g. Malaria RDT, HCG Test, Widal Test"
+                value="{{ selected_service_name|escapejs }}"
+                autocomplete="off"
+            >
+            <p class="mt-2 text-xs text-text-muted">
+                Fill the name, then click <strong>Add Test Row</strong>. Change this name before adding rows for the next test — each name becomes its own section.
+            </p>
         </div>
 
         <div id="template-preview" class="p-3 bg-brand-soft border border-gray-200 rounded-lg text-text-main hidden" style="display:none;"></div>
@@ -104,69 +146,96 @@
     </div>
 
     <div class="card">
-        <h3 class="text-lg font-bold text-text-main mb-4">Patient Information</h3>
-        <p class="text-sm text-text-muted mb-4">This is the patient biodata block used on-screen and on the printed report.</p>
-
-        {% if linked_visit %}
-        <div class="p-3 bg-brand-soft border border-gray-200 rounded-lg text-text-main mb-4">
-            Linked to visit #{{ linked_visit.pk }} for {{ linked_visit.patient.name }}.
-            Patient biodata is being pulled from reception and preserved here as the report snapshot.
-        </div>
-        {% endif %}
-
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+        <div class="flex flex-wrap gap-3 items-start justify-between mb-5">
             <div>
-                <label for="{{ form.patient_name.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">Name</label>
+                <h3 class="text-lg font-bold text-text-main">Patient Information</h3>
+                <p class="text-sm text-text-muted mt-0.5">Bio-data snapshot printed on the final report.</p>
+            </div>
+            {% if linked_visit %}
+            <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-blue-50 border border-blue-200 text-blue-800 text-xs font-semibold">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101"/><path stroke-linecap="round" stroke-linejoin="round" d="M10.172 13.828a4 4 0 015.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/></svg>
+                Visit #{{ linked_visit.pk }} · {{ linked_visit.patient.name }}
+            </span>
+            {% endif %}
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-x-6 gap-y-4 mb-5">
+            {# Patient Name #}
+            <div class="xl:col-span-2">
+                <label for="{{ form.patient_name.id_for_label }}" class="block text-xs font-semibold uppercase tracking-wide text-text-muted mb-1">Patient Name</label>
                 {{ form.patient_name }}
                 {% if form.patient_name.errors %}<div class="text-xs text-red-600 mt-1">{{ form.patient_name.errors }}</div>{% endif %}
             </div>
+
+            {# Sex #}
             <div>
-                <label for="{{ form.age_value.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">Age</label>
-                <div class="space-y-1">
-                    {{ form.patient_age }}
-                    <div class="flex gap-3 items-end">
-                        <div class="flex-1">
-                            {{ form.age_value }}
-                        </div>
-                        <div class="w-40">
-                            {{ form.age_unit }}
-                        </div>
-                    </div>
-                    <div class="text-xs text-text-muted">Choose whether the age is in years or months.</div>
-                </div>
-                {% if form.age_value.errors %}<div class="text-xs text-red-600 mt-1">{{ form.age_value.errors }}</div>{% endif %}
-                {% if form.age_unit.errors %}<div class="text-xs text-red-600 mt-1">{{ form.age_unit.errors }}</div>{% endif %}
-                {% if form.patient_age.errors %}<div class="text-xs text-red-600 mt-1">{{ form.patient_age.errors }}</div>{% endif %}
-            </div>
-            <div>
-                <label for="{{ form.patient_sex.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">Sex</label>
+                <label for="{{ form.patient_sex.id_for_label }}" class="block text-xs font-semibold uppercase tracking-wide text-text-muted mb-1">Sex</label>
                 {{ form.patient_sex }}
                 {% if form.patient_sex.errors %}<div class="text-xs text-red-600 mt-1">{{ form.patient_sex.errors }}</div>{% endif %}
             </div>
+
+            {# Age #}
             <div>
-                <label for="{{ form.referred_by.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">Referred By</label>
-                {{ form.referred_by }}
-                {% if form.referred_by.errors %}<div class="text-xs text-red-600 mt-1">{{ form.referred_by.errors }}</div>{% endif %}
+                <label class="block text-xs font-semibold uppercase tracking-wide text-text-muted mb-1">Age</label>
+                {{ form.patient_age }}
+                <div class="flex gap-2 items-center">
+                    <div class="flex-1">{{ form.age_value }}</div>
+                    <div class="w-32">{{ form.age_unit }}</div>
+                </div>
+                {% if form.age_value.errors %}<div class="text-xs text-red-600 mt-1">{{ form.age_value.errors }}</div>{% endif %}
             </div>
+
+            {# Sample Date #}
             <div>
-                <label for="{{ form.sample_date.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">Sample Date</label>
+                <label for="{{ form.sample_date.id_for_label }}" class="block text-xs font-semibold uppercase tracking-wide text-text-muted mb-1">Sample Date</label>
                 {{ form.sample_date }}
                 {% if form.sample_date.errors %}<div class="text-xs text-red-600 mt-1">{{ form.sample_date.errors }}</div>{% endif %}
             </div>
+
+            {# Specimen — auto-fills from template selection #}
             <div>
-                <label for="{{ form.specimen_type.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">Specimen</label>
+                <label for="{{ form.specimen_type.id_for_label }}" class="block text-xs font-semibold uppercase tracking-wide text-text-muted mb-1">
+                    Specimen
+                    <span class="ml-1 inline-flex items-center gap-1 text-[10px] font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded px-1.5 py-0.5 align-middle normal-case tracking-normal">
+                        <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 12l5 5L20 7"/></svg>
+                        auto-fills from template
+                    </span>
+                </label>
                 {{ form.specimen_type }}
                 {% if form.specimen_type.errors %}<div class="text-xs text-red-600 mt-1">{{ form.specimen_type.errors }}</div>{% endif %}
             </div>
+
+            {# Referred By — auto-filled from who sent the patient #}
             <div>
-                <label for="{{ form.attendant_name.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">Technician</label>
+                <label for="{{ form.referred_by.id_for_label }}" class="block text-xs font-semibold uppercase tracking-wide text-text-muted mb-1">
+                    Referred By
+                    {% if form.referred_by.value %}
+                    <span class="ml-1 inline-flex items-center gap-1 text-[10px] font-medium text-blue-700 bg-blue-50 border border-blue-200 rounded px-1.5 py-0.5 align-middle normal-case tracking-normal">
+                        <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 12l5 5L20 7"/></svg>
+                        auto-filled
+                    </span>
+                    {% endif %}
+                </label>
+                {{ form.referred_by }}
+                {% if form.referred_by.errors %}<div class="text-xs text-red-600 mt-1">{{ form.referred_by.errors }}</div>{% endif %}
+            </div>
+
+            {# Technician — auto-filled from logged-in user #}
+            <div>
+                <label for="{{ form.attendant_name.id_for_label }}" class="block text-xs font-semibold uppercase tracking-wide text-text-muted mb-1">
+                    Technician
+                    <span class="ml-1 inline-flex items-center gap-1 text-[10px] font-medium text-blue-700 bg-blue-50 border border-blue-200 rounded px-1.5 py-0.5 align-middle normal-case tracking-normal">
+                        <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 12l5 5L20 7"/></svg>
+                        auto-filled
+                    </span>
+                </label>
                 {{ form.attendant_name }}
                 {% if form.attendant_name.errors %}<div class="text-xs text-red-600 mt-1">{{ form.attendant_name.errors }}</div>{% endif %}
             </div>
         </div>
 
         <div>
-            <label for="{{ form.comments.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">Report Comments</label>
+            <label for="{{ form.comments.id_for_label }}" class="block text-xs font-semibold uppercase tracking-wide text-text-muted mb-1">Report Comments</label>
             {{ form.comments }}
             {% if form.comments.errors %}<div class="text-xs text-red-600 mt-1">{{ form.comments.errors }}</div>{% endif %}
         </div>
@@ -312,6 +381,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const loadedTemplatesWrap = document.getElementById('loaded-templates');
     const loadedTemplatesList = document.getElementById('loaded-templates-list');
+    const manualSessionWrap = document.getElementById('manual-session-wrap');
+    const manualSessionInput = document.getElementById('manual-session-name');
 
     if (!form || !tbody || !totalFormsInput || !templateHtml) {
         return;
@@ -381,6 +452,19 @@ document.addEventListener('DOMContentLoaded', () => {
         return Boolean(config && config.code === 'manual_simple');
     }
 
+    function isStoolAnalysisProfile(config) {
+        return Boolean(config && config.code === 'stool_analysis');
+    }
+
+    function isManualMode() {
+        // Manual mode = no template selected in the dropdown.
+        return !templateSelect || !templateSelect.value;
+    }
+
+    function currentSessionName() {
+        return (manualSessionInput ? manualSessionInput.value.trim() : '') || 'Manual Entry';
+    }
+
     function getRowProfileConfig(row) {
         const sourceProfile = row.querySelector('input[type="hidden"][name$="source_profile"]')?.value || '';
         return profilePayload[String(sourceProfile)] || null;
@@ -437,6 +521,17 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function createTextField(inputField, currentValue, inputType) {
+        if (inputType === 'textarea') {
+            const ta = document.createElement('textarea');
+            ta.name = inputField.name;
+            ta.id = inputField.id;
+            ta.className = inputField.className;
+            ta.value = currentValue || '';
+            ta.rows = 3;
+            ta.placeholder = inputField.placeholder || 'Describe findings…';
+            ta.style.resize = 'vertical';
+            return ta;
+        }
         const textInput = document.createElement('input');
         textInput.type = 'text';
         textInput.name = inputField.name;
@@ -553,9 +648,11 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         if (isUrinalysisProfile(profileConfig)) {
-            const readonly = Boolean(sectionName && sectionName !== 'Others');
+            const hasFixedConfig = Boolean(findRowConfig(profileConfig, row));
+            const readonly = Boolean(sectionName && sectionName !== 'Others' && hasFixedConfig);
             testInput.readOnly = readonly;
-            testInput.placeholder = readonly ? 'Fixed urinalysis parameter' : 'Other finding';
+            testInput.placeholder = readonly ? 'Fixed urinalysis parameter'
+                : (sectionName && sectionName !== 'Others' ? `New ${sectionName} finding` : 'Other finding');
         } else if (isCbcProfile(profileConfig)) {
             const readonly = Boolean(rowConfig);
             testInput.readOnly = readonly;
@@ -578,10 +675,20 @@ document.addEventListener('DOMContentLoaded', () => {
         const profileConfig = currentProfileConfig();
         const urinalysisMode = isUrinalysisProfile(profileConfig);
         const cbcMode = isCbcProfile(profileConfig);
-        const showSectionDividers = urinalysisMode;
+        const stoolMode = isStoolAnalysisProfile(profileConfig);
+        const manualMode = isManualMode();
+        const showSectionDividers = urinalysisMode || stoolMode || manualMode;
+
+        // Show / hide the session name panel for manual mode.
+        if (manualSessionWrap) {
+            manualSessionWrap.classList.toggle('hidden', !manualMode);
+        }
 
         if (addRowBtn) {
-            addRowBtn.textContent = urinalysisMode ? 'Add Other Finding' : (cbcMode ? 'Add CBC Row' : 'Add Test Row');
+            addRowBtn.textContent = urinalysisMode ? 'Add Other Finding'
+                : cbcMode ? 'Add CBC Row'
+                : manualMode ? 'Add Test Row'
+                : 'Add Test Row';
         }
         if (testHeaderCell) {
             testHeaderCell.textContent = cbcMode ? 'Test' : 'Investigation Parameter';
@@ -903,13 +1010,16 @@ document.addEventListener('DOMContentLoaded', () => {
             const index = tbody.querySelectorAll('tr.result-row').length;
             const profileConfig = currentProfileConfig();
             const templateId = templateSelect?.value ? String(templateSelect.value) : '';
-            const manualMode = Boolean(profileConfig && profileConfig.code === 'manual_simple');
+            const manualMode = isManualMode();
 
-            // For structured profiles (e.g. Urinalysis), inherit section_name from the last
-            // visible row so new rows stay inside the correct section (e.g. Microscopy)
-            // instead of falling back to the template name as the section header.
-            let newSectionName = manualMode ? 'Manual Tests' : '';
-            if (!manualMode) {
+            // Manual mode: new row's section_name = whatever the tech typed in the session
+            // name input (e.g. "Malaria RDT", "HCG Test").
+            // Structured profiles: inherit section_name from the last visible row so new
+            // rows stay inside the correct section (e.g. Microscopy).
+            let newSectionName = '';
+            if (manualMode) {
+                newSectionName = currentSessionName();
+            } else {
                 const rows = visibleRows();
                 const lastRow = rows.length > 0 ? rows[rows.length - 1] : null;
                 if (lastRow) {

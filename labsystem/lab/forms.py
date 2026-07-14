@@ -132,7 +132,6 @@ class TestResultInlineFormSet(BaseInlineFormSet):
         super().add_fields(form, index)
         row_number = (index or 0) + 1
         form.fields['test_name'].error_messages['required'] = f'Row {row_number}: test name is required.'
-        form.fields['result_value'].error_messages['required'] = f'Row {row_number}: result value is required.'
 
 
 TestResultFormSet = inlineformset_factory(

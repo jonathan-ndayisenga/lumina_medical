@@ -109,9 +109,13 @@ def lab_visit_services(visit, *, performed=None):
     return qs.order_by("created_at", "id")
 
 
-def serialize_requested_service(visit_service):
+def serialize_requested_service(visit_service, *, combined_manual_report=None):
     profile = getattr(visit_service.service, "test_profile", None)
+    manual = profile is None
     report = getattr(visit_service, "lab_report", None)
+    # Manual services share the combined report rather than having their own.
+    if report is None and manual and combined_manual_report:
+        report = combined_manual_report
     return {
         "visit_service_id": visit_service.pk,
         "service_id": visit_service.service_id,
@@ -121,6 +125,7 @@ def serialize_requested_service(visit_service):
         "test_profile_id": profile.pk if profile else None,
         "test_profile_name": profile.name if profile else "",
         "report_id": report.pk if report else None,
+        "is_manual": manual,
     }
 
 
@@ -151,26 +156,77 @@ def reconcile_lab_visit_services(visit):
     return repaired
 
 
+def _resolve_referred_by(visit):
+    """Return the referring account name for a visit (doctor first, then receptionist)."""
+    doctor_entry = (
+        QueueEntry.objects.filter(visit=visit, queue_type=QueueEntry.TYPE_LAB_DOCTOR)
+        .select_related("requested_by")
+        .order_by("-created_at")
+        .first()
+    )
+    if doctor_entry and doctor_entry.requested_by:
+        return doctor_entry.requested_by.get_full_name() or doctor_entry.requested_by.username
+    reception_entry = (
+        QueueEntry.objects.filter(visit=visit, queue_type=QueueEntry.TYPE_LAB_RECEPTION)
+        .select_related("requested_by")
+        .order_by("-created_at")
+        .first()
+    )
+    if reception_entry and reception_entry.requested_by:
+        return reception_entry.requested_by.get_full_name() or reception_entry.requested_by.username
+    return ""
+
+
+def is_manual_visit_service(visit_service):
+    """True when a lab service has no linked TestProfile (i.e. manual/ad-hoc test)."""
+    return getattr(visit_service.service, "test_profile", None) is None
+
+
+def ensure_manual_report_for_visit(visit, *, attendant=None):
+    """
+    Find or create the single combined manual LabReport for a visit.
+    All manual (no TestProfile) lab services share this one report so their
+    results print on one page with separate section headings.
+    Identified by: visit set, profile NULL, requested_visit_service NULL.
+    """
+    report = LabReport.objects.filter(
+        visit=visit,
+        profile__isnull=True,
+        requested_visit_service__isnull=True,
+    ).first()
+    if report:
+        return report
+
+    patient = visit.patient
+    return LabReport.objects.create(
+        profile=None,
+        hospital=visit.hospital,
+        visit=visit,
+        requested_visit_service=None,
+        patient_name=patient.name,
+        patient_age=patient.age,
+        patient_sex=patient.sex,
+        referred_by=_resolve_referred_by(visit),
+        sample_date=timezone.now().date(),
+        specimen_type="",
+        attendant=attendant,
+        attendant_name=(attendant.get_full_name() or attendant.username) if attendant else "",
+    )
+
+
 def ensure_report_for_visit_service(visit_service, *, attendant=None):
+    # Manual services (no TestProfile) share one combined report per visit.
+    if is_manual_visit_service(visit_service):
+        return ensure_manual_report_for_visit(visit_service.visit, attendant=attendant)
+
+    # Structured services (CBC, Urinalysis, etc.) get their own dedicated report.
     report = getattr(visit_service, "lab_report", None)
     if report:
         return report
 
     visit = visit_service.visit
     patient = visit.patient
-    profile = getattr(visit_service.service, "test_profile", None)
-    doctor_entry = (
-        QueueEntry.objects.filter(
-            visit=visit,
-            queue_type=QueueEntry.TYPE_LAB_DOCTOR,
-        )
-        .select_related("requested_by")
-        .order_by("-created_at")
-        .first()
-    )
-    referred_by = ""
-    if doctor_entry and doctor_entry.requested_by:
-        referred_by = doctor_entry.requested_by.get_full_name() or doctor_entry.requested_by.username
+    profile = visit_service.service.test_profile
 
     report = LabReport.objects.create(
         profile=profile,
@@ -180,11 +236,9 @@ def ensure_report_for_visit_service(visit_service, *, attendant=None):
         patient_name=patient.name,
         patient_age=patient.age,
         patient_sex=patient.sex,
-        referred_by=referred_by,
+        referred_by=_resolve_referred_by(visit),
         sample_date=timezone.now().date(),
-        specimen_type=(profile.default_specimen_type if profile and profile.default_specimen_type else (
-            "" if (profile and profile.code == "manual_simple") else "BLOOD"
-        )),
+        specimen_type=profile.default_specimen_type if profile and profile.default_specimen_type else "BLOOD",
         attendant=attendant,
         attendant_name=(attendant.get_full_name() or attendant.username) if attendant else "",
     )
@@ -565,26 +619,66 @@ def handle_report_form(request, report=None):
 
     pending_requested_services = []
     completed_requested_services = []
+    combined_manual_report = None
+    selected_service_name = ""
     selected_requested_service_id = (request.POST.get("requested_service_id") or request.GET.get("requested_service_id") or "").strip()
-    if report.visit_id and selected_requested_service_id and not report.requested_visit_service_id:
+
+    # Determine whether this report is the combined manual hub (profile=None, no linked service).
+    is_combined_manual_report = bool(
+        report.pk
+        and report.visit_id
+        and not report.profile_id
+        and not report.requested_visit_service_id
+    )
+
+    # For structured (non-manual) reports: if no service is linked yet, link it now.
+    if (
+        report.visit_id
+        and selected_requested_service_id
+        and not report.requested_visit_service_id
+        and not is_combined_manual_report
+    ):
         selected_service = VisitService.objects.filter(
             visit=report.visit,
             service__category="lab",
             pk=selected_requested_service_id,
         ).select_related("service__test_profile").first()
-        if selected_service and not getattr(selected_service, "lab_report", None):
+        if selected_service and not is_manual_visit_service(selected_service) and not getattr(selected_service, "lab_report", None):
             report.requested_visit_service = selected_service
             if selected_service.service.test_profile_id and not report.profile_id:
                 report.profile = selected_service.service.test_profile
             if report.pk:
                 report.save(update_fields=["requested_visit_service", "profile"])
+
     if report.visit_id:
         pending_services_qs = list(lab_visit_services(report.visit, performed=False))
         completed_services_qs = list(lab_visit_services(report.visit, performed=True))
-        for visit_service in pending_services_qs:
-            ensure_report_for_visit_service(visit_service, attendant=request.user)
-        pending_requested_services = [serialize_requested_service(item) for item in pending_services_qs]
-        completed_requested_services = [serialize_requested_service(item) for item in completed_services_qs]
+        # Pre-create reports for structured services on GET only so the sidebar has report IDs.
+        # On POST the auto-advance logic creates the next report as needed; running this on POST
+        # would claim a OneToOneField slot before the save logic can link the current report.
+        if request.method == "GET":
+            for visit_service in pending_services_qs:
+                ensure_report_for_visit_service(visit_service, attendant=request.user)
+
+        # Resolve combined manual report once for this visit so all manual services share it.
+        all_services = pending_services_qs + completed_services_qs
+        if any(is_manual_visit_service(vs) for vs in all_services):
+            combined_manual_report = ensure_manual_report_for_visit(report.visit, attendant=request.user)
+
+        pending_requested_services = [
+            serialize_requested_service(item, combined_manual_report=combined_manual_report)
+            for item in pending_services_qs
+        ]
+        completed_requested_services = [
+            serialize_requested_service(item, combined_manual_report=combined_manual_report)
+            for item in completed_services_qs
+        ]
+
+        # Derive the display name for the currently-selected manual service (for the session name input).
+        if selected_requested_service_id:
+            _sel = next((vs for vs in pending_services_qs if str(vs.pk) == selected_requested_service_id), None)
+            if _sel and is_manual_visit_service(_sel):
+                selected_service_name = _sel.service.name
 
     if (
         request.method == "GET"
@@ -602,6 +696,23 @@ def handle_report_form(request, report=None):
             target_report = ensure_report_for_visit_service(selected_service, attendant=request.user)
             return redirect(
                 f"{reverse('report_edit', kwargs={'pk': target_report.pk})}?requested_service_id={selected_service.pk}"
+            )
+
+    # On the combined manual report: if the selected service is structured, redirect to its own report.
+    if (
+        request.method == "GET"
+        and is_combined_manual_report
+        and selected_requested_service_id
+    ):
+        _sel_svc = VisitService.objects.filter(
+            visit=report.visit,
+            service__category="lab",
+            pk=selected_requested_service_id,
+        ).select_related("service__test_profile").first()
+        if _sel_svc and not is_manual_visit_service(_sel_svc):
+            target_report = ensure_report_for_visit_service(_sel_svc, attendant=request.user)
+            return redirect(
+                f"{reverse('report_edit', kwargs={'pk': target_report.pk})}?requested_service_id={_sel_svc.pk}"
             )
 
     if report.requested_visit_service_id and not selected_requested_service_id:
@@ -645,11 +756,15 @@ def handle_report_form(request, report=None):
             if report.visit_id and selected_requested_service_id:
                 selected_visit_service = lab_visit_services(report.visit, performed=False).filter(pk=selected_requested_service_id).first()
                 if selected_visit_service:
-                    if not report.requested_visit_service_id:
-                        report.requested_visit_service = selected_visit_service
-                    if selected_visit_service.service.test_profile_id and not report.profile_id:
-                        report.profile = selected_visit_service.service.test_profile
-                    report.save(update_fields=["requested_visit_service", "profile"])
+                    # Combined manual report must never be linked to a specific service —
+                    # it covers multiple services and stays with profile=None, service=None.
+                    _this_is_combined_manual = (not report.profile_id and not report.requested_visit_service_id)
+                    if not _this_is_combined_manual:
+                        if not report.requested_visit_service_id:
+                            report.requested_visit_service = selected_visit_service
+                        if selected_visit_service.service.test_profile_id and not report.profile_id:
+                            report.profile = selected_visit_service.service.test_profile
+                        report.save(update_fields=["requested_visit_service", "profile"])
                     mark_visit_service_performed(selected_visit_service)
                     refresh_lab_doctor_queue_reason(report.visit)
 
@@ -706,6 +821,8 @@ def handle_report_form(request, report=None):
             return redirect('report_edit', pk=report.pk)
         messages.error(request, 'Please fix the errors below.')
     else:
+        if not report.attendant_name:
+            report.attendant_name = request.user.get_full_name() or request.user.username
         form = LabReportForm(instance=report)
         formset = TestResultFormSet(instance=report)
 
@@ -717,6 +834,8 @@ def handle_report_form(request, report=None):
         'pending_requested_services': pending_requested_services,
         'completed_requested_services': completed_requested_services,
         'selected_requested_service_id': selected_requested_service_id,
+        'selected_service_name': selected_service_name,
+        'is_combined_manual_report': is_combined_manual_report,
     }
 
     return render(

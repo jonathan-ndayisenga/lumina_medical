@@ -73,6 +73,7 @@ def dashboard(request):
             entry__date__gte=month_start,
             entry__date__lte=today,
             entry__is_reversal=False,
+            entry__reversal_of__isnull=True,
         ).aggregate(t=Sum("credit"))["t"] or Decimal("0")
     )
 
@@ -86,6 +87,7 @@ def dashboard(request):
             entry__date__gte=month_start,
             entry__date__lte=today,
             entry__is_reversal=False,
+            entry__reversal_of__isnull=True,
         ).aggregate(t=Sum("debit"))["t"] or Decimal("0")
     )
 
@@ -109,6 +111,7 @@ def dashboard(request):
                 entry__date__gte=month_start,
                 entry__date__lte=today,
                 entry__is_reversal=False,
+                entry__reversal_of__isnull=True,
             ).aggregate(t=Sum("credit"))["t"] or Decimal("0")
         )
         if total > 0:
@@ -325,6 +328,7 @@ def cashbook(request):
             entry__date__gte=date_from,
             entry__date__lte=date_to,
             entry__is_reversal=False,
+            entry__reversal_of__isnull=True,
         )
         .select_related("entry", "account")
         .order_by("entry__date", "entry__id")
@@ -430,6 +434,7 @@ def revenue_report(request):
                 entry__date__gte=date_from,
                 entry__date__lte=date_to,
                 entry__is_reversal=False,
+                entry__reversal_of__isnull=True,
             ).aggregate(t=Sum("credit"))["t"] or Decimal("0")
         )
         rows.append({"account": acc, "total": total})
@@ -469,6 +474,7 @@ def revenue_report_print(request):
                 entry__date__gte=date_from,
                 entry__date__lte=date_to,
                 entry__is_reversal=False,
+                entry__reversal_of__isnull=True,
             ).aggregate(t=Sum("credit"))["t"] or Decimal("0")
         )
         rows.append({"account": acc, "total": total})
@@ -503,6 +509,7 @@ def trial_balance(request):
             account=acc,
             entry__date__lte=as_of,
             entry__is_reversal=False,
+            entry__reversal_of__isnull=True,
         ).aggregate(d=Sum("debit"), c=Sum("credit"))
         dr = agg["d"] or Decimal("0")
         cr = agg["c"] or Decimal("0")
@@ -545,6 +552,7 @@ def profit_and_loss(request):
                 entry__date__gte=date_from,
                 entry__date__lte=date_to,
                 entry__is_reversal=False,
+                entry__reversal_of__isnull=True,
             ).aggregate(t=Sum(agg_key))["t"] or Decimal("0")
         )
 
@@ -562,6 +570,7 @@ def profit_and_loss(request):
                 entry__date__gte=date_from,
                 entry__date__lte=date_to,
                 entry__is_reversal=False,
+                entry__reversal_of__isnull=True,
             ).aggregate(t=Sum("credit"))["t"] or Decimal("0")
         )
         if t:
@@ -577,6 +586,7 @@ def profit_and_loss(request):
                 entry__date__gte=date_from,
                 entry__date__lte=date_to,
                 entry__is_reversal=False,
+                entry__reversal_of__isnull=True,
             ).aggregate(t=Sum("debit"))["t"] or Decimal("0")
         )
         if t:
