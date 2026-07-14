@@ -34,7 +34,7 @@
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {% for field in form %}
                     {% if field.field.widget.input_type != "checkbox" %}
-                        <div>
+                        <div {% if field.html_name == "test_profile" %}id="obj-test-profile-wrap"{% endif %}>
                             <label for="{{ field.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">{{ field.label }}</label>
                             {{ field }}
                             {% if field.help_text %}
@@ -104,4 +104,21 @@
         </form>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    const profileWrap = document.getElementById('obj-test-profile-wrap');
+    if (!profileWrap) return;
+    const categorySelect = document.querySelector('select[name="category"]');
+    if (!categorySelect) return;
+
+    function toggle() {
+        profileWrap.style.display = categorySelect.value === 'lab' ? '' : 'none';
+    }
+    categorySelect.addEventListener('change', toggle);
+    toggle();
+})();
+</script>
 {% endblock %}

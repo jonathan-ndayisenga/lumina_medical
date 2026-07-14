@@ -9,6 +9,7 @@ from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 
 from accounts.models import Hospital, HospitalModuleSubscription, Module, User
+from lab.models import TestProfile
 from reception.models import Service
 
 from .models import (
@@ -284,10 +285,14 @@ class HospitalStaffUserUpdateForm(forms.ModelForm):
 class HospitalServiceForm(forms.ModelForm):
     class Meta:
         model = Service
-        fields = ("name", "category", "price", "is_active", "is_per_day")
+        fields = ("name", "category", "price", "test_profile", "is_active", "is_per_day")
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.fields["test_profile"].queryset = TestProfile.objects.filter(is_active=True).order_by("name")
+        self.fields["test_profile"].required = False
+        self.fields["test_profile"].empty_label = "— no template —"
+        self.fields["test_profile"].help_text = "Lab services only. Links this service to a test template so results are auto-structured."
         for field in self.fields.values():
             field.widget.attrs.setdefault("class", "form-control")
 
