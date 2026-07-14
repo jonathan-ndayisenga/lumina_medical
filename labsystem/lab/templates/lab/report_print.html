@@ -138,6 +138,29 @@
             </div>
             {% endfor %}
         </div>
+        {% elif not report.profile or report.profile.code == 'manual_simple' %}
+        <div class="results-table-wrap overflow-x-auto">
+            <table class="results-table w-full" style="border-collapse: collapse; font-size: 0.75rem; line-height: 1.2; table-layout: fixed;">
+                <colgroup>
+                    <col style="width: 45%;">
+                    <col style="width: 55%;">
+                </colgroup>
+                <thead>
+                    <tr>
+                        <th style="text-align: left; border-bottom: 2px solid #1d3557; padding: 0.28rem 0.4rem; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.05em; color: #1d3557;">Test</th>
+                        <th style="text-align: left; border-bottom: 2px solid #1d3557; padding: 0.28rem 0.4rem; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.05em; color: #1d3557;">Result</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for result in group.results %}
+                    <tr>
+                        <td style="border-bottom: 1px solid #e6ecf3; padding: 0.3rem 0.4rem; vertical-align: top; font-weight: 600; font-size: 0.75rem; color: #1f2a37;">{{ result.test.name }}</td>
+                        <td style="border-bottom: 1px solid #e6ecf3; padding: 0.3rem 0.4rem; vertical-align: top; font-size: 0.75rem; white-space: pre-wrap; color: #1f2a37;">{{ result.result_value|default:"" }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
         {% else %}
         <div class="results-table-wrap overflow-x-auto">
             <table class="results-table w-full text-right" style="border-collapse: collapse; font-size: 0.75rem; line-height: 1.12;">

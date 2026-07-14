@@ -798,11 +798,12 @@ document.addEventListener('DOMContentLoaded', () => {
             testHeaderCell.textContent = cbcMode ? 'Test' : 'Investigation Parameter';
         }
 
-        // Stool mode: card layout — hide range/unit/comment headers, handled per-card.
+        // Stool mode: card layout. Manual mode: test+result only. Both hide extra columns.
+        const hideExtraCols = stoolMode || manualMode;
         if (resultsTable) resultsTable.classList.toggle('stool-mode', stoolMode);
-        setCellVisible(rangeHeaderCell, !stoolMode);
-        setCellVisible(unitHeaderCell, !stoolMode);
-        setCellVisible(commentHeaderCell, !stoolMode);
+        setCellVisible(rangeHeaderCell, !hideExtraCols);
+        setCellVisible(unitHeaderCell, !hideExtraCols);
+        setCellVisible(commentHeaderCell, !hideExtraCols);
 
         removeSectionDividers();
 
@@ -825,10 +826,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 removeStoolResultField(row);
             }
 
-            // Hide range, unit and comment cells in stool mode.
-            setCellVisible(rangeCell, !stoolMode);
-            setCellVisible(unitCell, !stoolMode);
-            setCellVisible(commentCell, !stoolMode);
+            // Hide range, unit and comment cells in stool or manual mode.
+            setCellVisible(rangeCell, !hideExtraCols);
+            setCellVisible(unitCell, !hideExtraCols);
+            setCellVisible(commentCell, !hideExtraCols);
             [row.querySelector('.range-field'), row.querySelector('.unit-field'), row.querySelector('.comment-field')].forEach(field => {
                 if (!field) return;
                 field.classList.toggle('hidden', manualRow);
