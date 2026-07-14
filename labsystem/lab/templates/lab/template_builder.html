@@ -5,6 +5,25 @@
 {% block page_title %}{% if editing %}Edit Template{% else %}Template Builder{% endif %}{% endblock %}
 {% block page_subtitle %}{% if editing %}Update sections and test rows for this template.{% else %}Design your test template — add sections, then add test rows under each one.{% endif %}{% endblock %}
 
+{% block extra_css %}
+<style>
+/* stool_analysis mode: collapse ref/unit columns */
+#builder-page.stool-mode .test-row {
+    grid-template-columns: 1fr 100px 32px !important;
+}
+#builder-page.stool-mode .section-col-headers {
+    grid-template-columns: 1fr 100px 32px !important;
+}
+#builder-page.stool-mode .row-ref,
+#builder-page.stool-mode .col-ref-hdr,
+#builder-page.stool-mode .row-unit,
+#builder-page.stool-mode .col-unit-hdr { display: none !important; }
+
+#builder-page.stool-mode .stool-notice { display: block !important; }
+.stool-notice { display: none; }
+</style>
+{% endblock %}
+
 {% block content %}
 <div id="builder-page" data-save-url="{% url 'template_save' %}" data-catalog-url="{% url 'template_catalog_api' %}">
 
@@ -58,6 +77,11 @@
         {% endif %}
     </div>
 
+    <!-- Stool analysis notice (shown only when code = stool_analysis) -->
+    <div class="stool-notice mb-4 px-4 py-3 rounded-lg bg-blue-50 border border-blue-200 text-blue-800 text-sm">
+        <strong>Stool Analysis mode:</strong> Reference Range and Unit columns are hidden — they are not used for this report type.
+    </div>
+
     <!-- Section builder -->
     <div class="space-y-4" id="sections-container">
         <!-- sections injected by JS -->
@@ -98,10 +122,10 @@
             <button type="button" class="remove-section-btn text-red-400 hover:text-red-600 font-bold text-lg leading-none">&times;</button>
         </div>
         <div class="p-3 space-y-2">
-            <div class="grid grid-cols-[1fr_130px_90px_100px_32px] gap-2 px-2 pb-1">
+            <div class="section-col-headers grid grid-cols-[1fr_130px_90px_100px_32px] gap-2 px-2 pb-1">
                 <span class="text-xs font-semibold text-text-muted uppercase">Test Name</span>
-                <span class="text-xs font-semibold text-text-muted uppercase">Reference Range</span>
-                <span class="text-xs font-semibold text-text-muted uppercase">Unit</span>
+                <span class="col-ref-hdr text-xs font-semibold text-text-muted uppercase">Reference Range</span>
+                <span class="col-unit-hdr text-xs font-semibold text-text-muted uppercase">Unit</span>
                 <span class="text-xs font-semibold text-text-muted uppercase">Input Type</span>
                 <span></span>
             </div>
@@ -234,10 +258,17 @@
 
     // ── auto-slug ─────────────────────────────────────────────────────────────
     let codeManuallyEdited = false;
-    codeInput.addEventListener('input', () => { codeManuallyEdited = true; });
+    codeInput.addEventListener('input', () => { codeManuallyEdited = true; applyStoolMode(); });
     nameInput.addEventListener('input', () => {
         if (!codeManuallyEdited) codeInput.value = slug(nameInput.value);
+        applyStoolMode();
     });
+
+    // ── stool-mode: hide ref/unit columns for stool_analysis templates ─────────
+    function applyStoolMode() {
+        const isStool = codeInput.value.trim() === 'stool_analysis';
+        page.classList.toggle('stool-mode', isStool);
+    }
 
     // ── save ──────────────────────────────────────────────────────────────────
     document.getElementById('save-btn').addEventListener('click', async () => {
@@ -314,6 +345,7 @@
         // Start with one blank section
         addSection();
     }
+    applyStoolMode();
 })();
 </script>
 {% endblock %}
