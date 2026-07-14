@@ -276,6 +276,54 @@ class User(AbstractUser):
         super().save(*args, **kwargs)
 
 
+class SystemNotification(models.Model):
+    """Broadcast from super-admin to one hospital or all hospitals."""
+    hospital = models.ForeignKey(
+        Hospital,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="system_notifications",
+        help_text="Leave blank to broadcast to every hospital.",
+    )
+    title = models.CharField(max_length=200)
+    body = models.TextField()
+    is_active = models.BooleanField(default=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="sent_notifications",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        target = self.hospital.name if self.hospital_id else "ALL"
+        return f"[{target}] {self.title}"
+
+
+class NotificationRead(models.Model):
+    """Tracks which users have dismissed a system notification."""
+    notification = models.ForeignKey(
+        SystemNotification,
+        on_delete=models.CASCADE,
+        related_name="reads",
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="notification_reads",
+    )
+    read_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ("notification", "user")
+
+
 class AuditLog(models.Model):
     user = models.ForeignKey(
         User,

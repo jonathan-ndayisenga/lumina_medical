@@ -127,6 +127,21 @@
         {% if group.name %}
         <div class="section-heading px-3 py-2 bg-brand-soft text-text-main font-bold uppercase text-xs" style="letter-spacing: 0.08em;">{{ group.name }}</div>
         {% endif %}
+        {% if report.profile and report.profile.code == 'stool_analysis' %}
+        <div style="padding: 0.3rem 0.5rem;">
+            {% for result in group.results %}
+            <div style="border-bottom: 1px solid #e6ecf3; padding: 0.35rem 0.25rem;">
+                <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 0.75rem;">
+                    <span style="font-weight: 700; font-size: 0.78rem; min-width: 40%;">{{ result.test.name }}</span>
+                    <span style="font-size: 0.78rem; white-space: pre-wrap; text-align: right;">{{ result.result_value|default:"" }}</span>
+                </div>
+                {% if result.comment %}
+                <div style="font-size: 0.73rem; color: #4b5563; margin-top: 0.18rem; white-space: pre-wrap; line-height: 1.35;">{{ result.comment }}</div>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
         <div class="results-table-wrap overflow-x-auto">
             <table class="results-table w-full text-right" style="border-collapse: collapse; font-size: 0.75rem; line-height: 1.12;">
                 <thead>
@@ -155,6 +170,7 @@
                 </tbody>
             </table>
         </div>
+        {% endif %}
     </section>
     {% endfor %}
 

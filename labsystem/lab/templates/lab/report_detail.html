@@ -212,6 +212,21 @@
         {% if group.name %}
         <div class="section-heading bg-brand-soft text-text-main px-4 py-2 font-bold uppercase text-xs">{{ group.name }}</div>
         {% endif %}
+        {% if report.profile and report.profile.code == 'stool_analysis' %}
+        <div class="divide-y divide-gray-100">
+            {% for result in group.results %}
+            <div class="px-4 py-3">
+                <div class="flex items-baseline justify-between gap-4">
+                    <span class="font-semibold text-sm text-text-main">{{ result.test.name }}</span>
+                    <span class="text-sm text-text-main" style="white-space: pre-wrap;">{{ result.result_value|default:"" }}</span>
+                </div>
+                {% if result.comment %}
+                <div class="mt-1 text-xs text-text-muted leading-relaxed" style="white-space: pre-wrap;">{{ result.comment }}</div>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
         <div class="overflow-x-auto">
             <table class="results-table w-full text-sm">
                 <thead>
@@ -250,6 +265,7 @@
                 </tbody>
             </table>
         </div>
+        {% endif %}
     </section>
     {% empty %}
     <section class="section-block border border-gray-200 rounded-2xl overflow-hidden">

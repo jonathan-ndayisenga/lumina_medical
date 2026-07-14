@@ -544,8 +544,38 @@
                                 <p class="text-sm text-text-muted mt-0.5">{% block page_subtitle %}Manage hospital operations from a unified platform.{% endblock %}</p>
                             </div>
                         </div>
+
+                        {% if user.is_authenticated and not user.is_superadmin %}
+                        <div class="relative flex-shrink-0" id="notif-menu-wrap">
+                            <a href="{% url 'notification_list' %}" class="relative inline-flex items-center justify-center w-10 h-10 rounded-full hover:bg-gray-100 transition-colors" title="Notifications" id="notif-bell-btn">
+                                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="text-text-main">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/>
+                                </svg>
+                                {% if notification_unread_count %}
+                                <span class="absolute -top-0.5 -right-0.5 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold leading-none text-white bg-red-500 rounded-full">
+                                    {{ notification_unread_count }}
+                                </span>
+                                {% endif %}
+                            </a>
+                        </div>
+                        {% endif %}
                     </div>
                 </div>
+
+                {% if expiry_alert and user.is_authenticated and not user.is_superadmin %}
+                <div class="no-print px-4 lg:px-8 py-2 {% if expiry_alert.expired %}bg-red-50 border-b border-red-200{% elif expiry_alert.urgent %}bg-orange-50 border-b border-orange-200{% else %}bg-amber-50 border-b border-amber-200{% endif %}">
+                    <div class="flex items-center gap-2 text-sm {% if expiry_alert.expired %}text-red-800{% elif expiry_alert.urgent %}text-orange-800{% else %}text-amber-800{% endif %}">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="flex-shrink-0">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+                        </svg>
+                        {% if expiry_alert.expired %}
+                            <strong>Subscription expired.</strong> Your hospital's subscription has lapsed. Contact your administrator to renew access.
+                        {% else %}
+                            <strong>Subscription expiring in {{ expiry_alert.days }} day{{ expiry_alert.days|pluralize }}.</strong> Contact your administrator to avoid interruption.
+                        {% endif %}
+                    </div>
+                </div>
+                {% endif %}
 
                 <!-- Main Content -->
                 <div class="flex-1 overflow-auto">

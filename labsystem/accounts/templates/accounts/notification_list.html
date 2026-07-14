@@ -1,0 +1,80 @@
+{% extends 'base.html' %}
+
+{% block title %}Notifications - Lumina Medical Services{% endblock %}
+{% block page_title %}Notifications{% endblock %}
+{% block page_subtitle %}System messages and alerts for your account.{% endblock %}
+
+{% block content %}
+<div class="space-y-4">
+    {% if notifications %}
+    <div class="flex justify-end">
+        <form method="post" action="{% url 'notification_mark_all_read' %}">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-secondary btn-sm">Mark all as read</button>
+        </form>
+    </div>
+    {% endif %}
+
+    {% if expiry_alert %}
+    <div class="card border-l-4 {% if expiry_alert.expired %}border-red-500 bg-red-50{% elif expiry_alert.urgent %}border-orange-500 bg-orange-50{% else %}border-amber-400 bg-amber-50{% endif %} p-4">
+        <div class="flex items-start gap-3">
+            <svg class="flex-shrink-0 mt-0.5 {% if expiry_alert.expired %}text-red-500{% elif expiry_alert.urgent %}text-orange-500{% else %}text-amber-500{% endif %}" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+            </svg>
+            <div>
+                <p class="font-semibold {% if expiry_alert.expired %}text-red-800{% elif expiry_alert.urgent %}text-orange-800{% else %}text-amber-800{% endif %}">
+                    {% if expiry_alert.expired %}
+                        Subscription Expired
+                    {% elif expiry_alert.urgent %}
+                        Subscription Expiring Soon
+                    {% else %}
+                        Subscription Reminder
+                    {% endif %}
+                </p>
+                <p class="text-sm mt-1 {% if expiry_alert.expired %}text-red-700{% elif expiry_alert.urgent %}text-orange-700{% else %}text-amber-700{% endif %}">
+                    {% if expiry_alert.expired %}
+                        Your subscription expired {{ expiry_alert.days|floatformat:0|stringformat:"s"|slice:"1:" }} day{{ expiry_alert.days|add:"-1"|pluralize }} ago. Please contact your administrator to renew.
+                    {% else %}
+                        Your subscription expires in <strong>{{ expiry_alert.days }} day{{ expiry_alert.days|pluralize }}</strong>. Contact your administrator to renew in time.
+                    {% endif %}
+                </p>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    {% for notification in notifications %}
+    <div class="card {% if notification.pk not in read_ids %}border-l-4 border-brand-dark{% endif %}">
+        <div class="flex items-start justify-between gap-4">
+            <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-2 mb-1">
+                    {% if notification.pk not in read_ids %}
+                    <span class="inline-block w-2 h-2 rounded-full bg-brand-dark flex-shrink-0"></span>
+                    {% endif %}
+                    <h3 class="font-semibold text-text-main">{{ notification.title }}</h3>
+                </div>
+                <p class="text-sm text-text-muted">{{ notification.created_at|date:"d M Y, H:i" }}</p>
+                <div class="mt-2 text-sm text-text-main leading-relaxed">{{ notification.body|linebreaks }}</div>
+            </div>
+            {% if notification.pk not in read_ids %}
+            <form method="post" action="{% url 'notification_mark_read' notification.pk %}">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-secondary btn-sm flex-shrink-0">Mark read</button>
+            </form>
+            {% else %}
+            <span class="text-xs text-text-muted flex-shrink-0 mt-1">Read</span>
+            {% endif %}
+        </div>
+    </div>
+    {% empty %}
+    {% if not expiry_alert %}
+    <div class="card text-center py-12">
+        <svg class="mx-auto mb-3 text-text-muted" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/>
+        </svg>
+        <p class="text-text-muted">No notifications at this time.</p>
+    </div>
+    {% endif %}
+    {% endfor %}
+</div>
+{% endblock %}
