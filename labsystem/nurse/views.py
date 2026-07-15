@@ -544,13 +544,7 @@ def discharge_nursing(request, admission_id):
 def sonographer_role_required(view_func):
     @login_required
     def wrapped(request, *args, **kwargs):
-        user = request.user
-        allowed = getattr(user, "role", "") in {
-            User.ROLE_SUPERADMIN,
-            User.ROLE_HOSPITAL_ADMIN,
-            User.ROLE_NURSE,
-        } or user.groups.filter(name__in=["Nurse", "Sonographer"]).exists()
-        if not allowed:
+        if not getattr(request.user, "can_access_sonographer", False):
             return redirect("app_home")
         return view_func(request, *args, **kwargs)
     return wrapped

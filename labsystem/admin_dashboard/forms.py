@@ -129,7 +129,7 @@ class HospitalForm(forms.ModelForm):
 
         # Determine intent from non-core selections only
         non_core_selected_codes = {m.code for m in selected if not m.is_core}
-        clinical_non_core = {"doctor", "nurse", "lab", "inventory", "finance", "hospital_mgmt"}
+        clinical_non_core = {"doctor", "nurse", "lab", "inventory", "finance", "hospital_mgmt", "sonographer"}
         is_homecare_only = (
             "home_care" in non_core_selected_codes
             and not (non_core_selected_codes & clinical_non_core)
@@ -217,6 +217,7 @@ MODULE_CODE_TO_GROUP_NAME = {
     "lab": "Lab",
     "inventory": "Inventory",
     "finance": "Finance",
+    "sonographer": "Sonographer",
 }
 
 
@@ -239,6 +240,16 @@ class HospitalStaffUserForm(UserCreationForm):
         widget=forms.CheckboxSelectMultiple,
         help_text="Optional: assign this user to one or more modules this hospital has subscribed to.",
     )
+    custom_role = forms.CharField(
+        required=False,
+        max_length=50,
+        label="Custom role",
+        widget=forms.TextInput(attrs={
+            "placeholder": "e.g. Physiotherapist, Dentist…",
+            "class": "form-control",
+            "autocomplete": "off",
+        }),
+    )
 
     class Meta(UserCreationForm.Meta):
         model = User
@@ -248,15 +259,29 @@ class HospitalStaffUserForm(UserCreationForm):
         super().__init__(*args, **kwargs)
         self.fields["groups"].queryset = _module_group_queryset(hospital)
         self.fields["role"].choices = [
+            ("", "— select a role —"),
             (User.ROLE_HOSPITAL_ADMIN, "Hospital Admin"),
             (User.ROLE_RECEPTIONIST, "Receptionist"),
             (User.ROLE_LAB_ATTENDANT, "Lab Attendant"),
             (User.ROLE_DOCTOR, "Doctor"),
             (User.ROLE_NURSE, "Nurse"),
+            (User.ROLE_SONOGRAPHER, "Sonographer"),
         ]
+        self.fields["role"].required = False
         for name, field in self.fields.items():
             if hasattr(field.widget, "attrs"):
                 field.widget.attrs.setdefault("class", "form-control")
+
+    def clean(self):
+        cleaned = super().clean()
+        custom = (cleaned.get("custom_role") or "").strip()
+        role = (cleaned.get("role") or "").strip()
+        if custom:
+            # Normalise: lowercase, spaces → underscores, max 50 chars
+            cleaned["role"] = custom.lower().replace(" ", "_")[:50]
+        elif not role:
+            self.add_error("role", "Please select a role or enter a custom one below.")
+        return cleaned
 
 
 class HospitalStaffUserUpdateForm(forms.ModelForm):
@@ -266,6 +291,21 @@ class HospitalStaffUserUpdateForm(forms.ModelForm):
         widget=forms.CheckboxSelectMultiple,
         help_text="Optional: assign this user to one or more modules this hospital has subscribed to.",
     )
+    custom_role = forms.CharField(
+        required=False,
+        max_length=50,
+        label="Custom role",
+        widget=forms.TextInput(attrs={
+            "placeholder": "e.g. Physiotherapist, Dentist…",
+            "class": "form-control",
+            "autocomplete": "off",
+        }),
+    )
+
+    STANDARD_ROLES = {
+        User.ROLE_HOSPITAL_ADMIN, User.ROLE_RECEPTIONIST, User.ROLE_LAB_ATTENDANT,
+        User.ROLE_DOCTOR, User.ROLE_NURSE, User.ROLE_SONOGRAPHER,
+    }
 
     class Meta:
         model = User
@@ -274,16 +314,37 @@ class HospitalStaffUserUpdateForm(forms.ModelForm):
     def __init__(self, *args, hospital=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields["groups"].queryset = _module_group_queryset(hospital)
-        self.fields["role"].choices = [
+        standard_choices = [
+            ("", "— select a role —"),
             (User.ROLE_HOSPITAL_ADMIN, "Hospital Admin"),
             (User.ROLE_RECEPTIONIST, "Receptionist"),
             (User.ROLE_LAB_ATTENDANT, "Lab Attendant"),
             (User.ROLE_DOCTOR, "Doctor"),
             (User.ROLE_NURSE, "Nurse"),
+            (User.ROLE_SONOGRAPHER, "Sonographer"),
         ]
+        # If the instance has a custom role not in standard list, show it as a choice
+        # so it doesn't get wiped on the next save and also pre-fill the custom field
+        if self.instance and self.instance.pk:
+            current_role = self.instance.role or ""
+            if current_role and current_role not in self.STANDARD_ROLES:
+                standard_choices.append((current_role, current_role.replace("_", " ").title()))
+                self.fields["custom_role"].initial = current_role.replace("_", " ").title()
+        self.fields["role"].choices = standard_choices
+        self.fields["role"].required = False
         for field in self.fields.values():
             if hasattr(field.widget, "attrs"):
                 field.widget.attrs.setdefault("class", "form-control")
+
+    def clean(self):
+        cleaned = super().clean()
+        custom = (cleaned.get("custom_role") or "").strip()
+        role = (cleaned.get("role") or "").strip()
+        if custom:
+            cleaned["role"] = custom.lower().replace(" ", "_")[:50]
+        elif not role:
+            self.add_error("role", "Please select a role or enter a custom one below.")
+        return cleaned
 
 
 class HospitalServiceForm(forms.ModelForm):

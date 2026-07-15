@@ -15,7 +15,7 @@ QUEUE_TYPE_TO_MODULE_CODE = {
     QueueEntry.TYPE_NURSE: "nurse",
     QueueEntry.TYPE_LAB_RECEPTION: "lab",
     QueueEntry.TYPE_LAB_DOCTOR: "lab",
-    QueueEntry.TYPE_SONOGRAPHER: "nurse",
+    QueueEntry.TYPE_SONOGRAPHER: "sonographer",
 }
 
 

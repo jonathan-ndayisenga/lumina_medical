@@ -436,11 +436,19 @@
                                     </svg>
                                     IV Nursing Care
                                 </a>
+                            </div>
+                        </div>
+                    {% endif %}
+
+                    {% if user.can_access_sonographer %}
+                        <div>
+                            <div class="text-xs font-bold uppercase tracking-widest text-white/60 mb-2">Sonographer</div>
+                            <div class="space-y-1">
                                 <a href="{% url 'scan_queue' %}" class="sidebar-link {% if active_nav == 'scan_queue' %}active{% endif %}">
                                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-5 h-5">
                                         <path stroke-linecap="round" stroke-linejoin="round" d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2v-4M9 21H5a2 2 0 0 1-2-2v-4m0 0h18" />
                                     </svg>
-                                    Sonographer Queue
+                                    Scan Queue
                                 </a>
                             </div>
                         </div>

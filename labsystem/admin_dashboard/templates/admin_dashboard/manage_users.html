@@ -86,6 +86,11 @@
                         <label for="{{ form.role.id_for_label }}" class="block text-xs font-semibold text-text-muted uppercase tracking-wide mb-1">Role <span class="text-red-500">*</span></label>
                         {{ form.role }}
                         {% for e in form.role.errors %}<p class="text-xs text-red-600 mt-1">{{ e }}</p>{% endfor %}
+                        <div class="mt-2">
+                            <label for="{{ form.custom_role.id_for_label }}" class="block text-xs text-text-muted mb-1">Or type a custom role</label>
+                            {{ form.custom_role }}
+                            {% for e in form.custom_role.errors %}<p class="text-xs text-red-600 mt-1">{{ e }}</p>{% endfor %}
+                        </div>
                     </div>
                     <div class="flex items-center gap-3 pb-1">
                         <label class="text-xs font-semibold text-text-muted uppercase tracking-wide">Active</label>
@@ -343,6 +348,20 @@
 </style>
 
 <script>
+// Custom role toggle: typing in custom field clears dropdown, picking dropdown clears custom field
+(function () {
+  var roleSelect  = document.getElementById('{{ form.role.id_for_label }}');
+  var customInput = document.getElementById('{{ form.custom_role.id_for_label }}');
+  if (roleSelect && customInput) {
+    customInput.addEventListener('input', function () {
+      if (this.value.trim()) roleSelect.value = '';
+    });
+    roleSelect.addEventListener('change', function () {
+      if (this.value) customInput.value = '';
+    });
+  }
+})();
+
 (function () {
   var btn = document.getElementById('toggle-form-btn');
   var panel = document.getElementById('form-panel');

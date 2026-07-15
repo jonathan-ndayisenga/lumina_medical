@@ -108,6 +108,19 @@
 
 {% block extra_js %}
 <script>
+// Custom role toggle for user edit form
+(function () {
+    var roleSelect  = document.getElementById('id_role');
+    var customInput = document.getElementById('id_custom_role');
+    if (!roleSelect || !customInput) return;
+    customInput.addEventListener('input', function () {
+        if (this.value.trim()) roleSelect.value = '';
+    });
+    roleSelect.addEventListener('change', function () {
+        if (this.value) customInput.value = '';
+    });
+})();
+
 (function () {
     const profileWrap = document.getElementById('obj-test-profile-wrap');
     if (!profileWrap) return;

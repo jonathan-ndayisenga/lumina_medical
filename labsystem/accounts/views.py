@@ -52,6 +52,8 @@ class RoleAwareLoginView(LoginView):
             return reverse("doctor_queue")
         if role == user.ROLE_NURSE:
             return reverse("nurse_queue")
+        if role == user.ROLE_SONOGRAPHER:
+            return reverse("scan_queue")
         return reverse("app_home")
 
 
@@ -71,6 +73,8 @@ def app_home(request):
         return redirect("doctor_queue")
     if role == user.ROLE_NURSE:
         return redirect("nurse_queue")
+    if role == user.ROLE_SONOGRAPHER:
+        return redirect("scan_queue")
     return render(request, "accounts/home.html")
 
 

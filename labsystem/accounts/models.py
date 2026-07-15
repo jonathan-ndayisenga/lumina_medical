@@ -81,6 +81,7 @@ class Module(models.Model):
     CODE_LAB = "lab"
     CODE_INVENTORY = "inventory"
     CODE_FINANCE = "finance"
+    CODE_SONOGRAPHER = "sonographer"
 
     code = models.SlugField(max_length=50, unique=True)
     name = models.CharField(max_length=100)
@@ -123,6 +124,7 @@ class User(AbstractUser):
     ROLE_LAB_ATTENDANT = "lab_attendant"
     ROLE_DOCTOR = "doctor"
     ROLE_NURSE = "nurse"
+    ROLE_SONOGRAPHER = "sonographer"
 
     ROLE_CHOICES = [
         (ROLE_SUPERADMIN, "Super Admin"),
@@ -132,6 +134,7 @@ class User(AbstractUser):
         (ROLE_LAB_ATTENDANT, "Lab Attendant"),
         (ROLE_DOCTOR, "Doctor"),
         (ROLE_NURSE, "Nurse"),
+        (ROLE_SONOGRAPHER, "Sonographer"),
     ]
 
     hospital = models.ForeignKey(
@@ -229,6 +232,17 @@ class User(AbstractUser):
             return True
         eligible = self.is_hospital_admin or self.has_module_group("Home Care")
         return eligible and self._hospital_has_module("home_care")
+
+    @property
+    def can_access_sonographer(self):
+        if self.is_superadmin:
+            return True
+        eligible = (
+            self.is_hospital_admin
+            or self.role == self.ROLE_SONOGRAPHER
+            or self.has_module_group("Sonographer")
+        )
+        return eligible and self._hospital_has_module("sonographer")
 
     def get_full_name(self):
         full = f"{self.first_name} {self.last_name}".strip()
