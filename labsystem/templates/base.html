@@ -423,6 +423,7 @@
 
                     {% if user.can_access_nurse %}
                         <div>
+                            <div class="text-xs font-bold uppercase tracking-widest text-white/60 mb-2">Nursing</div>
                             <div class="space-y-1">
                                 <a href="{% url 'nurse_queue' %}" class="sidebar-link {% if active_nav == 'nurse' %}active{% endif %}">
                                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-5 h-5">
@@ -500,6 +501,7 @@
 
                     {% if user.can_access_lab %}
                         <div>
+                            <div class="text-xs font-bold uppercase tracking-widest text-white/60 mb-2">Laboratory</div>
                             <div class="space-y-1">
                                 <a href="{% url 'lab_queue' %}" class="sidebar-link {% if active_nav == 'lab_queue' %}active{% endif %}">
                                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-5 h-5">
