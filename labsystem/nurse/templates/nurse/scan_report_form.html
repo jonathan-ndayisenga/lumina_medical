@@ -74,7 +74,17 @@
                 {% if report and report.status == 'final' and not edit_mode %}disabled{% endif %}>{{ report.impression|default:'' }}</textarea>
         </div>
 
-        {% if not edit_mode and (not report or report.status != 'final') %}
+        {% if edit_mode %}
+            <div class="border-t border-gray-100 pt-4 space-y-3">
+                <div class="flex flex-wrap gap-3">
+                    <button type="submit" name="action" value="draft" class="btn btn-secondary">Save as Draft</button>
+                    <button type="submit" name="action" value="finalize" class="btn btn-primary">Save as Final</button>
+                    <a href="{% url 'scan_queue' %}" class="btn btn-secondary">Cancel</a>
+                </div>
+                <p class="text-xs text-text-muted">The patient has already been handed off — saving only updates the report content.</p>
+            </div>
+
+        {% elif not report or report.status != 'final' %}
 
             <!-- Hidden handoff value driven by the buttons below -->
             <input type="hidden" name="handoff" id="handoff-value" value="">
@@ -128,15 +138,6 @@
                 <button type="button" id="finalize-btn" class="btn btn-primary">Finalize &amp; Hand Off</button>
             </div>
 
-        {% elif edit_mode %}
-            <div class="border-t border-gray-100 pt-4 space-y-3">
-                <div class="flex flex-wrap gap-3">
-                    <button type="submit" name="action" value="draft" class="btn btn-secondary">Save as Draft</button>
-                    <button type="submit" name="action" value="finalize" class="btn btn-primary">Save as Final</button>
-                    <a href="{% url 'scan_queue' %}" class="btn btn-secondary">Cancel</a>
-                </div>
-                <p class="text-xs text-text-muted">The patient has already been handed off — saving only updates the report content.</p>
-            </div>
         {% else %}
             <div class="flex flex-wrap gap-3 pt-2">
                 <a href="{% url 'scan_report_print' report.id %}" target="_blank" class="btn btn-primary">Print Report</a>
