@@ -669,6 +669,45 @@ def scan_report(request, queue_entry_id):
 
 
 @sonographer_role_required
+@transaction.atomic
+def scan_report_edit(request, report_id):
+    hospital = get_active_hospital(request)
+    qs = ScanReport.objects.select_related("visit__patient", "visit__hospital")
+    if hospital and getattr(request.user, "role", "") != User.ROLE_SUPERADMIN:
+        qs = qs.filter(visit__hospital=hospital)
+    report = get_object_or_404(qs, pk=report_id)
+    visit = report.visit
+
+    if request.method == "POST":
+        scan_type = request.POST.get("scan_type", ScanReport.SCAN_OTHER)
+        clinical_indication = (request.POST.get("clinical_indication") or "").strip()
+        findings = (request.POST.get("findings") or "").strip()
+        impression = (request.POST.get("impression") or "").strip()
+        action = request.POST.get("action", "draft")
+
+        if not findings or not impression:
+            messages.error(request, "Findings and impression are required.")
+        else:
+            report.scan_type = scan_type
+            report.clinical_indication = clinical_indication
+            report.findings = findings
+            report.impression = impression
+            report.status = ScanReport.STATUS_FINAL if action == "finalize" else ScanReport.STATUS_DRAFT
+            report.sonographer = request.user
+            report.save()
+            messages.success(request, "Scan report updated.")
+            return redirect("scan_queue")
+
+    return render(request, "nurse/scan_report_form.html", {
+        "active_nav": "scan_queue",
+        "visit": visit,
+        "report": report,
+        "scan_type_choices": ScanReport.SCAN_TYPE_CHOICES,
+        "edit_mode": True,
+    })
+
+
+@sonographer_role_required
 def scan_report_print(request, report_id):
     hospital = get_active_hospital(request)
     qs = ScanReport.objects.select_related("visit__patient", "visit__hospital", "sonographer")

@@ -17,4 +17,5 @@ urlpatterns = [
     path("scan-queue/", views.scan_queue, name="scan_queue"),
     path("scan-queue/<int:queue_entry_id>/report/", views.scan_report, name="scan_report"),
     path("scan-report/<int:report_id>/print/", views.scan_report_print, name="scan_report_print"),
+    path("scan-report/<int:report_id>/edit/", views.scan_report_edit, name="scan_report_edit"),
 ]

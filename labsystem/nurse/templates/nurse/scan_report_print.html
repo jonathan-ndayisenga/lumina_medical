@@ -28,7 +28,14 @@
     @media (max-width: 760px) {
         .print-header { flex-direction: column; align-items: flex-start; }
         .print-meta { width: 100%; text-align: left; }
-        .patient-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+        .print-shell { padding: 0 0.25rem; }
+    }
+
+    @media (max-width: 480px) {
+        .patient-grid { grid-template-columns: 1fr !important; }
+        .signature-block { margin-top: 28px; }
+        .no-print-bar { flex-direction: column; }
+        .no-print-bar a, .no-print-bar button { width: 100%; text-align: center; }
     }
 </style>
 {% endblock %}
@@ -39,7 +46,7 @@
     {% include "partials/print_header.html" with hospital=hospital print_title="ULTRASOUND SCAN REPORT" print_subtitle=report.get_scan_type_display %}
 
     <!-- Patient info grid -->
-    <div class="patient-grid grid grid-cols-3 gap-1 p-2 border border-gray-200 rounded-lg bg-white" style="font-size: 0.75rem;">
+    <div class="patient-grid grid grid-cols-2 md:grid-cols-3 gap-1 p-2 border border-gray-200 rounded-lg bg-white" style="font-size: 0.75rem;">
         <div class="flex items-baseline gap-1 flex-wrap min-w-0">
             <span class="font-semibold uppercase text-text-muted" style="font-size: 0.66rem;">Name:</span>
             <span class="font-semibold text-text-main" style="font-size: 0.79rem;">{{ patient.name }}</span>
@@ -67,7 +74,7 @@
             </span>
         </div>
         {% if report.clinical_indication %}
-        <div class="col-span-3 flex items-baseline gap-1 flex-wrap min-w-0">
+        <div class="col-span-2 md:col-span-3 flex items-baseline gap-1 flex-wrap min-w-0">
             <span class="font-semibold uppercase text-text-muted" style="font-size: 0.66rem;">Clinical Indication:</span>
             <span class="font-semibold text-text-main" style="font-size: 0.79rem;">{{ report.clinical_indication }}</span>
         </div>
@@ -99,9 +106,10 @@
     </div>
 
     <!-- Print button (hidden on print) -->
-    <div class="no-print flex gap-3 mt-6">
+    <div class="no-print no-print-bar flex flex-wrap gap-3 mt-6">
         <button onclick="window.print()" class="btn btn-primary">Print</button>
         <a href="{% url 'scan_queue' %}" class="btn btn-secondary">Back to Queue</a>
+        <a href="{% url 'scan_report_edit' report.id %}" class="btn btn-secondary">Edit Report</a>
     </div>
 
 </div>

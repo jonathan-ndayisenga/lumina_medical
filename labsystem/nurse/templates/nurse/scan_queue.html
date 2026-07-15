@@ -118,7 +118,8 @@
                             <dd class="text-text-main text-xs line-clamp-2">{{ report.impression|truncatewords:15 }}</dd>
                         </div>
                     </dl>
-                    <div class="flex gap-2">
+                    <div class="flex gap-2 flex-wrap">
+                        <a href="{% url 'scan_report_edit' report.id %}" class="btn btn-secondary btn-sm">Edit</a>
                         <a href="{% url 'scan_report_print' report.id %}" target="_blank" class="btn btn-secondary btn-sm">Print</a>
                     </div>
                 </article>
@@ -161,7 +162,10 @@
                             </td>
                             <td class="px-4 py-3 text-sm text-text-muted max-w-xs truncate">{{ report.impression|truncatewords:12 }}</td>
                             <td class="px-4 py-3 text-sm">
-                                <a href="{% url 'scan_report_print' report.id %}" target="_blank" class="btn btn-secondary btn-sm">Print</a>
+                                <div class="flex gap-2">
+                                    <a href="{% url 'scan_report_edit' report.id %}" class="btn btn-secondary btn-sm">Edit</a>
+                                    <a href="{% url 'scan_report_print' report.id %}" target="_blank" class="btn btn-secondary btn-sm">Print</a>
+                                </div>
                             </td>
                         </tr>
                     {% empty %}
