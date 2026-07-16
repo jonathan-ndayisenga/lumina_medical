@@ -648,7 +648,13 @@ def scan_report(request, queue_entry_id):
                     )
                     msg = f"Scan report finalized for {visit.patient.name}. Results sent back to doctor."
                 else:
-                    send_to_reception_queue(visit=visit, requested_by=request.user, reason="Scan report finalized — patient ready for billing.")
+                    send_to_reception_queue(
+                        visit=visit,
+                        hospital=visit.hospital,
+                        source="Sonographer",
+                        detail="Scan report finalized.",
+                        requested_by=request.user,
+                    )
                     msg = f"Scan report finalized for {visit.patient.name}. Patient sent to reception for billing."
 
                 from reception.workflow import sync_visit_status

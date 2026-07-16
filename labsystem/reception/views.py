@@ -1112,6 +1112,7 @@ def complete_visit(request, visit_id):
             if visit.is_fully_paid:
                 visit.status = Visit.STATUS_COMPLETED
                 visit.save(update_fields=["status"])
+                mark_queue_entries_processed(visit=visit, queue_type=QueueEntry.TYPE_RECEPTION)
                 messages.success(request, "Payment recorded. Visit is now fully paid and completed.")
             else:
                 visit.status = Visit.STATUS_READY_FOR_BILLING

@@ -106,8 +106,10 @@ def ensure_pending_queue_entry(
     notes: str = "",
     reason: str = "",
     requested_by=None,
-) -> QueueEntry:
+):
     """Create a fresh queue entry only when no open entry of the same type exists."""
+    if visit.status in {Visit.STATUS_COMPLETED, Visit.STATUS_CANCELLED}:
+        return None
     require_module_for_queue_type(hospital=hospital, queue_type=queue_type)
     existing_pending = visit.queue_entries.filter(queue_type=queue_type, processed=False).order_by("-created_at").first()
     if existing_pending:
