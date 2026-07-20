@@ -28,7 +28,6 @@ def _hospital_admin_home(user) -> str:
         codes = set(hospital.active_module_codes)
         # Homecare-only hospital: skip hospital_dashboard (requires hospital_mgmt)
         if "home_care" in codes and "hospital_mgmt" not in codes:
-            from homecare.models import HomecarePatient  # noqa: F401 — just checking module exists
             return reverse("homecare_dashboard")
     return reverse("hospital_dashboard")
 
