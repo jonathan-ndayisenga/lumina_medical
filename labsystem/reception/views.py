@@ -64,24 +64,45 @@ def admin_override_reason(request):
     return (request.POST.get("admin_reason") or "").strip()
 
 
-def queue_types_for_service(service):
-    mapping = {
-        service.CATEGORY_LAB: [QueueEntry.TYPE_RECEPTION],
-        service.CATEGORY_CONSULTATION: [QueueEntry.TYPE_DOCTOR],
-        service.CATEGORY_TRIAGE: [QueueEntry.TYPE_NURSE],
-        service.CATEGORY_SCAN: [QueueEntry.TYPE_SONOGRAPHER],
+def normalize_service_category(category):
+    if category is None:
+        return ""
+    return str(category).strip().casefold()
+
+
+def is_scan_service_category(category):
+    normalized = normalize_service_category(category)
+    return normalized in {
+        Service.CATEGORY_SCAN,
+        "scan",
+        "sonographer",
+        "ultrasound",
+        "scan / ultrasound",
     }
-    return mapping.get(service.category, [])
+
+
+def queue_types_for_service(service):
+    category = normalize_service_category(getattr(service, "category", ""))
+    if category in {service.CATEGORY_LAB, "lab"}:
+        return [QueueEntry.TYPE_RECEPTION]
+    if category in {service.CATEGORY_CONSULTATION, "consultation"}:
+        return [QueueEntry.TYPE_DOCTOR]
+    if category in {service.CATEGORY_TRIAGE, "triage"}:
+        return [QueueEntry.TYPE_NURSE]
+    if is_scan_service_category(category):
+        return [QueueEntry.TYPE_SONOGRAPHER]
+    return []
 
 
 def queue_reason_for_service(service):
-    if service.category == service.CATEGORY_LAB:
+    category = normalize_service_category(getattr(service, "category", ""))
+    if category in {service.CATEGORY_LAB, "lab"}:
         return f"Initial lab tests: {service.name}"
-    if service.category == service.CATEGORY_CONSULTATION:
+    if category in {service.CATEGORY_CONSULTATION, "consultation"}:
         return f"Initial consultation: {service.name}"
-    if service.category == service.CATEGORY_TRIAGE:
+    if category in {service.CATEGORY_TRIAGE, "triage"}:
         return f"Triage required: {service.name}"
-    if service.category == service.CATEGORY_SCAN:
+    if is_scan_service_category(category):
         return f"Scan requested: {service.name}"
     return f"Initial {service.category}: {service.name}"
 
@@ -146,8 +167,13 @@ def consultation_services_queryset(hospital):
 def scan_services_queryset(hospital):
     return Service.objects.filter(
         hospital=hospital,
-        category=Service.CATEGORY_SCAN,
         is_active=True,
+    ).filter(
+        Q(category__iexact=Service.CATEGORY_SCAN)
+        | Q(category__iexact="scan")
+        | Q(category__iexact="sonographer")
+        | Q(category__iexact="ultrasound")
+        | Q(category__iexact="scan / ultrasound")
     ).order_by("name")
 
 
@@ -489,8 +515,13 @@ def receptionist_queue_send_to_sonographer(request, queue_entry_id):
 
     already_billed = visit.visit_services.filter(
         service=scan_service,
-        service__category=Service.CATEGORY_SCAN,
         performed=False,
+    ).filter(
+        Q(service__category__iexact=Service.CATEGORY_SCAN)
+        | Q(service__category__iexact="scan")
+        | Q(service__category__iexact="sonographer")
+        | Q(service__category__iexact="ultrasound")
+        | Q(service__category__iexact="scan / ultrasound")
     ).exists()
     if not already_billed:
         VisitService.objects.create(
@@ -1539,10 +1570,10 @@ QUICK_SEND_DESTINATIONS = {
         "reason": "Returning patient — sent directly to lab by reception.",
     },
     "sonographer": {
-        "queue_type": QueueEntry.TYPE_SONOGRAPHER,
+        "queue_type": QueueEntry.TYPE_RECEPTION,
         "category": Service.CATEGORY_SCAN,
         "label": "Sonographer",
-        "reason": "Returning patient — sent directly to sonographer by reception.",
+        "reason": "Pending sonographer approval — waiting for reception review.",
     },
     "nurse": {
         "queue_type": QueueEntry.TYPE_NURSE,
@@ -1606,8 +1637,16 @@ def patient_quick_send(request, patient_id):
         queue_type=config["queue_type"],
         reason=config["reason"],
         requested_by=request.user,
+        notes=(
+            f"Quick send to {config['label']} by {request.user.get_full_name() or request.user.username}."
+            if config["queue_type"] != QueueEntry.TYPE_RECEPTION
+            else f"Quick send to {config['label']} requires reception approval before handoff."
+        ),
     )
 
     sync_visit_status(visit)
-    messages.success(request, f"{patient.name} sent to {config['label']} queue.")
+    if destination == "sonographer":
+        messages.success(request, f"{patient.name} placed in reception review for sonographer approval.")
+    else:
+        messages.success(request, f"{patient.name} sent to {config['label']} queue.")
     return redirect("reception_queue")

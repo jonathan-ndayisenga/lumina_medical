@@ -31,6 +31,80 @@ def _enable_modules(hospital, *codes):
         HospitalModuleSubscription.objects.get_or_create(hospital=hospital, module=module, defaults={"is_active": True})
 
 
+class SonographerQuickSendWorkflowTests(TestCase):
+    def setUp(self):
+        plan = SubscriptionPlan.objects.create(
+            name="Standard",
+            price_monthly=Decimal("0.00"),
+            price_yearly=Decimal("0.00"),
+        )
+        self.hospital = Hospital.objects.create(
+            name="Lumina Test Hospital",
+            subdomain="lumina-sonographer",
+            location="Kampala",
+            box_number="PO Box 1",
+            phone_number="+256700000000",
+            email="test@example.com",
+            subscription_plan=plan,
+        )
+        self.receptionist = User.objects.create_user(
+            username="reception",
+            password="pass12345",
+            role=User.ROLE_RECEPTIONIST,
+            hospital=self.hospital,
+            is_active=True,
+        )
+        self.patient = Patient.objects.create(
+            hospital=self.hospital,
+            name="Jane Sonographer",
+            registration_date=timezone.localdate(),
+            age="32YRS",
+            sex="F",
+        )
+        self.scan_service = Service.objects.create(
+            hospital=self.hospital,
+            name="Ultrasound Scan",
+            category=Service.CATEGORY_SCAN,
+            price=Decimal("120.00"),
+            is_active=True,
+        )
+
+    def test_sonographer_quick_send_requires_reception_approval(self):
+        self.client.force_login(self.receptionist)
+
+        response = self.client.post(
+            reverse("patient_quick_send", kwargs={"patient_id": self.patient.pk}),
+            {"destination": "sonographer"},
+            follow=False,
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertRedirects(response, reverse("reception_queue"))
+
+        visit = Visit.objects.get(patient=self.patient, hospital=self.hospital)
+        self.assertEqual(visit.total_amount, Decimal("120.00"))
+        self.assertTrue(visit.visit_services.filter(service=self.scan_service).exists())
+
+        reception_entry = visit.queue_entries.filter(queue_type=QueueEntry.TYPE_RECEPTION, processed=False).first()
+        self.assertIsNotNone(reception_entry)
+        self.assertIn("approval", reception_entry.reason.lower())
+        self.assertFalse(visit.queue_entries.filter(queue_type=QueueEntry.TYPE_SONOGRAPHER, processed=False).exists())
+
+    def test_legacy_sonographer_category_is_recognized_as_scan_service(self):
+        legacy_service = Service.objects.create(
+            hospital=self.hospital,
+            name="Legacy Sonographer Service",
+            category="Sonographer",
+            price=Decimal("90.00"),
+            is_active=True,
+        )
+
+        from reception.views import scan_services_queryset
+
+        services = scan_services_queryset(self.hospital)
+        self.assertIn(legacy_service, services)
+
+
 class ReceiptRenderingTests(TestCase):
     def setUp(self):
         plan = SubscriptionPlan.objects.create(
