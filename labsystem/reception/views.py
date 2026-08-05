@@ -978,6 +978,38 @@ def visit_edit(request, visit_id):
 
 @reception_role_required
 @transaction.atomic
+def visit_edit_date(request, visit_id):
+    if request.method != "POST":
+        raise PermissionDenied("Editing visit date requires a POST request.")
+    if not getattr(request.user, "can_access_hospital_admin", False):
+        raise PermissionDenied("Only hospital administrators can edit visit dates.")
+
+    hospital = get_active_hospital(request)
+    visit = get_object_or_404(Visit, pk=visit_id, hospital=hospital)
+
+    raw = (request.POST.get("visit_date") or "").strip()
+    if not raw:
+        messages.error(request, "Please enter a valid date and time.")
+        return redirect("patient_visits", patient_id=visit.patient_id)
+
+    from django.utils.dateparse import parse_datetime as _parse_dt
+    try:
+        new_dt = _parse_dt(raw)
+        if new_dt is None:
+            raise ValueError
+        if timezone.is_naive(new_dt):
+            new_dt = timezone.make_aware(new_dt)
+    except (ValueError, TypeError):
+        messages.error(request, "Invalid date/time. Please use the date picker.")
+        return redirect("patient_visits", patient_id=visit.patient_id)
+
+    Visit.objects.filter(pk=visit.pk).update(visit_date=new_dt)
+    messages.success(request, f"Visit date updated to {new_dt.strftime('%b %d, %Y %H:%M')}.")
+    return redirect("patient_visits", patient_id=visit.patient_id)
+
+
+@reception_role_required
+@transaction.atomic
 def visit_delete(request, visit_id):
     hospital = get_active_hospital(request)
     visit = get_object_or_404(

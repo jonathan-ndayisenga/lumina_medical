@@ -65,6 +65,18 @@
                         <h4 class="text-sm font-semibold text-text-main">{{ row.visit.visit_date|date:"M d, Y" }}</h4>
                         <p class="text-xs text-text-muted">{{ row.visit.visit_date|date:"H:i" }}</p>
                         <p class="text-xs text-text-muted mt-1">{{ row.visit.get_visit_type_display }}</p>
+                        {% if request.user.can_access_hospital_admin %}
+                        <details class="mt-2">
+                            <summary class="text-xs text-blue-600 cursor-pointer hover:underline select-none">Edit date</summary>
+                            <form method="post" action="{% url 'visit_edit_date' row.visit.pk %}" class="mt-2 flex flex-col gap-1">
+                                {% csrf_token %}
+                                <input type="datetime-local" name="visit_date"
+                                       value="{{ row.visit.visit_date|date:'Y-m-d' }}T{{ row.visit.visit_date|date:'H:i' }}"
+                                       class="input text-xs" style="font-size:0.75rem; padding:0.25rem 0.5rem;">
+                                <button type="submit" class="btn btn-primary btn-sm self-start">Save</button>
+                            </form>
+                        </details>
+                        {% endif %}
                     </div>
                     {% with status=row.visit.status %}
                         {% if status == "completed" %}
@@ -153,6 +165,18 @@
                             <div class="font-medium">{{ row.visit.visit_date|date:"M d, Y" }}</div>
                             <div class="text-xs text-text-muted">{{ row.visit.visit_date|date:"H:i" }}</div>
                             <div class="text-xs text-text-muted mt-1">{{ row.visit.get_visit_type_display }}</div>
+                            {% if request.user.can_access_hospital_admin %}
+                            <details class="mt-2">
+                                <summary class="text-xs text-blue-600 cursor-pointer hover:underline select-none">Edit date</summary>
+                                <form method="post" action="{% url 'visit_edit_date' row.visit.pk %}" class="mt-2 flex items-center gap-2">
+                                    {% csrf_token %}
+                                    <input type="datetime-local" name="visit_date"
+                                           value="{{ row.visit.visit_date|date:'Y-m-d' }}T{{ row.visit.visit_date|date:'H:i' }}"
+                                           class="input" style="font-size:0.75rem; padding:0.25rem 0.5rem;">
+                                    <button type="submit" class="btn btn-primary btn-sm">Save</button>
+                                </form>
+                            </details>
+                            {% endif %}
                         </td>
                         <td class="px-4 py-3">
                             {% with status=row.visit.status %}
