@@ -1178,15 +1178,6 @@ def complete_visit(request, visit_id):
     available_drugs = list(
         InventoryItem.objects.filter(
             hospital=hospital,
-            category__in=[
-                InventoryItem.CATEGORY_DRUG,
-                InventoryItem.CATEGORY_SYRUP,
-                InventoryItem.CATEGORY_IV_FLUID,
-                InventoryItem.CATEGORY_IV_MED,
-                InventoryItem.CATEGORY_IM,
-                InventoryItem.CATEGORY_TUBE,
-                InventoryItem.CATEGORY_REAGENT,
-            ],
             is_active=True,
         ).order_by("name")
     )
