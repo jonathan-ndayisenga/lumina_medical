@@ -279,6 +279,7 @@
                 <h3 class="font-semibold text-text-main mb-2">Patient Details</h3>
                 <div class="space-y-1 text-text-muted">
                     <p><strong class="text-text-main">Name:</strong> {{ visit.patient.name }}</p>
+                    <p><strong class="text-text-main">Visit Date:</strong> {{ visit.visit_date|date:"M d, Y" }}</p>
                     <p><strong class="text-text-main">Age / Sex:</strong> {{ visit.patient.age }} / {{ visit.patient.get_sex_display }}</p>
                     {% if visit.patient.weight_kg %}<p><strong class="text-text-main">Weight:</strong> {{ visit.patient.weight_kg }} kg</p>{% endif %}
                     {% if visit.patient.contact %}<p><strong class="text-text-main">Contact:</strong> {{ visit.patient.contact }}</p>{% endif %}
@@ -379,6 +380,7 @@
         <div class="receipt-separator"></div>
         <div class="receipt-section-title">Patient</div>
         <div class="receipt-info-row"><span class="receipt-info-label">Name:</span><span class="receipt-info-value">{{ visit.patient.name|truncatewords:4 }}</span></div>
+        <div class="receipt-info-row"><span class="receipt-info-label">Date:</span><span class="receipt-info-value">{{ visit.visit_date|date:"Y-m-d" }}</span></div>
         <div class="receipt-info-row"><span class="receipt-info-label">Age:</span><span class="receipt-info-value">{{ visit.patient.age }}{{ visit.patient.get_sex_display|slice:":1" }}</span></div>
         <div class="receipt-separator"></div>
         <div class="receipt-section-title">Services</div>

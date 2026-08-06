@@ -71,6 +71,7 @@
 
 <div><span class="lbl">Patient:</span> {{ visit.patient.name|truncatechars:16 }}</div>
 <div><span class="lbl">Age/Sex:</span> {{ visit.patient.age }} / {{ visit.patient.get_sex_display|slice:":1" }}</div>
+<div><span class="lbl">Visit Date:</span> {{ visit.visit_date|date:"Y-m-d" }}</div>
 <div><span class="lbl">Visit:</span> #{{ visit.id }}</div>
 <div class="sep"></div>
 
