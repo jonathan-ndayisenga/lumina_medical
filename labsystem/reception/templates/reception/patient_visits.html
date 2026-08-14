@@ -23,7 +23,10 @@
                     </div>
                     <div>
                         <div class="text-xs font-semibold text-text-muted uppercase tracking-widest">Age</div>
-                        <div class="text-lg font-semibold text-text-main mt-1">{{ patient.age }}</div>
+                        <div class="text-lg font-semibold text-text-main mt-1">{{ patient.current_age }}</div>
+                        {% if patient.date_of_birth %}
+                        <div class="text-xs text-text-muted mt-0.5">Registered: {{ patient.age }}</div>
+                        {% endif %}
                     </div>
                     <div>
                         <div class="text-xs font-semibold text-text-muted uppercase tracking-widest">Sex</div>
@@ -65,6 +68,7 @@
                         <h4 class="text-sm font-semibold text-text-main">{{ row.visit.visit_date|date:"M d, Y" }}</h4>
                         <p class="text-xs text-text-muted">{{ row.visit.visit_date|date:"H:i" }}</p>
                         <p class="text-xs text-text-muted mt-1">{{ row.visit.get_visit_type_display }}</p>
+                        {% if row.visit.weight_kg %}<p class="text-xs text-text-muted mt-0.5">{{ row.visit.weight_kg }} kg</p>{% endif %}
                     </div>
                     {% with status=row.visit.status %}
                         {% if status == "completed" %}
@@ -139,6 +143,7 @@
                 <thead class="bg-gray-50 border-b border-gray-200">
                     <tr>
                         <th class="text-left px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-widest">Date & Time</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-widest">Weight</th>
                         <th class="text-left px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-widest">Status</th>
                         <th class="text-left px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-widest">Services</th>
                         <th class="text-left px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-widest">Total Bill</th>
@@ -153,6 +158,9 @@
                             <div class="font-medium">{{ row.visit.visit_date|date:"M d, Y" }}</div>
                             <div class="text-xs text-text-muted">{{ row.visit.visit_date|date:"H:i" }}</div>
                             <div class="text-xs text-text-muted mt-1">{{ row.visit.get_visit_type_display }}</div>
+                        </td>
+                        <td class="px-4 py-3 text-text-main font-medium">
+                            {% if row.visit.weight_kg %}{{ row.visit.weight_kg }} kg{% else %}<span class="text-text-muted">—</span>{% endif %}
                         </td>
                         <td class="px-4 py-3">
                             {% with status=row.visit.status %}
@@ -213,7 +221,7 @@
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="6" class="px-4 py-8 text-center text-text-muted italic">No visits recorded for this patient yet.</td>
+                        <td colspan="7" class="px-4 py-8 text-center text-text-muted italic">No visits recorded for this patient yet.</td>
                     </tr>
                     {% endfor %}
                 </tbody>

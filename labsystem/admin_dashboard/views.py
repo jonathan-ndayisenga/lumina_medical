@@ -1717,6 +1717,7 @@ def manage_inventory(request):
         "healthy",
         "active",
         "inactive",
+        "expired",
     }
 
     if search_query:
@@ -1747,6 +1748,13 @@ def manage_inventory(request):
         inventory_items = inventory_items.filter(is_active=True)
     elif selected_stock_filter == "inactive":
         inventory_items = inventory_items.filter(is_active=False)
+    elif selected_stock_filter == "expired":
+        from django.utils import timezone as _tz
+        inventory_items = inventory_items.filter(
+            batches__expiry_date__isnull=False,
+            batches__expiry_date__lt=_tz.localdate(),
+            batches__quantity__gt=0,
+        ).distinct()
 
     filtered_inventory_count = inventory_items.count()
     inventory_items = inventory_items.prefetch_related("transactions", "batches")
@@ -1784,25 +1792,18 @@ def manage_inventory(request):
     snapshot = inventory_dashboard_snapshot(hospital)
     all_inventory_items = InventoryItem.objects.filter(hospital=hospital) if hospital else InventoryItem.objects.none()
 
-    from django.utils import timezone
-    today = timezone.now().date()
-    alert_threshold = today + timezone.timedelta(days=30)
-    expiry_alerts = (
-        InventoryBatch.objects.filter(
-            item__hospital=hospital,
-            expiry_date__isnull=False,
-            quantity__gt=0,
-            expiry_date__lte=alert_threshold,
-        )
-        .select_related("item")
-        .order_by("expiry_date")
-    ) if hospital else InventoryBatch.objects.none()
+    _today = timezone.localdate()
+    expired_items_count = (
+        all_inventory_items.filter(
+            batches__expiry_date__isnull=False,
+            batches__expiry_date__lt=_today,
+            batches__quantity__gt=0,
+        ).distinct().count()
+    ) if hospital else 0
 
     context.update(
         {
             "inventory_items": inventory_items,
-            "expiry_alerts": expiry_alerts,
-            "today": today,
             "filtered_inventory_count": filtered_inventory_count,
             "inventory_search_query": search_query,
             "inventory_selected_category": selected_category,
@@ -1813,6 +1814,7 @@ def manage_inventory(request):
                 "low": snapshot["stats"]["low_stock_count"],
                 "out": snapshot["stats"]["out_of_stock_count"],
                 "syrup": all_inventory_items.filter(category=InventoryItem.CATEGORY_SYRUP).count(),
+                "expired": expired_items_count,
             },
             "page_obj": page_obj,
             "inventory_filter_querystring": filter_query.urlencode(),
@@ -1896,6 +1898,26 @@ def inventory_insights(request):
     drugs_page_obj = drugs_paginator.get_page(request.GET.get("drugs_page"))
 
     snapshot = inventory_dashboard_snapshot(hospital)
+
+    # Paginate restock items
+    restock_paginator = Paginator(snapshot["restock_items"], 10)
+    restock_page_obj = restock_paginator.get_page(request.GET.get("restock_page"))
+
+    # Expiry alerts — batches expired or expiring within 30 days with stock remaining
+    alert_threshold = today + timedelta(days=30)
+    expiry_batches = list(
+        InventoryBatch.objects.filter(
+            item__hospital=hospital,
+            expiry_date__isnull=False,
+            quantity__gt=0,
+            expiry_date__lte=alert_threshold,
+        )
+        .select_related("item")
+        .order_by("expiry_date")
+    ) if hospital else []
+    expiry_paginator = Paginator(expiry_batches, 10)
+    expiry_page_obj = expiry_paginator.get_page(request.GET.get("expiry_page"))
+
     context = hospital_admin_context(
         request,
         "hospital_inventory_insights",
@@ -1911,6 +1933,9 @@ def inventory_insights(request):
         "pharma_profit_values_json": json.dumps(pharma_profit_values),
         "dispensed_list": drugs_page_obj,
         "drugs_page_obj": drugs_page_obj,
+        "restock_page_obj": restock_page_obj,
+        "expiry_page_obj": expiry_page_obj,
+        "today": today,
         "date_qs": f"start={period_start.isoformat()}&end={period_end.isoformat()}",
     })
     return render(request, "admin_dashboard/inventory_insights.html", context)

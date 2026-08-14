@@ -16,7 +16,7 @@ from admin_dashboard.models import InventoryItem, InventoryTransaction
 from doctor.models import Consultation, Prescription
 from lab.models import LabReport
 from .forms import CompleteVisitForm, PatientForm, QuickDispenseStartForm, VisitCreateForm
-from .models import Patient, Payment, QueueEntry, Service, Visit, VisitService
+from .models import Patient, Payment, QueueEntry, Service, Triage, Visit, VisitService
 from .workflow import (
     ensure_pending_queue_entry,
     mark_queue_entries_processed,
@@ -817,6 +817,11 @@ def visit_create(request, patient_id):
                 visit.adjustment_reason = ""
             visit.save()
 
+            # Keep patient's global weight in sync with the most recent visit weight
+            if form.cleaned_data.get("weight_kg"):
+                patient.weight_kg = form.cleaned_data["weight_kg"]
+                patient.save(update_fields=["weight_kg"])
+
             services = list(form.cleaned_data["services"])
             if visit.visit_type == Visit.TYPE_ADJUSTMENT:
                 ensure_pending_queue_entry(
@@ -1508,26 +1513,36 @@ def requested_by_label(user, fallback="System"):
 def view_visit_report(request, visit_id):
     """View complete visit report with doctor,nurse, and lab sections for printing"""
     hospital = get_active_hospital(request)
-    visits = Visit.objects.select_related("patient", "hospital")
+    visits = Visit.objects.select_related("patient", "hospital").prefetch_related(
+        "visit_services__service",
+        "prescriptions__drug",
+    )
     if hospital and getattr(request.user, "role", "") != User.ROLE_SUPERADMIN:
         visits = visits.filter(hospital=hospital)
-    
+
     visit = get_object_or_404(visits, pk=visit_id)
-    
+
     # Import here to avoid circular imports
     from doctor.models import Consultation
     from nurse.models import NurseNote
     from lab.models import LabReport
-    
     # Get doctor consultation
     consultation = getattr(visit, "consultation", None)
-    
+
+    # Get triage/vitals
+    try:
+        triage = visit.triage
+    except Triage.DoesNotExist:
+        triage = None
+
     # Get nurse notes
     nurse_notes = NurseNote.objects.filter(visit=visit).select_related("created_by").order_by("-created_at")
-    
+
     # Get lab reports
     lab_reports = LabReport.objects.filter(visit=visit).prefetch_related("results__test").order_by("-created_at")
-    
+
+    age_at_visit = visit.patient.age_at(visit.visit_date)
+
     context = {
         "active_nav": "reception_patients",
         "dashboard_title": f"Visit Report - {visit.patient.name}",
@@ -1535,8 +1550,10 @@ def view_visit_report(request, visit_id):
         "hospital": hospital,
         "visit": visit,
         "consultation": consultation,
+        "triage": triage,
         "nurse_notes": nurse_notes,
         "lab_reports": lab_reports,
+        "age_at_visit": age_at_visit,
         "payments": visit.payments.select_related("bank_account", "mobile_account", "recorded_by").order_by("-paid_at", "-id"),
     }
 

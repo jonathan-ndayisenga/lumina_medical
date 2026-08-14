@@ -44,7 +44,9 @@
             </div>
 
             <div>
-                <label class="block text-sm font-semibold text-text-main mb-1">Age (optional)</label>
+                <label class="block text-sm font-semibold text-text-main mb-1">
+                    Age {% if form.instance.pk %}<span class="font-normal text-text-muted">(registered age)</span>{% else %}(optional){% endif %}
+                </label>
                 <div class="grid grid-cols-3 gap-2">
                     <div>
                         {{ form.age_value }}
@@ -55,6 +57,11 @@
                         {% for error in form.age_unit.errors %}<div class="text-xs text-red-600 mt-1">{{ error }}</div>{% endfor %}
                     </div>
                 </div>
+                {% if form.instance.pk %}
+                <p class="mt-1 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">
+                    Changing age re-derives the patient's date of birth. Leave as-is unless you recorded it incorrectly at registration — the system auto-calculates current age from DOB.
+                </p>
+                {% endif %}
             </div>
 
             <div>

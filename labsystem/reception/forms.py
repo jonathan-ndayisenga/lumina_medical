@@ -106,22 +106,26 @@ class PatientForm(forms.ModelForm):
             age_manually_entered = True
 
         if dob and not age_manually_entered:
-            # Compute and store age string from DOB (years or months).
-            years = today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day))
-            if years >= 1:
-                # If it's a whole number of years, use YRS, otherwise use MTH for better precision if preferred
-                # But for DOB calculation, we usually default to YRS if >= 1
-                cleaned["age"] = f"{years}YRS"
-                cleaned["age_value"] = Decimal(str(years))
-                cleaned["age_unit"] = "YRS"
+            if self.instance.pk:
+                # Existing patient: DOB was changed but age wasn't manually re-entered.
+                # Preserve the registered age (ground truth from first contact).
+                # The current_age property derives the live age from the updated DOB.
+                cleaned["age"] = self.instance.age
             else:
-                months = (today.year - dob.year) * 12 + (today.month - dob.month)
-                if today.day < dob.day:
-                    months -= 1
-                months = max(months, 0)
-                cleaned["age"] = f"{months}MTH"
-                cleaned["age_value"] = Decimal(str(months))
-                cleaned["age_unit"] = "MTH"
+                # New patient registered with DOB only: compute initial age string from DOB.
+                years = today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day))
+                if years >= 1:
+                    cleaned["age"] = f"{years}YRS"
+                    cleaned["age_value"] = Decimal(str(years))
+                    cleaned["age_unit"] = "YRS"
+                else:
+                    months = (today.year - dob.year) * 12 + (today.month - dob.month)
+                    if today.day < dob.day:
+                        months -= 1
+                    months = max(months, 0)
+                    cleaned["age"] = f"{months}MTH"
+                    cleaned["age_value"] = Decimal(str(months))
+                    cleaned["age_unit"] = "MTH"
         else:
             # Age -> approximate DOB
             try:
@@ -185,9 +189,22 @@ class VisitCreateForm(forms.ModelForm):
         ),
     )
 
+    weight_kg = forms.DecimalField(
+        required=False,
+        min_value=0,
+        max_digits=6,
+        decimal_places=2,
+        label="Weight at this visit (kg)",
+        widget=forms.NumberInput(attrs={
+            "class": "form-control",
+            "step": "0.1",
+            "placeholder": "e.g. 65.5",
+        }),
+    )
+
     class Meta:
         model = Visit
-        fields = ["visit_type", "notes"]
+        fields = ["visit_type", "weight_kg", "notes"]
         widgets = {
             "visit_type": forms.Select(attrs={"class": "form-control"}),
             "notes": forms.Textarea(attrs={"rows": 3, "class": "form-control"}),
@@ -199,6 +216,9 @@ class VisitCreateForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         self.hospital = hospital
         self.patient = patient or getattr(self.instance, "patient", None)
+        # Pre-fill weight from patient record when creating a new visit
+        if not self.instance.pk and self.patient and self.patient.weight_kg:
+            self.fields["weight_kg"].initial = self.patient.weight_kg
         if hospital is not None:
             self.fields["services"].queryset = Service.objects.filter(hospital=hospital, is_active=True)
         self.fields["services"].label_from_instance = lambda service: f"{service.name} - {service.price:.2f}"

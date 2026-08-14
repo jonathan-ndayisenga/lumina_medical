@@ -56,6 +56,38 @@ class Patient(models.Model):
     def __str__(self):
         return self.name
 
+    # ── Age helpers ───────────────────────────────────────────────────────────
+
+    def _age_string(self, reference_date):
+        """Human-readable age from date_of_birth vs reference_date.
+        Falls back to stored `age` CharField when DOB is unavailable."""
+        if not self.date_of_birth:
+            return self.age
+        dob = self.date_of_birth
+        years = reference_date.year - dob.year - (
+            (reference_date.month, reference_date.day) < (dob.month, dob.day)
+        )
+        if years >= 2:
+            return f"{years} yrs"
+        total_months = (reference_date.year - dob.year) * 12 + (reference_date.month - dob.month)
+        if reference_date.day < dob.day:
+            total_months -= 1
+        total_months = max(total_months, 0)
+        if total_months >= 12:
+            y, m = divmod(total_months, 12)
+            return f"{y} yr{'s' if y != 1 else ''} {m} mo" if m else f"{y} yr{'s' if y != 1 else ''}"
+        return f"{total_months} mo"
+
+    @property
+    def current_age(self):
+        """Age calculated from DOB vs today — updates automatically over time."""
+        return self._age_string(timezone.localdate())
+
+    def age_at(self, visit_date):
+        """Age calculated from DOB vs a specific visit date."""
+        d = visit_date.date() if hasattr(visit_date, "date") else visit_date
+        return self._age_string(d)
+
 
 class Visit(models.Model):
     TYPE_NORMAL = "normal"
@@ -112,6 +144,7 @@ class Visit(models.Model):
     )
     notes = models.TextField(blank=True)
     whatsapp_number = models.CharField(max_length=20, blank=True, default="")
+    weight_kg = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True, verbose_name="Weight at visit (kg)")
 
     class Meta:
         ordering = ["-visit_date"]

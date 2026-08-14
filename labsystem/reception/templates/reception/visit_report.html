@@ -6,17 +6,102 @@
 {% block page_title %}Visit Report - {{ visit.patient.name }}{% endblock %}
 {% block page_subtitle %}Complete visit documentation with all clinical sections. Print this for patient records.{% endblock %}
 
+{% block extra_css %}
+<style>
+@media print {
+    /* ── Page setup ─────────────────────────────── */
+    @page {
+        size: A4;
+        margin: 30mm 15mm 25mm 15mm; /* top clears fixed header, bottom clears footer */
+    }
+
+    /* ── Repeated header on every page ─────────── */
+    .vr-print-header {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        background: #fff;
+        padding: 6mm 15mm 3mm;
+        z-index: 100;
+    }
+
+    /* ── Repeated footer on every page ─────────── */
+    .vr-print-footer {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        background: #fff;
+        padding: 2mm 15mm 3mm;
+        z-index: 100;
+        border-top: 1px solid #e5e7eb;
+    }
+
+    /* ── Page break markers ─────────────────────── */
+    .vr-page-break-before {
+        page-break-before: always;
+        break-before: page;
+        padding-top: 4mm;
+    }
+
+    /* ── Hide screen-only elements ──────────────── */
+    .print-hidden { display: none !important; }
+    .vr-screen-header { display: none !important; }
+
+    /* ── Show print-only elements ───────────────── */
+    .vr-print-header { display: block !important; }
+    .vr-print-footer { display: block !important; }
+
+    /* ── General print typography ───────────────── */
+    body { font-size: 11px; color: #111; }
+    .card {
+        break-inside: avoid;
+        page-break-inside: avoid;
+        box-shadow: none !important;
+        border: 1px solid #e5e7eb !important;
+        margin-bottom: 6mm;
+        padding: 4mm !important;
+    }
+    .space-y-6 > * + * { margin-top: 4mm; }
+
+    /* ── Nurse notes: page break after ─────────── */
+    .vr-after-nursing { page-break-after: always; break-after: page; }
+
+    /* ── Lab: each report avoid split ──────────── */
+    .vr-lab-report { break-inside: avoid; page-break-inside: avoid; }
+}
+
+/* Screen-only: hide the print-specific fixed header/footer wrappers */
+.vr-print-header { display: none; }
+.vr-print-footer { display: none; }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="space-y-6">
-    <!-- Print & Back Buttons -->
-    <div class="flex justify-between items-center">
+
+    <!-- ── Screen nav buttons ────────────────────────────────────── -->
+    <div class="flex justify-between items-center print-hidden">
         <a href="{% url 'patient_visits' visit.patient.pk %}" class="btn btn-secondary">Back</a>
-        <button onclick="window.print()" class="btn btn-primary print-visible">Print Visit Report</button>
+        <button onclick="window.print()" class="btn btn-primary">Print Visit Report</button>
     </div>
 
-    {% include "partials/print_header.html" with print_title="VISIT REPORT" print_subtitle=visit.id %}
+    <!-- ── Print-only fixed header (repeats every page) ─────────── -->
+    <div class="vr-print-header">
+        {% include "partials/print_header.html" with print_title="VISIT REPORT" print_subtitle=visit.id %}
+    </div>
 
-    <!-- Visit Header -->
+    <!-- ── Screen header (once, on screen only) ──────────────────── -->
+    <div class="vr-screen-header">
+        {% include "partials/print_header.html" with print_title="VISIT REPORT" print_subtitle=visit.id %}
+    </div>
+
+    <!-- =========================================================== -->
+    <!--  PAGE 1 — Patient summary, clinical findings, nursing notes  -->
+    <!-- =========================================================== -->
+
+    <!-- Visit Header / Patient Bio -->
     <div class="card bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200">
         <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
             <div>
@@ -24,12 +109,17 @@
                 <div class="font-semibold text-text-main mt-1">{{ visit.patient.name }}</div>
             </div>
             <div>
-                <div class="text-xs font-semibold text-text-muted uppercase tracking-widest">Age / Sex</div>
-                <div class="font-semibold text-text-main mt-1">{{ visit.patient.age }} / {{ visit.patient.get_sex_display }}</div>
+                <div class="text-xs font-semibold text-text-muted uppercase tracking-widest">Age at Visit / Sex</div>
+                <div class="font-semibold text-text-main mt-1">{{ age_at_visit }} / {{ visit.patient.get_sex_display }}</div>
+                {% if visit.patient.date_of_birth %}
+                <div class="text-xs text-text-muted mt-0.5">Registered: {{ visit.patient.age }}</div>
+                {% endif %}
             </div>
             <div>
                 <div class="text-xs font-semibold text-text-muted uppercase tracking-widest">Weight</div>
-                <div class="font-semibold text-text-main mt-1">{{ visit.patient.weight_kg|default:"-" }}{% if visit.patient.weight_kg %} kg{% endif %}</div>
+                {% with w=visit.weight_kg|default:visit.patient.weight_kg %}
+                <div class="font-semibold text-text-main mt-1">{{ w|default:"-" }}{% if w %} kg{% endif %}</div>
+                {% endwith %}
             </div>
             <div>
                 <div class="text-xs font-semibold text-text-muted uppercase tracking-widest">Visit Date</div>
@@ -54,8 +144,7 @@
         </div>
     </div>
 
-    <!-- Triage / Nursing Vitals -->
-    {% with triage=visit.triage %}
+    <!-- Triage & Vitals -->
     {% if triage %}
     <div class="card border-l-4 border-emerald-500">
         <h2 class="text-lg font-bold text-text-main mb-3">Triage &amp; Vitals</h2>
@@ -71,15 +160,11 @@
         {% if triage.recorded_by %}<p class="mt-2 text-xs text-text-muted">Recorded by {{ triage.recorded_by.get_full_name|default:triage.recorded_by.username }}</p>{% endif %}
     </div>
     {% endif %}
-    {% endwith %}
 
-    <!-- Doctor Consultation Section -->
+    <!-- Doctor Consultation -->
     {% if consultation %}
     <div class="card border-l-4 border-blue-500">
-        <div class="mb-4">
-            <h2 class="text-lg font-bold text-text-main">Doctor Consultation</h2>
-        </div>
-        
+        <h2 class="text-lg font-bold text-text-main mb-4">Doctor Consultation</h2>
         <div class="space-y-4">
             {% if consultation.vitals %}
             <div>
@@ -96,35 +181,30 @@
                 </div>
             </div>
             {% endif %}
-            
             {% if consultation.signs_symptoms %}
             <div>
-                <h3 class="text-sm font-semibold text-text-main mb-2">Signs & Symptoms</h3>
+                <h3 class="text-sm font-semibold text-text-main mb-2">Signs &amp; Symptoms</h3>
                 <p class="text-sm text-text-main bg-gray-50 p-3 rounded">{{ consultation.signs_symptoms }}</p>
             </div>
             {% endif %}
-            
             {% if consultation.diagnosis %}
             <div>
                 <h3 class="text-sm font-semibold text-text-main mb-2">Diagnosis</h3>
                 <p class="text-sm text-text-main bg-blue-50 p-3 rounded border border-blue-200">{{ consultation.diagnosis }}</p>
             </div>
             {% endif %}
-            
             {% if consultation.treatment %}
             <div>
                 <h3 class="text-sm font-semibold text-text-main mb-2">Treatment Plan</h3>
                 <p class="text-sm text-text-main bg-green-50 p-3 rounded border border-green-200">{{ consultation.treatment }}</p>
             </div>
             {% endif %}
-            
             {% if consultation.follow_up_date %}
             <div>
                 <h3 class="text-sm font-semibold text-text-main mb-2">Follow-up Date</h3>
                 <p class="text-sm text-text-main">{{ consultation.follow_up_date|date:"F d, Y" }}</p>
             </div>
             {% endif %}
-            
             <div class="text-xs text-text-muted pt-2 border-t">
                 By: {{ consultation.created_by.get_full_name|default:consultation.created_by.username }} on {{ consultation.created_at|date:"M d, Y H:i" }}
             </div>
@@ -132,186 +212,248 @@
     </div>
     {% endif %}
 
-    <!-- Nurse Notes Section -->
-    {% if nurse_notes %}
-    <div class="card border-l-4 border-purple-500">
-        <div class="mb-4">
-            <h2 class="text-lg font-bold text-text-main">Nursing Notes</h2>
-        </div>
-        
-        <div class="space-y-3">
-            {% for note in nurse_notes %}
-            <div class="bg-purple-50 p-3 rounded border border-purple-200">
-                <p class="text-sm text-text-main">{{ note.notes }}</p>
-                <div class="text-xs text-text-muted mt-2">
-                    By: {{ note.created_by.get_full_name|default:note.created_by.username }} on {{ note.created_at|date:"M d, Y H:i" }}
-                </div>
-            </div>
-            {% endfor %}
-        </div>
-    </div>
-    {% else %}
-    <div class="card bg-gray-50 border border-gray-200">
-        <p class="text-sm text-text-muted">No nursing notes recorded for this visit.</p>
-    </div>
-    {% endif %}
-
-    <!-- Lab Reports Section -->
-    {% if lab_reports %}
-    <div class="card border-l-4 border-emerald-500">
-        <div class="mb-4">
-            <h2 class="text-lg font-bold text-text-main">Laboratory Reports</h2>
-        </div>
-        
-        <div class="space-y-4">
-            {% for report in lab_reports %}
-            <div class="bg-emerald-50 p-4 rounded border border-emerald-200">
-                <div class="flex justify-between items-start gap-4 mb-3">
-                    <div>
-                        <h3 class="font-semibold text-text-main">{{ report.profile.name|default:"Lab Report" }}</h3>
-                        <p class="text-xs text-text-muted">
-                            Specimen: {{ report.specimen_type }} | Sample Date: {{ report.sample_date|date:"M d, Y" }}
-                        </p>
+    <!-- Nursing Notes — page break after this on print -->
+    <div class="vr-after-nursing">
+        {% if nurse_notes %}
+        <div class="card border-l-4 border-purple-500">
+            <h2 class="text-lg font-bold text-text-main mb-4">Nursing Notes</h2>
+            <div class="space-y-3">
+                {% for note in nurse_notes %}
+                <div class="bg-purple-50 p-3 rounded border border-purple-200">
+                    <p class="text-sm text-text-main">{{ note.notes }}</p>
+                    <div class="text-xs text-text-muted mt-2">
+                        By: {{ note.created_by.get_full_name|default:note.created_by.username }} on {{ note.created_at|date:"M d, Y H:i" }}
                     </div>
-                    {% if report.sent_to_doctor %}
-                        <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold bg-green-200 text-green-800">
-                            Sent to Doctor
-                        </span>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% else %}
+        <div class="card bg-gray-50 border border-gray-200">
+            <p class="text-sm text-text-muted">No nursing notes recorded for this visit.</p>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- =========================================================== -->
+    <!--  PAGE 2 — Laboratory Reports                                 -->
+    <!-- =========================================================== -->
+
+    <div class="vr-page-break-before">
+        {% if lab_reports %}
+        <div class="card border-l-4 border-emerald-500">
+            <h2 class="text-lg font-bold text-text-main mb-4">Laboratory Reports</h2>
+            <div class="space-y-4">
+                {% for report in lab_reports %}
+                <div class="vr-lab-report bg-emerald-50 p-4 rounded border border-emerald-200">
+                    <div class="flex justify-between items-start gap-4 mb-3">
+                        <div>
+                            <h3 class="font-semibold text-text-main">{{ report.profile.name|default:"Lab Report" }}</h3>
+                            <p class="text-xs text-text-muted">
+                                Specimen: {{ report.specimen_type }} | Sample Date: {{ report.sample_date|date:"M d, Y" }}
+                            </p>
+                        </div>
+                        {% if report.sent_to_doctor %}
+                            <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold bg-green-200 text-green-800">Sent to Doctor</span>
+                        {% endif %}
+                    </div>
+                    {% if report.results.all %}
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm mt-2" style="border-collapse:collapse;">
+                            <thead>
+                                <tr style="border-bottom:1px solid #d1fae5;">
+                                    <th class="text-left py-1 px-2 text-xs font-semibold text-text-muted uppercase">Test</th>
+                                    <th class="text-left py-1 px-2 text-xs font-semibold text-text-muted uppercase">Result</th>
+                                    <th class="text-left py-1 px-2 text-xs font-semibold text-text-muted uppercase">Reference Range</th>
+                                    <th class="text-left py-1 px-2 text-xs font-semibold text-text-muted uppercase">Flag</th>
+                                    <th class="text-left py-1 px-2 text-xs font-semibold text-text-muted uppercase">Unit</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for result in report.results.all %}
+                                {% with flag=result.result_value|range_flag:result.reference_range %}
+                                <tr style="border-bottom:1px solid #ecfdf5;">
+                                    <td class="py-1 px-2 font-medium text-text-main">
+                                        {{ result.test.name }}
+                                        {% if result.section_name %}<span class="text-xs text-text-muted block">{{ result.section_name }}</span>{% endif %}
+                                    </td>
+                                    <td class="py-1 px-2 font-semibold text-text-main">{{ result.result_value|default:"-" }}</td>
+                                    <td class="py-1 px-2 text-text-muted">{{ result.reference_range|default:"-" }}</td>
+                                    <td class="py-1 px-2">
+                                        {% if flag == "HIGH" %}<span class="text-xs font-semibold text-red-600">HIGH</span>
+                                        {% elif flag == "LOW" %}<span class="text-xs font-semibold text-blue-600">LOW</span>
+                                        {% elif flag == "NORMAL" %}<span class="text-xs font-semibold text-gray-500">NORMAL</span>
+                                        {% else %}-{% endif %}
+                                    </td>
+                                    <td class="py-1 px-2 text-text-muted">{{ result.unit|default:"-" }}</td>
+                                </tr>
+                                {% endwith %}
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
                     {% endif %}
+                    {% if report.comments %}
+                    <p class="text-sm text-text-main mt-2"><strong>Comments:</strong> {{ report.comments }}</p>
+                    {% endif %}
+                    <div class="text-xs text-text-muted mt-2 pt-2 border-t">
+                        By: {{ report.attendant_name|default:"Lab Technician" }} on {{ report.created_at|date:"M d, Y H:i" }}
+                    </div>
                 </div>
-                
-                {% if report.results.all %}
-                <div class="overflow-x-auto">
-                    <table class="w-full text-sm mt-2" style="border-collapse:collapse;">
-                        <thead>
-                            <tr style="border-bottom:1px solid #d1fae5;">
-                                <th class="text-left py-1 px-2 text-xs font-semibold text-text-muted uppercase">Test</th>
-                                <th class="text-left py-1 px-2 text-xs font-semibold text-text-muted uppercase">Result</th>
-                                <th class="text-left py-1 px-2 text-xs font-semibold text-text-muted uppercase">Reference Range</th>
-                                <th class="text-left py-1 px-2 text-xs font-semibold text-text-muted uppercase">Flag</th>
-                                <th class="text-left py-1 px-2 text-xs font-semibold text-text-muted uppercase">Unit</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for result in report.results.all %}
-                            {% with flag=result.result_value|range_flag:result.reference_range %}
-                            <tr style="border-bottom:1px solid #ecfdf5;">
-                                <td class="py-1 px-2 font-medium text-text-main">
-                                    {{ result.test.name }}
-                                    {% if result.section_name %}<span class="text-xs text-text-muted block">{{ result.section_name }}</span>{% endif %}
-                                </td>
-                                <td class="py-1 px-2 font-semibold text-text-main">{{ result.result_value|default:"-" }}</td>
-                                <td class="py-1 px-2 text-text-muted">{{ result.reference_range|default:"-" }}</td>
-                                <td class="py-1 px-2">
-                                    {% if flag == "HIGH" %}<span class="text-xs font-semibold text-red-600">HIGH</span>
-                                    {% elif flag == "LOW" %}<span class="text-xs font-semibold text-blue-600">LOW</span>
-                                    {% elif flag == "NORMAL" %}<span class="text-xs font-semibold text-gray-500">NORMAL</span>
-                                    {% else %}-{% endif %}
-                                </td>
-                                <td class="py-1 px-2 text-text-muted">{{ result.unit|default:"-" }}</td>
-                            </tr>
-                            {% endwith %}
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-                {% endif %}
-                
-                {% if report.comments %}
-                <p class="text-sm text-text-main mt-2"><strong>Comments:</strong> {{ report.comments }}</p>
-                {% endif %}
-                
-                <div class="text-xs text-text-muted mt-2 pt-2 border-t">
-                    By: {{ report.attendant_name|default:"Lab Technician" }} on {{ report.created_at|date:"M d, Y H:i" }}
-                </div>
-            </div>
-            {% endfor %}
-        </div>
-    </div>
-    {% else %}
-    <div class="card bg-gray-50 border border-gray-200">
-        <p class="text-sm text-text-muted">No laboratory reports recorded for this visit.</p>
-    </div>
-    {% endif %}
-
-    <!-- Payment Information -->
-    <div class="card bg-amber-50 border border-amber-200">
-        <h2 class="text-lg font-bold text-text-main mb-3">Payment Information</h2>
-        <div class="space-y-2">
-            <div class="flex justify-between">
-                <span class="text-sm font-medium">Total Bill:</span>
-                <span class="text-sm font-semibold">{{ visit.total_amount }}</span>
-            </div>
-            <div class="flex justify-between">
-                <span class="text-sm font-medium">Total Paid:</span>
-                <span class="text-sm font-semibold">{{ visit.total_paid }}</span>
-            </div>
-            <div class="flex justify-between">
-                <span class="text-sm font-medium">Balance Due:</span>
-                <span class="text-sm font-semibold">{{ visit.balance_due }}</span>
+                {% endfor %}
             </div>
         </div>
+        {% else %}
+        <div class="card bg-gray-50 border border-gray-200">
+            <p class="text-sm text-text-muted">No laboratory reports recorded for this visit.</p>
+        </div>
+        {% endif %}
+    </div>
 
-        <div class="mt-4">
-            <h3 class="text-sm font-semibold text-text-main mb-2">Receipts</h3>
+    <!-- =========================================================== -->
+    <!--  PAGE 3 — Bill & Payments                                    -->
+    <!-- =========================================================== -->
+
+    <div class="vr-page-break-before">
+
+        <!-- Services -->
+        <div class="card border border-amber-200 bg-amber-50">
+            <h2 class="text-lg font-bold text-text-main mb-3">Services</h2>
             <div class="overflow-x-auto">
-                <table class="w-full text-sm">
-                    <thead class="border-b border-amber-200">
-                        <tr>
-                            <th class="text-left py-2 pr-4 text-xs font-semibold uppercase text-amber-700">Receipt</th>
-                            <th class="text-left py-2 pr-4 text-xs font-semibold uppercase text-amber-700">Date</th>
-                            <th class="text-left py-2 pr-4 text-xs font-semibold uppercase text-amber-700">Mode</th>
-                            <th class="text-right py-2 text-xs font-semibold uppercase text-amber-700">Amount</th>
+                <table class="w-full text-sm" style="border-collapse:collapse;">
+                    <thead>
+                        <tr style="border-bottom:2px solid #d97706;">
+                            <th class="text-left py-2 pr-4 text-xs font-semibold uppercase text-amber-700">Service</th>
+                            <th class="text-left py-2 pr-4 text-xs font-semibold uppercase text-amber-700">Category</th>
+                            <th class="text-right py-2 text-xs font-semibold uppercase text-amber-700">Price</th>
                         </tr>
                     </thead>
-                    <tbody class="divide-y divide-amber-100">
-                        {% for payment in payments %}
-                            <tr>
-                                <td class="py-2 pr-4 font-semibold text-text-main">{{ payment.receipt_number }}</td>
-                                <td class="py-2 pr-4 text-text-muted">{% if payment.paid_at %}{{ payment.paid_at|date:"Y-m-d H:i" }}{% else %}-{% endif %}</td>
-                                <td class="py-2 pr-4 text-text-muted">{{ payment.get_mode_display }}</td>
-                                <td class="py-2 text-right font-semibold text-text-main">{{ payment.amount_paid }}</td>
-                            </tr>
+                    <tbody>
+                        {% for vs in visit.visit_services.all %}
+                        <tr style="border-bottom:1px solid #fde68a;">
+                            <td class="py-2 pr-4 text-text-main">{{ vs.service.name }}</td>
+                            <td class="py-2 pr-4 text-text-muted">{{ vs.service.get_category_display }}</td>
+                            <td class="py-2 text-right font-semibold text-text-main">{{ vs.price_at_time }}</td>
+                        </tr>
                         {% empty %}
-                            <tr>
-                                <td colspan="4" class="py-4 text-sm text-text-muted italic">No receipts recorded yet.</td>
-                            </tr>
+                        <tr><td colspan="3" class="py-3 text-text-muted italic">No services billed.</td></tr>
                         {% endfor %}
                     </tbody>
                 </table>
             </div>
         </div>
+
+        <!-- Drugs Prescribed -->
+        {% with rx_list=visit.prescriptions.all %}
+        {% if rx_list %}
+        <div class="card border border-blue-200 bg-blue-50 mt-4">
+            <h2 class="text-lg font-bold text-text-main mb-3">Drugs Prescribed</h2>
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm" style="border-collapse:collapse;">
+                    <thead>
+                        <tr style="border-bottom:2px solid #3b82f6;">
+                            <th class="text-left py-2 pr-4 text-xs font-semibold uppercase text-blue-700">Drug</th>
+                            <th class="text-left py-2 pr-4 text-xs font-semibold uppercase text-blue-700">Regimen</th>
+                            <th class="text-left py-2 pr-4 text-xs font-semibold uppercase text-blue-700">Qty</th>
+                            <th class="text-right py-2 text-xs font-semibold uppercase text-blue-700">Price</th>
+                            <th class="text-left py-2 pl-3 text-xs font-semibold uppercase text-blue-700">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for rx in rx_list %}
+                        <tr style="border-bottom:1px solid #bfdbfe;">
+                            <td class="py-2 pr-4 text-text-main font-medium">{{ rx.drug.name }}</td>
+                            <td class="py-2 pr-4 text-text-muted text-xs">{{ rx.regimen_display }}</td>
+                            <td class="py-2 pr-4 text-text-muted">{{ rx.total_quantity }}</td>
+                            <td class="py-2 text-right font-semibold text-text-main">
+                                {% if rx.covered_by_previous %}<span class="text-xs text-emerald-600">Covered</span>{% else %}{{ rx.total_price }}{% endif %}
+                            </td>
+                            <td class="py-2 pl-3">
+                                {% if rx.dispensed %}
+                                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">Dispensed</span>
+                                {% else %}
+                                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-600">Pending</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% endif %}
+        {% endwith %}
+
+        <!-- Totals Summary -->
+        <div class="card border border-gray-300 bg-white mt-4">
+            <div class="space-y-2 max-w-xs ml-auto text-sm">
+                <div class="flex justify-between py-1 border-b border-gray-100">
+                    <span class="text-text-muted">Total Billed</span>
+                    <span class="font-semibold text-text-main">{{ visit.total_amount }}</span>
+                </div>
+                <div class="flex justify-between py-1 border-b border-gray-100">
+                    <span class="text-text-muted">Total Paid</span>
+                    <span class="font-semibold text-emerald-700">{{ visit.total_paid }}</span>
+                </div>
+                <div class="flex justify-between py-1">
+                    <span class="font-semibold text-text-main">Balance Due</span>
+                    <span class="font-bold {% if visit.balance_due > 0 %}text-red-600{% else %}text-emerald-700{% endif %}">{{ visit.balance_due }}</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Payment Receipts -->
+        <div class="card border border-gray-200 bg-white mt-4">
+            <h2 class="text-lg font-bold text-text-main mb-3">Payment Receipts</h2>
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm" style="border-collapse:collapse;">
+                    <thead>
+                        <tr style="border-bottom:2px solid #d1d5db;">
+                            <th class="text-left py-2 pr-4 text-xs font-semibold uppercase text-text-muted">Receipt #</th>
+                            <th class="text-left py-2 pr-4 text-xs font-semibold uppercase text-text-muted">Date</th>
+                            <th class="text-left py-2 pr-4 text-xs font-semibold uppercase text-text-muted">Mode</th>
+                            <th class="text-left py-2 pr-4 text-xs font-semibold uppercase text-text-muted">Account</th>
+                            <th class="text-right py-2 text-xs font-semibold uppercase text-text-muted">Amount</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for payment in payments %}
+                        <tr style="border-bottom:1px solid #f3f4f6;">
+                            <td class="py-2 pr-4 font-semibold text-text-main">{{ payment.receipt_number }}</td>
+                            <td class="py-2 pr-4 text-text-muted">{% if payment.paid_at %}{{ payment.paid_at|date:"Y-m-d H:i" }}{% else %}-{% endif %}</td>
+                            <td class="py-2 pr-4 text-text-muted">{{ payment.get_mode_display }}</td>
+                            <td class="py-2 pr-4 text-text-muted">
+                                {% if payment.mode == "card" %}{{ payment.bank_account|default:"-" }}
+                                {% elif payment.mode == "mobile_money" %}{{ payment.mobile_account|default:"-" }}
+                                {% else %}Cash{% endif %}
+                            </td>
+                            <td class="py-2 text-right font-semibold text-text-main">{{ payment.amount_paid }}</td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="5" class="py-4 text-text-muted italic text-center">No receipts recorded yet.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    </div><!-- end page 3 -->
+
+    <!-- ── Print-only fixed footer (repeats every page) ─────────── -->
+    <div class="vr-print-footer">
+        {% include "partials/print_footer.html" %}
     </div>
 
-    <!-- Footer & Print Buttons -->
+    <!-- ── Screen footer (once, on screen only) ──────────────────── -->
+    <div class="print-hidden">
+        {% include "partials/print_footer.html" %}
+    </div>
+
+    <!-- Screen nav buttons (bottom) -->
     <div class="flex justify-between items-center pt-4 border-t print-hidden">
         <a href="{% url 'patient_visits' visit.patient.pk %}" class="btn btn-secondary">Back</a>
         <button onclick="window.print()" class="btn btn-primary">Print Visit Report</button>
     </div>
 
-    {% include "partials/print_footer.html" %}
 </div>
-
-<style media="print">
-    .print-hidden {
-        display: none;
-    }
-    .print-visible {
-        display: none;
-    }
-    @print {
-        .print-visible {
-            display: inline-block;
-        }
-    }
-    body {
-        margin: 0;
-        padding: 20px;
-        font-size: 12px;
-    }
-    .card {
-        break-inside: avoid;
-        page-break-inside: avoid;
-    }
-</style>
 {% endblock %}

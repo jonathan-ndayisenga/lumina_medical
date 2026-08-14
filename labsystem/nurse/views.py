@@ -82,8 +82,13 @@ def perform_nursing(request, queue_entry_id):
         defaults={
             "recorded_by": request.user,
             "updated_by": request.user,
+            "weight_kg": visit.weight_kg,
         },
     )
+    # If triage exists but has no weight yet, pull from the visit snapshot
+    if not triage_created and not triage_obj.weight_kg and visit.weight_kg:
+        triage_obj.weight_kg = visit.weight_kg
+        triage_obj.save(update_fields=["weight_kg"])
 
     if request.method == "POST":
         triage_form = TriageForm(request.POST, instance=triage_obj)

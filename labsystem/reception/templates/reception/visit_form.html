@@ -10,8 +10,16 @@
         <h3 class="text-sm font-semibold text-text-main mb-1">Patient</h3>
         <p><strong class="text-text-main">{{ patient.name }}</strong> | {{ patient.age }} | {{ patient.get_sex_display }}</p>
         <div class="mt-2 flex flex-wrap gap-4 text-sm text-text-muted">
-            {% if patient.weight_kg %}<span>Weight: {{ patient.weight_kg }} kg</span>{% endif %}
+            {% if patient.weight_kg %}<span>Last recorded weight: {{ patient.weight_kg }} kg</span>{% endif %}
             {% if patient.contact %}<span>Contact: {{ patient.contact }}</span>{% endif %}
+        </div>
+        <div class="mt-4 max-w-xs">
+            <label for="{{ form.weight_kg.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">
+                Weight at this visit (kg)
+            </label>
+            {{ form.weight_kg }}
+            <p class="mt-1 text-xs text-text-muted">Update if the patient's weight has changed since their last visit. This is saved on the visit record for tracking over time.</p>
+            {% for error in form.weight_kg.errors %}<div class="text-xs text-red-600 mt-1">{{ error }}</div>{% endfor %}
         </div>
     </div>
 
