@@ -612,7 +612,7 @@ def patient_list(request):
     page_obj = paginator.get_page(request.GET.get("page"))
     patient_rows = []
     for patient in page_obj:
-        visits = list(patient.visits.all())
+        visits = list(patient.visits.order_by("-visit_date").all())
         latest_editable_visit = next(
             (
                 visit

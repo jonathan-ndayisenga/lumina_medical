@@ -68,18 +68,43 @@
                     </div>
                 </dl>
                 {% if row.recent_visits %}
-                    <div class="space-y-2">
-                        <div class="text-xs uppercase tracking-wide text-text-muted">Recent Visits</div>
-                        {% for visit in row.recent_visits %}
-                            <div class="rounded-lg border border-gray-200 bg-gray-50 p-2 text-xs">
-                                <div class="flex items-center justify-between gap-2">
-                                    <span>{{ visit.visit_date|date:"M d, Y H:i" }}</span>
-                                    <span class="font-semibold">{{ visit.get_status_display }}</span>
-                                </div>
-                                <div class="mt-1 text-text-muted">Bill: {{ visit.total_amount }}</div>
+                    {% if row.recent_visits|length == 1 %}
+                        {% with v=row.recent_visits.0 %}
+                        <div class="rounded-lg border border-gray-200 bg-gray-50 p-2 text-xs">
+                            <div class="flex items-center justify-between gap-2">
+                                <span>{{ v.visit_date|date:"M d, Y H:i" }}</span>
+                                <span class="font-semibold">{{ v.get_status_display }}</span>
                             </div>
-                        {% endfor %}
-                    </div>
+                            <div class="mt-1 text-text-muted">Bill: {{ v.total_amount }}</div>
+                        </div>
+                        {% endwith %}
+                    {% else %}
+                        <div class="visit-dd-wrap space-y-1">
+                            <div class="text-xs uppercase tracking-wide text-text-muted">Recent Visits</div>
+                            <select class="visit-dd w-full rounded border border-gray-200 bg-white text-xs py-1 px-2 text-text-main">
+                                {% for v in row.recent_visits %}
+                                <option
+                                    data-date="{{ v.visit_date|date:'M d, Y H:i' }}"
+                                    data-status="{{ v.get_status_display }}"
+                                    data-bill="{{ v.total_amount }}"
+                                    {% if forloop.first %}selected{% endif %}
+                                >{{ v.visit_date|date:"M d, Y" }} — {{ v.get_status_display }}</option>
+                                {% endfor %}
+                            </select>
+                            <div class="visit-dd-info rounded-lg border border-gray-200 bg-gray-50 p-2 text-xs">
+                                {% with v=row.recent_visits.0 %}
+                                <div class="flex items-center justify-between gap-2">
+                                    <span class="dd-date">{{ v.visit_date|date:"M d, Y H:i" }}</span>
+                                    <span class="font-semibold dd-status">{{ v.get_status_display }}</span>
+                                </div>
+                                <div class="mt-1 text-text-muted">Bill: <span class="dd-bill">{{ v.total_amount }}</span></div>
+                                {% endwith %}
+                            </div>
+                            {% if row.patient.visit_count > 3 %}
+                            <div class="text-xs text-text-muted">Showing 3 of {{ row.patient.visit_count }} — <a href="{% url 'patient_visits' row.patient.pk %}" class="text-blue-600 hover:underline">see all</a></div>
+                            {% endif %}
+                        </div>
+                    {% endif %}
                 {% endif %}
                 <div class="flex flex-col gap-2">
                     <a href="{% url 'patient_visits' row.patient.pk %}" class="btn btn-secondary">Visits</a>
@@ -139,17 +164,42 @@
                                 <div class="text-xs text-text-muted">No prior visits recorded</div>
                             {% endif %}
                             {% if row.recent_visits %}
-                                <div class="mt-2 space-y-2 max-w-sm">
-                                    {% for visit in row.recent_visits %}
-                                        <div class="rounded-lg border border-gray-200 bg-gray-50 p-2 text-xs">
-                                            <div class="flex items-center justify-between gap-2">
-                                                <span>{{ visit.visit_date|date:"M d, Y H:i" }}</span>
-                                                <span class="font-semibold">{{ visit.get_status_display }}</span>
-                                            </div>
-                                            <div class="mt-1 text-text-muted">Bill: {{ visit.total_amount }}</div>
+                                {% if row.recent_visits|length == 1 %}
+                                    {% with v=row.recent_visits.0 %}
+                                    <div class="mt-2 rounded-lg border border-gray-200 bg-gray-50 p-2 text-xs max-w-xs">
+                                        <div class="flex items-center justify-between gap-2">
+                                            <span>{{ v.visit_date|date:"M d, Y H:i" }}</span>
+                                            <span class="font-semibold">{{ v.get_status_display }}</span>
                                         </div>
-                                    {% endfor %}
-                                </div>
+                                        <div class="mt-1 text-text-muted">Bill: {{ v.total_amount }}</div>
+                                    </div>
+                                    {% endwith %}
+                                {% else %}
+                                    <div class="mt-2 visit-dd-wrap space-y-1 max-w-xs">
+                                        <select class="visit-dd w-full rounded border border-gray-200 bg-white text-xs py-1 px-2 text-text-main">
+                                            {% for v in row.recent_visits %}
+                                            <option
+                                                data-date="{{ v.visit_date|date:'M d, Y H:i' }}"
+                                                data-status="{{ v.get_status_display }}"
+                                                data-bill="{{ v.total_amount }}"
+                                                {% if forloop.first %}selected{% endif %}
+                                            >{{ v.visit_date|date:"M d, Y" }} — {{ v.get_status_display }}</option>
+                                            {% endfor %}
+                                        </select>
+                                        <div class="visit-dd-info rounded-lg border border-gray-200 bg-gray-50 p-2 text-xs">
+                                            {% with v=row.recent_visits.0 %}
+                                            <div class="flex items-center justify-between gap-2">
+                                                <span class="dd-date">{{ v.visit_date|date:"M d, Y H:i" }}</span>
+                                                <span class="font-semibold dd-status">{{ v.get_status_display }}</span>
+                                            </div>
+                                            <div class="mt-1 text-text-muted">Bill: <span class="dd-bill">{{ v.total_amount }}</span></div>
+                                            {% endwith %}
+                                        </div>
+                                        {% if row.patient.visit_count > 3 %}
+                                        <div class="text-xs text-text-muted">Showing 3 of {{ row.patient.visit_count }} — <a href="{% url 'patient_visits' row.patient.pk %}" class="text-blue-600 hover:underline">see all</a></div>
+                                        {% endif %}
+                                    </div>
+                                {% endif %}
                             {% endif %}
                         </td>
                         <td class="px-4 py-3">
@@ -197,4 +247,18 @@
         {% endif %}
     </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.querySelectorAll('.visit-dd').forEach(function (sel) {
+    sel.addEventListener('change', function () {
+        var opt = this.selectedOptions[0];
+        var wrap = this.closest('.visit-dd-wrap');
+        wrap.querySelector('.dd-date').textContent = opt.dataset.date;
+        wrap.querySelector('.dd-status').textContent = opt.dataset.status;
+        wrap.querySelector('.dd-bill').textContent = opt.dataset.bill;
+    });
+});
+</script>
 {% endblock %}
