@@ -18,7 +18,7 @@
 
     <!-- Visit Header -->
     <div class="card bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200">
-        <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
+        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
             <div>
                 <div class="text-xs font-semibold text-text-muted uppercase tracking-widest">Patient</div>
                 <div class="font-semibold text-text-main mt-1">{{ visit.patient.name }}</div>
@@ -26,6 +26,10 @@
             <div>
                 <div class="text-xs font-semibold text-text-muted uppercase tracking-widest">Age / Sex</div>
                 <div class="font-semibold text-text-main mt-1">{{ visit.patient.age }} / {{ visit.patient.get_sex_display }}</div>
+            </div>
+            <div>
+                <div class="text-xs font-semibold text-text-muted uppercase tracking-widest">Weight</div>
+                <div class="font-semibold text-text-main mt-1">{{ visit.patient.weight_kg|default:"-" }}{% if visit.patient.weight_kg %} kg{% endif %}</div>
             </div>
             <div>
                 <div class="text-xs font-semibold text-text-muted uppercase tracking-widest">Visit Date</div>
@@ -49,6 +53,25 @@
             </div>
         </div>
     </div>
+
+    <!-- Triage / Nursing Vitals -->
+    {% with triage=visit.triage %}
+    {% if triage %}
+    <div class="card border-l-4 border-emerald-500">
+        <h2 class="text-lg font-bold text-text-main mb-3">Triage &amp; Vitals</h2>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-3 bg-gray-50 p-3 rounded">
+            {% if triage.weight_kg %}<div><div class="text-xs text-text-muted">Weight</div><div class="font-semibold text-text-main">{{ triage.weight_kg }} kg</div></div>{% endif %}
+            {% if triage.bp_systolic and triage.bp_diastolic %}<div><div class="text-xs text-text-muted">Blood Pressure</div><div class="font-semibold text-text-main">{{ triage.bp_systolic }}/{{ triage.bp_diastolic }} mmHg</div></div>{% endif %}
+            {% if triage.pulse %}<div><div class="text-xs text-text-muted">Pulse</div><div class="font-semibold text-text-main">{{ triage.pulse }} bpm</div></div>{% endif %}
+            {% if triage.temperature_celsius %}<div><div class="text-xs text-text-muted">Temperature</div><div class="font-semibold text-text-main">{{ triage.temperature_celsius }} °C</div></div>{% endif %}
+            {% if triage.respiratory_rate %}<div><div class="text-xs text-text-muted">Resp. Rate</div><div class="font-semibold text-text-main">{{ triage.respiratory_rate }} /min</div></div>{% endif %}
+            {% if triage.oxygen_saturation %}<div><div class="text-xs text-text-muted">O₂ Saturation</div><div class="font-semibold text-text-main">{{ triage.oxygen_saturation }}%</div></div>{% endif %}
+            {% if triage.glucose_mg_dl %}<div><div class="text-xs text-text-muted">Glucose</div><div class="font-semibold text-text-main">{{ triage.glucose_mg_dl }} mg/dL</div></div>{% endif %}
+        </div>
+        {% if triage.recorded_by %}<p class="mt-2 text-xs text-text-muted">Recorded by {{ triage.recorded_by.get_full_name|default:triage.recorded_by.username }}</p>{% endif %}
+    </div>
+    {% endif %}
+    {% endwith %}
 
     <!-- Doctor Consultation Section -->
     {% if consultation %}

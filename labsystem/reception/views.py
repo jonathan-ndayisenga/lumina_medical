@@ -681,9 +681,6 @@ def patient_edit(request, patient_id):
     hospital = get_active_hospital(request)
     patient = get_object_or_404(Patient, pk=patient_id, hospital=hospital)
     
-    # Bio data editing is restricted to administrators to ensure clinical data integrity.
-    require_admin_override(request.user)
-
     if request.method == "POST":
         form = PatientForm(request.POST, instance=patient)
         if form.is_valid():

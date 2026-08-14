@@ -95,11 +95,14 @@ def perform_nursing(request, queue_entry_id):
         triage_only_action = action in {"triage_to_doctor", "triage_to_reception"}
 
         if triage_form.is_valid() and (triage_only_action or note_form.is_valid()):
-            triage_saved = triage_form.save(commit=False)
-            if triage_created and not triage_saved.recorded_by_id:
-                triage_saved.recorded_by = request.user
-            triage_saved.updated_by = request.user
-            triage_saved.save()
+            for field_name in triage_form.Meta.fields:
+                value = triage_form.cleaned_data.get(field_name)
+                if value is not None:
+                    setattr(triage_obj, field_name, value)
+            if triage_created and not triage_obj.recorded_by_id:
+                triage_obj.recorded_by = request.user
+            triage_obj.updated_by = request.user
+            triage_obj.save()
 
             nurse_note = None
             if note_text:

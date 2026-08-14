@@ -902,7 +902,7 @@ def consultation(request, visit_id):
             send_to_nurse = form.cleaned_data.get("send_to_nurse", False)
             triage_data = form.cleaned_triage_data()
             has_any_triage_value = any(value is not None for value in triage_data.values())
-            if not send_to_nurse and has_any_triage_value:
+            if has_any_triage_value:
                 triage_obj, created = Triage.objects.get_or_create(
                     visit=visit,
                     defaults={
@@ -911,7 +911,8 @@ def consultation(request, visit_id):
                     },
                 )
                 for key, value in triage_data.items():
-                    setattr(triage_obj, key, value)
+                    if value is not None:
+                        setattr(triage_obj, key, value)
                 if created and not triage_obj.recorded_by_id:
                     triage_obj.recorded_by = request.user
                 triage_obj.updated_by = request.user

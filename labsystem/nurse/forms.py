@@ -46,7 +46,5 @@ class TriageForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # Minimum required for nurse sign-off.
-        self.fields["weight_kg"].required = True
-        self.fields["bp_systolic"].required = True
-        self.fields["bp_diastolic"].required = True
+        for field in self.fields.values():
+            field.required = False

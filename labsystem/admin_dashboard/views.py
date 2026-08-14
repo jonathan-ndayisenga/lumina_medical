@@ -1783,9 +1783,26 @@ def manage_inventory(request):
     )
     snapshot = inventory_dashboard_snapshot(hospital)
     all_inventory_items = InventoryItem.objects.filter(hospital=hospital) if hospital else InventoryItem.objects.none()
+
+    from django.utils import timezone
+    today = timezone.now().date()
+    alert_threshold = today + timezone.timedelta(days=30)
+    expiry_alerts = (
+        InventoryBatch.objects.filter(
+            item__hospital=hospital,
+            expiry_date__isnull=False,
+            quantity__gt=0,
+            expiry_date__lte=alert_threshold,
+        )
+        .select_related("item")
+        .order_by("expiry_date")
+    ) if hospital else InventoryBatch.objects.none()
+
     context.update(
         {
             "inventory_items": inventory_items,
+            "expiry_alerts": expiry_alerts,
+            "today": today,
             "filtered_inventory_count": filtered_inventory_count,
             "inventory_search_query": search_query,
             "inventory_selected_category": selected_category,
