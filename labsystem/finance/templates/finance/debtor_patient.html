@@ -44,10 +44,12 @@
         <table class="w-full text-xs mb-3">
             <tbody>
                 {% for vs in visit.visit_services.all %}
+                {% if vs.service.category != 'pharmacy' %}
                 <tr class="border-b border-gray-100">
                     <td class="py-1 text-text-main">{{ vs.service.name }}</td>
                     <td class="py-1 text-right font-mono font-semibold text-text-main">UGX {{ vs.price_at_time|floatformat:0|intcomma }}</td>
                 </tr>
+                {% endif %}
                 {% endfor %}
                 <tr class="font-semibold">
                     <td class="pt-2">Total</td>

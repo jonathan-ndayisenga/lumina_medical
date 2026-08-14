@@ -2,10 +2,12 @@
 
 {% block title %}{{ patient.name }} - Visits - Hospital EMR{% endblock %}
 {% block page_title %}{{ patient.name }} - Visit History{% endblock %}
-{% block page_subtitle %}Review every dated visit for this patient, then view, edit, complete, or delete where appropriate.{% endblock %}
+{% block page_subtitle %}Select a visit from the dropdown to review its details, then view, edit, complete, or delete where appropriate.{% endblock %}
 
 {% block content %}
 <div class="space-y-6">
+
+    <!-- Patient Bio Header -->
     <div class="card bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200">
         <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-6">
             <div class="space-y-4">
@@ -58,180 +60,140 @@
         </div>
     </div>
 
-    <div class="card">
-        <h3 class="text-sm font-semibold text-text-main mb-4">All Visits</h3>
-        <div class="space-y-3 md:hidden">
-            {% for row in visit_rows %}
-            <article class="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm space-y-3">
-                <div class="flex items-start justify-between gap-3">
-                    <div>
-                        <h4 class="text-sm font-semibold text-text-main">{{ row.visit.visit_date|date:"M d, Y" }}</h4>
-                        <p class="text-xs text-text-muted">{{ row.visit.visit_date|date:"H:i" }}</p>
-                        <p class="text-xs text-text-muted mt-1">{{ row.visit.get_visit_type_display }}</p>
-                        {% if row.visit.weight_kg %}<p class="text-xs text-text-muted mt-0.5">{{ row.visit.weight_kg }} kg</p>{% endif %}
-                    </div>
-                    {% with status=row.visit.status %}
-                        {% if status == "completed" %}
-                            <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">Completed</span>
-                        {% elif status == "ready_for_billing" %}
-                            <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-800">Ready for Billing</span>
-                        {% elif status == "in_progress" %}
-                            <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-800">In Progress</span>
-                        {% else %}
-                            <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-800">{{ row.visit.get_status_display }}</span>
-                        {% endif %}
-                    {% endwith %}
-                </div>
-                <dl class="space-y-2 text-sm">
-                    <div>
-                        <dt class="text-xs uppercase tracking-wide text-text-muted">Services</dt>
-                        <dd class="text-text-main">
-                            <div class="text-sm font-medium">{{ row.service_count }} service{{ row.service_count|pluralize }}</div>
-                            {% if row.visit.visit_services.all %}
-                                <div class="mt-1 space-y-1">
-                                    {% for vs in row.visit.visit_services.all %}
-                                        <div class="text-xs text-text-muted">- {{ vs.service.name }}</div>
-                                    {% endfor %}
-                                </div>
-                            {% endif %}
-                        </dd>
-                    </div>
-                    <div>
-                        <dt class="text-xs uppercase tracking-wide text-text-muted">Total Bill</dt>
-                        <dd class="text-text-main font-semibold">{{ row.visit.total_amount }}</dd>
-                    </div>
-                    <div>
-                        <dt class="text-xs uppercase tracking-wide text-text-muted">Payment Status</dt>
-                        <dd>
-                            {% if row.total_paid and row.balance_due == 0 %}
-                                <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">Paid</span>
-                                {% if row.latest_payment %}
-                                    <div class="text-xs text-text-muted mt-1">{{ row.latest_payment.get_mode_display }}</div>
-                                {% endif %}
-                            {% elif row.total_paid and row.balance_due > 0 %}
-                                <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-800">Partial</span>
-                                <div class="text-xs text-text-muted mt-1">{{ row.total_paid }}/{{ row.visit.total_amount }} paid · Balance {{ row.balance_due }}</div>
-                            {% else %}
-                                <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-800">Not Paid</span>
-                            {% endif %}
-                        </dd>
-                    </div>
-                </dl>
-                <div class="flex flex-col gap-2">
-                    <a href="{% url 'view_visit_report' row.visit.pk %}" class="btn btn-secondary">View</a>
-                    {% if row.can_edit %}
-                        <a href="{% url 'visit_edit' row.visit.pk %}" class="btn btn-primary">Edit</a>
-                    {% endif %}
-                    {% if row.can_delete %}
-                        <a href="{% url 'visit_delete' row.visit.pk %}" class="btn btn-danger">Delete</a>
-                    {% endif %}
-                    {% if request.user.can_access_hospital_admin and row.visit.status != "completed" and row.visit.status != "cancelled" %}
-                        <a href="{% url 'visit_terminate' row.visit.pk %}?next={{ request.get_full_path|urlencode }}" class="btn btn-danger">Terminate</a>
-                    {% endif %}
-                    <a href="{% url 'complete_visit' row.visit.pk %}" class="btn btn-secondary">Record Payment</a>
-                </div>
-            </article>
-            {% empty %}
-            <div class="rounded-2xl border border-dashed border-gray-300 bg-gray-50 px-4 py-8 text-center text-text-muted italic">
-                No visits recorded for this patient yet.
-            </div>
-            {% endfor %}
-        </div>
+    {% if visit_rows %}
 
-        <div class="overflow-x-auto hidden md:block">
-            <table class="w-full">
-                <thead class="bg-gray-50 border-b border-gray-200">
-                    <tr>
-                        <th class="text-left px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-widest">Date & Time</th>
-                        <th class="text-left px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-widest">Weight</th>
-                        <th class="text-left px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-widest">Status</th>
-                        <th class="text-left px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-widest">Services</th>
-                        <th class="text-left px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-widest">Total Bill</th>
-                        <th class="text-left px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-widest">Payment Status</th>
-                        <th class="text-left px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-widest">Actions</th>
-                    </tr>
-                </thead>
-                <tbody class="divide-y divide-gray-200">
+    <!-- Visit Selector Dropdown -->
+    <div class="card">
+        <label class="block text-sm font-semibold text-text-main mb-2">Select Visit</label>
+        <form method="get" id="visit-selector-form">
+            <div class="flex gap-3 items-center flex-wrap">
+                <select
+                    name="visit"
+                    id="visit-selector"
+                    class="form-control flex-1 min-w-0"
+                    onchange="document.getElementById('visit-selector-form').submit()"
+                >
                     {% for row in visit_rows %}
-                    <tr class="hover:bg-gray-50 transition-colors">
-                        <td class="px-4 py-3 text-text-main">
-                            <div class="font-medium">{{ row.visit.visit_date|date:"M d, Y" }}</div>
-                            <div class="text-xs text-text-muted">{{ row.visit.visit_date|date:"H:i" }}</div>
-                            <div class="text-xs text-text-muted mt-1">{{ row.visit.get_visit_type_display }}</div>
-                        </td>
-                        <td class="px-4 py-3 text-text-main font-medium">
-                            {% if row.visit.weight_kg %}{{ row.visit.weight_kg }} kg{% else %}<span class="text-text-muted">—</span>{% endif %}
-                        </td>
-                        <td class="px-4 py-3">
-                            {% with status=row.visit.status %}
-                                {% if status == "completed" %}
-                                    <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">Completed</span>
-                                {% elif status == "ready_for_billing" %}
-                                    <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-800">Ready for Billing</span>
-                                {% elif status == "in_progress" %}
-                                    <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-800">In Progress</span>
-                                {% else %}
-                                    <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-800">{{ row.visit.get_status_display }}</span>
-                                {% endif %}
-                            {% endwith %}
-                        </td>
-                        <td class="px-4 py-3 text-text-main">
-                            <div class="text-sm font-medium">{{ row.service_count }} service{{ row.service_count|pluralize }}</div>
-                            {% if row.visit.visit_services.all %}
-                                <div class="mt-1 space-y-1 max-w-xs">
-                                    {% for vs in row.visit.visit_services.all %}
-                                        <div class="text-xs text-text-muted">- {{ vs.service.name }}</div>
-                                    {% endfor %}
-                                </div>
-                            {% endif %}
-                        </td>
-                        <td class="px-4 py-3 text-text-main font-semibold">{{ row.visit.total_amount }}</td>
-                        <td class="px-4 py-3">
-                            {% if row.total_paid and row.balance_due == 0 %}
-                                <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">Paid</span>
-                                {% if row.latest_payment %}
-                                    <div class="text-xs text-text-muted mt-1">{{ row.latest_payment.get_mode_display }}</div>
-                                {% endif %}
-                            {% elif row.total_paid and row.balance_due > 0 %}
-                                <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-800">
-                                    Partial ({{ row.total_paid }}/{{ row.visit.total_amount }})
-                                </span>
-                                {% if row.latest_payment %}
-                                    <div class="text-xs text-text-muted mt-1">Balance: {{ row.balance_due }}</div>
-                                {% endif %}
-                            {% else %}
-                                <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-800">Not Paid</span>
-                            {% endif %}
-                        </td>
-                        <td class="px-4 py-3">
-                            <div class="flex flex-wrap gap-2">
-                                <a href="{% url 'view_visit_report' row.visit.pk %}" class="btn btn-secondary btn-sm" title="View complete visit report">View</a>
-                                {% if row.can_edit %}
-                                    <a href="{% url 'visit_edit' row.visit.pk %}" class="btn btn-primary btn-sm" title="Edit visit">Edit</a>
-                                {% endif %}
-                                {% if row.can_delete %}
-                                    <a href="{% url 'visit_delete' row.visit.pk %}" class="btn btn-danger btn-sm" title="Delete visit">Delete</a>
-                                {% endif %}
-                                {% if request.user.can_access_hospital_admin and row.visit.status != "completed" and row.visit.status != "cancelled" %}
-                                    <a href="{% url 'visit_terminate' row.visit.pk %}?next={{ request.get_full_path|urlencode }}" class="btn btn-danger btn-sm" title="Terminate visit">Terminate</a>
-                                {% endif %}
-                                <a href="{% url 'complete_visit' row.visit.pk %}" class="btn btn-secondary btn-sm" title="Record payment">Record Payment</a>
-                            </div>
-                        </td>
-                    </tr>
-                    {% empty %}
-                    <tr>
-                        <td colspan="7" class="px-4 py-8 text-center text-text-muted italic">No visits recorded for this patient yet.</td>
-                    </tr>
+                    <option
+                        value="{{ row.visit.pk }}"
+                        {% if row.visit.pk == selected_visit_id %}selected{% endif %}
+                    >
+                        Visit {{ forloop.revcounter }} &mdash; {{ row.visit.visit_date|date:"M d, Y H:i" }} &mdash; {{ row.visit.get_visit_type_display }} &mdash;
+                        {% if row.visit.status == "completed" %}Completed
+                        {% elif row.visit.status == "ready_for_billing" %}Ready for Billing
+                        {% elif row.visit.status == "in_progress" %}In Progress
+                        {% else %}{{ row.visit.get_status_display }}
+                        {% endif %}
+                    </option>
                     {% endfor %}
-                </tbody>
-            </table>
-        </div>
+                </select>
+                <noscript>
+                    <button type="submit" class="btn btn-secondary btn-sm">Go</button>
+                </noscript>
+            </div>
+        </form>
     </div>
 
+    <!-- Selected Visit Detail Panel -->
+    {% if selected_row %}
+    {% with visit=selected_row.visit %}
+    <div class="card border-2 border-blue-200">
+
+        <!-- Visit header row -->
+        <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-5">
+            <div>
+                <div class="flex items-center gap-3 flex-wrap">
+                    <h3 class="text-lg font-bold text-text-main">{{ visit.visit_date|date:"F d, Y" }}</h3>
+                    <span class="text-sm text-text-muted">{{ visit.visit_date|date:"H:i" }}</span>
+                    {% if visit.status == "completed" %}
+                        <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">Completed</span>
+                    {% elif visit.status == "ready_for_billing" %}
+                        <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-800">Ready for Billing</span>
+                    {% elif visit.status == "in_progress" %}
+                        <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-800">In Progress</span>
+                    {% else %}
+                        <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-800">{{ visit.get_status_display }}</span>
+                    {% endif %}
+                </div>
+                <p class="text-sm text-text-muted mt-1">{{ visit.get_visit_type_display }}</p>
+                {% if visit.weight_kg %}<p class="text-xs text-text-muted mt-0.5">Weight at visit: {{ visit.weight_kg }} kg</p>{% endif %}
+            </div>
+        </div>
+
+        <!-- Services -->
+        <div class="mb-5">
+            <h4 class="text-xs font-semibold text-text-muted uppercase tracking-widest mb-2">Services</h4>
+            {% if selected_row.non_pharmacy_services %}
+            <div class="divide-y divide-gray-100 rounded border border-gray-200">
+                {% for vs in selected_row.non_pharmacy_services %}
+                <div class="flex items-center justify-between px-3 py-2 text-sm">
+                    <span class="text-text-main">{{ vs.service.name }}</span>
+                    <span class="font-semibold text-text-main ml-4">{{ vs.price_at_time }}</span>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="text-sm text-text-muted italic">No services billed.</p>
+            {% endif %}
+        </div>
+
+        <!-- Payment summary -->
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-5 bg-gray-50 rounded-lg p-4">
+            <div>
+                <div class="text-xs font-semibold text-text-muted uppercase tracking-widest">Total Bill</div>
+                <div class="text-xl font-bold text-text-main mt-1">{{ visit.total_amount }}</div>
+            </div>
+            <div>
+                <div class="text-xs font-semibold text-text-muted uppercase tracking-widest">Paid</div>
+                <div class="text-xl font-bold text-emerald-700 mt-1">{{ selected_row.total_paid }}</div>
+                {% if selected_row.latest_payment %}
+                <div class="text-xs text-text-muted mt-0.5">{{ selected_row.latest_payment.get_mode_display }}</div>
+                {% endif %}
+            </div>
+            <div>
+                <div class="text-xs font-semibold text-text-muted uppercase tracking-widest">Balance</div>
+                <div class="text-xl font-bold mt-1 {% if selected_row.balance_due > 0 %}text-red-600{% else %}text-emerald-700{% endif %}">
+                    {{ selected_row.balance_due }}
+                </div>
+                {% if selected_row.balance_due == 0 and selected_row.total_paid > 0 %}
+                <div class="text-xs text-emerald-600 mt-0.5">Fully paid</div>
+                {% elif selected_row.balance_due == 0 %}
+                <div class="text-xs text-text-muted mt-0.5">No charge</div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Action buttons -->
+        <div class="flex flex-wrap gap-2 pt-4 border-t border-gray-200">
+            <a href="{% url 'view_visit_report' visit.pk %}" class="btn btn-secondary btn-sm">View Report</a>
+            {% if selected_row.can_edit %}
+                <a href="{% url 'visit_edit' visit.pk %}" class="btn btn-primary btn-sm">Edit</a>
+            {% endif %}
+            {% if selected_row.can_delete %}
+                <a href="{% url 'visit_delete' visit.pk %}" class="btn btn-danger btn-sm">Delete</a>
+            {% endif %}
+            {% if request.user.can_access_hospital_admin and visit.status != "completed" and visit.status != "cancelled" %}
+                <a href="{% url 'visit_terminate' visit.pk %}?next={{ request.get_full_path|urlencode }}" class="btn btn-danger btn-sm">Terminate</a>
+            {% endif %}
+            <a href="{% url 'complete_visit' visit.pk %}" class="btn btn-secondary btn-sm">Record Payment</a>
+        </div>
+
+    </div>
+    {% endwith %}
+    {% endif %}
+
+    {% else %}
+    <!-- No visits yet -->
+    <div class="card bg-gray-50 border border-dashed border-gray-300 text-center py-10 text-text-muted">
+        <p class="text-sm italic">No visits recorded for this patient yet.</p>
+    </div>
+    {% endif %}
+
+    <!-- Bottom actions -->
     <div class="flex gap-2">
         <a href="{% url 'patient_list' %}" class="btn btn-secondary">Back to Patients</a>
         <a href="{% url 'visit_create' patient.pk %}" class="btn btn-primary">Create New Visit</a>
     </div>
+
 </div>
 {% endblock %}

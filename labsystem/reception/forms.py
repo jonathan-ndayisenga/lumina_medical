@@ -220,7 +220,9 @@ class VisitCreateForm(forms.ModelForm):
         if not self.instance.pk and self.patient and self.patient.weight_kg:
             self.fields["weight_kg"].initial = self.patient.weight_kg
         if hospital is not None:
-            self.fields["services"].queryset = Service.objects.filter(hospital=hospital, is_active=True)
+            self.fields["services"].queryset = Service.objects.filter(
+                hospital=hospital, is_active=True
+            ).exclude(category=Service.CATEGORY_PHARMACY)
         self.fields["services"].label_from_instance = lambda service: f"{service.name} - {service.price:.2f}"
         self.fields["visit_type"].help_text = "Use Adjustment Visit when the doctor is swapping medication already paid for on a previous visit."
         self.fields["follow_up_parent_visit"].widget.attrs.update({"class": "form-control"})

@@ -86,10 +86,9 @@
                         <div>
                             {% with services=payment.visit.visit_services.all %}
                                 {% if services %}
-                                    {% for vs in services|slice:":3" %}
-                                        {{ vs.service.name }}{% if not forloop.last %}, {% endif %}
+                                    {% for vs in services|slice:":4" %}
+                                        {% if vs.service.category != 'pharmacy' %}{{ vs.service.name }}{% if not forloop.last %}, {% endif %}{% endif %}
                                     {% endfor %}
-                                    {% if services|length > 3 %}...{% endif %}
                                 {% else %}
                                     -
                                 {% endif %}
@@ -155,10 +154,9 @@
                             <td class="text-sm text-text-muted">
                                 {% with services=payment.visit.visit_services.all %}
                                     {% if services %}
-                                        {% for vs in services|slice:":3" %}
-                                            {{ vs.service.name }}{% if not forloop.last %}, {% endif %}
+                                        {% for vs in services|slice:":4" %}
+                                            {% if vs.service.category != 'pharmacy' %}{{ vs.service.name }}{% if not forloop.last %}, {% endif %}{% endif %}
                                         {% endfor %}
-                                        {% if services|length > 3 %}…{% endif %}
                                     {% else %}
                                         -
                                     {% endif %}

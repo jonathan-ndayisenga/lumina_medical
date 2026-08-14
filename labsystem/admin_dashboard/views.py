@@ -1408,7 +1408,11 @@ def delete_user(request, user_id):
 @role_required(User.ROLE_HOSPITAL_ADMIN)
 def manage_services(request):
     hospital = active_hospital(request)
-    services_qs = Service.objects.filter(hospital=hospital).order_by("category", "name") if hospital else Service.objects.none()
+    services_qs = (
+        Service.objects.filter(hospital=hospital)
+        .exclude(category=Service.CATEGORY_PHARMACY)
+        .order_by("category", "name")
+    ) if hospital else Service.objects.none()
 
     if request.method == "POST":
         form = HospitalServiceForm(request.POST)

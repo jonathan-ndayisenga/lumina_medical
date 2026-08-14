@@ -344,12 +344,14 @@
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-gray-100">
-                        {% for item in visit.visit_services.all %}
+                        {% for item in non_pharmacy_services %}
                             <tr>
                                 <td class="py-3 pr-4 text-text-main">{{ item.service.name }}</td>
                                 <td class="py-3 pr-4 text-text-muted">{{ item.service.get_category_display }}</td>
                                 <td class="py-3 text-right text-text-main">{{ item.price_at_time }}</td>
                             </tr>
+                        {% empty %}
+                            <tr><td colspan="3" class="py-4 text-center text-text-muted italic">No services billed.</td></tr>
                         {% endfor %}
                     </tbody>
                     <tfoot>
@@ -384,7 +386,7 @@
         <div class="receipt-info-row"><span class="receipt-info-label">Age:</span><span class="receipt-info-value">{{ visit.patient.age }}{{ visit.patient.get_sex_display|slice:":1" }}</span></div>
         <div class="receipt-separator"></div>
         <div class="receipt-section-title">Services</div>
-        <table class="receipt-items-table">{% for item in visit.visit_services.all %}<tr><td class="item-name">{{ item.service.name|truncatewords:3 }}</td><td class="item-price">{{ item.price_at_time }}</td></tr>{% endfor %}</table>
+        <table class="receipt-items-table">{% for item in non_pharmacy_services %}<tr><td class="item-name">{{ item.service.name|truncatewords:3 }}</td><td class="item-price">{{ item.price_at_time }}</td></tr>{% endfor %}</table>
         <div class="receipt-items-separator"></div>
         <div class="receipt-info-row receipt-total"><span>TOTAL:</span><span>{{ visit.total_amount }}</span></div>
         <div class="receipt-separator"></div>

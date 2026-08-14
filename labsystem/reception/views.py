@@ -1347,6 +1347,10 @@ def print_receipt(request, visit_id):
     )
     payments = visit.payments.select_related("bank_account", "mobile_account", "recorded_by").order_by("-paid_at", "-id")
     latest_payment = payments.first()
+    non_pharmacy_services = [
+        vs for vs in visit.visit_services.all()
+        if vs.service.category != Service.CATEGORY_PHARMACY
+    ]
     return render(
         request,
         "reception/receipt.html",
@@ -1357,6 +1361,7 @@ def print_receipt(request, visit_id):
             "hospital": visit.hospital,
             "total_paid": visit.total_paid,
             "balance_due": visit.balance_due,
+            "non_pharmacy_services": non_pharmacy_services,
         },
     )
 
@@ -1489,6 +1494,26 @@ def patient_visits(request, patient_id):
             "service_count": visit.visit_services.count(),
         })
     
+    # Determine which visit to show in the detail panel
+    selected_visit_id = None
+    try:
+        selected_visit_id = int(request.GET.get("visit", ""))
+    except (ValueError, TypeError):
+        pass
+
+    selected_row = None
+    if visit_rows:
+        if selected_visit_id:
+            selected_row = next((r for r in visit_rows if r["visit"].pk == selected_visit_id), None)
+        if selected_row is None:
+            selected_row = visit_rows[0]  # default to most recent
+
+    if selected_row:
+        selected_row["non_pharmacy_services"] = [
+            vs for vs in selected_row["visit"].visit_services.all()
+            if vs.service.category != Service.CATEGORY_PHARMACY
+        ]
+
     return render(
         request,
         "reception/patient_visits.html",
@@ -1499,6 +1524,8 @@ def patient_visits(request, patient_id):
             "hospital": hospital,
             "patient": patient,
             "visit_rows": visit_rows,
+            "selected_row": selected_row,
+            "selected_visit_id": selected_row["visit"].pk if selected_row else None,
         },
     )
 
@@ -1543,6 +1570,12 @@ def view_visit_report(request, visit_id):
 
     age_at_visit = visit.patient.age_at(visit.visit_date)
 
+    # Non-pharmacy services for the bill page (pharmacy lines appear under Drugs Prescribed instead)
+    non_pharmacy_services = [
+        vs for vs in visit.visit_services.all()
+        if vs.service.category != Service.CATEGORY_PHARMACY
+    ]
+
     context = {
         "active_nav": "reception_patients",
         "dashboard_title": f"Visit Report - {visit.patient.name}",
@@ -1554,6 +1587,7 @@ def view_visit_report(request, visit_id):
         "nurse_notes": nurse_notes,
         "lab_reports": lab_reports,
         "age_at_visit": age_at_visit,
+        "non_pharmacy_services": non_pharmacy_services,
         "payments": visit.payments.select_related("bank_account", "mobile_account", "recorded_by").order_by("-paid_at", "-id"),
     }
 

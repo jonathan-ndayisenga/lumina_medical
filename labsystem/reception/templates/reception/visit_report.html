@@ -316,7 +316,7 @@
 
     <div class="vr-page-break-before">
 
-        <!-- Services -->
+        <!-- Services (pharmacy lines excluded — those appear under Drugs Prescribed) -->
         <div class="card border border-amber-200 bg-amber-50">
             <h2 class="text-lg font-bold text-text-main mb-3">Services</h2>
             <div class="overflow-x-auto">
@@ -329,14 +329,14 @@
                         </tr>
                     </thead>
                     <tbody>
-                        {% for vs in visit.visit_services.all %}
+                        {% for vs in non_pharmacy_services %}
                         <tr style="border-bottom:1px solid #fde68a;">
                             <td class="py-2 pr-4 text-text-main">{{ vs.service.name }}</td>
                             <td class="py-2 pr-4 text-text-muted">{{ vs.service.get_category_display }}</td>
                             <td class="py-2 text-right font-semibold text-text-main">{{ vs.price_at_time }}</td>
                         </tr>
                         {% empty %}
-                        <tr><td colspan="3" class="py-3 text-text-muted italic">No services billed.</td></tr>
+                        <tr><td colspan="3" class="py-3 text-text-muted italic">No non-pharmacy services billed.</td></tr>
                         {% endfor %}
                     </tbody>
                 </table>
