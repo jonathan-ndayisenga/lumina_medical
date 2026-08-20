@@ -1509,6 +1509,14 @@ def lab_settings(request):
             messages.success(request, f'"{obj.name}" {state}.')
             return redirect('lab_settings')
 
+        if action == 'delete':
+            pk = request.POST.get('pk')
+            obj = get_object_or_404(LabConsumable, pk=pk, hospital=hospital)
+            name = obj.name
+            obj.delete()
+            messages.success(request, f'"{name}" deleted.')
+            return redirect('lab_settings')
+
     form = LabConsumableForm() if is_admin else None
     return render(request, 'lab/lab_settings.html', {
         'consumables': consumables,
