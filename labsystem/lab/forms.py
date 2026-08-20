@@ -3,7 +3,7 @@ import re
 from django import forms
 from django.forms import BaseInlineFormSet, inlineformset_factory
 
-from .models import LabReport, TestResult, TestProfile
+from .models import LabConsumable, LabConsumableUsage, LabReport, TestResult, TestProfile
 
 
 class LabReportForm(forms.ModelForm):
@@ -43,7 +43,7 @@ class LabReportForm(forms.ModelForm):
             'comments',
         ]
         widgets = {
-            'sample_date': forms.DateInput(attrs={'type': 'date'}),
+            'sample_date': forms.DateTimeInput(attrs={'type': 'datetime-local'}),
             'comments': forms.Textarea(attrs={'rows': 3}),
         }
 
@@ -140,5 +140,51 @@ TestResultFormSet = inlineformset_factory(
     form=TestResultForm,
     formset=TestResultInlineFormSet,
     extra=0,
+    can_delete=True,
+)
+
+
+class LabConsumableForm(forms.ModelForm):
+    class Meta:
+        model = LabConsumable
+        fields = ['name', 'unit', 'current_quantity', 'minimum_quantity']
+        widgets = {
+            'name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'e.g. Glass Slides'}),
+            'unit': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'e.g. slides'}),
+            'current_quantity': forms.NumberInput(attrs={'class': 'form-control', 'step': '1', 'min': '0'}),
+            'minimum_quantity': forms.NumberInput(attrs={'class': 'form-control', 'step': '1', 'min': '0'}),
+        }
+        labels = {
+            'minimum_quantity': 'Low-stock alert below',
+        }
+
+
+class BaseLabConsumableUsageFormSet(BaseInlineFormSet):
+    def __init__(self, *args, hospital=None, **kwargs):
+        self.hospital = hospital
+        super().__init__(*args, **kwargs)
+
+    def _construct_form(self, i, **kwargs):
+        form = super()._construct_form(i, **kwargs)
+        qs = (
+            LabConsumable.objects.filter(hospital=self.hospital, is_active=True)
+            if self.hospital else LabConsumable.objects.none()
+        )
+        form.fields['consumable'].queryset = qs
+        form.fields['consumable'].empty_label = '— Select consumable —'
+        return form
+
+
+LabConsumableUsageFormSet = inlineformset_factory(
+    LabReport,
+    LabConsumableUsage,
+    formset=BaseLabConsumableUsageFormSet,
+    fields=['consumable', 'quantity_used', 'notes'],
+    widgets={
+        'consumable': forms.Select(attrs={'class': 'form-control text-sm'}),
+        'quantity_used': forms.NumberInput(attrs={'class': 'form-control text-sm', 'step': '0.5', 'min': '0.5', 'placeholder': 'Qty'}),
+        'notes': forms.TextInput(attrs={'class': 'form-control text-sm', 'placeholder': 'Optional note'}),
+    },
+    extra=1,
     can_delete=True,
 )

@@ -65,7 +65,7 @@ class LabReport(models.Model):
     patient_age = models.CharField(max_length=20, help_text="e.g., 22YRS")
     patient_sex = models.CharField(max_length=10, choices=[('M', 'Male'), ('F', 'Female'), ('O', 'Other')])
     referred_by = models.CharField(max_length=150, blank=True)
-    sample_date = models.DateField()
+    sample_date = models.DateTimeField()
     specimen_type = models.CharField(max_length=50, default='BLOOD')
     attendant = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)
     attendant_name = models.CharField(max_length=100, blank=True, help_text="Lab attendant's name")
@@ -205,3 +205,48 @@ class TestResult(models.Model):
 
     def __str__(self):
         return f"{self.test.name}: {self.result_value}"
+
+
+class LabConsumable(models.Model):
+    """Consumable or equipment item tracked per hospital lab (e.g. glass slides, reagent vials)."""
+
+    hospital = models.ForeignKey(
+        Hospital,
+        on_delete=models.CASCADE,
+        related_name='lab_consumables',
+    )
+    name = models.CharField(max_length=100)
+    unit = models.CharField(max_length=50, default='units')
+    current_quantity = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    minimum_quantity = models.DecimalField(max_digits=10, decimal_places=2, default=0, help_text='Warn when stock falls at or below this level')
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ('hospital', 'name')
+        ordering = ['name']
+
+    def __str__(self):
+        return self.name
+
+    @property
+    def is_low(self):
+        return self.minimum_quantity > 0 and self.current_quantity <= self.minimum_quantity
+
+
+class LabConsumableUsage(models.Model):
+    """Records each deduction of a consumable against a specific lab report."""
+
+    consumable = models.ForeignKey(LabConsumable, on_delete=models.CASCADE, related_name='usages')
+    lab_report = models.ForeignKey(LabReport, on_delete=models.CASCADE, related_name='consumable_usages')
+    quantity_used = models.DecimalField(max_digits=10, decimal_places=2)
+    used_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)
+    used_at = models.DateTimeField(auto_now_add=True)
+    notes = models.CharField(max_length=200, blank=True)
+
+    class Meta:
+        ordering = ['-used_at']
+
+    def __str__(self):
+        return f"{self.consumable.name} × {self.quantity_used}"

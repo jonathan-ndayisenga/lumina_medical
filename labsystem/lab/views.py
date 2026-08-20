@@ -22,8 +22,10 @@ from reception.workflow import (
 )
 from doctor.models import LabRequest, Notification
 
-from .forms import LabReportForm, TestResultFormSet
+from .forms import LabConsumableForm, LabConsumableUsageFormSet, LabReportForm, TestResultFormSet
 from .models import (
+    LabConsumable,
+    LabConsumableUsage,
     LabReport,
     ReferenceRangeDefault,
     TestCatalog,
@@ -607,6 +609,29 @@ def build_report_form_context(form, formset, **extra_context):
     return context
 
 
+def _save_consumable_usages(usage_formset, user):
+    """Deduct stock for new usages, restore stock for deleted ones."""
+    for form in usage_formset.forms:
+        if not form.cleaned_data:
+            continue
+        if form.cleaned_data.get('DELETE') and form.instance.pk:
+            consumable = form.instance.consumable
+            consumable.current_quantity += form.instance.quantity_used
+            consumable.save(update_fields=['current_quantity', 'updated_at'])
+            form.instance.delete()
+        elif (
+            not form.instance.pk
+            and form.cleaned_data.get('consumable')
+            and form.cleaned_data.get('quantity_used')
+        ):
+            usage = form.save(commit=False)
+            usage.used_by = user
+            usage.save()
+            consumable = usage.consumable
+            consumable.current_quantity = max(0, consumable.current_quantity - usage.quantity_used)
+            consumable.save(update_fields=['current_quantity', 'updated_at'])
+
+
 def handle_report_form(request, report=None):
     """Shared create/edit handler for report entry."""
     is_edit = report is not None
@@ -720,9 +745,12 @@ def handle_report_form(request, report=None):
 
     can_send_to_doctor = report_ready_to_send_to_doctor(report)
 
+    _hospital = report.hospital or get_active_hospital(request)
+
     if request.method == 'POST':
         form = LabReportForm(request.POST, instance=report)
         formset = TestResultFormSet(request.POST, instance=report)
+        usage_formset = LabConsumableUsageFormSet(request.POST, instance=report, prefix='consumable', hospital=_hospital)
         if form.is_valid() and formset.is_valid():
             action = request.POST.get("action", "save_report")
             selected_visit_service = None
@@ -751,6 +779,8 @@ def handle_report_form(request, report=None):
                 report.attendant_name = request.user.get_full_name() or request.user.username
             report.save()
             save_results_from_formset(report, formset)
+            if usage_formset.is_valid():
+                _save_consumable_usages(usage_formset, request.user)
 
             selected_visit_service = None
             if report.visit_id and selected_requested_service_id:
@@ -825,6 +855,7 @@ def handle_report_form(request, report=None):
             report.attendant_name = request.user.get_full_name() or request.user.username
         form = LabReportForm(instance=report)
         formset = TestResultFormSet(instance=report)
+        usage_formset = LabConsumableUsageFormSet(instance=report, prefix='consumable', hospital=_hospital)
 
     context = {
         'edit_mode': is_edit,
@@ -836,6 +867,7 @@ def handle_report_form(request, report=None):
         'selected_requested_service_id': selected_requested_service_id,
         'selected_service_name': selected_service_name,
         'is_combined_manual_report': is_combined_manual_report,
+        'usage_formset': usage_formset,
     }
 
     return render(
@@ -1428,3 +1460,59 @@ def route_lab_report(request, report_id):
     cleanup_stale_lab_queue_entries(visit=report.visit)
     messages.success(request, message)
     return redirect("report_detail", pk=report.pk)
+
+
+@login_required
+@staff_required
+@transaction.atomic
+def lab_settings(request):
+    hospital = get_active_hospital(request)
+    is_admin = getattr(request.user, 'role', '') in ('admin', 'superadmin') or request.user.can_access_hospital_admin
+
+    consumables = LabConsumable.objects.filter(hospital=hospital).order_by('name')
+
+    if request.method == 'POST' and is_admin:
+        action = request.POST.get('action', '')
+
+        if action == 'add':
+            form = LabConsumableForm(request.POST)
+            if form.is_valid():
+                obj = form.save(commit=False)
+                obj.hospital = hospital
+                try:
+                    obj.save()
+                    messages.success(request, f'"{obj.name}" added to lab inventory.')
+                except Exception:
+                    messages.error(request, 'A consumable with that name already exists.')
+            else:
+                messages.error(request, 'Please fix the form errors below.')
+            return redirect('lab_settings')
+
+        if action == 'adjust':
+            pk = request.POST.get('pk')
+            new_qty = request.POST.get('quantity')
+            obj = get_object_or_404(LabConsumable, pk=pk, hospital=hospital)
+            try:
+                obj.current_quantity = max(0, float(new_qty))
+                obj.save(update_fields=['current_quantity', 'updated_at'])
+                messages.success(request, f'Stock for "{obj.name}" updated to {obj.current_quantity}.')
+            except (TypeError, ValueError):
+                messages.error(request, 'Invalid quantity value.')
+            return redirect('lab_settings')
+
+        if action == 'toggle':
+            pk = request.POST.get('pk')
+            obj = get_object_or_404(LabConsumable, pk=pk, hospital=hospital)
+            obj.is_active = not obj.is_active
+            obj.save(update_fields=['is_active', 'updated_at'])
+            state = 'activated' if obj.is_active else 'deactivated'
+            messages.success(request, f'"{obj.name}" {state}.')
+            return redirect('lab_settings')
+
+    form = LabConsumableForm() if is_admin else None
+    return render(request, 'lab/lab_settings.html', {
+        'consumables': consumables,
+        'form': form,
+        'is_admin': is_admin,
+        'active_nav': 'lab_settings',
+    })
