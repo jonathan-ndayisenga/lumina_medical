@@ -490,6 +490,54 @@ def revenue_report_print(request):
 
 
 @login_required
+def revenue_breakdown(request):
+    guard = _require_finance(request)
+    if guard:
+        return guard
+
+    hospital = _hospital(request)
+    today = timezone.localdate()
+    date_from = request.GET.get("from", today.replace(day=1).isoformat())
+    date_to = request.GET.get("to", today.isoformat())
+    account_pk = request.GET.get("account")
+
+    account = get_object_or_404(
+        Account,
+        pk=account_pk,
+        hospital=hospital,
+        account_type=Account.TYPE_REVENUE,
+    )
+
+    lines = (
+        JournalLine.objects.filter(
+            account=account,
+            entry__date__gte=date_from,
+            entry__date__lte=date_to,
+            entry__is_reversal=False,
+            entry__reversal_of__isnull=True,
+        )
+        .select_related(
+            "entry",
+            "entry__source_visit_service__visit__patient",
+            "entry__source_payment__visit__patient",
+        )
+        .order_by("-entry__date", "-entry__id")
+    )
+
+    grand_total = lines.aggregate(t=Sum("credit"))["t"] or Decimal("0")
+
+    return render(request, "finance/revenue_breakdown.html", {
+        "active_nav": "finance_revenue",
+        "hospital": hospital,
+        "account": account,
+        "lines": lines,
+        "grand_total": grand_total,
+        "date_from": date_from,
+        "date_to": date_to,
+    })
+
+
+@login_required
 def trial_balance(request):
     guard = _require_finance(request)
     if guard:

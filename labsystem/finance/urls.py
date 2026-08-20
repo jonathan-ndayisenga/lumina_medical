@@ -15,6 +15,7 @@ urlpatterns = [
     path("debtors/<int:patient_id>/", views.debtor_patient, name="finance_debtor_patient"),
     path("reports/revenue/", views.revenue_report, name="finance_revenue"),
     path("reports/revenue/print/", views.revenue_report_print, name="finance_revenue_print"),
+    path("reports/revenue/breakdown/", views.revenue_breakdown, name="finance_revenue_breakdown"),
     path("reports/trial-balance/", views.trial_balance, name="finance_trial_balance"),
     path("reports/profit-loss/", views.profit_and_loss, name="finance_pnl"),
     path("reports/balance-sheet/", views.balance_sheet, name="finance_balance_sheet"),

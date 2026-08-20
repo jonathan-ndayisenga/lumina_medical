@@ -29,11 +29,23 @@
                 </thead>
                 <tbody class="divide-y divide-gray-100">
                     {% for row in rows %}
-                    <tr class="hover:bg-gray-50 {% if not row.total %}opacity-40{% endif %}">
-                        <td class="py-2 pr-4 font-mono text-xs text-text-muted">{{ row.account.code }}</td>
-                        <td class="py-2 pr-4 text-text-main">{{ row.account.name }}</td>
-                        <td class="py-2 text-right font-mono font-semibold text-text-main">{{ row.total|floatformat:0|intcomma }}</td>
+                    {% if row.total %}
+                    <tr class="hover:bg-brand-soft cursor-pointer transition-colors group"
+                        onclick="window.location='{% url 'finance_revenue_breakdown' %}?account={{ row.account.pk }}&from={{ date_from }}&to={{ date_to }}'">
+                        <td class="py-3 pr-4 font-mono text-xs text-text-muted">{{ row.account.code }}</td>
+                        <td class="py-3 pr-4 text-text-main font-medium group-hover:text-brand-dark">
+                            {{ row.account.name }}
+                            <span class="ml-1 text-xs text-blue-500 opacity-0 group-hover:opacity-100 transition-opacity">&rarr;</span>
+                        </td>
+                        <td class="py-3 text-right font-mono font-semibold text-text-main">{{ row.total|floatformat:0|intcomma }}</td>
                     </tr>
+                    {% else %}
+                    <tr class="opacity-40">
+                        <td class="py-3 pr-4 font-mono text-xs text-text-muted">{{ row.account.code }}</td>
+                        <td class="py-3 pr-4 text-text-muted">{{ row.account.name }}</td>
+                        <td class="py-3 text-right font-mono text-text-muted">0</td>
+                    </tr>
+                    {% endif %}
                     {% endfor %}
                 </tbody>
                 <tfoot class="border-t-2 border-gray-300 bg-gray-50">
