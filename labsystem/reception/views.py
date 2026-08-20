@@ -650,15 +650,34 @@ def patient_create(request):
         messages.error(request, "A hospital context is required before you can register patients.")
         return redirect("reception_dashboard")
 
+    duplicate_patients = []
+
     if request.method == "POST":
         form = PatientForm(request.POST)
+        force_create = request.POST.get("force_create") == "1"
+
         if form.is_valid():
-            patient = form.save(commit=False)
-            patient.hospital = hospital
-            patient.save()
-            messages.success(request, f"{patient.name} registered successfully.")
-            return redirect("visit_create", patient_id=patient.pk)
-        messages.error(request, "Please fix the patient details below.")
+            name = form.cleaned_data.get("name", "").strip()
+
+            if not force_create and name:
+                # Split name into words and match any patient whose name contains any word (min 3 chars)
+                words = [w for w in name.split() if len(w) >= 3]
+                qs = Patient.objects.filter(hospital=hospital)
+                for word in words:
+                    qs = qs.filter(name__icontains=word)
+                duplicate_patients = list(qs.order_by("name")[:8])
+
+            if duplicate_patients:
+                # Re-render form with duplicate warning — do not save yet
+                pass
+            else:
+                patient = form.save(commit=False)
+                patient.hospital = hospital
+                patient.save()
+                messages.success(request, f"{patient.name} registered successfully.")
+                return redirect("visit_create", patient_id=patient.pk)
+        else:
+            messages.error(request, "Please fix the patient details below.")
     else:
         form = PatientForm()
 
@@ -671,6 +690,7 @@ def patient_create(request):
             "dashboard_intro": "Create a patient record and continue into visit creation.",
             "hospital": hospital,
             "form": form,
+            "duplicate_patients": duplicate_patients,
         },
     )
 

@@ -93,7 +93,7 @@
 
 {% block content %}
 <div class="space-y-3 print-shell" style="background: #fff; color: #111827; font-size: 12px; line-height: 1.2;">
-    {% include "partials/print_header.html" with hospital=report.hospital print_title="LABORATORY REPORT" print_subtitle=report.sample_date %}
+    {% include "partials/print_header.html" with hospital=report.hospital print_title="LABORATORY REPORT" print_subtitle=report.sample_date|fancy_datetime %}
 
     <div class="patient-grid grid grid-cols-3 gap-1 p-2 border border-gray-200 rounded-lg bg-white" style="font-size: 0.75rem;">
         <div class="flex items-baseline gap-1 flex-wrap min-w-0">
@@ -114,7 +114,7 @@
         </div>
         <div class="flex items-baseline gap-1 flex-wrap min-w-0">
             <span class="label font-semibold uppercase text-text-muted" style="font-size: 0.66rem;">Sample Date:</span>
-            <span class="value font-semibold text-text-main" style="font-size: 0.79rem;">{{ report.sample_date|date:"d M Y H:i" }}</span>
+            <span class="value font-semibold text-text-main" style="font-size: 0.79rem;">{{ report.sample_date|fancy_datetime }}</span>
         </div>
         <div class="flex items-baseline gap-1 flex-wrap min-w-0">
             <span class="label font-semibold uppercase text-text-muted" style="font-size: 0.66rem;">Specimen:</span>
@@ -206,7 +206,7 @@
 
     {% if report.comments %}
     <section class="section-block border border-gray-200 rounded-lg overflow-hidden">
-        <div class="section-heading px-3 py-2 bg-brand-soft text-text-main font-bold uppercase text-xs" style="letter-spacing: 0.08em;">Clinical Remarks</div>
+        <div class="section-heading px-3 py-2 bg-brand-soft text-text-main font-bold uppercase text-xs" style="letter-spacing: 0.08em;">Lab Notes</div>
         <div class="remarks-body px-3 py-2" style="font-size: 0.76rem; line-height: 1.18;">{{ report.comments }}</div>
     </section>
     {% endif %}

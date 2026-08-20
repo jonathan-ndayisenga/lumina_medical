@@ -1,8 +1,29 @@
 from decimal import Decimal, InvalidOperation
 
 from django import template
+from django.utils import timezone
 
 register = template.Library()
+
+
+@register.filter
+def fancy_datetime(value):
+    """Format a datetime as 'Thursday 20TH August, 2026 at 14:30'."""
+    if not value:
+        return ""
+    try:
+        if timezone.is_aware(value):
+            value = timezone.localtime(value)
+        day = value.day
+        suffix = (
+            "ST" if day % 10 == 1 and day != 11 else
+            "ND" if day % 10 == 2 and day != 12 else
+            "RD" if day % 10 == 3 and day != 13 else
+            "TH"
+        )
+        return value.strftime(f"%A {day}{suffix} %B, %Y at %H:%M")
+    except (AttributeError, ValueError):
+        return str(value)
 
 @register.filter
 def get_item(dictionary, key):
