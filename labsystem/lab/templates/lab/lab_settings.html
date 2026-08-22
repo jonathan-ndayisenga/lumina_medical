@@ -102,12 +102,7 @@
                                         {% if item.is_active %}Deactivate{% else %}Activate{% endif %}
                                     </button>
                                 </form>
-                                <form method="post" onsubmit="return confirm('Delete {{ item.name }}? This cannot be undone.');">
-                                    {% csrf_token %}
-                                    <input type="hidden" name="action" value="delete">
-                                    <input type="hidden" name="pk" value="{{ item.pk }}">
-                                    <button type="submit" class="btn btn-danger btn-sm">Delete</button>
-                                </form>
+
                             </div>
                         </td>
                         {% endif %}
