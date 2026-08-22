@@ -8,7 +8,7 @@ breaks the clinical workflow.
 
 import logging
 
-from django.db.models.signals import post_delete, post_save
+from django.db.models.signals import post_save, pre_delete
 from django.dispatch import receiver
 
 logger = logging.getLogger(__name__)
@@ -29,9 +29,8 @@ def on_visit_service_save(sender, instance, **kwargs):
     _safe_post(post_visit_service, instance)
 
 
-@receiver(post_delete, sender="reception.VisitService")
+@receiver(pre_delete, sender="reception.VisitService")
 def on_visit_service_delete(sender, instance, **kwargs):
-    from .models import JournalEntry
     from .posting import _reverse_existing
     try:
         _reverse_existing(instance.visit.hospital, source_visit_service=instance)
@@ -47,7 +46,7 @@ def on_payment_save(sender, instance, **kwargs):
     _safe_post(post_payment, instance)
 
 
-@receiver(post_delete, sender="reception.Payment")
+@receiver(pre_delete, sender="reception.Payment")
 def on_payment_delete(sender, instance, **kwargs):
     from .posting import _reverse_existing
     try:
@@ -64,7 +63,7 @@ def on_expense_save(sender, instance, **kwargs):
     _safe_post(post_expense, instance)
 
 
-@receiver(post_delete, sender="admin_dashboard.Expense")
+@receiver(pre_delete, sender="admin_dashboard.Expense")
 def on_expense_delete(sender, instance, **kwargs):
     from .posting import _reverse_existing
     try:
@@ -81,7 +80,7 @@ def on_salary_save(sender, instance, **kwargs):
     _safe_post(post_salary, instance)
 
 
-@receiver(post_delete, sender="admin_dashboard.Salary")
+@receiver(pre_delete, sender="admin_dashboard.Salary")
 def on_salary_delete(sender, instance, **kwargs):
     from .posting import _reverse_salary
     try:
