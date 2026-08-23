@@ -2456,10 +2456,72 @@ def download_inventory_report(request):
 def printable_inventory_report(request):
     hospital = active_hospital(request)
     inventory_items = (
-        InventoryItem.objects.filter(hospital=hospital).order_by("category", "name").prefetch_related("batches")
+        InventoryItem.objects.filter(hospital=hospital).order_by("category", "name")
         if hospital
         else InventoryItem.objects.none()
     )
+
+    search_query = (request.GET.get("search") or "").strip()
+    selected_category = (request.GET.get("category") or "").strip()
+    selected_stock_filter = (request.GET.get("stock") or "").strip()
+
+    valid_categories = {choice[0] for choice in InventoryItem.CATEGORY_CHOICES}
+    valid_stock_filters = {"all", "out", "low", "healthy", "active", "inactive", "expired"}
+
+    if search_query:
+        inventory_items = inventory_items.filter(
+            Q(name__icontains=search_query)
+            | Q(unit__icontains=search_query)
+            | Q(base_unit__icontains=search_query)
+            | Q(category__icontains=search_query)
+        )
+    if selected_category in valid_categories:
+        inventory_items = inventory_items.filter(category=selected_category)
+    else:
+        selected_category = ""
+
+    if selected_stock_filter not in valid_stock_filters:
+        selected_stock_filter = "all"
+
+    if selected_stock_filter == "out":
+        inventory_items = inventory_items.filter(current_quantity__lte=0)
+    elif selected_stock_filter == "low":
+        inventory_items = inventory_items.filter(
+            current_quantity__gt=0, current_quantity__lte=models.F("reorder_level")
+        )
+    elif selected_stock_filter == "healthy":
+        inventory_items = inventory_items.filter(current_quantity__gt=models.F("reorder_level"))
+    elif selected_stock_filter == "active":
+        inventory_items = inventory_items.filter(is_active=True)
+    elif selected_stock_filter == "inactive":
+        inventory_items = inventory_items.filter(is_active=False)
+    elif selected_stock_filter == "expired":
+        inventory_items = inventory_items.filter(
+            batches__expiry_date__isnull=False,
+            batches__expiry_date__lt=timezone.localdate(),
+            batches__quantity__gt=0,
+        ).distinct()
+
+    inventory_items = inventory_items.prefetch_related("batches")
+
+    # Build a human-readable filter label for the report header.
+    label_parts = []
+    if selected_stock_filter and selected_stock_filter != "all":
+        label_parts.append({
+            "out": "Out of Stock",
+            "low": "Low Stock",
+            "healthy": "Healthy Stock",
+            "active": "Active Items",
+            "inactive": "Inactive Items",
+            "expired": "Expired Batches",
+        }.get(selected_stock_filter, selected_stock_filter.title()))
+    if selected_category:
+        category_label = dict(InventoryItem.CATEGORY_CHOICES).get(selected_category, selected_category)
+        label_parts.append(category_label)
+    if search_query:
+        label_parts.append(f'Search: "{search_query}"')
+    filter_label = " · ".join(label_parts) if label_parts else "All Items"
+
     printable_rows, totals = inventory_printable_rows(inventory_items)
     context = hospital_admin_context(
         request,
@@ -2473,6 +2535,7 @@ def printable_inventory_report(request):
             "totals": totals,
             "estimated_margin": totals["stock_retail"] - totals["stock_cost"],
             "generated_on": timezone.localtime(),
+            "filter_label": filter_label,
         }
     )
     return render(request, "admin_dashboard/inventory_printable_report.html", context)

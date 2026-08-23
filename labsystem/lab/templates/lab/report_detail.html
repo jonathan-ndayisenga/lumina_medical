@@ -224,49 +224,57 @@
             {% endfor %}
         </div>
         {% elif not report.profile or report.profile.code == 'manual_simple' %}
-        <div class="overflow-x-auto">
-            <table class="results-table w-full text-sm" style="table-layout: fixed;">
+        <div style="width: 100%;">
+            <table class="results-table" style="width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 0.875rem;">
                 <colgroup>
                     <col style="width: 45%;">
                     <col style="width: 55%;">
                 </colgroup>
                 <thead>
-                    <tr class="border-b-2 border-gray-300">
-                        <th class="text-left px-3 py-2 text-xs font-semibold uppercase tracking-wide">Test</th>
-                        <th class="text-left px-3 py-2 text-xs font-semibold uppercase tracking-wide">Result</th>
+                    <tr>
+                        <th class="text-left px-3 py-2 text-xs font-semibold uppercase tracking-wide" style="border-bottom: 2px solid #d1d5db;">Test</th>
+                        <th class="text-left px-3 py-2 text-xs font-semibold uppercase tracking-wide" style="border-bottom: 2px solid #d1d5db;">Result</th>
                     </tr>
                 </thead>
-                <tbody class="divide-y">
+                <tbody>
                     {% for result in group.results %}
                     <tr class="hover:bg-gray-50">
-                        <td class="px-3 py-2 font-semibold text-text-main">{{ result.test.name }}</td>
-                        <td class="px-3 py-2 text-text-main" style="white-space: pre-wrap;">{{ result.result_value|default:"" }}</td>
+                        <td class="px-3 py-2 font-semibold text-text-main" style="border-bottom: 1px solid #c8d8e4;">{{ result.test.name }}</td>
+                        <td class="px-3 py-2 text-text-main" style="border-bottom: 1px solid #c8d8e4; white-space: pre-wrap;">{{ result.result_value|default:"" }}</td>
                     </tr>
                     {% endfor %}
                 </tbody>
             </table>
         </div>
         {% else %}
-        <div class="overflow-x-auto">
-            <table class="results-table w-full text-sm">
+        <div style="width: 100%;">
+            <table class="results-table" style="width: 100%; border-collapse: collapse; font-size: 0.875rem; table-layout: fixed;">
+                <colgroup>
+                    <col style="width: 28%;">
+                    <col style="width: 14%;">
+                    <col style="width: 20%;">
+                    <col style="width: 10%;">
+                    <col style="width: 10%;">
+                    <col style="width: 18%;">
+                </colgroup>
                 <thead>
-                    <tr class="border-b border-gray-200">
-                        <th class="text-left px-3 py-2 text-xs font-semibold uppercase w-32">Test</th>
-                        <th class="text-left px-3 py-2 text-xs font-semibold uppercase w-16">Result</th>
-                        <th class="text-left px-3 py-2 text-xs font-semibold uppercase w-24">Reference Range</th>
-                        <th class="text-left px-3 py-2 text-xs font-semibold uppercase w-16">Flag</th>
-                        <th class="text-left px-3 py-2 text-xs font-semibold uppercase w-16">Units</th>
-                        <th class="text-left px-3 py-2 text-xs font-semibold uppercase">Comment</th>
+                    <tr>
+                        <th class="text-left px-3 py-2 text-xs font-semibold uppercase" style="border-bottom: 2px solid #d1d5db;">Test</th>
+                        <th class="text-left px-3 py-2 text-xs font-semibold uppercase" style="border-bottom: 2px solid #d1d5db;">Result</th>
+                        <th class="text-left px-3 py-2 text-xs font-semibold uppercase" style="border-bottom: 2px solid #d1d5db;">Reference Range</th>
+                        <th class="text-left px-3 py-2 text-xs font-semibold uppercase" style="border-bottom: 2px solid #d1d5db;">Flag</th>
+                        <th class="text-left px-3 py-2 text-xs font-semibold uppercase" style="border-bottom: 2px solid #d1d5db;">Units</th>
+                        <th class="text-left px-3 py-2 text-xs font-semibold uppercase" style="border-bottom: 2px solid #d1d5db;">Comment</th>
                     </tr>
                 </thead>
-                <tbody class="divide-y">
+                <tbody>
                     {% for result in group.results %}
                     <tr class="hover:bg-gray-50">
                         {% with flag=result.result_value|range_flag:result.reference_range %}
-                        <td class="px-3 py-2"><strong>{{ result.test.name }}</strong></td>
-                        <td class="px-3 py-2" style="white-space: pre-wrap;">{{ result.result_value|default:"-" }}</td>
-                        <td class="px-3 py-2">{{ result.reference_range|default:"-" }}</td>
-                        <td class="px-3 py-2">
+                        <td class="px-3 py-2" style="border-bottom: 1px solid #c8d8e4;"><strong>{{ result.test.name }}</strong></td>
+                        <td class="px-3 py-2" style="border-bottom: 1px solid #c8d8e4; white-space: pre-wrap;">{{ result.result_value|default:"-" }}</td>
+                        <td class="px-3 py-2" style="border-bottom: 1px solid #c8d8e4;">{{ result.reference_range|default:"-" }}</td>
+                        <td class="px-3 py-2" style="border-bottom: 1px solid #c8d8e4;">
                             {% if flag == "HIGH" %}
                                 <span class="font-semibold text-red-600">{{ flag }}</span>
                             {% elif flag == "LOW" %}
@@ -277,8 +285,8 @@
                                 -
                             {% endif %}
                         </td>
-                        <td class="px-3 py-2">{{ result.unit|default:"-" }}</td>
-                        <td class="px-3 py-2">{{ result.comment|default:"-" }}</td>
+                        <td class="px-3 py-2" style="border-bottom: 1px solid #c8d8e4;">{{ result.unit|default:"-" }}</td>
+                        <td class="px-3 py-2" style="border-bottom: 1px solid #c8d8e4;">{{ result.comment|default:"-" }}</td>
                         {% endwith %}
                     </tr>
                     {% endfor %}

@@ -651,31 +651,68 @@ def patient_create(request):
         return redirect("reception_dashboard")
 
     duplicate_patients = []
+    nin_required = False
 
     if request.method == "POST":
         form = PatientForm(request.POST)
         force_create = request.POST.get("force_create") == "1"
+        nin_required = request.POST.get("nin_required") == "1"
 
         if form.is_valid():
-            name = form.cleaned_data.get("name", "").strip()
+            name = form.cleaned_data["name"].strip()
+            dob = form.cleaned_data.get("date_of_birth")
+            nin = (form.cleaned_data.get("nin") or "").strip()
 
-            if not force_create and name:
-                # Split name into words and match any patient whose name contains any word (min 3 chars)
-                words = [w for w in name.split() if len(w) >= 3]
-                qs = Patient.objects.filter(hospital=hospital)
-                for word in words:
-                    qs = qs.filter(name__icontains=word)
-                duplicate_patients = list(qs.order_by("name")[:8])
+            if nin_required:
+                # Hard match was already confirmed — user must provide a unique NIN.
+                if not nin:
+                    form.add_error("nin", "NIN is required to distinguish this patient from the existing record.")
+                elif Patient.objects.filter(hospital=hospital, nin__iexact=nin).exists():
+                    form.add_error("nin", "A patient with this NIN is already registered — this appears to be a duplicate.")
 
-            if duplicate_patients:
-                # Re-render form with duplicate warning — do not save yet
-                pass
-            else:
+                if form.errors:
+                    if dob:
+                        duplicate_patients = list(
+                            Patient.objects.filter(hospital=hospital, name__iexact=name, date_of_birth=dob)[:5]
+                        )
+                else:
+                    patient = form.save(commit=False)
+                    patient.hospital = hospital
+                    patient.save()
+                    messages.success(request, f"{patient.name} registered successfully.")
+                    return redirect("visit_create", patient_id=patient.pk)
+
+            elif force_create:
                 patient = form.save(commit=False)
                 patient.hospital = hospital
                 patient.save()
                 messages.success(request, f"{patient.name} registered successfully.")
                 return redirect("visit_create", patient_id=patient.pk)
+
+            else:
+                # Stage 1: exact name + DOB → hard block, must provide NIN.
+                if name and dob:
+                    exact_matches = list(
+                        Patient.objects.filter(hospital=hospital, name__iexact=name, date_of_birth=dob)[:5]
+                    )
+                    if exact_matches:
+                        duplicate_patients = exact_matches
+                        nin_required = True
+
+                # Stage 2: name-word match → soft warning, force_create bypass allowed.
+                if not nin_required and name:
+                    words = [w for w in name.split() if len(w) >= 3]
+                    qs = Patient.objects.filter(hospital=hospital)
+                    for word in words:
+                        qs = qs.filter(name__icontains=word)
+                    duplicate_patients = list(qs.order_by("name")[:8])
+
+                if not duplicate_patients:
+                    patient = form.save(commit=False)
+                    patient.hospital = hospital
+                    patient.save()
+                    messages.success(request, f"{patient.name} registered successfully.")
+                    return redirect("visit_create", patient_id=patient.pk)
         else:
             messages.error(request, "Please fix the patient details below.")
     else:
@@ -691,6 +728,7 @@ def patient_create(request):
             "hospital": hospital,
             "form": form,
             "duplicate_patients": duplicate_patients,
+            "nin_required": nin_required,
         },
     )
 

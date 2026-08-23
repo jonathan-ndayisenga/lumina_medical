@@ -15,7 +15,7 @@
             <a href="{% url 'download_inventory_import_template' %}" class="btn btn-secondary whitespace-nowrap">Download Import Template</a>
             <a href="{% url 'download_inventory_report' %}" class="btn btn-secondary whitespace-nowrap">Download CSV</a>
             <a href="{% url 'download_inventory_xlsx' %}" class="btn btn-secondary whitespace-nowrap">Download Excel (.xlsx)</a>
-            <a href="{% url 'printable_inventory_report' %}" class="btn btn-secondary whitespace-nowrap" target="_blank" rel="noopener">Printable Stock Sheet</a>
+            <a href="{% url 'printable_inventory_report' %}{% if inventory_filter_querystring %}?{{ inventory_filter_querystring }}{% endif %}" class="btn btn-secondary whitespace-nowrap" target="_blank" rel="noopener">Printable Stock Sheet</a>
         </div>
     </div>
 
