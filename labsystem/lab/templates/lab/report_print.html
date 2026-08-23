@@ -37,8 +37,13 @@
             print-color-adjust: exact;
         }
 
-        .content {
-            padding: 0;
+        /* Collapse the sidebar grid so content fills the full page width */
+        #appShell {
+            display: block !important;
+        }
+
+        main {
+            min-height: unset !important;
         }
 
         .print-header,
@@ -94,6 +99,8 @@
     }
 </style>
 {% endblock %}
+
+{% block content_container_classes %}p-0{% endblock %}
 
 {% block content %}
 <div class="space-y-3 print-shell" style="background: #fff; color: #111827; font-size: 11px; line-height: 1.2;">
