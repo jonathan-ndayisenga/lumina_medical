@@ -11,6 +11,14 @@
         margin: 8mm;
     }
 
+    /* Collapse sidebar grid in screen view so tables fill full width */
+    #appShell {
+        display: block !important;
+    }
+    .sidebar-nav, .sidebar-overlay, nav[aria-label="Sidebar"] {
+        display: none !important;
+    }
+
     .paper-section .results-table {
         border: none;
     }
