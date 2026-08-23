@@ -5,173 +5,221 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Print Report - Lumina Medical Services</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        brand: {
-                            dark: '#1d3557',
-                            soft: '#e8eef5',
-                            border: '#cfd8e3',
-                        },
-                        text: {
-                            main: '#1f2a37',
-                            muted: '#5f6b7a',
-                        },
-                    },
-                    fontFamily: {
-                        sans: ['Inter', 'sans-serif'],
-                    },
-                },
-            },
-        }
-    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
         @page {
             size: A4 portrait;
-            margin: 8mm;
+            margin: 10mm;
         }
 
         *, *::before, *::after { box-sizing: border-box; }
 
-        body {
+        html, body {
             margin: 0;
-            padding: 0.75rem;
-            font-family: 'Inter', system-ui, sans-serif;
-            background: #f7f9fc;
+            padding: 0;
+            font-family: 'Inter', Arial, sans-serif;
+            font-size: 11px;
             color: #111827;
+            background: #fff;
+            width: 100%;
         }
 
-        .results-table {
+        .print-shell {
+            width: 100%;
+            background: #fff;
+        }
+
+        /* ── Section blocks ── */
+        .section-block {
+            width: 100%;
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+            overflow: hidden;
+            margin-bottom: 8px;
+        }
+
+        .section-heading {
+            width: 100%;
+            padding: 5px 10px;
+            background: #e8eef5;
+            color: #1f2a37;
+            font-weight: 700;
+            font-size: 0.65rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+        }
+
+        /* ── Results tables ── */
+        table {
             width: 100%;
             border-collapse: collapse;
             font-size: 0.68rem;
             line-height: 1.2;
         }
 
-        .section-block {
+        table th {
+            text-align: left;
+            border-bottom: 2px solid #1d3557;
+            padding: 4px 8px;
+            font-size: 0.60rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: #1d3557;
+            background: #fff;
+        }
+
+        table td {
+            border-bottom: 1px solid #c8d8e4;
+            padding: 4px 8px;
+            vertical-align: top;
+            color: #1f2a37;
+        }
+
+        /* ── Patient info grid ── */
+        .patient-grid {
             width: 100%;
-            display: block;
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 4px;
+            padding: 6px 8px;
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+            margin-bottom: 8px;
+            font-size: 0.68rem;
         }
 
-        .paper-section .results-table {
-            border: none;
+        .patient-field {
+            display: flex;
+            align-items: baseline;
+            gap: 4px;
+            flex-wrap: wrap;
+            min-width: 0;
         }
 
-        .paper-section .results-table th,
-        .paper-section .results-table td {
-            background: transparent;
-            border-bottom: 0;
-            padding-left: 0;
-            padding-right: 0.45rem;
-            color: #111827;
+        .patient-label {
+            font-weight: 600;
+            text-transform: uppercase;
+            color: #5f6b7a;
+            font-size: 0.60rem;
         }
 
-        .paper-section .results-table th {
+        .patient-value {
+            font-weight: 600;
+            color: #1f2a37;
+            font-size: 0.72rem;
+        }
+
+        /* ── Stool analysis layout ── */
+        .stool-row {
+            border-bottom: 1px solid #e6ecf3;
+            padding: 6px;
+        }
+
+        .stool-name {
+            font-weight: 700;
+            font-size: 0.66rem;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            color: #1d3557;
+            margin-bottom: 2px;
+        }
+
+        .stool-value {
+            font-size: 0.69rem;
+            color: #1f2a37;
+            white-space: pre-wrap;
+            line-height: 1.45;
+            padding-left: 4px;
+        }
+
+        /* ── CBC paper section ── */
+        .paper-section table th {
             font-size: 0.69rem;
             font-weight: 700;
             text-transform: none;
             letter-spacing: 0;
+            border-bottom: 0;
         }
+
+        .paper-section table td {
+            border-bottom: 0;
+            padding-left: 0;
+            padding-right: 6px;
+        }
+
+        /* ── Footer ── */
+        .report-footer {
+            border-top: 1px solid #d1d5db;
+            padding-top: 6px;
+            text-align: center;
+            color: #6b7280;
+            margin-top: 8px;
+        }
+
+        /* ── Remarks ── */
+        .remarks-body {
+            padding: 6px 10px;
+            font-size: 0.69rem;
+            line-height: 1.18;
+        }
+
+        /* ── Flag colours ── */
+        .flag-high { color: #dc2626; font-weight: 700; }
+        .flag-low  { color: #2563eb; font-weight: 700; }
+        .flag-norm { font-weight: 700; }
 
         @media print {
-            body {
-                -webkit-print-color-adjust: exact;
-                print-color-adjust: exact;
-                background: #fff;
-                padding: 0;
-            }
-
-            .print-header,
-            .patient-grid {
-                break-inside: avoid;
-            }
-
-            .section-block {
-                break-inside: auto;
-            }
-
-            .section-block + .section-block {
-                break-before: page;
-            }
-
-            .results-table tr {
-                break-inside: avoid;
-            }
-
-            .report-footer {
-                font-size: 0.64rem;
-            }
-        }
-
-        @media (max-width: 760px) {
-            .print-header {
-                flex-direction: column;
-                align-items: flex-start;
-            }
-
-            .print-meta {
-                width: 100%;
-                text-align: left;
-            }
-
-            .patient-grid {
-                grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-            }
+            html, body { background: #fff; }
+            .section-block { break-inside: auto; }
+            .section-block + .section-block { break-before: page; }
+            .patient-grid { break-inside: avoid; }
+            tr { break-inside: avoid; }
+            .report-footer { font-size: 0.64rem; }
         }
 
         @media (max-width: 640px) {
-            .print-shell {
-                font-size: 11px;
-            }
+            .patient-grid { grid-template-columns: 1fr; }
+        }
 
-            .patient-grid {
-                grid-template-columns: 1fr !important;
-            }
-
-            .results-table {
-                min-width: 640px;
-            }
+        @media (max-width: 760px) {
+            .patient-grid { grid-template-columns: repeat(2, 1fr); }
         }
     </style>
 </head>
 <body>
-<div class="space-y-3 print-shell" style="background: #fff; color: #111827; font-size: 11px; line-height: 1.2;">
+<div class="print-shell">
     {% include "partials/print_header.html" with hospital=report.hospital print_title="LABORATORY REPORT" print_subtitle=report.sample_date|fancy_datetime %}
 
-    <div class="patient-grid grid grid-cols-3 gap-1 p-2 border border-gray-200 rounded-lg bg-white" style="font-size: 0.68rem;">
-        <div class="flex items-baseline gap-1 flex-wrap min-w-0">
-            <span class="label font-semibold uppercase text-text-muted" style="font-size: 0.60rem;">Name:</span>
-            <span class="value font-semibold text-text-main" style="font-size: 0.72rem;">{{ report.patient_name }}</span>
+    <div class="patient-grid">
+        <div class="patient-field">
+            <span class="patient-label">Name:</span>
+            <span class="patient-value">{{ report.patient_name }}</span>
         </div>
-        <div class="flex items-baseline gap-1 flex-wrap min-w-0">
-            <span class="label font-semibold uppercase text-text-muted" style="font-size: 0.60rem;">Age:</span>
-            <span class="value font-semibold text-text-main" style="font-size: 0.72rem;">{{ report.patient_age }}</span>
+        <div class="patient-field">
+            <span class="patient-label">Age:</span>
+            <span class="patient-value">{{ report.patient_age }}</span>
         </div>
-        <div class="flex items-baseline gap-1 flex-wrap min-w-0">
-            <span class="label font-semibold uppercase text-text-muted" style="font-size: 0.60rem;">Sex:</span>
-            <span class="value font-semibold text-text-main" style="font-size: 0.72rem;">{{ report.get_patient_sex_display }}</span>
+        <div class="patient-field">
+            <span class="patient-label">Sex:</span>
+            <span class="patient-value">{{ report.get_patient_sex_display }}</span>
         </div>
-        <div class="flex items-baseline gap-1 flex-wrap min-w-0">
-            <span class="label font-semibold uppercase text-text-muted" style="font-size: 0.60rem;">Referred By:</span>
-            <span class="value font-semibold text-text-main" style="font-size: 0.72rem;">{{ report.referred_by|default:"-" }}</span>
+        <div class="patient-field">
+            <span class="patient-label">Referred By:</span>
+            <span class="patient-value">{{ report.referred_by|default:"-" }}</span>
         </div>
-        <div class="flex items-baseline gap-1 flex-wrap min-w-0">
-            <span class="label font-semibold uppercase text-text-muted" style="font-size: 0.60rem;">Sample Date:</span>
-            <span class="value font-semibold text-text-main" style="font-size: 0.72rem;">{{ report.sample_date|fancy_datetime }}</span>
+        <div class="patient-field">
+            <span class="patient-label">Sample Date:</span>
+            <span class="patient-value">{{ report.sample_date|fancy_datetime }}</span>
         </div>
-        <div class="flex items-baseline gap-1 flex-wrap min-w-0">
-            <span class="label font-semibold uppercase text-text-muted" style="font-size: 0.60rem;">Specimen:</span>
-            <span class="value font-semibold text-text-main" style="font-size: 0.72rem;">{{ report.specimen_type }}</span>
+        <div class="patient-field">
+            <span class="patient-label">Specimen:</span>
+            <span class="patient-value">{{ report.specimen_type }}</span>
         </div>
-        <div class="flex items-baseline gap-1 flex-wrap min-w-0">
-            <span class="label font-semibold uppercase text-text-muted" style="font-size: 0.60rem;">Technician:</span>
-            <span class="value font-semibold text-text-main" style="font-size: 0.72rem;">
+        <div class="patient-field">
+            <span class="patient-label">Technician:</span>
+            <span class="patient-value">
                 {% with att=report.attendant %}
                     {% if report.attendant_name %}{{ report.attendant_name }}
                     {% elif att %}{{ att.get_full_name|default:att.username }}
@@ -182,77 +230,81 @@
     </div>
 
     {% for group in result_groups %}
-    <section class="section-block border border-gray-200 rounded-lg overflow-hidden{% if report.profile and report.profile.code == 'cbc' %} paper-section{% endif %}">
+    <div class="section-block{% if report.profile and report.profile.code == 'cbc' %} paper-section{% endif %}">
         {% if group.name %}
-        <div class="section-heading px-3 py-2 bg-brand-soft text-text-main font-bold uppercase text-xs" style="letter-spacing: 0.08em;">{{ group.name }}</div>
+        <div class="section-heading">{{ group.name }}</div>
         {% endif %}
+
         {% if report.profile and report.profile.code == 'stool_analysis' %}
-        <div style="padding: 0.3rem 0.5rem;">
             {% for result in group.results %}
-            <div style="border-bottom: 1px solid #e6ecf3; padding: 0.45rem 0.35rem;">
-                <div style="font-weight: 700; font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.04em; color: #1d3557; margin-bottom: 0.2rem;">{{ result.test.name }}</div>
+            <div class="stool-row">
+                <div class="stool-name">{{ result.test.name }}</div>
                 {% if result.result_value %}
-                <div style="font-size: 0.69rem; color: #1f2a37; white-space: pre-wrap; line-height: 1.45; padding-left: 0.25rem;">{{ result.result_value }}</div>
+                <div class="stool-value">{{ result.result_value }}</div>
                 {% endif %}
             </div>
             {% endfor %}
-        </div>
+
         {% elif not report.profile or report.profile.code == 'manual_simple' %}
-        <table class="results-table">
+        <table>
             <thead>
                 <tr>
-                    <th style="width: 45%; text-align: left; border-bottom: 2px solid #1d3557; padding: 0.28rem 0.5rem; font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.05em; color: #1d3557;">Test</th>
-                    <th style="width: 55%; text-align: left; border-bottom: 2px solid #1d3557; padding: 0.28rem 0.5rem; font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.05em; color: #1d3557;">Result</th>
+                    <th style="width:45%;">Test</th>
+                    <th style="width:55%;">Result</th>
                 </tr>
             </thead>
             <tbody>
                 {% for result in group.results %}
                 <tr>
-                    <td style="border-bottom: 1px solid #c8d8e4; padding: 0.3rem 0.5rem; vertical-align: top; font-weight: 600; color: #1f2a37;">{{ result.test.name }}</td>
-                    <td style="border-bottom: 1px solid #c8d8e4; padding: 0.3rem 0.5rem; vertical-align: top; white-space: pre-wrap; color: #1f2a37;">{{ result.result_value|default:"" }}</td>
+                    <td style="font-weight:600;">{{ result.test.name }}</td>
+                    <td style="white-space:pre-wrap;">{{ result.result_value|default:"" }}</td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
+
         {% else %}
-        <table class="results-table" style="line-height: 1.12;">
+        <table>
             <thead>
                 <tr>
-                    <th style="width: 30%; text-align: left; border-bottom: 2px solid #1d3557; padding: 0.22rem 0.35rem; vertical-align: top; color: #1d3557; font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.04em;">Test</th>
-                    <th style="width: 14%; text-align: left; border-bottom: 2px solid #1d3557; padding: 0.22rem 0.35rem; vertical-align: top; color: #1d3557; font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.04em;">Result</th>
-                    <th style="width: 18%; text-align: left; border-bottom: 2px solid #1d3557; padding: 0.22rem 0.35rem; vertical-align: top; color: #1d3557; font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.04em;">Ref. Range</th>
-                    <th style="width: 10%; text-align: left; border-bottom: 2px solid #1d3557; padding: 0.22rem 0.35rem; vertical-align: top; color: #1d3557; font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.04em;">Flag</th>
-                    <th style="width: 10%; text-align: left; border-bottom: 2px solid #1d3557; padding: 0.22rem 0.35rem; vertical-align: top; color: #1d3557; font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.04em;">Units</th>
-                    <th style="width: 18%; text-align: left; border-bottom: 2px solid #1d3557; padding: 0.22rem 0.35rem; vertical-align: top; color: #1d3557; font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.04em;">Comment</th>
+                    <th style="width:30%;">Test</th>
+                    <th style="width:14%;">Result</th>
+                    <th style="width:18%;">Ref. Range</th>
+                    <th style="width:10%;">Flag</th>
+                    <th style="width:10%;">Units</th>
+                    <th style="width:18%;">Comment</th>
                 </tr>
             </thead>
             <tbody>
                 {% for result in group.results %}
                 <tr>
                     {% with flag=result.result_value|range_flag:result.reference_range %}
-                    <td style="border-bottom: 1px solid #c8d8e4; padding: 0.22rem 0.35rem; vertical-align: top; text-align: left;">{{ result.test.name }}</td>
-                    <td style="border-bottom: 1px solid #c8d8e4; padding: 0.22rem 0.35rem; vertical-align: top; text-align: left; white-space: pre-wrap;">{{ result.result_value|default:"-" }}</td>
-                    <td style="border-bottom: 1px solid #c8d8e4; padding: 0.22rem 0.35rem; vertical-align: top; text-align: left;">{{ result.reference_range|default:"-" }}</td>
-                    <td style="border-bottom: 1px solid #c8d8e4; padding: 0.22rem 0.35rem; vertical-align: top; text-align: left;{% if flag == 'HIGH' %} color: #dc2626; font-weight: 700;{% elif flag == 'LOW' %} color: #2563eb; font-weight: 700;{% elif flag == 'NORMAL' %} font-weight: 700;{% endif %}">{% if flag %}{{ flag }}{% else %}-{% endif %}</td>
-                    <td style="border-bottom: 1px solid #c8d8e4; padding: 0.22rem 0.35rem; vertical-align: top; text-align: left;">{{ result.unit|default:"-" }}</td>
-                    <td style="border-bottom: 1px solid #c8d8e4; padding: 0.22rem 0.35rem; vertical-align: top; text-align: left;">{{ result.comment|default:"-" }}</td>
+                    <td>{{ result.test.name }}</td>
+                    <td style="white-space:pre-wrap;">{{ result.result_value|default:"-" }}</td>
+                    <td>{{ result.reference_range|default:"-" }}</td>
+                    <td class="{% if flag == 'HIGH' %}flag-high{% elif flag == 'LOW' %}flag-low{% elif flag == 'NORMAL' %}flag-norm{% endif %}">{% if flag %}{{ flag }}{% else %}-{% endif %}</td>
+                    <td>{{ result.unit|default:"-" }}</td>
+                    <td>{{ result.comment|default:"-" }}</td>
                     {% endwith %}
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
         {% endif %}
-    </section>
+    </div>
     {% endfor %}
 
     {% if report.comments %}
-    <section class="section-block border border-gray-200 rounded-lg overflow-hidden">
-        <div class="section-heading px-3 py-2 bg-brand-soft text-text-main font-bold uppercase text-xs" style="letter-spacing: 0.08em;">Lab Notes</div>
-        <div class="remarks-body px-3 py-2" style="font-size: 0.69rem; line-height: 1.18;">{{ report.comments }}</div>
-    </section>
+    <div class="section-block">
+        <div class="section-heading">Lab Notes</div>
+        <div class="remarks-body">{{ report.comments }}</div>
+    </div>
     {% endif %}
 
-    {% include "partials/print_footer.html" with hospital=report.hospital %}
+    <div class="report-footer">
+        <div><strong style="color:#374151;">{% if hospital %}{{ hospital.name }}{% else %}Hospital EMR{% endif %}</strong>{% if hospital and hospital.tagline %} &nbsp;·&nbsp; {{ hospital.tagline }}{% endif %}{% if hospital and hospital.email %} &nbsp;·&nbsp; {{ hospital.email }}{% endif %}</div>
+        <div style="margin-top:6px;font-size:0.58rem;color:#9ca3af;letter-spacing:0.05em;">Powered by Ternah Health</div>
+    </div>
 </div>
 
 <script>
