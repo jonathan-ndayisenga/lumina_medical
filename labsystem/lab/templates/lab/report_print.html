@@ -1,116 +1,134 @@
-{% extends 'base.html' %}
 {% load static lab_extras %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Print Report - Lumina Medical Services</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            dark: '#1d3557',
+                            soft: '#e8eef5',
+                            border: '#cfd8e3',
+                        },
+                        text: {
+                            main: '#1f2a37',
+                            muted: '#5f6b7a',
+                        },
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                },
+            },
+        }
+    </script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        @page {
+            size: A4 portrait;
+            margin: 8mm;
+        }
 
-{% block title %}Print Report - Lumina Medical Services{% endblock %}
-{% block print_header %}{% endblock %}
+        *, *::before, *::after { box-sizing: border-box; }
 
-{% block extra_css %}
-<style>
-    @page {
-        size: A4 portrait;
-        margin: 8mm;
-    }
-
-    /* Collapse sidebar grid in screen view so tables fill full width */
-    #appShell {
-        display: block !important;
-    }
-    .sidebar-nav, .sidebar-overlay, nav[aria-label="Sidebar"] {
-        display: none !important;
-    }
-
-    .paper-section .results-table {
-        border: none;
-    }
-
-    .paper-section .results-table th,
-    .paper-section .results-table td {
-        background: transparent;
-        border-bottom: 0;
-        padding-left: 0;
-        padding-right: 0.45rem;
-        color: #111827;
-    }
-
-    .paper-section .results-table th {
-        font-size: 0.69rem;
-        font-weight: 700;
-        text-transform: none;
-        letter-spacing: 0;
-    }
-
-    @media print {
         body {
-            -webkit-print-color-adjust: exact;
-            print-color-adjust: exact;
+            margin: 0;
+            padding: 0.75rem;
+            font-family: 'Inter', system-ui, sans-serif;
+            background: #f7f9fc;
+            color: #111827;
         }
 
-        /* Collapse the sidebar grid so content fills the full page width */
-        #appShell {
-            display: block !important;
+        .paper-section .results-table {
+            border: none;
         }
 
-        main {
-            min-height: unset !important;
+        .paper-section .results-table th,
+        .paper-section .results-table td {
+            background: transparent;
+            border-bottom: 0;
+            padding-left: 0;
+            padding-right: 0.45rem;
+            color: #111827;
         }
 
-        .print-header,
-        .patient-grid {
-            break-inside: avoid;
+        .paper-section .results-table th {
+            font-size: 0.69rem;
+            font-weight: 700;
+            text-transform: none;
+            letter-spacing: 0;
         }
 
-        .section-block {
-            break-inside: auto;
+        @media print {
+            body {
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+                background: #fff;
+                padding: 0;
+            }
+
+            .print-header,
+            .patient-grid {
+                break-inside: avoid;
+            }
+
+            .section-block {
+                break-inside: auto;
+            }
+
+            .section-block + .section-block {
+                break-before: page;
+            }
+
+            .results-table tr {
+                break-inside: avoid;
+            }
+
+            .report-footer {
+                font-size: 0.64rem;
+            }
         }
 
-        .section-block + .section-block {
-            break-before: page;
+        @media (max-width: 760px) {
+            .print-header {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .print-meta {
+                width: 100%;
+                text-align: left;
+            }
+
+            .patient-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+            }
         }
 
-        .results-table tr {
-            break-inside: avoid;
+        @media (max-width: 640px) {
+            .print-shell {
+                font-size: 11px;
+            }
+
+            .patient-grid {
+                grid-template-columns: 1fr !important;
+            }
+
+            .results-table {
+                min-width: 640px;
+            }
         }
-
-        .report-footer {
-            font-size: 0.64rem;
-        }
-    }
-
-    @media (max-width: 760px) {
-        .print-header {
-            flex-direction: column;
-            align-items: flex-start;
-        }
-
-        .print-meta {
-            width: 100%;
-            text-align: left;
-        }
-
-        .patient-grid {
-            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-        }
-    }
-
-    @media (max-width: 640px) {
-        .print-shell {
-            font-size: 11px;
-        }
-
-        .patient-grid {
-            grid-template-columns: 1fr !important;
-        }
-
-        .results-table {
-            min-width: 640px;
-        }
-    }
-</style>
-{% endblock %}
-
-{% block content_container_classes %}p-0{% endblock %}
-
-{% block content %}
+    </style>
+</head>
+<body>
 <div class="space-y-3 print-shell" style="background: #fff; color: #111827; font-size: 11px; line-height: 1.2;">
     {% include "partials/print_header.html" with hospital=report.hospital print_title="LABORATORY REPORT" print_subtitle=report.sample_date|fancy_datetime %}
 
@@ -240,12 +258,11 @@
 
     {% include "partials/print_footer.html" with hospital=report.hospital %}
 </div>
-{% endblock %}
 
-{% block extra_js %}
 <script>
 window.addEventListener('load', function () {
     window.print();
 });
 </script>
-{% endblock %}
+</body>
+</html>
