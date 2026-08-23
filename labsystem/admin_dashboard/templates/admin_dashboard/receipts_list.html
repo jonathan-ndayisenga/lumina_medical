@@ -106,7 +106,7 @@
                         </div>
                         <div>
                             Collected by:
-                            {{ payment.recorded_by.get_full_name|default:payment.recorded_by.username|default:"-" }}
+                            {% if payment.recorded_by %}{{ payment.recorded_by.get_full_name|default:payment.recorded_by.username|default:"-" }}{% else %}-{% endif %}
                         </div>
                     </div>
                     <div class="mt-3 flex items-center justify-between gap-3">
