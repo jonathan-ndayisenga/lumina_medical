@@ -105,7 +105,7 @@
 <div class="sep"></div>
 
 <div><span class="lbl">Mode:</span> {{ payment.get_mode_display }}</div>
-<div><span class="lbl">By:</span> {{ payment.recorded_by.get_full_name|default:payment.recorded_by.username|truncatechars:16 }}</div>
+<div><span class="lbl">By:</span> {% if payment.recorded_by %}{{ payment.recorded_by.get_full_name|default:payment.recorded_by.username|truncatechars:16 }}{% else %}-{% endif %}</div>
 
 {% if payment.notes %}
 <div class="sep"></div>

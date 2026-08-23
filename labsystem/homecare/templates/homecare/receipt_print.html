@@ -32,7 +32,7 @@
 <div class="row"><span><b>Amount Paid</b></span><span>{{ receipt.amount_paid }}</span></div>
 <div class="row"><span><b>Balance Due</b></span><span>{{ receipt.placement.balance_due }}</span></div>
 <div class="sep"></div>
-<div><b>Issued by:</b> {{ receipt.recorded_by.get_full_name|default:receipt.recorded_by.username|default:"—" }}</div>
+<div><b>Issued by:</b> {% if receipt.recorded_by %}{{ receipt.recorded_by.get_full_name|default:receipt.recorded_by.username|default:"—" }}{% else %}—{% endif %}</div>
 {% if receipt.notes %}<div style="font-size:9px; font-weight:normal; margin-top:2px;">{{ receipt.notes }}</div>{% endif %}
 <div class="sep"></div>
 <div class="c">Thank you</div>

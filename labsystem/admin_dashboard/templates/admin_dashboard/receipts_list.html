@@ -174,7 +174,7 @@
                                 {% endif %}
                             </td>
                             <td class="text-sm text-text-muted">
-                                {{ payment.recorded_by.get_full_name|default:payment.recorded_by.username|default:"-" }}
+                                {% if payment.recorded_by %}{{ payment.recorded_by.get_full_name|default:payment.recorded_by.username|default:"-" }}{% else %}-{% endif %}
                             </td>
                             <td>
                                 {% if payment.bank_transactions.exists or payment.mobile_money_transactions.exists %}

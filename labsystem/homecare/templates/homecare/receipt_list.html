@@ -27,7 +27,7 @@
                 <td class="px-4 py-3 font-semibold text-text-main">UGX {{ r.amount_paid }}</td>
                 <td class="px-4 py-3 text-text-muted">{{ r.period_covered|default:"—" }}</td>
                 <td class="px-4 py-3 text-text-muted whitespace-nowrap">{{ r.paid_at|date:"d M Y" }}</td>
-                <td class="px-4 py-3 text-text-muted">{{ r.recorded_by.get_full_name|default:r.recorded_by.username|default:"—" }}</td>
+                <td class="px-4 py-3 text-text-muted">{% if r.recorded_by %}{{ r.recorded_by.get_full_name|default:r.recorded_by.username|default:"—" }}{% else %}—{% endif %}</td>
                 <td class="px-4 py-3"><a href="{% url 'homecare_receipt_print' r.pk %}" class="btn btn-secondary btn-sm">Print</a></td>
             </tr>
             {% empty %}
