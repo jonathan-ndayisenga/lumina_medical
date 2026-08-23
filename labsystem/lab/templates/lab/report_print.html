@@ -47,6 +47,18 @@
             color: #111827;
         }
 
+        .results-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.68rem;
+            line-height: 1.2;
+        }
+
+        .section-block {
+            width: 100%;
+            display: block;
+        }
+
         .paper-section .results-table {
             border: none;
         }
@@ -186,65 +198,49 @@
             {% endfor %}
         </div>
         {% elif not report.profile or report.profile.code == 'manual_simple' %}
-        <div style="width: 100%;">
-            <table style="width: 100%; border-collapse: collapse; font-size: 0.68rem; line-height: 1.2; table-layout: fixed;">
-                <colgroup>
-                    <col style="width: 45%;">
-                    <col style="width: 55%;">
-                </colgroup>
-                <thead>
-                    <tr>
-                        <th style="text-align: left; border-bottom: 2px solid #1d3557; padding: 0.28rem 0.5rem; font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.05em; color: #1d3557;">Test</th>
-                        <th style="text-align: left; border-bottom: 2px solid #1d3557; padding: 0.28rem 0.5rem; font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.05em; color: #1d3557;">Result</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for result in group.results %}
-                    <tr>
-                        <td style="border-bottom: 1px solid #c8d8e4; padding: 0.3rem 0.5rem; vertical-align: top; font-weight: 600; font-size: 0.68rem; color: #1f2a37;">{{ result.test.name }}</td>
-                        <td style="border-bottom: 1px solid #c8d8e4; padding: 0.3rem 0.5rem; vertical-align: top; font-size: 0.68rem; white-space: pre-wrap; color: #1f2a37;">{{ result.result_value|default:"" }}</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
+        <table class="results-table">
+            <thead>
+                <tr>
+                    <th style="width: 45%; text-align: left; border-bottom: 2px solid #1d3557; padding: 0.28rem 0.5rem; font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.05em; color: #1d3557;">Test</th>
+                    <th style="width: 55%; text-align: left; border-bottom: 2px solid #1d3557; padding: 0.28rem 0.5rem; font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.05em; color: #1d3557;">Result</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for result in group.results %}
+                <tr>
+                    <td style="border-bottom: 1px solid #c8d8e4; padding: 0.3rem 0.5rem; vertical-align: top; font-weight: 600; color: #1f2a37;">{{ result.test.name }}</td>
+                    <td style="border-bottom: 1px solid #c8d8e4; padding: 0.3rem 0.5rem; vertical-align: top; white-space: pre-wrap; color: #1f2a37;">{{ result.result_value|default:"" }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
         {% else %}
-        <div style="width: 100%;">
-            <table style="width: 100%; border-collapse: collapse; font-size: 0.68rem; line-height: 1.12; table-layout: fixed;">
-                <colgroup>
-                    <col style="width: 30%;">
-                    <col style="width: 14%;">
-                    <col style="width: 18%;">
-                    <col style="width: 10%;">
-                    <col style="width: 10%;">
-                    <col style="width: 18%;">
-                </colgroup>
-                <thead>
-                    <tr>
-                        <th style="text-align: left; border-bottom: 2px solid #1d3557; padding: 0.22rem 0.35rem; vertical-align: top; color: #1d3557; font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.04em;">Test</th>
-                        <th style="text-align: left; border-bottom: 2px solid #1d3557; padding: 0.22rem 0.35rem; vertical-align: top; color: #1d3557; font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.04em;">Result</th>
-                        <th style="text-align: left; border-bottom: 2px solid #1d3557; padding: 0.22rem 0.35rem; vertical-align: top; color: #1d3557; font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.04em;">Ref. Range</th>
-                        <th style="text-align: left; border-bottom: 2px solid #1d3557; padding: 0.22rem 0.35rem; vertical-align: top; color: #1d3557; font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.04em;">Flag</th>
-                        <th style="text-align: left; border-bottom: 2px solid #1d3557; padding: 0.22rem 0.35rem; vertical-align: top; color: #1d3557; font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.04em;">Units</th>
-                        <th style="text-align: left; border-bottom: 2px solid #1d3557; padding: 0.22rem 0.35rem; vertical-align: top; color: #1d3557; font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.04em;">Comment</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for result in group.results %}
-                    <tr>
-                        {% with flag=result.result_value|range_flag:result.reference_range %}
-                        <td style="border-bottom: 1px solid #c8d8e4; padding: 0.22rem 0.35rem; vertical-align: top; text-align: left;">{{ result.test.name }}</td>
-                        <td style="border-bottom: 1px solid #c8d8e4; padding: 0.22rem 0.35rem; vertical-align: top; text-align: left; white-space: pre-wrap;">{{ result.result_value|default:"-" }}</td>
-                        <td style="border-bottom: 1px solid #c8d8e4; padding: 0.22rem 0.35rem; vertical-align: top; text-align: left;">{{ result.reference_range|default:"-" }}</td>
-                        <td style="border-bottom: 1px solid #c8d8e4; padding: 0.22rem 0.35rem; vertical-align: top; text-align: left;{% if flag == 'HIGH' %} color: #dc2626; font-weight: 700;{% elif flag == 'LOW' %} color: #2563eb; font-weight: 700;{% elif flag == 'NORMAL' %} font-weight: 700;{% endif %}">{% if flag %}{{ flag }}{% else %}-{% endif %}</td>
-                        <td style="border-bottom: 1px solid #c8d8e4; padding: 0.22rem 0.35rem; vertical-align: top; text-align: left;">{{ result.unit|default:"-" }}</td>
-                        <td style="border-bottom: 1px solid #c8d8e4; padding: 0.22rem 0.35rem; vertical-align: top; text-align: left;">{{ result.comment|default:"-" }}</td>
-                        {% endwith %}
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
+        <table class="results-table" style="line-height: 1.12;">
+            <thead>
+                <tr>
+                    <th style="width: 30%; text-align: left; border-bottom: 2px solid #1d3557; padding: 0.22rem 0.35rem; vertical-align: top; color: #1d3557; font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.04em;">Test</th>
+                    <th style="width: 14%; text-align: left; border-bottom: 2px solid #1d3557; padding: 0.22rem 0.35rem; vertical-align: top; color: #1d3557; font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.04em;">Result</th>
+                    <th style="width: 18%; text-align: left; border-bottom: 2px solid #1d3557; padding: 0.22rem 0.35rem; vertical-align: top; color: #1d3557; font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.04em;">Ref. Range</th>
+                    <th style="width: 10%; text-align: left; border-bottom: 2px solid #1d3557; padding: 0.22rem 0.35rem; vertical-align: top; color: #1d3557; font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.04em;">Flag</th>
+                    <th style="width: 10%; text-align: left; border-bottom: 2px solid #1d3557; padding: 0.22rem 0.35rem; vertical-align: top; color: #1d3557; font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.04em;">Units</th>
+                    <th style="width: 18%; text-align: left; border-bottom: 2px solid #1d3557; padding: 0.22rem 0.35rem; vertical-align: top; color: #1d3557; font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.04em;">Comment</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for result in group.results %}
+                <tr>
+                    {% with flag=result.result_value|range_flag:result.reference_range %}
+                    <td style="border-bottom: 1px solid #c8d8e4; padding: 0.22rem 0.35rem; vertical-align: top; text-align: left;">{{ result.test.name }}</td>
+                    <td style="border-bottom: 1px solid #c8d8e4; padding: 0.22rem 0.35rem; vertical-align: top; text-align: left; white-space: pre-wrap;">{{ result.result_value|default:"-" }}</td>
+                    <td style="border-bottom: 1px solid #c8d8e4; padding: 0.22rem 0.35rem; vertical-align: top; text-align: left;">{{ result.reference_range|default:"-" }}</td>
+                    <td style="border-bottom: 1px solid #c8d8e4; padding: 0.22rem 0.35rem; vertical-align: top; text-align: left;{% if flag == 'HIGH' %} color: #dc2626; font-weight: 700;{% elif flag == 'LOW' %} color: #2563eb; font-weight: 700;{% elif flag == 'NORMAL' %} font-weight: 700;{% endif %}">{% if flag %}{{ flag }}{% else %}-{% endif %}</td>
+                    <td style="border-bottom: 1px solid #c8d8e4; padding: 0.22rem 0.35rem; vertical-align: top; text-align: left;">{{ result.unit|default:"-" }}</td>
+                    <td style="border-bottom: 1px solid #c8d8e4; padding: 0.22rem 0.35rem; vertical-align: top; text-align: left;">{{ result.comment|default:"-" }}</td>
+                    {% endwith %}
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
         {% endif %}
     </section>
     {% endfor %}
