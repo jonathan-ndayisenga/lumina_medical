@@ -2942,6 +2942,9 @@ def receipts_list(request):
     if mobile_account_id:
         payments = payments.filter(mode=Payment.MODE_MOBILE_MONEY, mobile_account_id=mobile_account_id)
 
+    paginator = Paginator(payments, 15)
+    page_obj = paginator.get_page(request.GET.get("page"))
+
     context = finance_context(
         request,
         "hospital_receipts",
@@ -2950,7 +2953,8 @@ def receipts_list(request):
     )
     context.update(
         {
-            "payments": payments,
+            "payments": page_obj,
+            "page_obj": page_obj,
             "q": q,
             "mode": mode,
             "start_date": start,

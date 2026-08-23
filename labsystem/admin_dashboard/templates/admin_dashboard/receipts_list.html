@@ -125,6 +125,14 @@
             {% endfor %}
         </div>
 
+        {% if page_obj.has_other_pages %}
+        <div class="flex items-center justify-center gap-2 mt-4 no-print md:hidden">
+            {% if page_obj.has_previous %}<a href="?{% if q %}q={{ q }}&{% endif %}{% if mode %}mode={{ mode }}&{% endif %}{% if start_date %}start_date={{ start_date }}&{% endif %}{% if end_date %}end_date={{ end_date }}&{% endif %}{% if reconciled %}reconciled={{ reconciled }}&{% endif %}page={{ page_obj.previous_page_number }}" class="btn btn-secondary btn-sm">← Prev</a>{% endif %}
+            <span class="text-sm text-text-muted">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+            {% if page_obj.has_next %}<a href="?{% if q %}q={{ q }}&{% endif %}{% if mode %}mode={{ mode }}&{% endif %}{% if start_date %}start_date={{ start_date }}&{% endif %}{% if end_date %}end_date={{ end_date }}&{% endif %}{% if reconciled %}reconciled={{ reconciled }}&{% endif %}page={{ page_obj.next_page_number }}" class="btn btn-secondary btn-sm">Next →</a>{% endif %}
+        </div>
+        {% endif %}
+
         <div class="overflow-x-auto hidden md:block">
             <table>
                 <thead>
@@ -194,6 +202,13 @@
                     {% endfor %}
                 </tbody>
             </table>
+            {% if page_obj.has_other_pages %}
+            <div class="flex items-center justify-center gap-2 mt-4 no-print">
+                {% if page_obj.has_previous %}<a href="?{% if q %}q={{ q }}&{% endif %}{% if mode %}mode={{ mode }}&{% endif %}{% if start_date %}start_date={{ start_date }}&{% endif %}{% if end_date %}end_date={{ end_date }}&{% endif %}{% if reconciled %}reconciled={{ reconciled }}&{% endif %}page={{ page_obj.previous_page_number }}" class="btn btn-secondary btn-sm">← Prev</a>{% endif %}
+                <span class="text-sm text-text-muted">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+                {% if page_obj.has_next %}<a href="?{% if q %}q={{ q }}&{% endif %}{% if mode %}mode={{ mode }}&{% endif %}{% if start_date %}start_date={{ start_date }}&{% endif %}{% if end_date %}end_date={{ end_date }}&{% endif %}{% if reconciled %}reconciled={{ reconciled }}&{% endif %}page={{ page_obj.next_page_number }}" class="btn btn-secondary btn-sm">Next →</a>{% endif %}
+            </div>
+            {% endif %}
         </div>
     </div>
 </div>
