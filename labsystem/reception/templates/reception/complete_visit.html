@@ -40,7 +40,7 @@
             </div>
         </div>
 
-        <div class="card">
+        <div class="card"{% if request.user.can_access_hospital_admin %} data-remove-service-url-template="/reception/complete/{{ visit.pk }}/services/__SERVICE_ID__/remove/"{% endif %}>
             <h3 class="text-sm font-semibold text-text-main mb-4">Services on This Visit</h3>
             <div class="overflow-x-auto">
                 <table class="w-full text-sm">
@@ -48,30 +48,43 @@
                         <tr>
                             <th class="text-left py-2 pr-4 text-xs font-semibold uppercase text-text-muted">Service</th>
                             <th class="text-left py-2 pr-4 text-xs font-semibold uppercase text-text-muted">Category</th>
-                            <th class="text-right py-2 text-xs font-semibold uppercase text-text-muted">Price</th>
+                            <th class="text-right py-2 {% if request.user.can_access_hospital_admin %}pr-4{% endif %} text-xs font-semibold uppercase text-text-muted">Price</th>
+                            {% if request.user.can_access_hospital_admin %}
+                            <th class="text-right py-2 text-xs font-semibold uppercase text-text-muted">Admin</th>
+                            {% endif %}
                         </tr>
                     </thead>
-                    <tbody class="divide-y divide-gray-100">
+                    <tbody class="divide-y divide-gray-100" id="visit-services-body">
                         {% for item in visit_services %}
-                            <tr>
+                            <tr data-visit-service-id="{{ item.pk }}">
                                 <td class="py-3 pr-4 text-text-main">{{ item.service.name }}</td>
                                 <td class="py-3 pr-4 text-text-muted">{{ item.service.get_category_display }}</td>
-                                <td class="py-3 text-right text-text-main">{{ item.price_at_time }}</td>
+                                <td class="py-3 {% if request.user.can_access_hospital_admin %}pr-4{% endif %} text-right text-text-main">{{ item.price_at_time }}</td>
+                                {% if request.user.can_access_hospital_admin %}
+                                <td class="py-3 text-right">
+                                    {% if not item.performed %}
+                                    <button type="button" class="inline-flex items-center rounded-full border border-red-200 bg-white px-2 py-1 text-xs font-semibold text-red-700 hover:bg-red-50" data-remove-service="{{ item.pk }}">Remove</button>
+                                    {% else %}
+                                    <span class="text-xs text-text-muted italic">Recorded</span>
+                                    {% endif %}
+                                </td>
+                                {% endif %}
                             </tr>
                         {% empty %}
-                            <tr>
-                                <td colspan="3" class="py-6 text-center text-text-muted">No services are attached to this visit.</td>
+                            <tr id="visit-services-empty-row">
+                                <td colspan="{% if request.user.can_access_hospital_admin %}4{% else %}3{% endif %}" class="py-6 text-center text-text-muted">No services are attached to this visit.</td>
                             </tr>
                         {% endfor %}
                     </tbody>
                     <tfoot>
                         <tr class="border-t border-gray-200">
-                            <td colspan="2" class="pt-3 font-semibold text-text-main">Total</td>
+                            <td colspan="{% if request.user.can_access_hospital_admin %}3{% else %}2{% endif %}" class="pt-3 font-semibold text-text-main">Total</td>
                             <td id="visit-services-total" class="pt-3 text-right font-semibold text-text-main">{{ visit.total_amount }}</td>
                         </tr>
                     </tfoot>
                 </table>
             </div>
+            <div id="service-removal-message" class="hidden mt-3 rounded-lg border px-3 py-2 text-sm"></div>
         </div>
 
         <div class="card" data-add-prescription-url="{% url 'add_prescription_api' visit.pk %}" data-remove-prescription-url-template="/doctor/visit/{{ visit.pk }}/api/prescriptions/__PRESCRIPTION_ID__/remove/" data-dispense-url-template="/reception/complete/{{ visit.pk }}/prescriptions/__PRESCRIPTION_ID__/dispense/" data-csrf-token="{{ csrf_token }}" data-default-duration="{{ visit.adjustment_remaining_days|default:1 }}" data-is-adjustment-visit="{% if visit.is_adjustment_visit %}true{% else %}false{% endif %}">
@@ -323,6 +336,78 @@
         modeEl.addEventListener("change", updateVisibility);
         updateVisibility();
     }
+})();
+
+(function () {
+    const servicesCard = document.querySelector('[data-remove-service-url-template]');
+    if (!servicesCard) return;
+
+    const removeServiceUrlTemplate = servicesCard.dataset.removeServiceUrlTemplate;
+    const csrfToken = document.querySelector('input[name="csrfmiddlewaretoken"]')?.value || '';
+    const servicesBody = document.getElementById('visit-services-body');
+    const removalMessage = document.getElementById('service-removal-message');
+    const visitTotalAmount = document.getElementById('visit-total-amount');
+    const visitServicesTotal = document.getElementById('visit-services-total');
+    const visitBalanceDue = document.getElementById('visit-balance-due');
+
+    function showRemovalMessage(message, level) {
+        if (!removalMessage) return;
+        removalMessage.textContent = message;
+        removalMessage.classList.remove('hidden', 'border-red-200', 'bg-red-50', 'text-red-700', 'border-green-200', 'bg-green-50', 'text-green-700');
+        removalMessage.classList.add(...(level === 'error' ? ['border-red-200', 'bg-red-50', 'text-red-700'] : ['border-green-200', 'bg-green-50', 'text-green-700']));
+    }
+
+    function updateServiceTotals(totalAmountValue) {
+        if (visitTotalAmount) visitTotalAmount.textContent = totalAmountValue;
+        if (visitServicesTotal) visitServicesTotal.textContent = totalAmountValue;
+        if (visitBalanceDue) visitBalanceDue.textContent = totalAmountValue;
+    }
+
+    servicesCard.addEventListener('click', async (event) => {
+        const button = event.target.closest('[data-remove-service]');
+        if (!button) return;
+
+        const serviceId = button.dataset.removeService;
+        const row = servicesBody?.querySelector(`tr[data-visit-service-id="${serviceId}"]`);
+        const serviceName = row?.querySelector('td')?.textContent?.trim() || 'this service';
+
+        const reason = window.prompt(`Admin only: enter the reason for removing "${serviceName}" from this bill.`);
+        if (reason === null) return;
+        if (!reason.trim()) {
+            showRemovalMessage('A reason is required to remove a service.', 'error');
+            return;
+        }
+
+        button.disabled = true;
+
+        try {
+            const formData = new FormData();
+            formData.append('admin_reason', reason.trim());
+            const response = await fetch(
+                removeServiceUrlTemplate.replace('__SERVICE_ID__', String(serviceId)),
+                {
+                    method: 'POST',
+                    headers: { 'X-CSRFToken': csrfToken, 'X-Requested-With': 'XMLHttpRequest' },
+                    body: formData,
+                },
+            );
+            const payload = await response.json();
+            if (!response.ok) {
+                throw new Error(payload.error || 'Could not remove service.');
+            }
+
+            row?.remove();
+            if (servicesBody && !servicesBody.querySelector('[data-visit-service-id]')) {
+                const colspan = servicesBody.closest('table')?.querySelector('thead th:last-child') ? 4 : 3;
+                servicesBody.innerHTML = `<tr id="visit-services-empty-row"><td colspan="${colspan}" class="py-6 text-center text-text-muted">No services are attached to this visit.</td></tr>`;
+            }
+            updateServiceTotals(payload.visit_total_amount);
+            showRemovalMessage(payload.message, 'success');
+        } catch (error) {
+            showRemovalMessage(error.message, 'error');
+            button.disabled = false;
+        }
+    });
 })();
 
 (function () {

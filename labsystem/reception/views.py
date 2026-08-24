@@ -6,10 +6,12 @@ from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.paginator import Paginator
 from django.db import transaction
 from django.db.models import Count, Max, Q, Sum
+from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
+from django.views.decorators.http import require_http_methods
 
 from accounts.models import User
 from admin_dashboard.models import InventoryItem, InventoryTransaction
@@ -26,6 +28,7 @@ from .workflow import (
     send_to_reception_queue,
     sync_visit_status,
     terminate_visit_workflow,
+    user_can_admin_override,
 )
 
 
@@ -1265,6 +1268,70 @@ def complete_visit(request, visit_id):
             "allow_reception_prescribing": not visit.is_adjustment_visit,
             "adjustment_origin_prescription": visit.adjustment_origin_prescription,
         },
+    )
+
+
+@reception_role_required
+@require_http_methods(["POST"])
+@transaction.atomic
+def remove_visit_service_api(request, visit_id, visit_service_id):
+    """Admin-only: remove a not-yet-performed service from a bill before it is recorded."""
+    hospital = get_active_hospital(request)
+    visit = get_object_or_404(
+        Visit.objects.select_related("hospital"),
+        pk=visit_id,
+        hospital=hospital,
+    )
+
+    if not user_can_admin_override(request.user):
+        return JsonResponse(
+            {"error": "Only a hospital administrator can remove a service from the bill."},
+            status=403,
+        )
+    if visit.status in {Visit.STATUS_CANCELLED, Visit.STATUS_COMPLETED}:
+        return JsonResponse({"error": "This visit is no longer open for billing changes."}, status=409)
+
+    visit_service = get_object_or_404(
+        VisitService.objects.select_related("service"),
+        pk=visit_service_id,
+        visit=visit,
+    )
+    if visit_service.performed:
+        return JsonResponse(
+            {"error": f"{visit_service.service.name} has already been recorded and can no longer be removed."},
+            status=400,
+        )
+
+    reason = admin_override_reason(request)
+    if not reason:
+        return JsonResponse({"error": "Enter a reason for removing this service."}, status=400)
+
+    removed_price = visit_service.price_at_time
+    service_name = visit_service.service.name
+    visit_service.delete()
+
+    visit.total_amount = max(Decimal("0"), visit.total_amount - removed_price)
+    visit.save(update_fields=["total_amount"])
+
+    record_admin_override(
+        actor=request.user,
+        hospital=visit.hospital,
+        action="remove_visit_service",
+        model_name="VisitService",
+        object_id=visit_service_id,
+        details={
+            "visit_id": visit.pk,
+            "service_name": service_name,
+            "removed_price": str(removed_price),
+            "reason": reason,
+        },
+    )
+
+    return JsonResponse(
+        {
+            "message": f"{service_name} removed from the bill.",
+            "visit_total_amount": str(visit.total_amount),
+        }
     )
 
 
