@@ -274,8 +274,8 @@
                     <th style="width:32%;">Test</th>
                     <th style="width:16%;">Result</th>
                     <th style="width:20%;">Ref. Range</th>
-                    <th style="width:14%;">Comment</th>
                     <th style="width:18%;">Units</th>
+                    <th style="width:14%;">Comment</th>
                 </tr>
             </thead>
             <tbody>
@@ -285,8 +285,8 @@
                     <td>{{ result.test.name }}</td>
                     <td style="white-space:pre-wrap;">{{ result.result_value|default:"-" }}</td>
                     <td>{{ result.reference_range|default:"-" }}</td>
-                    <td class="{% if flag == 'HIGH' %}flag-high{% elif flag == 'LOW' %}flag-low{% elif flag == 'NORMAL' %}flag-norm{% endif %}">{% if flag %}{{ flag }}{% else %}-{% endif %}</td>
                     <td>{{ result.unit|default:"-" }}</td>
+                    <td class="{% if flag == 'HIGH' %}flag-high{% elif flag == 'LOW' %}flag-low{% elif flag == 'NORMAL' %}flag-norm{% endif %}">{% if flag %}{{ flag }}{% else %}-{% endif %}</td>
                     {% endwith %}
                 </tr>
                 {% endfor %}
