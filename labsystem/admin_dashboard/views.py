@@ -1299,7 +1299,6 @@ def edit_user(request, user_id):
     if request.method == "POST":
         if form.is_valid():
             form.save()
-            form.save_m2m()
             messages.success(request, f"{user.get_full_name() or user.username} updated.")
             return redirect("manage_users")
         messages.error(request, "Please fix the user details below.")
