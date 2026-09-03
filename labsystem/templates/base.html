@@ -536,7 +536,15 @@
                     {% endif %}
                 </nav>
                 {% else %}
-                <nav class="flex-1"></nav>
+                <nav class="flex-1 flex flex-col gap-1 px-4 lg:px-0 pb-6 lg:pb-0" style="padding-left: 1.25rem; padding-right: 1.25rem; padding-top: 1.5rem;">
+                    <a href="{% url 'app_home' %}" class="sidebar-link active">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-5 h-5">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M3 12l9-9 9 9M5 10v10a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V10" />
+                        </svg>
+                        Home
+                    </a>
+                    <p class="px-4 text-xs text-white/50">Pick where you want to go.</p>
+                </nav>
                 {% endif %}
                 {% endblock %}
 
