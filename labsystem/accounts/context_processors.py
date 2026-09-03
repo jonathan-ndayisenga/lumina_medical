@@ -15,6 +15,12 @@ def _expiry_level(days):
     return "warning"
 
 
+def nav_section(request):
+    if not request.user.is_authenticated:
+        return {}
+    return {"nav_section": request.session.get("nav_section")}
+
+
 def notifications(request):
     if not request.user.is_authenticated or getattr(request.user, "is_superadmin", False):
         return {}

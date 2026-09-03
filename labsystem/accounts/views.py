@@ -2,6 +2,7 @@ from datetime import date
 
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.views import LoginView
+from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
 from django.db.models import Q
 from django.http import JsonResponse
@@ -32,27 +33,101 @@ def _hospital_admin_home(user) -> str:
     return reverse("hospital_dashboard")
 
 
+# Ordered registry of "sections" a user can land in from the Home tile picker.
+# Each entry's `check` is a boolean property on User; `url` is either a URL name
+# or a callable(user) -> url string for sections whose landing page varies.
+NAV_SECTIONS = [
+    {
+        "key": "hospital_admin",
+        "label": "Hospital Management",
+        "description": "Dashboard, staff, services, reports",
+        "icon": "M4 21V7m0 0l8-4 8 4m-8 14V11m-4 10h8",
+        "check": "can_access_hospital_admin",
+        "url": _hospital_admin_home,
+    },
+    {
+        "key": "finance",
+        "label": "Finance",
+        "description": "Financials, expenses, salaries, ledger, receipts",
+        "icon": "M12 1v22M17 5H9a4 4 0 0 0 0 8h6a4 4 0 1 1 0 8H6",
+        "check": "can_access_finance",
+        "url": "financial_report",
+    },
+    {
+        "key": "inventory",
+        "label": "Inventory",
+        "description": "Stock levels, restock insights",
+        "icon": "M20 7 12 3 4 7m16 0v10l-8 4-8-4V7m16 0-8 4m-8-4 8 4m0 0v10",
+        "check": "can_access_inventory",
+        "url": "manage_inventory",
+    },
+    {
+        "key": "reception",
+        "label": "Reception",
+        "description": "Registration, queue, patients",
+        "icon": "M4 6h16M4 12h16M4 18h10",
+        "check": "can_access_reception",
+        "url": "reception_dashboard",
+    },
+    {
+        "key": "doctor",
+        "label": "Doctor",
+        "description": "Doctor queue and consultations",
+        "icon": "M12 3v18M3 12h18",
+        "check": "can_access_doctor",
+        "url": "doctor_queue",
+    },
+    {
+        "key": "nurse",
+        "label": "Nursing",
+        "description": "Nurse queue and IV care",
+        "icon": "M9 12l2 2 4-4M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Z",
+        "check": "can_access_nurse",
+        "url": "nurse_queue",
+    },
+    {
+        "key": "sonographer",
+        "label": "Sonographer",
+        "description": "Scan queue and reports",
+        "icon": "M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2v-4M9 21H5a2 2 0 0 1-2-2v-4m0 0h18",
+        "check": "can_access_sonographer",
+        "url": "scan_queue",
+    },
+    {
+        "key": "home_care",
+        "label": "Home Care",
+        "description": "Clients, nurses, placements, contracts",
+        "icon": "M3 12l9-9 9 9M5 10v10a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V10",
+        "check": "can_access_home_care",
+        "url": "homecare_dashboard",
+    },
+    {
+        "key": "lab",
+        "label": "Laboratory",
+        "description": "Lab queue, reports, templates",
+        "icon": "M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01",
+        "check": "can_access_lab",
+        "url": "lab_queue",
+    },
+]
+
+
+def _section_url(section, user) -> str:
+    url = section["url"]
+    return url(user) if callable(url) else reverse(url)
+
+
+def _accessible_sections(user):
+    return [s for s in NAV_SECTIONS if getattr(user, s["check"], False)]
+
+
 @method_decorator(ensure_csrf_cookie, name="dispatch")
 class RoleAwareLoginView(LoginView):
     template_name = "registration/login.html"
 
     def get_success_url(self):
-        user = self.request.user
-        if user.is_superadmin:
+        if self.request.user.is_superadmin:
             return reverse("developer_dashboard")
-        role = getattr(user, "role", None)
-        if role == user.ROLE_HOSPITAL_ADMIN:
-            return _hospital_admin_home(user)
-        if role == user.ROLE_RECEPTIONIST:
-            return reverse("reception_queue")
-        if role == user.ROLE_LAB_ATTENDANT:
-            return reverse("lab_queue")
-        if role == user.ROLE_DOCTOR:
-            return reverse("doctor_queue")
-        if role == user.ROLE_NURSE:
-            return reverse("nurse_queue")
-        if role == user.ROLE_SONOGRAPHER:
-            return reverse("scan_queue")
         return reverse("app_home")
 
 
@@ -61,20 +136,36 @@ def app_home(request):
     user = request.user
     if user.is_superadmin:
         return redirect("developer_dashboard")
-    role = getattr(user, "role", None)
-    if role == user.ROLE_HOSPITAL_ADMIN:
-        return redirect(_hospital_admin_home(user))
-    if role == user.ROLE_RECEPTIONIST:
-        return redirect("reception_queue")
-    if role == user.ROLE_LAB_ATTENDANT:
-        return redirect("lab_queue")
-    if role == user.ROLE_DOCTOR:
-        return redirect("doctor_queue")
-    if role == user.ROLE_NURSE:
-        return redirect("nurse_queue")
-    if role == user.ROLE_SONOGRAPHER:
-        return redirect("scan_queue")
-    return render(request, "accounts/home.html")
+
+    sections = _accessible_sections(user)
+    if len(sections) <= 1:
+        request.session.pop("nav_section", None)
+        if sections:
+            return redirect(_section_url(sections[0], user))
+        return render(request, "accounts/home.html", {"tiles": [], "hide_sidebar_nav": True})
+
+    request.session.pop("nav_section", None)
+    tiles = [
+        {
+            "key": s["key"],
+            "label": s["label"],
+            "description": s["description"],
+            "icon": s["icon"],
+            "url": reverse("enter_nav_section", args=[s["key"]]),
+        }
+        for s in sections
+    ]
+    return render(request, "accounts/home.html", {"tiles": tiles, "hide_sidebar_nav": True})
+
+
+@login_required
+def enter_nav_section(request, section_key):
+    user = request.user
+    section = next((s for s in NAV_SECTIONS if s["key"] == section_key), None)
+    if not section or not getattr(user, section["check"], False):
+        raise PermissionDenied("You do not have access to that section.")
+    request.session["nav_section"] = section_key
+    return redirect(_section_url(section, user))
 
 
 def landing(request):

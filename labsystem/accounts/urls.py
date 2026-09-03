@@ -7,6 +7,7 @@ from .views import (
     direct_message_delete,
     direct_message_detail,
     dismiss_expiry_banner,
+    enter_nav_section,
     landing,
     message_mark_all_read,
     message_mark_read,
@@ -20,6 +21,7 @@ from .views import (
 urlpatterns = [
     path("", RoleAwareLoginView.as_view(), name="login"),
     path("home/", app_home, name="app_home"),
+    path("home/section/<str:section_key>/", enter_nav_section, name="enter_nav_section"),
     path("welcome/", landing, name="landing"),
 
     # ── Unified Messages Inbox ────────────────────────────────────────────────

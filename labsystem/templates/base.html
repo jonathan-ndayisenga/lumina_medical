@@ -270,12 +270,18 @@
 
                 <!-- Navigation Menu -->
                 {% block sidebar_navigation %}
+                {% if not hide_sidebar_nav %}
                 <nav class="flex-1 flex flex-col gap-6 px-4 lg:px-0 pb-6 lg:pb-0" style="padding-left: 1.25rem; padding-right: 1.25rem; padding-top: 1.5rem;">
-                    {% if user.can_access_hospital_admin or user.can_access_inventory or user.can_access_finance %}
-                        <div>
+                    {% if nav_section %}
+                    <style>
+                        #appSidebar nav [data-section] { display: none; }
+                        #appSidebar nav [data-section="{{ nav_section }}"] { display: revert; }
+                    </style>
+                    {% endif %}
+                    {% if user.can_access_hospital_admin %}
+                        <div data-section="hospital_admin">
                             <div class="text-xs font-bold uppercase tracking-widest text-white/60 mb-2">Hospital Management</div>
                             <div class="space-y-1">
-                                {% if user.can_access_hospital_admin %}
                                 <a href="{% url 'hospital_dashboard' %}" class="sidebar-link {% if active_nav == 'hospital_admin' %}active{% endif %}">
                                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-5 h-5">
                                         <path stroke-linecap="round" stroke-linejoin="round" d="M4 21V7m0 0l8-4 8 4m-8 14V11m-4 10h8" />
@@ -315,9 +321,12 @@
                                     <span class="ml-auto inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold text-white bg-red-500 rounded-full">{{ token_unread_count }}</span>
                                     {% endif %}
                                 </a>
-                                {% endif %}
+                            </div>
+                        </div>
+                    {% endif %}
 
-                                {% if user.can_access_finance %}
+                    {% if user.can_access_finance %}
+                        <div data-section="finance">
                                 <details class="space-y-1" {% if active_nav == 'hospital_financials' or active_nav == 'hospital_expenses' or active_nav == 'hospital_salaries' or active_nav == 'hospital_receipts' or active_nav == 'hospital_bank_accounts' or active_nav == 'hospital_mobile_money' or active_nav|slice:":8" == 'finance_' %}open{% endif %}>
                                     <summary class="sidebar-link cursor-pointer {% if active_nav == 'hospital_financials' or active_nav == 'hospital_expenses' or active_nav == 'hospital_salaries' or active_nav == 'hospital_receipts' or active_nav == 'hospital_bank_accounts' or active_nav == 'hospital_mobile_money' or active_nav|slice:":8" == 'finance_' %}active{% endif %}">
                                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-5 h-5">
@@ -356,9 +365,11 @@
                                         <a href="{% url 'mobile_money_list' %}" class="sidebar-sublink {% if active_nav == 'hospital_mobile_money' %}active{% endif %}">Mobile Money</a>
                                     </div>
                                 </details>
-                                {% endif %}
+                        </div>
+                    {% endif %}
 
-                                {% if user.can_access_inventory %}
+                    {% if user.can_access_inventory %}
+                        <div data-section="inventory">
                                 <details class="group" {% if active_nav == 'hospital_inventory' or active_nav == 'hospital_inventory_insights' %}open{% endif %}>
                                     <summary class="sidebar-link list-none cursor-pointer {% if active_nav == 'hospital_inventory' or active_nav == 'hospital_inventory_insights' %}active{% endif %}">
                                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-5 h-5">
@@ -374,15 +385,12 @@
                                         <a href="{% url 'inventory_insights' %}" class="sidebar-sublink {% if active_nav == 'hospital_inventory_insights' %}active{% endif %}">Insights & Restock</a>
                                     </div>
                                 </details>
-                                {% endif %}
-
-                            </div>
                         </div>
                     {% endif %}
 
                     <!-- Operational Modules -->
                     {% if user.can_access_reception %}
-                        <div>
+                        <div data-section="reception">
                             <div class="text-xs font-bold uppercase tracking-widest text-white/60 mb-2">Operations</div>
                             <div class="space-y-1">
                                 <a href="{% url 'reception_dashboard' %}" class="sidebar-link {% if active_nav == 'reception' %}active{% endif %}">
@@ -408,7 +416,7 @@
                     {% endif %}
                     
                     {% if user.can_access_doctor %}
-                        <div>
+                        <div data-section="doctor">
                             <div class="text-xs font-bold uppercase tracking-widest text-white/60 mb-2">Medical</div>
                             <div class="space-y-1">
                                 <a href="{% url 'doctor_queue' %}" class="sidebar-link {% if active_nav == 'doctor' %}active{% endif %}">
@@ -422,7 +430,7 @@
                     {% endif %}
 
                     {% if user.can_access_nurse %}
-                        <div>
+                        <div data-section="nurse">
                             <div class="text-xs font-bold uppercase tracking-widest text-white/60 mb-2">Nursing</div>
                             <div class="space-y-1">
                                 <a href="{% url 'nurse_queue' %}" class="sidebar-link {% if active_nav == 'nurse' %}active{% endif %}">
@@ -442,7 +450,7 @@
                     {% endif %}
 
                     {% if user.can_access_sonographer %}
-                        <div>
+                        <div data-section="sonographer">
                             <div class="text-xs font-bold uppercase tracking-widest text-white/60 mb-2">Sonographer</div>
                             <div class="space-y-1">
                                 <a href="{% url 'scan_queue' %}" class="sidebar-link {% if active_nav == 'scan_queue' %}active{% endif %}">
@@ -456,7 +464,7 @@
                     {% endif %}
 
                     {% if user.can_access_home_care %}
-                        <div>
+                        <div data-section="home_care">
                             <div class="text-xs font-bold uppercase tracking-widest text-white/60 mb-2">Home Care</div>
                             <div class="space-y-1">
                                 <a href="{% url 'homecare_dashboard' %}" class="sidebar-link {% if active_nav == 'homecare' %}active{% endif %}">
@@ -500,7 +508,7 @@
                     {% endif %}
 
                     {% if user.can_access_lab %}
-                        <div>
+                        <div data-section="lab">
                             <div class="text-xs font-bold uppercase tracking-widest text-white/60 mb-2">Laboratory</div>
                             <div class="space-y-1">
                                 <a href="{% url 'lab_queue' %}" class="sidebar-link {% if active_nav == 'lab_queue' %}active{% endif %}">
@@ -531,6 +539,9 @@
                         </div>
                     {% endif %}
                 </nav>
+                {% else %}
+                <nav class="flex-1"></nav>
+                {% endif %}
                 {% endblock %}
 
                 <!-- User Footer -->

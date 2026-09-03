@@ -1,0 +1,30 @@
+{% extends 'base.html' %}
+
+{% block title %}Home - Lumina Medical Services{% endblock %}
+
+{% block content %}
+<div class="mb-6">
+    <h1 class="text-2xl font-bold text-text-main">Welcome back, {{ user.get_full_name|default:user.username }}</h1>
+    <p class="mt-1 text-sm text-text-muted">Pick where you want to go.</p>
+</div>
+
+{% if tiles %}
+<div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+    {% for tile in tiles %}
+    <a href="{{ tile.url }}" class="card block no-underline hover:-translate-y-0.5 hover:shadow-lg transition-transform duration-150">
+        <div class="w-11 h-11 rounded-xl flex items-center justify-center mb-4" style="background:#e8eef5;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="#1d3557" stroke-width="2" class="w-5 h-5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="{{ tile.icon }}" />
+            </svg>
+        </div>
+        <h2 class="text-base font-bold text-text-main">{{ tile.label }}</h2>
+        <p class="mt-1 text-sm text-text-muted">{{ tile.description }}</p>
+    </a>
+    {% endfor %}
+</div>
+{% else %}
+<div class="card">
+    <p class="text-sm text-text-muted">You don't have access to any modules yet. Contact your hospital administrator.</p>
+</div>
+{% endif %}
+{% endblock %}
