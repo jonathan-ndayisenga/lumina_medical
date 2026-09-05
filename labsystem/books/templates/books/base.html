@@ -65,10 +65,18 @@
         .stat-grid .card { margin-bottom: 0; }
         .stat-label { font-size: 0.78rem; text-transform: uppercase; color: var(--muted); letter-spacing: 0.03em; margin-bottom: 0.4rem; }
         .stat-value { font-size: 1.5rem; font-weight: 700; }
+        @media (max-width: 1024px) {
+            table { display: block; overflow-x: auto; white-space: nowrap; }
+        }
         @media (max-width: 760px) {
             .shell { flex-direction: column; }
             .sidebar { width: 100%; }
             .sidebar nav { flex-direction: row; overflow-x: auto; }
+            .main { padding: 1rem; }
+            .card { padding: 1rem; }
+            h1.page-title { font-size: 1.2rem; }
+            .btn { width: 100%; justify-content: center; }
+            .btn + .btn { margin-top: 0.5rem; }
         }
     </style>
     {% block extra_css %}{% endblock %}
