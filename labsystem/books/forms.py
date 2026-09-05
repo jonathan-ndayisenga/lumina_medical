@@ -36,12 +36,16 @@ class ClientForm(forms.ModelForm):
     class Meta:
         model = Client
         fields = [
-            "name", "trading_name", "tin", "is_withholding_agent",
+            "hospital", "name", "trading_name", "tin", "is_withholding_agent",
             "address", "phone", "email", "contact_person", "notes", "active",
         ]
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        from accounts.models import Hospital
+        self.fields["hospital"].queryset = Hospital.objects.order_by("name")
+        self.fields["hospital"].required = False
+        self.fields["hospital"].label = "Linked tenant (if this client runs one of our products)"
         _style(self.fields)
 
 

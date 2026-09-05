@@ -9,6 +9,18 @@
     <a href="{% url 'books:client_statement_pdf' client.pk %}" class="btn btn-secondary">Print statement</a>
 </p>
 
+{% if client.hospital %}
+<div class="card">
+    <h3>Tenant status</h3>
+    <p>
+        <strong>{{ client.hospital.name }}</strong>
+        <span class="badge {% if client.hospital.is_active %}badge-paid{% else %}badge-void{% endif %}">{% if client.hospital.is_active %}Active{% else %}Inactive{% endif %}</span>
+    </p>
+    <p>Subscription end date: {{ client.hospital.subscription_end_date|default:"not set" }}</p>
+    <p>Modules: {{ client.hospital.active_module_codes|join:", "|default:"none" }}</p>
+</div>
+{% endif %}
+
 <div class="stat-grid">
     <div class="card"><div class="stat-label">Balance</div><div class="stat-value">UGX {{ client.balance|money }}</div></div>
     <div class="card"><div class="stat-label">Unallocated credit</div><div class="stat-value">UGX {{ client.unallocated_credit|money }}</div></div>

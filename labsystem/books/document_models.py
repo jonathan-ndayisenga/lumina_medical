@@ -95,6 +95,17 @@ class CompanySettings(models.Model):
 class Client(models.Model):
     """A business paying Ternah."""
 
+    hospital = models.OneToOneField(
+        "accounts.Hospital",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="books_client",
+        help_text=(
+            "Link to the tenant row if this client runs one of our products. "
+            "Blank for website builds and one-off project clients that aren't tenants."
+        ),
+    )
     name = models.CharField(max_length=200)
     trading_name = models.CharField(max_length=200, blank=True)
     tin = models.CharField(max_length=30, blank=True)
