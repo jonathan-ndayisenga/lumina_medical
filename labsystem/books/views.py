@@ -1,12 +1,13 @@
 from datetime import date
 
 from django.contrib import messages
-from django.contrib.auth.views import LoginView, LogoutView
+from django.contrib.auth.views import LoginView, LogoutView, PasswordChangeDoneView, PasswordChangeView
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse, reverse_lazy
 from django.utils import timezone
+from django.utils.decorators import method_decorator
 
 from . import documents, reports
 from .document_models import Client, CompanySettings, Expense, Invoice, Payment, Product, WithholdingCredit
@@ -44,6 +45,17 @@ class BooksLoginView(LoginView):
 
 class BooksLogoutView(LogoutView):
     next_page = reverse_lazy("books:login")
+
+
+@method_decorator(books_staff_required, name="dispatch")
+class BooksPasswordChangeView(PasswordChangeView):
+    template_name = "books/password_change.html"
+    success_url = reverse_lazy("books:password_change_done")
+
+
+@method_decorator(books_staff_required, name="dispatch")
+class BooksPasswordChangeDoneView(PasswordChangeDoneView):
+    template_name = "books/password_change_done.html"
 
 
 @books_staff_required

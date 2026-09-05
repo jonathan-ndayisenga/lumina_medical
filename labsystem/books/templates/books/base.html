@@ -92,7 +92,10 @@
         </nav>
         <div class="footer">
             <div class="user">{{ request.user.get_username }}</div>
-            <form method="post" action="{% url 'books:logout' %}">
+            <div style="display:flex; gap:0.5rem;">
+                <a href="{% url 'books:password_change' %}" style="color:rgba(255,255,255,0.75); font-size:0.8rem; align-self:center;">Change password</a>
+            </div>
+            <form method="post" action="{% url 'books:logout' %}" style="margin-top:0.5rem;">
                 {% csrf_token %}
                 <button type="submit">Log out</button>
             </form>
