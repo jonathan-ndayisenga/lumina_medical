@@ -7,6 +7,9 @@
 <p>
     {% if invoice.status != 'void' %}
     <a href="{% url 'books:invoice_pdf' invoice.pk %}" class="btn btn-secondary" target="_blank">Print / PDF</a>
+    {% if invoice.client.is_withholding_agent and invoice.balance > 0 %}
+    <a href="{% url 'books:wht_credit_create' invoice.pk %}" class="btn btn-secondary">Record WHT credit</a>
+    {% endif %}
     <a href="{% url 'books:invoice_void' invoice.pk %}" class="btn btn-danger">Void</a>
     {% endif %}
 </p>

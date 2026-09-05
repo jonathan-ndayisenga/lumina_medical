@@ -9,6 +9,7 @@ from .document_models import (
     InvoiceLine,
     Payment,
     Product,
+    WithholdingCredit,
 )
 from .ledger_models import Account, FinancialYear
 
@@ -148,6 +149,28 @@ class ExpenseForm(forms.ModelForm):
         if currency and currency != "UGX" and fx_rate == 1:
             self.add_error("fx_rate", "Set an explicit FX rate for a non-UGX expense.")
         return cleaned
+
+
+class WithholdingCreditForm(forms.ModelForm):
+    class Meta:
+        model = WithholdingCredit
+        fields = ["certificate_number", "date", "amount", "certificate"]
+        widgets = {"date": forms.DateInput(attrs={"type": "date"})}
+
+    def __init__(self, *args, invoice=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.invoice = invoice
+        if invoice is not None:
+            self.fields["amount"].help_text = f"Invoice balance: UGX {invoice.balance:,.0f}"
+        _style(self.fields)
+
+    def clean_amount(self):
+        amount = self.cleaned_data["amount"]
+        if self.invoice is not None and amount > self.invoice.balance:
+            raise forms.ValidationError(
+                f"This exceeds the invoice's remaining balance of UGX {self.invoice.balance:,.0f}."
+            )
+        return amount
 
 
 class AccountForm(forms.ModelForm):

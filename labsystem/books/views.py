@@ -3,6 +3,7 @@ from datetime import date
 from django.contrib import messages
 from django.contrib.auth.views import LoginView, LogoutView, PasswordChangeDoneView, PasswordChangeView
 from django.core.exceptions import PermissionDenied, ValidationError
+from django.db import transaction
 from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse, reverse_lazy
@@ -24,6 +25,7 @@ from .forms import (
     PaymentForm,
     ProductForm,
     ScheduleForm,
+    WithholdingCreditForm,
 )
 from .ledger_models import Account, FinancialYear, JournalEntry
 from .permissions import _is_books_user, books_admin_required, books_staff_required
@@ -303,6 +305,31 @@ def invoice_void(request, pk):
                 messages.error(request, "; ".join(exc.messages))
                 return redirect("books:invoice_detail", pk=invoice.pk)
     return render(request, "books/void_confirm.html", {"object_label": invoice.number or f"Draft #{invoice.pk}", "cancel_url": reverse("books:invoice_detail", args=[invoice.pk])})
+
+
+@books_staff_required
+def wht_credit_create(request, invoice_pk):
+    invoice = get_object_or_404(Invoice.objects.select_related("client"), pk=invoice_pk)
+    if not invoice.client.is_withholding_agent:
+        messages.error(request, f"{invoice.client.name} is not flagged as a withholding agent.")
+        return redirect("books:invoice_detail", pk=invoice.pk)
+    if request.method == "POST":
+        form = WithholdingCreditForm(request.POST, request.FILES, invoice=invoice)
+        if form.is_valid():
+            credit = form.save(commit=False)
+            credit.client = invoice.client
+            credit.invoice = invoice
+            try:
+                with transaction.atomic():
+                    credit.save()
+                    credit.record(user=request.user)
+                messages.success(request, f"Withholding tax credit of UGX {credit.amount:,.0f} recorded.")
+                return redirect("books:invoice_detail", pk=invoice.pk)
+            except ValidationError as exc:
+                messages.error(request, "; ".join(exc.messages))
+    else:
+        form = WithholdingCreditForm(invoice=invoice, initial={"date": date.today(), "amount": invoice.balance})
+    return render(request, "books/wht_credit_form.html", {"form": form, "invoice": invoice})
 
 
 @books_staff_required

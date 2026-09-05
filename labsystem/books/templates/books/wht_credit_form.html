@@ -1,0 +1,21 @@
+{% extends "books/base.html" %}
+{% block title %}Record Withholding Credit - Ternah Books{% endblock %}
+{% block content %}
+<h1 class="page-title">Record withholding tax credit</h1>
+<p style="color:var(--muted);font-size:0.9rem;">For {{ invoice.number }} — {{ invoice.client.name }}. This clears part of the invoice balance without any cash changing hands; URA holds the amount as a credit against corporation tax.</p>
+<div class="card" style="max-width:500px;">
+    <form method="post" enctype="multipart/form-data">
+        {% csrf_token %}
+        {% for field in form %}
+        <div style="margin-bottom:1rem;">
+            <label style="display:block;font-size:0.85rem;font-weight:600;margin-bottom:0.3rem;">{{ field.label }}</label>
+            {{ field }}
+            {% if field.help_text %}<p style="font-size:0.78rem;color:var(--muted);margin:0.3rem 0 0;">{{ field.help_text }}</p>{% endif %}
+            {% for error in field.errors %}<p style="color:#a12b2b;font-size:0.8rem;">{{ error }}</p>{% endfor %}
+        </div>
+        {% endfor %}
+        <button type="submit" class="btn">Record credit</button>
+        <a href="{% url 'books:invoice_detail' invoice.pk %}" class="btn btn-secondary">Cancel</a>
+    </form>
+</div>
+{% endblock %}

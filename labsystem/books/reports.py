@@ -20,19 +20,28 @@ def _posted_lines(start=None, end=None):
     return lines
 
 
+def _totals_by_account(start=None, end=None) -> dict:
+    """One grouped query for every account's movement in the period, instead
+    of one query per account — trial_balance/profit_and_loss/balance_sheet/
+    revenue_by_product all build on this rather than calling Account.balance()
+    in a loop."""
+    rows = (
+        _posted_lines(start, end)
+        .values("account")
+        .annotate(debit=models.Sum("debit"), credit=models.Sum("credit"))
+    )
+    return {row["account"]: (row["debit"] or Decimal("0"), row["credit"] or Decimal("0")) for row in rows}
+
+
 def trial_balance(start=None, end=None) -> dict:
+    totals = _totals_by_account(start, end)
+    accounts = Account.objects.filter(pk__in=totals.keys()).order_by("code")
+
     rows = []
     total_debit = Decimal("0")
     total_credit = Decimal("0")
-    accounts = Account.objects.filter(active=True).order_by("code")
     for account in accounts:
-        agg = _posted_lines(start, end).filter(account=account).aggregate(
-            d=models.Sum("debit"), c=models.Sum("credit")
-        )
-        debit = agg["d"] or Decimal("0")
-        credit = agg["c"] or Decimal("0")
-        if not debit and not credit:
-            continue
+        debit, credit = totals[account.pk]
         net_debit = debit - credit if debit >= credit else Decimal("0")
         net_credit = credit - debit if credit > debit else Decimal("0")
         rows.append({
@@ -59,14 +68,18 @@ def profit_and_loss(start=None, end=None) -> dict:
     total_overhead = Decimal("0")
     non_deductible = Decimal("0")
 
-    for account in Account.objects.filter(active=True, type=Account.TYPE_INCOME).order_by("code"):
-        amount = account.balance(start, end)
+    totals = _totals_by_account(start, end)
+
+    for account in Account.objects.filter(pk__in=totals.keys(), type=Account.TYPE_INCOME).order_by("code"):
+        debit, credit = totals[account.pk]
+        amount = credit - debit
         if amount:
             income_rows.append({"account": account, "amount": amount})
             total_income += amount
 
-    for account in Account.objects.filter(active=True, type=Account.TYPE_EXPENSE).order_by("code"):
-        amount = account.balance(start, end)
+    for account in Account.objects.filter(pk__in=totals.keys(), type=Account.TYPE_EXPENSE).order_by("code"):
+        debit, credit = totals[account.pk]
+        amount = debit - credit
         if not amount:
             continue
         row = {"account": account, "amount": amount}
@@ -103,20 +116,25 @@ def balance_sheet(as_at=None) -> dict:
     asset_rows, liability_rows, equity_rows = [], [], []
     total_assets = total_liabilities = total_equity = Decimal("0")
 
-    for account in Account.objects.filter(active=True, type=Account.TYPE_ASSET).order_by("code"):
-        amount = account.balance(end=as_at)
+    totals = _totals_by_account(end=as_at)
+
+    for account in Account.objects.filter(pk__in=totals.keys(), type=Account.TYPE_ASSET).order_by("code"):
+        debit, credit = totals[account.pk]
+        amount = debit - credit
         if amount:
             asset_rows.append({"account": account, "amount": amount})
             total_assets += amount
 
-    for account in Account.objects.filter(active=True, type=Account.TYPE_LIABILITY).order_by("code"):
-        amount = account.balance(end=as_at)
+    for account in Account.objects.filter(pk__in=totals.keys(), type=Account.TYPE_LIABILITY).order_by("code"):
+        debit, credit = totals[account.pk]
+        amount = credit - debit
         if amount:
             liability_rows.append({"account": account, "amount": amount})
             total_liabilities += amount
 
-    for account in Account.objects.filter(active=True, type=Account.TYPE_EQUITY).order_by("code"):
-        amount = account.balance(end=as_at)
+    for account in Account.objects.filter(pk__in=totals.keys(), type=Account.TYPE_EQUITY).order_by("code"):
+        debit, credit = totals[account.pk]
+        amount = credit - debit
         if amount:
             equity_rows.append({"account": account, "amount": amount})
             total_equity += amount
@@ -182,6 +200,8 @@ def aged_receivables(as_at=None) -> dict:
                 "total": sum(buckets.values(), Decimal("0")),
                 "average_days_to_pay": client.average_days_to_pay(),
             })
+
+    client_rows.sort(key=lambda row: row["total"], reverse=True)
 
     return {
         "buckets": AGEING_BUCKETS,
@@ -254,8 +274,10 @@ def client_statement(client, start=None, end=None) -> dict:
 def revenue_by_product(start=None, end=None) -> dict:
     rows = []
     total = Decimal("0")
-    for account in Account.objects.filter(active=True, type=Account.TYPE_INCOME).order_by("code"):
-        amount = account.balance(start, end)
+    totals = _totals_by_account(start, end)
+    for account in Account.objects.filter(pk__in=totals.keys(), type=Account.TYPE_INCOME).order_by("code"):
+        debit, credit = totals[account.pk]
+        amount = credit - debit
         if amount:
             rows.append({"account": account, "amount": amount})
             total += amount
