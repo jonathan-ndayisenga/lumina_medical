@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sign in - Ternah Books</title>
+    <style>
+        :root {
+            --navy: #0f1a42;
+            --navy-dark: #081029;
+            --brand: #2f4cff;
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            font-family: -apple-system, 'Segoe UI', Roboto, sans-serif;
+            min-height: 100vh;
+            display: flex;
+        }
+        .panel-brand {
+            flex: 1;
+            background: linear-gradient(160deg, var(--navy), var(--navy-dark));
+            color: #fff;
+            padding: 3rem;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+        .panel-brand h1 { font-size: 2rem; margin: 0 0 0.5rem; }
+        .panel-brand p.tagline { color: rgba(255,255,255,0.7); margin: 0 0 2rem; }
+        .panel-brand ul { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 0.9rem; }
+        .panel-brand li { display: flex; gap: 0.75rem; align-items: baseline; color: rgba(255,255,255,0.9); }
+        .panel-brand li::before { content: "\2713"; color: var(--brand); font-weight: 700; }
+        .panel-form {
+            flex: 1;
+            background: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 3rem;
+        }
+        .form-card { width: 100%; max-width: 340px; }
+        .form-card h2 { margin: 0 0 1.5rem; color: var(--navy); }
+        label { display: block; font-size: 0.85rem; font-weight: 600; color: #333; margin-bottom: 0.3rem; }
+        input[type="text"], input[type="password"] {
+            width: 100%; padding: 0.7rem 0.85rem; border: 1px solid #d5d9e3; border-radius: 0.6rem;
+            margin-bottom: 1.1rem; font-size: 0.95rem;
+        }
+        input:focus { outline: none; border-color: var(--brand); box-shadow: 0 0 0 3px rgba(47,76,255,0.12); }
+        button {
+            width: 100%; padding: 0.8rem; border: none; border-radius: 0.6rem;
+            background: var(--brand); color: #fff; font-weight: 600; font-size: 0.95rem; cursor: pointer;
+        }
+        button:hover { background: #2540d9; }
+        .errors { background: #fdecec; color: #a12b2b; border-radius: 0.5rem; padding: 0.7rem 0.9rem; margin-bottom: 1rem; font-size: 0.85rem; }
+        @media (max-width: 820px) {
+            body { flex-direction: column; }
+            .panel-brand ul { display: none; }
+            .panel-brand { padding: 2rem; }
+        }
+    </style>
+</head>
+<body>
+    <div class="panel-brand">
+        <h1>Ternah Books</h1>
+        <p class="tagline">Invoicing, receipts, expenses and the ledger behind them.</p>
+        <ul>
+            <li>Issue invoices and track who owes what, and for how long</li>
+            <li>Record payments and withholding tax credits</li>
+            <li>Log expenses with receipts and duplicate detection</li>
+            <li>A double-entry ledger that always balances</li>
+            <li>Trial balance, P&amp;L, balance sheet and ageing reports</li>
+        </ul>
+    </div>
+    <div class="panel-form">
+        <div class="form-card">
+            <h2>Sign in</h2>
+            {% if form.non_field_errors %}
+                <div class="errors">{{ form.non_field_errors|striptags }}</div>
+            {% endif %}
+            <form method="post">
+                {% csrf_token %}
+                <label for="{{ form.username.id_for_label }}">Username</label>
+                <input type="text" name="username" id="{{ form.username.id_for_label }}" autofocus required>
+                <label for="{{ form.password.id_for_label }}">Password</label>
+                <input type="password" name="password" id="{{ form.password.id_for_label }}" required>
+                <input type="hidden" name="next" value="{{ next }}">
+                <button type="submit">Sign in</button>
+            </form>
+        </div>
+    </div>
+</body>
+</html>

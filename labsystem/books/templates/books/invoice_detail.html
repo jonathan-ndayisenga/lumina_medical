@@ -1,0 +1,46 @@
+{% extends "books/base.html" %}
+{% load books_extras %}
+{% block title %}{{ invoice.number|default:"Draft invoice" }} - Ternah Books{% endblock %}
+{% block content %}
+<h1 class="page-title">{{ invoice.number|default:"Draft invoice" }} <span class="badge badge-{{ invoice.status }}">{{ invoice.get_status_display }}</span></h1>
+
+<p>
+    {% if invoice.status != 'void' %}
+    <a href="{% url 'books:invoice_pdf' invoice.pk %}" class="btn btn-secondary" target="_blank">Print / PDF</a>
+    <a href="{% url 'books:invoice_void' invoice.pk %}" class="btn btn-danger">Void</a>
+    {% endif %}
+</p>
+
+<div class="card">
+    <p><strong>Client:</strong> {{ invoice.client.name }}</p>
+    <p><strong>Issue date:</strong> {{ invoice.issue_date }} &nbsp; <strong>Due date:</strong> {{ invoice.due_date|default:"-" }}</p>
+    <p><strong>Subtotal:</strong> UGX {{ invoice.subtotal|money }} &nbsp; <strong>Tax:</strong> UGX {{ invoice.tax_amount|money }} &nbsp; <strong>Total:</strong> UGX {{ invoice.total|money }}</p>
+    <p><strong>Paid:</strong> UGX {{ invoice.amount_paid|money }} &nbsp; <strong>WHT credited:</strong> UGX {{ invoice.wht_credited|money }} &nbsp; <strong>Balance:</strong> UGX {{ invoice.balance|money }}</p>
+</div>
+
+<div class="card">
+    <h3>Lines</h3>
+    <table>
+        <thead><tr><th>Description</th><th>Qty</th><th>Unit price</th><th>Amount</th></tr></thead>
+        <tbody>
+            {% for line in invoice.lines.all %}
+            <tr><td>{{ line.description }}</td><td>{{ line.quantity }}</td><td>UGX {{ line.unit_price|money }}</td><td>UGX {{ line.amount|money }}</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<div class="card">
+    <h3>Journal entry</h3>
+    <table>
+        <thead><tr><th>Account</th><th>Debit</th><th>Credit</th></tr></thead>
+        <tbody>
+            {% for line in journal_lines %}
+            <tr><td>{{ line.account.code }} - {{ line.account.name }}</td><td>{% if line.debit %}UGX {{ line.debit|money }}{% endif %}</td><td>{% if line.credit %}UGX {{ line.credit|money }}{% endif %}</td></tr>
+            {% empty %}
+            <tr><td colspan="3">Not posted (still a draft).</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

@@ -17,6 +17,7 @@ urlpatterns = [
         name='logout',
     ),
     path('', include('accounts.urls')),  # Root: login page (at /)
+    path('books/', include('books.urls')),  # Ternah Books: its own login, its own shell
     path('platform/', include('admin_dashboard.urls')),  # superadmin & hospital admin
     path('reception/', include('reception.urls')),
     path('doctor/', include('doctor.urls')),

@@ -1,0 +1,73 @@
+{% extends "books/base.html" %}
+{% load books_extras %}
+{% block title %}Journal - Ternah Books{% endblock %}
+{% block content %}
+<h1 class="page-title">Journal</h1>
+
+<div class="card">
+    <h3>Post a manual entry</h3>
+    <p style="font-size:0.85rem;color:var(--muted);">For adjustments an accountant needs to post by hand — depreciation, accruals, opening balances. Debits must equal credits.</p>
+    <form method="post">
+        {% csrf_token %}
+        <div style="display:flex;gap:1rem;flex-wrap:wrap;margin-bottom:1rem;">
+            <div style="flex:1;min-width:160px;">
+                <label style="display:block;font-size:0.8rem;font-weight:600;">{{ manual_form.date.label }}</label>
+                {{ manual_form.date }}
+            </div>
+            <div style="flex:2;min-width:220px;">
+                <label style="display:block;font-size:0.8rem;font-weight:600;">{{ manual_form.memo.label }}</label>
+                {{ manual_form.memo }}
+            </div>
+            <div style="flex:1;min-width:160px;">
+                <label style="display:block;font-size:0.8rem;font-weight:600;">{{ manual_form.reference.label }}</label>
+                {{ manual_form.reference }}
+            </div>
+        </div>
+        {% for error in manual_form.non_field_errors %}<p style="color:#a12b2b;">{{ error }}</p>{% endfor %}
+
+        {{ manual_formset.management_form }}
+        <table>
+            <thead><tr><th>Account</th><th>Debit</th><th>Credit</th><th>Narration</th></tr></thead>
+            <tbody>
+                {% for line_form in manual_formset %}
+                <tr>
+                    <td>{{ line_form.account }}</td>
+                    <td>{{ line_form.debit }}</td>
+                    <td>{{ line_form.credit }}</td>
+                    <td>{{ line_form.narration }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        <button type="submit" class="btn" style="margin-top:1rem;">Post entry</button>
+    </form>
+</div>
+
+<div class="card">
+    <h3>Posted entries</h3>
+    <p>
+        <a href="?source=invoice">Invoice</a> &middot; <a href="?source=payment">Payment</a> &middot;
+        <a href="?source=expense">Expense</a> &middot; <a href="?source=wht">WHT</a> &middot;
+        <a href="?source=manual">Manual</a> &middot; <a href="{% url 'books:journal_list' %}">All</a>
+    </p>
+    <table>
+        <thead><tr><th>Date</th><th>Memo</th><th>Source</th><th>Lines</th></tr></thead>
+        <tbody>
+            {% for entry in entries %}
+            <tr>
+                <td>{{ entry.date }}</td>
+                <td>{{ entry.memo }}{% if entry.reverses_id %} <span class="badge badge-void">Reversal</span>{% endif %}</td>
+                <td>{{ entry.get_source_type_display }}</td>
+                <td>
+                    {% for line in entry.lines.all %}
+                        {{ line.account.code }} {% if line.debit %}Dr {{ line.debit|money }}{% else %}Cr {{ line.credit|money }}{% endif %}{% if not forloop.last %}, {% endif %}
+                    {% endfor %}
+                </td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="4">No posted entries yet.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

@@ -1,0 +1,28 @@
+{% extends "books/base.html" %}
+{% load books_extras %}
+{% block title %}Ageing - Ternah Books{% endblock %}
+{% block content %}
+<h1 class="page-title">Aged receivables</h1>
+<div class="card">
+    <table>
+        <thead>
+            <tr><th>Client</th>{% for bucket in report.buckets %}<th>{{ bucket }}</th>{% endfor %}<th>Total</th><th>Avg. days to pay</th></tr>
+        </thead>
+        <tbody>
+            {% for row in report.client_rows %}
+            <tr>
+                <td><a href="{% url 'books:client_detail' row.client.pk %}">{{ row.client.name }}</a></td>
+                {% for bucket in report.buckets %}<td>{% if row.buckets|dictkey:bucket %}UGX {{ row.buckets|dictkey:bucket|money }}{% endif %}</td>{% endfor %}
+                <td>UGX {{ row.total|money }}</td>
+                <td>{{ row.average_days_to_pay|default:"-" }}</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="{{ report.buckets|length|add:3 }}">Nothing outstanding.</td></tr>
+            {% endfor %}
+        </tbody>
+        <tfoot>
+            <tr><td><strong>Grand total</strong></td>{% for bucket in report.buckets %}<td><strong>UGX {{ report.grand_totals|dictkey:bucket|money }}</strong></td>{% endfor %}<td><strong>UGX {{ report.grand_total|money }}</strong></td><td></td></tr>
+        </tfoot>
+    </table>
+</div>
+{% endblock %}

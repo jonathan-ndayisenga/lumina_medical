@@ -122,6 +122,7 @@ INSTALLED_APPS = [
     "django.contrib.humanize",
     "accounts",
     "admin_dashboard",
+    "books",
     "doctor",
     "finance",
     "homecare",
@@ -129,6 +130,15 @@ INSTALLED_APPS = [
     "nurse",
     "reception",
 ]
+
+# Ternah Books is a fully separate, internally-facing module (its own login,
+# its own shell) rather than a per-hospital module gated through the normal
+# Hospital/Module subscription system. Access is restricted to users whose
+# `hospital` is this specific tenant, identified by subdomain, so that
+# is_staff (which is set broadly across every customer hospital's staff —
+# see accounts.models.User.save()) can never be mistaken for authorization
+# into Ternah's own internal books.
+TERNAH_BOOKS_HOSPITAL_SUBDOMAIN = "ternah-books"
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
@@ -159,6 +169,7 @@ TEMPLATES = [
                 "django.contrib.messages.context_processors.messages",
                 "accounts.context_processors.notifications",
                 "accounts.context_processors.nav_section",
+                "books.context_processors.books_admin",
             ],
         },
     },

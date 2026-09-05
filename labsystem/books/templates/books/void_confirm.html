@@ -1,0 +1,15 @@
+{% extends "books/base.html" %}
+{% block title %}Confirm void - Ternah Books{% endblock %}
+{% block content %}
+<h1 class="page-title">Void {{ object_label }}</h1>
+<div class="card" style="max-width:500px;">
+    <p>This reverses the journal entry it produced — the original stays on record; it is not edited or deleted.</p>
+    <form method="post">
+        {% csrf_token %}
+        <label style="display:block;font-size:0.85rem;font-weight:600;margin-bottom:0.3rem;">Reason</label>
+        <textarea name="reason" class="form-control" rows="3" required style="margin-bottom:1rem;"></textarea>
+        <button type="submit" class="btn btn-danger">Void</button>
+        <a href="{{ cancel_url }}" class="btn btn-secondary">Cancel</a>
+    </form>
+</div>
+{% endblock %}

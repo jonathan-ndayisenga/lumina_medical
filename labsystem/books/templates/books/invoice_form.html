@@ -1,0 +1,44 @@
+{% extends "books/base.html" %}
+{% block title %}New Invoice - Ternah Books{% endblock %}
+{% block content %}
+<h1 class="page-title">New invoice</h1>
+<div class="card" style="max-width:800px;">
+    <form method="post">
+        {% csrf_token %}
+        <h3>Invoice</h3>
+        {% for field in form %}
+        <div style="margin-bottom:1rem;">
+            <label style="display:block;font-size:0.85rem;font-weight:600;margin-bottom:0.3rem;">{{ field.label }}</label>
+            {{ field }}
+            {% for error in field.errors %}<p style="color:#a12b2b;font-size:0.8rem;">{{ error }}</p>{% endfor %}
+        </div>
+        {% endfor %}
+
+        <h3>Lines</h3>
+        {{ formset.management_form }}
+        {% for line_form in formset %}
+        <div class="card" style="background:var(--bg);">
+            {% for field in line_form.visible_fields %}
+            <div style="margin-bottom:0.75rem;">
+                <label style="display:block;font-size:0.8rem;font-weight:600;margin-bottom:0.25rem;">{{ field.label }}</label>
+                {{ field }}
+            </div>
+            {% endfor %}
+            {% for hidden in line_form.hidden_fields %}{{ hidden }}{% endfor %}
+        </div>
+        {% endfor %}
+
+        <h3>Instalment schedule (optional)</h3>
+        {% for field in schedule_form %}
+        <div style="margin-bottom:1rem;">
+            <label style="display:block;font-size:0.85rem;font-weight:600;margin-bottom:0.3rem;">{{ field.label }}</label>
+            {{ field }}
+            {% if field.help_text %}<p style="font-size:0.78rem;color:var(--muted);margin:0.3rem 0 0;">{{ field.help_text }}</p>{% endif %}
+        </div>
+        {% endfor %}
+
+        <button type="submit" class="btn">Issue invoice</button>
+        <a href="{% url 'books:invoice_list' %}" class="btn btn-secondary">Cancel</a>
+    </form>
+</div>
+{% endblock %}

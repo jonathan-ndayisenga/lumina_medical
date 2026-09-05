@@ -1,0 +1,32 @@
+{% extends "books/base.html" %}
+{% load books_extras %}
+{% block title %}Balance Sheet - Ternah Books{% endblock %}
+{% block content %}
+<h1 class="page-title">Balance sheet as at {{ report.as_at }}</h1>
+<p><span class="badge {% if report.balanced %}badge-paid{% else %}badge-void{% endif %}">{% if report.balanced %}Balanced{% else %}NOT balanced{% endif %}</span></p>
+
+<div class="card">
+    <h3>Assets</h3>
+    <table>
+        {% for row in report.asset_rows %}<tr><td>{{ row.account.name }}</td><td>UGX {{ row.amount|money }}</td></tr>{% endfor %}
+        <tr><td><strong>Total assets</strong></td><td><strong>UGX {{ report.total_assets|money }}</strong></td></tr>
+    </table>
+</div>
+
+<div class="card">
+    <h3>Liabilities</h3>
+    <table>
+        {% for row in report.liability_rows %}<tr><td>{{ row.account.name }}</td><td>UGX {{ row.amount|money }}</td></tr>{% endfor %}
+        <tr><td><strong>Total liabilities</strong></td><td><strong>UGX {{ report.total_liabilities|money }}</strong></td></tr>
+    </table>
+</div>
+
+<div class="card">
+    <h3>Equity</h3>
+    <table>
+        {% for row in report.equity_rows %}<tr><td>{{ row.account.name }}</td><td>UGX {{ row.amount|money }}</td></tr>{% endfor %}
+        <tr><td>Result for period (not yet closed to equity)</td><td>UGX {{ report.result_for_period|money }}</td></tr>
+        <tr><td><strong>Total equity</strong></td><td><strong>UGX {{ report.total_equity_with_result|money }}</strong></td></tr>
+    </table>
+</div>
+{% endblock %}

@@ -1,0 +1,114 @@
+{% load books_extras %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Ternah Books{% endblock %}</title>
+    <style>
+        :root {
+            --navy: #0f1a42;
+            --brand: #2f4cff;
+            --ink: #1f2733;
+            --muted: #667085;
+            --border: #e4e7ee;
+            --bg: #f6f7fb;
+        }
+        * { box-sizing: border-box; }
+        body { margin: 0; font-family: -apple-system, 'Segoe UI', Roboto, sans-serif; color: var(--ink); background: var(--bg); }
+        .shell { display: flex; min-height: 100vh; }
+        .sidebar { width: 240px; background: var(--navy); color: #fff; display: flex; flex-direction: column; flex-shrink: 0; }
+        .sidebar .brand { padding: 1.4rem 1.2rem; font-weight: 700; font-size: 1.05rem; border-bottom: 1px solid rgba(255,255,255,0.1); }
+        .sidebar nav { flex: 1; padding: 1rem 0.75rem; display: flex; flex-direction: column; gap: 0.2rem; }
+        .sidebar nav a {
+            display: block; padding: 0.6rem 0.85rem; border-radius: 0.5rem; color: rgba(255,255,255,0.75);
+            text-decoration: none; font-size: 0.92rem;
+        }
+        .sidebar nav a:hover { background: rgba(255,255,255,0.08); color: #fff; }
+        .sidebar nav a.on { background: var(--brand); color: #fff; }
+        .sidebar .footer { padding: 1rem 1.2rem; border-top: 1px solid rgba(255,255,255,0.1); font-size: 0.85rem; }
+        .sidebar .footer .user { color: rgba(255,255,255,0.85); margin-bottom: 0.5rem; }
+        .sidebar .footer button {
+            background: none; border: 1px solid rgba(255,255,255,0.25); color: rgba(255,255,255,0.85);
+            padding: 0.35rem 0.7rem; border-radius: 0.4rem; font-size: 0.8rem; cursor: pointer;
+        }
+        .sidebar .footer button:hover { background: rgba(255,255,255,0.08); }
+        .main { flex: 1; min-width: 0; padding: 2rem; }
+        .card { background: #fff; border: 1px solid var(--border); border-radius: 0.9rem; padding: 1.5rem; margin-bottom: 1.25rem; }
+        h1.page-title { font-size: 1.4rem; margin: 0 0 1.25rem; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { text-align: left; padding: 0.65rem 0.75rem; border-bottom: 1px solid var(--border); font-size: 0.9rem; }
+        th { color: var(--muted); font-weight: 600; text-transform: uppercase; font-size: 0.72rem; letter-spacing: 0.04em; }
+        .btn {
+            display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.55rem 0.9rem; border-radius: 0.55rem;
+            background: var(--brand); color: #fff; text-decoration: none; font-size: 0.88rem; font-weight: 600;
+            border: none; cursor: pointer;
+        }
+        .btn:hover { background: #2540d9; }
+        .btn-secondary { background: #fff; color: var(--navy); border: 1px solid var(--border); }
+        .btn-secondary:hover { background: var(--bg); }
+        .btn-danger { background: #b42318; }
+        .btn-danger:hover { background: #912018; }
+        .badge { display: inline-block; padding: 0.2rem 0.55rem; border-radius: 999px; font-size: 0.75rem; font-weight: 600; }
+        .badge-open { background: #fff3cd; color: #8a6100; }
+        .badge-paid { background: #d7f5e3; color: #146c3f; }
+        .badge-draft { background: #eceff3; color: var(--muted); }
+        .badge-void { background: #fdecec; color: #a12b2b; }
+        .form-control { width: 100%; padding: 0.6rem 0.75rem; border: 1px solid var(--border); border-radius: 0.55rem; font-size: 0.9rem; }
+        .messages { margin-bottom: 1rem; }
+        .messages li { list-style: none; padding: 0.7rem 1rem; border-radius: 0.6rem; margin-bottom: 0.5rem; font-size: 0.88rem; }
+        .messages .success { background: #d7f5e3; color: #146c3f; }
+        .messages .error { background: #fdecec; color: #a12b2b; }
+        .messages .warning { background: #fff3cd; color: #8a6100; }
+        .banner-danger { background: #fdecec; color: #a12b2b; border: 1px solid #f3c6c6; border-radius: 0.6rem; padding: 0.9rem 1.1rem; margin-bottom: 1.25rem; font-size: 0.9rem; }
+        .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1.25rem; }
+        .stat-grid .card { margin-bottom: 0; }
+        .stat-label { font-size: 0.78rem; text-transform: uppercase; color: var(--muted); letter-spacing: 0.03em; margin-bottom: 0.4rem; }
+        .stat-value { font-size: 1.5rem; font-weight: 700; }
+        @media (max-width: 760px) {
+            .shell { flex-direction: column; }
+            .sidebar { width: 100%; }
+            .sidebar nav { flex-direction: row; overflow-x: auto; }
+        }
+    </style>
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+<div class="shell">
+    <aside class="sidebar">
+        <div class="brand">Ternah Books</div>
+        <nav>
+            <a href="{% url 'books:dashboard' %}" class="{% if request.path == '/books/' %}on{% endif %}">Dashboard</a>
+            <a href="{% url 'books:client_list' %}" class="{% if request.path|startswith:'/books/clients' %}on{% endif %}">Clients</a>
+            <a href="{% url 'books:invoice_list' %}" class="{% if request.path|startswith:'/books/invoices' %}on{% endif %}">Invoices</a>
+            <a href="{% url 'books:payment_create' %}" class="{% if request.path|startswith:'/books/payments' %}on{% endif %}">Payments</a>
+            <a href="{% url 'books:receipt_list' %}" class="{% if request.path|startswith:'/books/receipts' %}on{% endif %}">Receipts</a>
+            <a href="{% url 'books:expense_list' %}" class="{% if request.path|startswith:'/books/expenses' %}on{% endif %}">Expenses</a>
+            <a href="{% url 'books:report_trial_balance' %}" class="{% if request.path|startswith:'/books/reports' %}on{% endif %}">Reports</a>
+            <a href="{% url 'books:journal_list' %}" class="{% if request.path|startswith:'/books/journal' %}on{% endif %}">Journal</a>
+            {% if is_books_admin %}
+            <a href="{% url 'books:company_settings' %}" class="{% if request.path|startswith:'/books/settings' %}on{% endif %}">Settings</a>
+            {% endif %}
+        </nav>
+        <div class="footer">
+            <div class="user">{{ request.user.get_username }}</div>
+            <form method="post" action="{% url 'books:logout' %}">
+                {% csrf_token %}
+                <button type="submit">Log out</button>
+            </form>
+        </div>
+    </aside>
+    <main class="main">
+        {% if messages %}
+        <ul class="messages">
+            {% for message in messages %}
+            <li class="{{ message.tags }}">{{ message }}</li>
+            {% endfor %}
+        </ul>
+        {% endif %}
+        {% block content %}{% endblock %}
+    </main>
+</div>
+{% block extra_js %}{% endblock %}
+</body>
+</html>

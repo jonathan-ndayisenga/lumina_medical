@@ -1,0 +1,20 @@
+{% extends "books/base.html" %}
+{% load books_extras %}
+{% block title %}Trial Balance - Ternah Books{% endblock %}
+{% block content %}
+<h1 class="page-title">Trial balance</h1>
+<p><span class="badge {% if report.balanced %}badge-paid{% else %}badge-void{% endif %}">{% if report.balanced %}Balanced{% else %}NOT balanced{% endif %}</span></p>
+<div class="card">
+    <table>
+        <thead><tr><th>Code</th><th>Account</th><th>Debit</th><th>Credit</th></tr></thead>
+        <tbody>
+            {% for row in report.rows %}
+            <tr><td>{{ row.account.code }}</td><td>{{ row.account.name }}</td><td>{% if row.debit %}UGX {{ row.debit|money }}{% endif %}</td><td>{% if row.credit %}UGX {{ row.credit|money }}{% endif %}</td></tr>
+            {% endfor %}
+        </tbody>
+        <tfoot>
+            <tr><td colspan="2"><strong>Total</strong></td><td><strong>UGX {{ report.total_debit|money }}</strong></td><td><strong>UGX {{ report.total_credit|money }}</strong></td></tr>
+        </tfoot>
+    </table>
+</div>
+{% endblock %}

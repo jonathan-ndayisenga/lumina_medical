@@ -1,0 +1,18 @@
+{% extends "books/base.html" %}
+{% block title %}Company Settings - Ternah Books{% endblock %}
+{% block content %}
+<h1 class="page-title">Company settings</h1>
+<div class="card" style="max-width:700px;">
+    <form method="post" enctype="multipart/form-data">
+        {% csrf_token %}
+        {% for field in form %}
+        <div style="margin-bottom:1rem;">
+            <label style="display:block;font-size:0.85rem;font-weight:600;margin-bottom:0.3rem;">{{ field.label }}</label>
+            {{ field }}
+            {% for error in field.errors %}<p style="color:#a12b2b;font-size:0.8rem;">{{ error }}</p>{% endfor %}
+        </div>
+        {% endfor %}
+        <button type="submit" class="btn">Save settings</button>
+    </form>
+</div>
+{% endblock %}

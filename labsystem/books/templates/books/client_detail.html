@@ -1,0 +1,41 @@
+{% extends "books/base.html" %}
+{% load books_extras %}
+{% block title %}{{ client.name }} - Ternah Books{% endblock %}
+{% block content %}
+<h1 class="page-title">{{ client.name }}</h1>
+<p>
+    <a href="{% url 'books:client_payment_create' client.pk %}" class="btn">Record payment</a>
+    <a href="{% url 'books:invoice_create' %}" class="btn btn-secondary">New invoice</a>
+    <a href="{% url 'books:client_statement_pdf' client.pk %}" class="btn btn-secondary">Print statement</a>
+</p>
+
+<div class="stat-grid">
+    <div class="card"><div class="stat-label">Balance</div><div class="stat-value">UGX {{ client.balance|money }}</div></div>
+    <div class="card"><div class="stat-label">Unallocated credit</div><div class="stat-value">UGX {{ client.unallocated_credit|money }}</div></div>
+    <div class="card"><div class="stat-label">Total invoiced</div><div class="stat-value">UGX {{ client.total_invoiced|money }}</div></div>
+    <div class="card"><div class="stat-label">Total received</div><div class="stat-value">UGX {{ client.total_received|money }}</div></div>
+</div>
+
+<div class="card">
+    <h3>Statement</h3>
+    <table>
+        <thead><tr><th>Date</th><th>Event</th><th>Debit</th><th>Credit</th><th>Running balance</th></tr></thead>
+        <tbody>
+            {% for event in statement.events %}
+            <tr>
+                <td>{{ event.date }}</td>
+                <td>
+                    {% if event.type == 'invoice' %}<a href="{% url 'books:invoice_detail' event.reference.pk %}">{{ event.label }}</a>
+                    {% else %}{{ event.label }}{% endif %}
+                </td>
+                <td>{% if event.debit %}UGX {{ event.debit|money }}{% endif %}</td>
+                <td>{% if event.credit %}UGX {{ event.credit|money }}{% endif %}</td>
+                <td>UGX {{ event.running_balance|money }}</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="5">Nothing recorded yet.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

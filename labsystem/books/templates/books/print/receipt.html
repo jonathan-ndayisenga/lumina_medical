@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Receipt {{ receipt_number }}</title>
+<style>
+    @page { size: A4 portrait; margin: 12mm; }
+    * { box-sizing: border-box; }
+    body { font-family: -apple-system, 'Segoe UI', Roboto, sans-serif; font-size: 12px; color: #1f2733; margin: 0; }
+    h1 { font-size: 1.3rem; letter-spacing: 0.05em; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 1rem; }
+    th, td { padding: 0.5rem 0.6rem; border-bottom: 1px solid #e4e7ee; text-align: left; }
+    th { background: #f6f7fb; text-transform: uppercase; font-size: 0.7rem; }
+    .footer { margin-top: 2rem; font-size: 0.8rem; color: #667085; border-top: 1px solid #e4e7ee; padding-top: 0.75rem; }
+</style>
+</head>
+<body>
+<div><strong>{{ company.legal_name }}</strong><br>{{ company.address }}, {{ company.city }}<br>{{ company.phone }} &middot; {{ company.email }}</div>
+<h1>RECEIPT {{ receipt_number }}</h1>
+<p><strong>Received from:</strong> {{ client.name }}<br>
+<strong>Date:</strong> {{ date }} &nbsp; <strong>Method:</strong> {{ method }} {% if reference %}&nbsp; <strong>Ref:</strong> {{ reference }}{% endif %}<br>
+<strong>Amount received:</strong> UGX {{ amount|floatformat:0 }}</p>
+
+<table>
+    <thead><tr><th>Applied to invoice</th><th>Amount applied</th><th>Invoice balance after</th></tr></thead>
+    <tbody>
+        {% for a in allocations %}
+        <tr><td>{{ a.invoice_number }}</td><td>UGX {{ a.amount|floatformat:0 }}</td><td>UGX {{ a.invoice_balance_after|floatformat:0 }}</td></tr>
+        {% empty %}
+        <tr><td colspan="3">Not yet applied to any invoice.</td></tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% if unallocated %}<p>Held as unallocated customer credit: UGX {{ unallocated|floatformat:0 }}</p>{% endif %}
+
+{% if footer_notes %}<div class="footer">{{ footer_notes }}</div>{% endif %}
+<script>window.addEventListener('load', () => window.print());</script>
+</body>
+</html>

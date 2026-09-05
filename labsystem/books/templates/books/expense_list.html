@@ -1,0 +1,33 @@
+{% extends "books/base.html" %}
+{% load books_extras %}
+{% block title %}Expenses - Ternah Books{% endblock %}
+{% block content %}
+<h1 class="page-title">Expenses</h1>
+<p><a href="{% url 'books:expense_create' %}" class="btn">New expense</a></p>
+
+<div class="stat-grid">
+    <div class="card"><div class="stat-label">Total</div><div class="stat-value">UGX {{ summary.total|money }}</div></div>
+    <div class="card"><div class="stat-label">Deductible</div><div class="stat-value">UGX {{ summary.deductible|money }}</div></div>
+    <div class="card"><div class="stat-label">Transaction charges</div><div class="stat-value">UGX {{ summary.charges|money }}</div></div>
+</div>
+
+<div class="card">
+    <table>
+        <thead><tr><th>Date</th><th>Description</th><th>Account</th><th>Amount</th><th>Deductible</th><th></th></tr></thead>
+        <tbody>
+            {% for expense in expenses %}
+            <tr>
+                <td>{{ expense.date }}</td>
+                <td>{{ expense.description }}{% if expense.voided_at %} <span class="badge badge-void">Voided</span>{% endif %}</td>
+                <td>{{ expense.account.name }}</td>
+                <td>UGX {{ expense.total_cost_ugx|money }}</td>
+                <td>{{ expense.is_deductible|yesno:"Yes,No" }}</td>
+                <td>{% if not expense.voided_at %}<a href="{% url 'books:expense_void' expense.pk %}">Void</a>{% endif %}</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="6">No expenses yet.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

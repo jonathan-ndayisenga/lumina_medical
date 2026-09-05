@@ -1,0 +1,28 @@
+{% extends "books/base.html" %}
+{% load books_extras %}
+{% block title %}Tax Pack - Ternah Books{% endblock %}
+{% block content %}
+<h1 class="page-title">Tax pack - {{ report.financial_year.label }}</h1>
+<form method="get" style="margin-bottom:1rem;">
+    <select name="year" class="form-control" style="display:inline-block;width:auto;" onchange="this.form.submit()">
+        {% for fy in financial_years %}
+        <option value="{{ fy.pk }}" {% if fy == report.financial_year %}selected{% endif %}>{{ fy.label }}</option>
+        {% endfor %}
+    </select>
+</form>
+
+<div class="card">
+    <p>Everything needed to start a URA return for {{ report.financial_year.label }}. This is not a finished tax computation — capital allowances and disallowances are for the accountant.</p>
+    <p><strong>Net profit:</strong> UGX {{ report.profit_and_loss.net_profit|money }}</p>
+    <p><strong>Taxable profit before adjustments:</strong> UGX {{ report.profit_and_loss.taxable_profit_before_adjustments|money }}</p>
+    <p><strong>Total WHT credits available:</strong> UGX {{ report.total_wht_credits|money }}</p>
+    <p><strong>Trial balance:</strong> <span class="badge {% if report.trial_balance.balanced %}badge-paid{% else %}badge-void{% endif %}">{% if report.trial_balance.balanced %}Balanced{% else %}NOT balanced{% endif %}</span></p>
+</div>
+
+<p>
+    <a href="{% url 'books:report_profit_loss' %}" class="btn btn-secondary">Full P&amp;L</a>
+    <a href="{% url 'books:report_balance_sheet' %}" class="btn btn-secondary">Full balance sheet</a>
+    <a href="{% url 'books:report_ageing' %}" class="btn btn-secondary">Full ageing</a>
+    <a href="{% url 'books:report_trial_balance' %}" class="btn btn-secondary">Full trial balance</a>
+</p>
+{% endblock %}

@@ -1,0 +1,44 @@
+{% extends "books/base.html" %}
+{% load books_extras %}
+{% block title %}Profit & Loss - Ternah Books{% endblock %}
+{% block content %}
+<h1 class="page-title">Profit &amp; loss{% if financial_year %} - {{ financial_year.label }}{% endif %}</h1>
+
+<div class="card">
+    <h3>Income</h3>
+    <table>
+        {% for row in report.income_rows %}
+        <tr><td>{{ row.account.name }}</td><td>UGX {{ row.amount|money }}</td></tr>
+        {% endfor %}
+        <tr><td><strong>Total income</strong></td><td><strong>UGX {{ report.total_income|money }}</strong></td></tr>
+    </table>
+</div>
+
+<div class="card">
+    <h3>Direct costs</h3>
+    <table>
+        {% for row in report.direct_cost_rows %}
+        <tr><td>{{ row.account.name }}</td><td>UGX {{ row.amount|money }}</td></tr>
+        {% endfor %}
+        <tr><td><strong>Total direct costs</strong></td><td><strong>UGX {{ report.total_direct_cost|money }}</strong></td></tr>
+        <tr><td><strong>Gross profit</strong></td><td><strong>UGX {{ report.gross_profit|money }}</strong> ({{ report.gross_margin_pct|floatformat:1 }}%)</td></tr>
+    </table>
+</div>
+
+<div class="card">
+    <h3>Overheads</h3>
+    <table>
+        {% for row in report.overhead_rows %}
+        <tr><td>{{ row.account.name }}{% if not row.account.is_deductible %} <span class="badge badge-void">non-deductible</span>{% endif %}</td><td>UGX {{ row.amount|money }}</td></tr>
+        {% endfor %}
+        <tr><td><strong>Total overheads</strong></td><td><strong>UGX {{ report.total_overhead|money }}</strong></td></tr>
+    </table>
+</div>
+
+<div class="card">
+    <p><strong>Net profit:</strong> UGX {{ report.net_profit|money }}</p>
+    <p><strong>Non-deductible expenses:</strong> UGX {{ report.non_deductible|money }}</p>
+    <p><strong>Taxable profit before adjustments:</strong> UGX {{ report.taxable_profit_before_adjustments|money }}</p>
+    <p style="font-size:0.8rem;color:var(--muted);">Capital allowances and further Finance-Act-specific adjustments are for the accountant — not computed here.</p>
+</div>
+{% endblock %}

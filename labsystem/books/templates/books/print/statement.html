@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Statement - {{ client.name }}</title>
+<style>
+    @page { size: A4 portrait; margin: 12mm; }
+    * { box-sizing: border-box; }
+    body { font-family: -apple-system, 'Segoe UI', Roboto, sans-serif; font-size: 12px; color: #1f2733; margin: 0; }
+    h1 { font-size: 1.3rem; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 0.5rem 0.6rem; border-bottom: 1px solid #e4e7ee; text-align: left; }
+    th { background: #f6f7fb; text-transform: uppercase; font-size: 0.7rem; }
+</style>
+</head>
+<body>
+<div><strong>{{ company.legal_name }}</strong></div>
+<h1>Statement of account</h1>
+<p><strong>{{ client.name }}</strong>{% if start %} &middot; {{ start }} to {{ end }}{% endif %}</p>
+<table>
+    <thead><tr><th>Date</th><th>Event</th><th>Debit</th><th>Credit</th><th>Balance</th></tr></thead>
+    <tbody>
+        {% for event in events %}
+        <tr><td>{{ event.date }}</td><td>{{ event.label }}</td><td>{% if event.debit %}UGX {{ event.debit|floatformat:0 }}{% endif %}</td><td>{% if event.credit %}UGX {{ event.credit|floatformat:0 }}{% endif %}</td><td>UGX {{ event.running_balance|floatformat:0 }}</td></tr>
+        {% empty %}
+        <tr><td colspan="5">Nothing recorded.</td></tr>
+        {% endfor %}
+    </tbody>
+    <tfoot><tr><td colspan="4"><strong>Closing balance</strong></td><td><strong>UGX {{ closing_balance|floatformat:0 }}</strong></td></tr></tfoot>
+</table>
+<script>window.addEventListener('load', () => window.print());</script>
+</body>
+</html>

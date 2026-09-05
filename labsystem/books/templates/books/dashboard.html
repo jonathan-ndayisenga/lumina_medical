@@ -1,0 +1,59 @@
+{% extends "books/base.html" %}
+{% load books_extras %}
+{% block title %}Dashboard - Ternah Books{% endblock %}
+{% block content %}
+<h1 class="page-title">Dashboard</h1>
+
+{% if not trial_balance_ok %}
+<div class="banner-danger"><strong>Trial balance is out of balance.</strong> Every other report should be treated as unreliable until this is fixed. Check the <a href="{% url 'books:report_trial_balance' %}">trial balance</a>.</div>
+{% endif %}
+
+{% if missing_letterhead_fields %}
+<div class="banner-danger">Company letterhead is incomplete — missing: {{ missing_letterhead_fields|join:", " }}. <a href="{% url 'books:company_settings' %}">Finish it</a> before invoicing with confidence.</div>
+{% endif %}
+
+<div class="stat-grid">
+    <div class="card"><div class="stat-label">Owed to us</div><div class="stat-value">UGX {{ owed_to_us|money }}</div></div>
+    <div class="card"><div class="stat-label">Revenue this year{% if financial_year %} ({{ financial_year.label }}){% endif %}</div><div class="stat-value">UGX {{ revenue_this_year|money }}</div></div>
+    <div class="card"><div class="stat-label">Spend this year</div><div class="stat-value">UGX {{ spend_this_year|money }}</div></div>
+    <div class="card"><div class="stat-label">Missing receipts</div><div class="stat-value">{{ missing_receipt_count }}</div></div>
+</div>
+
+<div class="card">
+    <h3>Overdue invoices</h3>
+    <table>
+        <thead><tr><th>Invoice</th><th>Client</th><th>Due date</th><th>Balance</th></tr></thead>
+        <tbody>
+            {% for invoice in overdue_invoices %}
+            <tr>
+                <td><a href="{% url 'books:invoice_detail' invoice.pk %}">{{ invoice.number }}</a></td>
+                <td>{{ invoice.client.name }}</td>
+                <td>{{ invoice.due_date }}</td>
+                <td>UGX {{ invoice.balance|money }}</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="4">Nothing overdue.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<div class="card">
+    <h3>Recent payments</h3>
+    <table>
+        <thead><tr><th>Receipt</th><th>Client</th><th>Date</th><th>Amount</th></tr></thead>
+        <tbody>
+            {% for payment in recent_payments %}
+            <tr>
+                <td><a href="{% url 'books:client_detail' payment.client_id %}">{{ payment.receipt_number }}</a></td>
+                <td>{{ payment.client.name }}</td>
+                <td>{{ payment.date }}</td>
+                <td>UGX {{ payment.amount|money }}</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="4">No payments recorded yet.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

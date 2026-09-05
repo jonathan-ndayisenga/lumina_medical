@@ -1,0 +1,33 @@
+{% extends "books/base.html" %}
+{% load books_extras %}
+{% block title %}Invoices - Ternah Books{% endblock %}
+{% block content %}
+<h1 class="page-title">Invoices</h1>
+<p>
+    <a href="{% url 'books:invoice_create' %}" class="btn">New invoice</a>
+    <a href="?status=draft" class="btn btn-secondary">Draft</a>
+    <a href="?status=open" class="btn btn-secondary">Open</a>
+    <a href="?status=paid" class="btn btn-secondary">Paid</a>
+    <a href="?status=void" class="btn btn-secondary">Void</a>
+    <a href="{% url 'books:invoice_list' %}" class="btn btn-secondary">All</a>
+</p>
+<div class="card">
+    <table>
+        <thead><tr><th>Number</th><th>Client</th><th>Issue date</th><th>Total</th><th>Balance</th><th>Status</th></tr></thead>
+        <tbody>
+            {% for invoice in invoices %}
+            <tr>
+                <td><a href="{% url 'books:invoice_detail' invoice.pk %}">{{ invoice.number|default:"Draft" }}</a></td>
+                <td>{{ invoice.client.name }}</td>
+                <td>{{ invoice.issue_date }}</td>
+                <td>UGX {{ invoice.total|money }}</td>
+                <td>UGX {{ invoice.balance|money }}</td>
+                <td><span class="badge badge-{{ invoice.status }}">{{ invoice.get_status_display }}</span></td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="6">No invoices yet.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}
