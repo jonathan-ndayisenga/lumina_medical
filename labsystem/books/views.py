@@ -28,7 +28,7 @@ from .forms import (
     WithholdingCreditForm,
 )
 from .ledger_models import Account, FinancialYear, JournalEntry
-from .permissions import _is_books_user, books_admin_required, books_staff_required
+from .permissions import _is_books_admin, _is_books_user, books_admin_required, books_staff_required
 
 
 class BooksLoginView(LoginView):
@@ -60,6 +60,57 @@ class BooksPasswordChangeDoneView(PasswordChangeDoneView):
     template_name = "books/password_change_done.html"
 
 
+DASHBOARD_TILES = [
+    {
+        "key": "clients", "label": "Clients", "description": "Who owes us, and for how long",
+        "icon": "M17 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2M9 7a4 4 0 1 0 0-8 4 4 0 0 0 0 8m10 14v-2a4 4 0 0 0-3-3.87m1-11.13a4 4 0 0 1 0 8",
+        "url": "books:client_list",
+    },
+    {
+        "key": "invoices", "label": "Invoices", "description": "Issue, view, void",
+        "icon": "M9 12h6m-6 4h6m2 5H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l5 5v15a2 2 0 0 1-2 2Z",
+        "url": "books:invoice_list",
+    },
+    {
+        "key": "payments", "label": "Payments", "description": "Record money coming in",
+        "icon": "M12 1v22M17 5H9a4 4 0 0 0 0 8h6a4 4 0 1 1 0 8H6",
+        "url": "books:payment_create",
+    },
+    {
+        "key": "receipts", "label": "Receipts", "description": "Every issued receipt",
+        "icon": "M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21V5a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v16l3.5-2 3.5 2 3.5-2 3.5 2Z",
+        "url": "books:receipt_list",
+    },
+    {
+        "key": "expenses", "label": "Expenses", "description": "Money out, with receipts",
+        "icon": "M20 7 12 3 4 7m16 0v10l-8 4-8-4V7m16 0-8 4m-8-4 8 4m0 0v10",
+        "url": "books:expense_list",
+    },
+    {
+        "key": "reports", "label": "Reports", "description": "Trial balance, P&L, ageing, tax pack",
+        "icon": "M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z",
+        "url": "books:report_trial_balance",
+    },
+    {
+        "key": "journal", "label": "Journal", "description": "Every posted entry, and manual postings",
+        "icon": "M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25",
+        "url": "books:journal_list",
+    },
+]
+
+DASHBOARD_ADMIN_TILE = {
+    "key": "settings", "label": "Settings", "description": "Letterhead, chart of accounts, products, years",
+    "icon": (
+        "M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 "
+        "001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 "
+        "00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 "
+        "00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 "
+        "2.296.07 2.572-1.065z"
+    ),
+    "url": "books:company_settings",
+}
+
+
 @books_staff_required
 def dashboard(request):
     settings_row = CompanySettings.load()
@@ -76,7 +127,13 @@ def dashboard(request):
     recent_payments = Payment.objects.filter(voided_at__isnull=True).select_related("client").order_by("-date", "-id")[:10]
     missing_receipt_count = Expense.objects.filter(receipt="", voided_at__isnull=True).count()
 
+    tiles = list(DASHBOARD_TILES)
+    if _is_books_admin(request.user):
+        tiles.append(DASHBOARD_ADMIN_TILE)
+    tiles = [{**t, "url": reverse(t["url"])} for t in tiles]
+
     context = {
+        "tiles": tiles,
         "settings_row": settings_row,
         "missing_letterhead_fields": settings_row.missing_fields_for_invoicing(),
         "owed_to_us": ageing["grand_total"],
