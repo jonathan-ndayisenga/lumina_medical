@@ -36,7 +36,7 @@ class BooksLoginView(LoginView):
     redirect_authenticated_user = False
 
     def get_success_url(self):
-        return reverse("books:dashboard")
+        return reverse("books:home")
 
     def form_valid(self, form):
         if not _is_books_user(form.get_user()):
@@ -60,7 +60,12 @@ class BooksPasswordChangeDoneView(PasswordChangeDoneView):
     template_name = "books/password_change_done.html"
 
 
-DASHBOARD_TILES = [
+HOME_TILES = [
+    {
+        "key": "dashboard", "label": "Dashboard", "description": "Owed to us, revenue, overdue invoices",
+        "icon": "M3 3h8v8H3zM13 3h8v5h-8zM13 11h8v10h-8zM3 14h8v7H3z",
+        "url": "books:dashboard",
+    },
     {
         "key": "clients", "label": "Clients", "description": "Who owes us, and for how long",
         "icon": "M17 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2M9 7a4 4 0 1 0 0-8 4 4 0 0 0 0 8m10 14v-2a4 4 0 0 0-3-3.87m1-11.13a4 4 0 0 1 0 8",
@@ -98,7 +103,7 @@ DASHBOARD_TILES = [
     },
 ]
 
-DASHBOARD_ADMIN_TILE = {
+HOME_ADMIN_TILE = {
     "key": "settings", "label": "Settings", "description": "Letterhead, chart of accounts, products, years",
     "icon": (
         "M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 "
@@ -109,6 +114,16 @@ DASHBOARD_ADMIN_TILE = {
     ),
     "url": "books:company_settings",
 }
+
+
+@books_staff_required
+def home(request):
+    """Clean landing page — nothing but tiles, mirroring Lumina's own Home tile picker."""
+    tiles = list(HOME_TILES)
+    if _is_books_admin(request.user):
+        tiles.append(HOME_ADMIN_TILE)
+    tiles = [{**t, "url": reverse(t["url"])} for t in tiles]
+    return render(request, "books/home.html", {"tiles": tiles})
 
 
 @books_staff_required
@@ -127,13 +142,7 @@ def dashboard(request):
     recent_payments = Payment.objects.filter(voided_at__isnull=True).select_related("client").order_by("-date", "-id")[:10]
     missing_receipt_count = Expense.objects.filter(receipt="", voided_at__isnull=True).count()
 
-    tiles = list(DASHBOARD_TILES)
-    if _is_books_admin(request.user):
-        tiles.append(DASHBOARD_ADMIN_TILE)
-    tiles = [{**t, "url": reverse(t["url"])} for t in tiles]
-
     context = {
-        "tiles": tiles,
         "settings_row": settings_row,
         "missing_letterhead_fields": settings_row.missing_fields_for_invoicing(),
         "owed_to_us": ageing["grand_total"],
@@ -557,7 +566,7 @@ def report_tax_pack(request):
     financial_year = get_object_or_404(FinancialYear, pk=year_id) if year_id else FinancialYear.current()
     if not financial_year:
         messages.error(request, "No financial year is configured yet.")
-        return redirect("books:dashboard")
+        return redirect("books:home")
     return render(request, "books/report_tax_pack.html", {
         "report": reports.tax_pack(financial_year),
         "financial_years": FinancialYear.objects.all(),
