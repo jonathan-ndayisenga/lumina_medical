@@ -90,16 +90,32 @@
         <div class="brand">Ternah Books</div>
         <nav>
             <a href="{% url 'books:home' %}" class="{% if request.path == '/books/' %}on{% endif %}">Home</a>
-            <a href="{% url 'books:dashboard' %}" class="{% if request.path == '/books/dashboard/' %}on{% endif %}">Dashboard</a>
-            <a href="{% url 'books:client_list' %}" class="{% if request.path|startswith:'/books/clients' %}on{% endif %}">Clients</a>
-            <a href="{% url 'books:invoice_list' %}" class="{% if request.path|startswith:'/books/invoices' %}on{% endif %}">Invoices</a>
-            <a href="{% url 'books:payment_create' %}" class="{% if request.path|startswith:'/books/payments' %}on{% endif %}">Payments</a>
-            <a href="{% url 'books:receipt_list' %}" class="{% if request.path|startswith:'/books/receipts' %}on{% endif %}">Receipts</a>
-            <a href="{% url 'books:expense_list' %}" class="{% if request.path|startswith:'/books/expenses' %}on{% endif %}">Expenses</a>
-            <a href="{% url 'books:report_trial_balance' %}" class="{% if request.path|startswith:'/books/reports' %}on{% endif %}">Reports</a>
-            <a href="{% url 'books:journal_list' %}" class="{% if request.path|startswith:'/books/journal' %}on{% endif %}">Journal</a>
-            {% if is_books_admin %}
-            <a href="{% url 'books:company_settings' %}" class="{% if request.path|startswith:'/books/settings' %}on{% endif %}">Settings</a>
+            {% if request.path == '/books/dashboard/' %}
+            <a href="{% url 'books:dashboard' %}" class="on">Dashboard</a>
+            {% endif %}
+            {% if request.path|startswith:'/books/clients' %}
+            <a href="{% url 'books:client_list' %}" class="on">Clients</a>
+            {% endif %}
+            {% if request.path|startswith:'/books/invoices' %}
+            <a href="{% url 'books:invoice_list' %}" class="on">Invoices</a>
+            {% endif %}
+            {% if request.path|startswith:'/books/payments' %}
+            <a href="{% url 'books:payment_create' %}" class="on">Payments</a>
+            {% endif %}
+            {% if request.path|startswith:'/books/receipts' %}
+            <a href="{% url 'books:receipt_list' %}" class="on">Receipts</a>
+            {% endif %}
+            {% if request.path|startswith:'/books/expenses' %}
+            <a href="{% url 'books:expense_list' %}" class="on">Expenses</a>
+            {% endif %}
+            {% if request.path|startswith:'/books/reports' %}
+            <a href="{% url 'books:report_trial_balance' %}" class="on">Reports</a>
+            {% endif %}
+            {% if request.path|startswith:'/books/journal' %}
+            <a href="{% url 'books:journal_list' %}" class="on">Journal</a>
+            {% endif %}
+            {% if is_books_admin and request.path|startswith:'/books/settings' %}
+            <a href="{% url 'books:company_settings' %}" class="on">Settings</a>
             {% endif %}
         </nav>
         <div class="footer">
