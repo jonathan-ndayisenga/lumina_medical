@@ -2,20 +2,47 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Receipt {{ receipt_number }}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
-    @page { size: A4 portrait; margin: 12mm; }
+    :root { --navy: #0f1a42; --brand: #2f4cff; --muted: #667085; --border: #e4e7ee; }
+    @page { size: A4 portrait; margin: 14mm; }
     * { box-sizing: border-box; }
-    body { font-family: -apple-system, 'Segoe UI', Roboto, sans-serif; font-size: 12px; color: #1f2733; margin: 0; }
-    h1 { font-size: 1.3rem; letter-spacing: 0.05em; }
+    body { font-family: 'Inter', -apple-system, 'Segoe UI', Roboto, sans-serif; font-size: 13px; color: #1f2733; margin: 0; }
+    .sheet { max-width: 700px; margin: 0 auto; }
+    .accent-bar { height: 6px; background: var(--brand); border-radius: 4px 4px 0 0; margin-bottom: 1.5rem; }
+    .header { display: flex; align-items: center; gap: 0.9rem; margin-bottom: 1.5rem; flex-wrap: wrap; }
+    .header img { max-height: 56px; max-width: 180px; object-fit: contain; }
+    .company-name { font-weight: 800; color: var(--navy); font-size: 1rem; }
+    .company-block div { color: var(--muted); font-size: 0.8rem; margin-top: 0.1rem; }
+    h1 { font-size: 1.4rem; letter-spacing: 0.05em; color: var(--navy); font-weight: 800; margin: 0 0 1.25rem; }
     table { width: 100%; border-collapse: collapse; margin-bottom: 1rem; }
-    th, td { padding: 0.5rem 0.6rem; border-bottom: 1px solid #e4e7ee; text-align: left; }
-    th { background: #f6f7fb; text-transform: uppercase; font-size: 0.7rem; }
-    .footer { margin-top: 2rem; font-size: 0.8rem; color: #667085; border-top: 1px solid #e4e7ee; padding-top: 0.75rem; }
+    th, td { padding: 0.6rem 0.7rem; text-align: left; }
+    thead th { background: var(--navy); color: #fff; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; }
+    tbody tr { border-bottom: 1px solid var(--border); }
+    tbody tr:nth-child(even) { background: #f7f8fc; }
+    .footer { margin-top: 2rem; font-size: 0.78rem; color: var(--muted); border-top: 1px solid var(--border); padding-top: 0.85rem; text-align: center; }
+    @media screen and (max-width: 640px) {
+        body { font-size: 12px; }
+        .sheet { max-width: 100%; padding: 0 0.75rem; }
+        table { display: block; overflow-x: auto; white-space: nowrap; }
+    }
 </style>
 </head>
 <body>
-<div><strong>{{ company.legal_name }}</strong><br>{{ company.address }}, {{ company.city }}<br>{{ company.phone }} &middot; {{ company.email }}</div>
+<div class="sheet">
+<div class="accent-bar"></div>
+<div class="header">
+    {% if company.logo %}<img src="{{ company.logo.url }}" alt="{{ company.legal_name }}">{% endif %}
+    <div class="company-block">
+        <div class="company-name">{{ company.legal_name }}</div>
+        <div>{{ company.address }}{% if company.city %}, {{ company.city }}{% endif %}</div>
+        <div>{{ company.phone }} &middot; {{ company.email }}</div>
+    </div>
+</div>
 <h1>RECEIPT {{ receipt_number }}</h1>
 <p><strong>Received from:</strong> {{ client.name }}<br>
 <strong>Date:</strong> {{ date }} &nbsp; <strong>Method:</strong> {{ method }} {% if reference %}&nbsp; <strong>Ref:</strong> {{ reference }}{% endif %}<br>
@@ -34,6 +61,7 @@
 {% if unallocated %}<p>Held as unallocated customer credit: UGX {{ unallocated|floatformat:0 }}</p>{% endif %}
 
 {% if footer_notes %}<div class="footer">{{ footer_notes }}</div>{% endif %}
+</div>
 <script>window.addEventListener('load', () => window.print());</script>
 </body>
 </html>
