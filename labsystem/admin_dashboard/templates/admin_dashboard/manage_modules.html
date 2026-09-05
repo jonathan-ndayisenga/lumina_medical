@@ -4,6 +4,22 @@
 {% block page_subtitle %}Set the monthly price for each platform module. Changes take effect on the next invoice generated.{% endblock %}
 
 {% block developer_content %}
+<div class="card border border-gray-100 shadow-none mb-4">
+    <div class="flex items-center justify-between flex-wrap gap-3">
+        <div>
+            <h3 class="font-semibold text-text-main">Ternah Books</h3>
+            <p class="text-sm text-text-muted mt-1">
+                Ternah's own internal invoicing and accounting system. Not part of the pricing catalog below —
+                it isn't a per-hospital module a customer subscribes to; access is scoped to one dedicated
+                tenant hospital, not to module subscriptions.
+            </p>
+        </div>
+        <a href="{% url 'books:login' %}" class="btn btn-secondary btn-sm" target="_blank">
+            {% url 'books:login' %} &rarr;
+        </a>
+    </div>
+</div>
+
 <div class="card border border-gray-100 shadow-none overflow-x-auto">
     <table class="w-full text-sm">
         <thead class="bg-gray-50 border-b border-gray-200">
