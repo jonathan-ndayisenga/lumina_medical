@@ -1,0 +1,25 @@
+{% extends "books/base.html" %}
+{% block title %}Products - Ternah Books{% endblock %}
+{% block content %}
+<h1 class="page-title">Settings</h1>
+{% include "books/_settings_nav.html" %}
+<p><a href="{% url 'books:product_create' %}" class="btn">New product</a></p>
+<div class="card">
+    <table>
+        <thead><tr><th>Name</th><th>Code</th><th>Revenue account</th><th>Active</th><th></th></tr></thead>
+        <tbody>
+            {% for product in products %}
+            <tr>
+                <td>{{ product.name }}</td>
+                <td>{{ product.code }}</td>
+                <td>{{ product.revenue_account.name }}</td>
+                <td>{{ product.active|yesno:"Yes,No" }}</td>
+                <td><a href="{% url 'books:product_edit' product.pk %}">Edit</a></td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="5">No products yet.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

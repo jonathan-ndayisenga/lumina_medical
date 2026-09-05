@@ -1,10 +1,9 @@
 {% extends "books/base.html" %}
-{% block title %}Company Settings - Ternah Books{% endblock %}
+{% block title %}{% if product %}Edit Product{% else %}New Product{% endif %} - Ternah Books{% endblock %}
 {% block content %}
-<h1 class="page-title">Settings</h1>
-{% include "books/_settings_nav.html" %}
-<div class="card" style="max-width:700px;">
-    <form method="post" enctype="multipart/form-data">
+<h1 class="page-title">{% if product %}Edit product{% else %}New product{% endif %}</h1>
+<div class="card" style="max-width:600px;">
+    <form method="post">
         {% csrf_token %}
         {% for field in form %}
         <div style="margin-bottom:1rem;">
@@ -13,7 +12,8 @@
             {% for error in field.errors %}<p style="color:#a12b2b;font-size:0.8rem;">{{ error }}</p>{% endfor %}
         </div>
         {% endfor %}
-        <button type="submit" class="btn">Save settings</button>
+        <button type="submit" class="btn">Save product</button>
+        <a href="{% url 'books:product_list' %}" class="btn btn-secondary">Cancel</a>
     </form>
 </div>
 {% endblock %}

@@ -1,0 +1,6 @@
+<p style="margin-bottom:1.25rem;">
+    <a href="{% url 'books:company_settings' %}" class="btn {% if request.resolver_match.url_name == 'company_settings' %}{% else %}btn-secondary{% endif %}">Letterhead</a>
+    <a href="{% url 'books:account_list' %}" class="btn {% if request.resolver_match.url_name|slice:':7' == 'account' %}{% else %}btn-secondary{% endif %}">Chart of accounts</a>
+    <a href="{% url 'books:product_list' %}" class="btn {% if request.resolver_match.url_name|slice:':7' == 'product' %}{% else %}btn-secondary{% endif %}">Products</a>
+    <a href="{% url 'books:financial_year_list' %}" class="btn {% if request.resolver_match.url_name|slice:':14' == 'financial_year' %}{% else %}btn-secondary{% endif %}">Financial years</a>
+</p>

@@ -8,8 +8,9 @@ from .document_models import (
     Invoice,
     InvoiceLine,
     Payment,
+    Product,
 )
-from .ledger_models import Account
+from .ledger_models import Account, FinancialYear
 
 
 WIDGET_CLASS = "form-control"
@@ -143,6 +144,52 @@ class ExpenseForm(forms.ModelForm):
         if currency and currency != "UGX" and fx_rate == 1:
             self.add_error("fx_rate", "Set an explicit FX rate for a non-UGX expense.")
         return cleaned
+
+
+class AccountForm(forms.ModelForm):
+    class Meta:
+        model = Account
+        fields = ["code", "name", "type", "role", "is_deductible", "is_direct_cost", "is_payment_account", "description", "active"]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        _style(self.fields)
+
+    def clean_role(self):
+        role = self.cleaned_data.get("role")
+        if role:
+            clash = Account.objects.filter(role=role, active=True).exclude(pk=self.instance.pk)
+            if clash.exists():
+                raise forms.ValidationError(
+                    f"{clash.first()} already carries this role — the posting engine needs exactly one "
+                    "active account per role. Deactivate that one first, or leave this role blank."
+                )
+        return role
+
+
+class ProductForm(forms.ModelForm):
+    class Meta:
+        model = Product
+        fields = ["name", "code", "revenue_account", "description", "active"]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["revenue_account"].queryset = Account.objects.filter(active=True, type=Account.TYPE_INCOME)
+        _style(self.fields)
+
+
+class FinancialYearForm(forms.ModelForm):
+    class Meta:
+        model = FinancialYear
+        fields = ["label", "start_date", "end_date"]
+        widgets = {
+            "start_date": forms.DateInput(attrs={"type": "date"}),
+            "end_date": forms.DateInput(attrs={"type": "date"}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        _style(self.fields)
 
 
 class ManualJournalLineForm(forms.Form):

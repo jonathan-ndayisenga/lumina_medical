@@ -1,0 +1,13 @@
+{% extends "books/base.html" %}
+{% block title %}Confirm - Ternah Books{% endblock %}
+{% block content %}
+<h1 class="page-title">Confirm</h1>
+<div class="card" style="max-width:500px;">
+    <p>{{ message }}</p>
+    <form method="post">
+        {% csrf_token %}
+        <button type="submit" class="btn">Confirm</button>
+        <a href="{{ cancel_url }}" class="btn btn-secondary">Cancel</a>
+    </form>
+</div>
+{% endblock %}

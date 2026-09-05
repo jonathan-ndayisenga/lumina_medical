@@ -9,16 +9,19 @@ from django.urls import reverse, reverse_lazy
 from django.utils import timezone
 
 from . import documents, reports
-from .document_models import Client, CompanySettings, Expense, Invoice, Payment, WithholdingCredit
+from .document_models import Client, CompanySettings, Expense, Invoice, Payment, Product, WithholdingCredit
 from .forms import (
+    AccountForm,
     ClientForm,
     CompanySettingsForm,
     ExpenseForm,
+    FinancialYearForm,
     InvoiceForm,
     InvoiceLineFormSet,
     ManualEntryForm,
     ManualJournalLineFormSet,
     PaymentForm,
+    ProductForm,
     ScheduleForm,
 )
 from .ledger_models import Account, FinancialYear, JournalEntry
@@ -86,6 +89,106 @@ def company_settings(request):
     else:
         form = CompanySettingsForm(instance=settings_row)
     return render(request, "books/company_settings.html", {"form": form})
+
+
+@books_admin_required
+def account_list(request):
+    accounts = Account.objects.all().order_by("code")
+    return render(request, "books/account_list.html", {"accounts": accounts})
+
+
+@books_admin_required
+def account_create(request):
+    if request.method == "POST":
+        form = AccountForm(request.POST)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "Account added.")
+            return redirect("books:account_list")
+    else:
+        form = AccountForm(initial={"active": True, "is_deductible": True})
+    return render(request, "books/account_form.html", {"form": form})
+
+
+@books_admin_required
+def account_edit(request, pk):
+    account = get_object_or_404(Account, pk=pk)
+    if request.method == "POST":
+        form = AccountForm(request.POST, instance=account)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "Account updated.")
+            return redirect("books:account_list")
+    else:
+        form = AccountForm(instance=account)
+    return render(request, "books/account_form.html", {"form": form, "account": account})
+
+
+@books_admin_required
+def product_list(request):
+    products = Product.objects.select_related("revenue_account").all()
+    return render(request, "books/product_list.html", {"products": products})
+
+
+@books_admin_required
+def product_create(request):
+    if request.method == "POST":
+        form = ProductForm(request.POST)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "Product added.")
+            return redirect("books:product_list")
+    else:
+        form = ProductForm(initial={"active": True})
+    return render(request, "books/product_form.html", {"form": form})
+
+
+@books_admin_required
+def product_edit(request, pk):
+    product = get_object_or_404(Product, pk=pk)
+    if request.method == "POST":
+        form = ProductForm(request.POST, instance=product)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "Product updated.")
+            return redirect("books:product_list")
+    else:
+        form = ProductForm(instance=product)
+    return render(request, "books/product_form.html", {"form": form, "product": product})
+
+
+@books_admin_required
+def financial_year_list(request):
+    years = FinancialYear.objects.all()
+    return render(request, "books/financial_year_list.html", {"years": years})
+
+
+@books_admin_required
+def financial_year_create(request):
+    if request.method == "POST":
+        form = FinancialYearForm(request.POST)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "Financial year added.")
+            return redirect("books:financial_year_list")
+    else:
+        form = FinancialYearForm()
+    return render(request, "books/financial_year_form.html", {"form": form})
+
+
+@books_admin_required
+def financial_year_close(request, pk):
+    financial_year = get_object_or_404(FinancialYear, pk=pk)
+    if request.method == "POST":
+        financial_year.is_closed = True
+        financial_year.closed_at = timezone.now()
+        financial_year.save(update_fields=["is_closed", "closed_at"])
+        messages.success(request, f"{financial_year.label} closed to new postings.")
+        return redirect("books:financial_year_list")
+    return render(request, "books/confirm.html", {
+        "message": f"Close financial year {financial_year.label}? No new entries can be posted into it afterwards.",
+        "cancel_url": reverse("books:financial_year_list"),
+    })
 
 
 @books_staff_required
