@@ -14,7 +14,7 @@
 </form>
 <div class="card">
     <table>
-        <thead><tr><th>Receipt</th><th>Client</th><th>Date</th><th>Amount</th><th>Method</th><th></th></tr></thead>
+        <thead><tr><th>Receipt</th><th>Client</th><th>Date</th><th>Amount</th><th>Method</th><th>Applied to</th><th></th></tr></thead>
         <tbody>
             {% for payment in payments %}
             <tr>
@@ -24,6 +24,13 @@
                 <td>UGX {{ payment.amount|money }}</td>
                 <td>{{ payment.get_method_display }}</td>
                 <td>
+                    {% for allocation in payment.allocations.all %}
+                    <a href="{% url 'books:invoice_detail' allocation.invoice_id %}">{{ allocation.invoice.number }}</a>{% if not forloop.last %}, {% endif %}
+                    {% empty %}
+                    {% if payment.unallocated %}<span style="color:var(--muted);">Unallocated credit</span>{% endif %}
+                    {% endfor %}
+                </td>
+                <td>
                     {% if not payment.voided_at %}
                     <a href="{% url 'books:receipt_pdf' payment.pk %}" target="_blank">Print</a>
                     &middot; <a href="{% url 'books:payment_void' payment.pk %}">Void</a>
@@ -31,7 +38,7 @@
                 </td>
             </tr>
             {% empty %}
-            <tr><td colspan="6">No receipts yet.</td></tr>
+            <tr><td colspan="7">No receipts yet.</td></tr>
             {% endfor %}
         </tbody>
     </table>

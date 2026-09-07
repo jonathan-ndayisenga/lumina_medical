@@ -5,14 +5,25 @@
 <h1 class="page-title">{{ invoice.number|default:"Draft invoice" }} <span class="badge badge-{{ invoice.status }}">{{ invoice.get_status_display }}</span></h1>
 
 <p>
-    {% if invoice.status != 'void' %}
+    {% if invoice.status == 'draft' %}
+    <a href="{% url 'books:invoice_edit' invoice.pk %}" class="btn">Edit</a>
+    <a href="{% url 'books:invoice_delete' invoice.pk %}" class="btn btn-danger">Delete</a>
+    {% else %}
     <a href="{% url 'books:invoice_pdf' invoice.pk %}" class="btn btn-secondary" target="_blank">Print / PDF</a>
+    {% if invoice.status == 'open' and invoice.balance > 0 %}
+    <a href="{% url 'books:invoice_payment_create' invoice.pk %}" class="btn">Record payment</a>
+    {% endif %}
     {% if invoice.client.is_withholding_agent and invoice.balance > 0 %}
     <a href="{% url 'books:wht_credit_create' invoice.pk %}" class="btn btn-secondary">Record WHT credit</a>
     {% endif %}
+    {% if invoice.status != 'void' %}
     <a href="{% url 'books:invoice_void' invoice.pk %}" class="btn btn-danger">Void</a>
     {% endif %}
+    {% endif %}
 </p>
+{% if invoice.status == 'draft' %}
+<p style="color:var(--muted);font-size:0.85rem;margin-top:-0.75rem;">This invoice never made it to "Open" — fix it and re-issue, or delete it.</p>
+{% endif %}
 
 <div class="card">
     <p><strong>Client:</strong> {{ invoice.client.name }}</p>
@@ -31,6 +42,30 @@
             {% endfor %}
         </tbody>
     </table>
+</div>
+
+<div class="card">
+    <h3>Payments applied</h3>
+    <table>
+        <thead><tr><th>Receipt</th><th>Date</th><th>Method</th><th>Amount applied</th></tr></thead>
+        <tbody>
+            {% for allocation in invoice.allocations.all %}
+            {% if not allocation.payment.voided_at %}
+            <tr>
+                <td><a href="{% url 'books:receipt_pdf' allocation.payment.pk %}" target="_blank">{{ allocation.payment.receipt_number }}</a></td>
+                <td>{{ allocation.payment.date }}</td>
+                <td>{{ allocation.payment.get_method_display }}</td>
+                <td>UGX {{ allocation.amount|money }}</td>
+            </tr>
+            {% endif %}
+            {% empty %}
+            <tr><td colspan="4">No payments received against this invoice yet.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% if invoice.wht_credited %}
+    <p style="margin-top:0.75rem;font-size:0.85rem;color:var(--muted);">Plus UGX {{ invoice.wht_credited|money }} covered by withholding tax credit.</p>
+    {% endif %}
 </div>
 
 <div class="card">

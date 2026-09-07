@@ -1,7 +1,7 @@
 {% extends "books/base.html" %}
-{% block title %}New Invoice - Ternah Books{% endblock %}
+{% block title %}{% if edit_mode %}Edit Invoice{% else %}New Invoice{% endif %} - Ternah Books{% endblock %}
 {% block content %}
-<h1 class="page-title">New invoice</h1>
+<h1 class="page-title">{% if edit_mode %}Edit draft invoice{% else %}New invoice{% endif %}</h1>
 <div class="card" style="max-width:800px;">
     <form method="post">
         {% csrf_token %}
@@ -38,7 +38,11 @@
         {% endfor %}
 
         <button type="submit" class="btn">Issue invoice</button>
+        {% if edit_mode %}
+        <a href="{% url 'books:invoice_detail' invoice.pk %}" class="btn btn-secondary">Cancel</a>
+        {% else %}
         <a href="{% url 'books:invoice_list' %}" class="btn btn-secondary">Cancel</a>
+        {% endif %}
     </form>
 </div>
 {% endblock %}

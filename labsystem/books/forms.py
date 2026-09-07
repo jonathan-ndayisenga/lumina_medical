@@ -102,14 +102,19 @@ class PaymentForm(forms.ModelForm):
         fields = ["client", "date", "amount", "method", "deposit_account", "reference", "notes"]
         widgets = {"date": forms.DateInput(attrs={"type": "date"})}
 
-    def __init__(self, *args, client=None, **kwargs):
+    def __init__(self, *args, client=None, invoice=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields["client"].queryset = Client.objects.filter(active=True)
         self.fields["deposit_account"].queryset = Account.objects.filter(active=True, is_payment_account=True)
         self.fields["deposit_account"].required = False
+        if invoice is not None:
+            client = invoice.client
         if client is not None:
             self.fields["client"].initial = client
             self.fields["invoice"].queryset = client.invoices.filter(status=Invoice.STATUS_OPEN)
+        if invoice is not None:
+            self.fields["invoice"].initial = invoice
+            self.initial.setdefault("amount", invoice.balance)
         _style(self.fields)
 
 
