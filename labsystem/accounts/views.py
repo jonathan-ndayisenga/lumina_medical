@@ -1,5 +1,7 @@
 from datetime import date
 
+from django.conf import settings
+from django.contrib.auth import logout
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.views import LoginView
 from django.core.exceptions import PermissionDenied
@@ -125,6 +127,18 @@ def _accessible_sections(user):
 class RoleAwareLoginView(LoginView):
     template_name = "registration/login.html"
 
+    def form_valid(self, form):
+        user = form.get_user()
+        hospital = getattr(user, "hospital", None)
+        if (
+            not user.is_superadmin
+            and hospital is not None
+            and hospital.subdomain == settings.TERNAH_BOOKS_HOSPITAL_SUBDOMAIN
+        ):
+            form.add_error(None, "This account is for Ternah Books — sign in at the Ternah Books login instead.")
+            return self.form_invalid(form)
+        return super().form_valid(form)
+
     def get_success_url(self):
         if self.request.user.is_superadmin:
             return reverse("developer_dashboard")
@@ -136,6 +150,11 @@ def app_home(request):
     user = request.user
     if user.is_superadmin:
         return redirect("developer_dashboard")
+
+    hospital = getattr(user, "hospital", None)
+    if hospital is not None and hospital.subdomain == settings.TERNAH_BOOKS_HOSPITAL_SUBDOMAIN:
+        logout(request)
+        return redirect("books:login")
 
     sections = _accessible_sections(user)
     if len(sections) <= 1:

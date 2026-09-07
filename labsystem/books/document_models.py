@@ -210,7 +210,7 @@ class Invoice(models.Model):
     ]
 
     client = models.ForeignKey(Client, on_delete=models.PROTECT, related_name="invoices")
-    number = models.CharField(max_length=30, blank=True)
+    number = models.CharField(max_length=30, blank=True, unique=True, null=True, default=None)
     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default=STATUS_DRAFT)
     kind = models.CharField(max_length=20, choices=KIND_CHOICES, default=KIND_OTHER)
     issue_date = models.DateField(default=timezone.localdate)
@@ -433,7 +433,7 @@ class Payment(models.Model):
     }
 
     client = models.ForeignKey(Client, on_delete=models.PROTECT, related_name="payments")
-    receipt_number = models.CharField(max_length=30, blank=True)
+    receipt_number = models.CharField(max_length=30, blank=True, unique=True, null=True, default=None)
     date = models.DateField(default=timezone.localdate)
     amount = models.DecimalField(max_digits=14, decimal_places=2)
     method = models.CharField(max_length=20, choices=METHOD_CHOICES, default=METHOD_BANK)

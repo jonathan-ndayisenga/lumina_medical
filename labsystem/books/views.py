@@ -254,31 +254,33 @@ def invoice_create(request):
         form = InvoiceForm(request.POST)
         invoice = Invoice(status=Invoice.STATUS_DRAFT)
         formset = InvoiceLineFormSet(request.POST, instance=invoice)
-        if form.is_valid():
-            invoice = form.save(commit=False)
-            invoice.status = Invoice.STATUS_DRAFT
-            invoice.save()
-            formset = InvoiceLineFormSet(request.POST, instance=invoice)
-            if formset.is_valid():
-                formset.save()
-                schedule_form = ScheduleForm(request.POST)
-                if schedule_form.is_valid() and schedule_form.cleaned_data.get("months"):
-                    invoice.recalculate()
-                    invoice.build_schedule(
-                        schedule_form.cleaned_data["months"],
-                        schedule_form.cleaned_data["first_due"] or invoice.issue_date,
-                    )
-                try:
+        schedule_form = ScheduleForm(request.POST)
+        if form.is_valid() and formset.is_valid():
+            try:
+                with transaction.atomic():
+                    invoice = form.save(commit=False)
+                    invoice.status = Invoice.STATUS_DRAFT
+                    invoice.save()
+                    formset.instance = invoice
+                    formset.save()
+                    if schedule_form.is_valid() and schedule_form.cleaned_data.get("months"):
+                        invoice.recalculate()
+                        invoice.build_schedule(
+                            schedule_form.cleaned_data["months"],
+                            schedule_form.cleaned_data["first_due"] or invoice.issue_date,
+                        )
                     invoice.issue(user=request.user)
-                    messages.success(request, f"Invoice {invoice.number} issued.")
-                    return redirect("books:invoice_detail", pk=invoice.pk)
-                except ValidationError as exc:
-                    messages.error(request, "; ".join(exc.messages))
-                    return redirect("books:invoice_detail", pk=invoice.pk)
+            except ValidationError as exc:
+                messages.error(request, "; ".join(exc.messages))
+            else:
+                messages.success(request, f"Invoice {invoice.number} issued.")
+                return redirect("books:invoice_detail", pk=invoice.pk)
+        else:
+            messages.error(request, "Fix the errors below before issuing this invoice.")
     else:
         form = InvoiceForm(initial={"issue_date": date.today()})
         formset = InvoiceLineFormSet()
-    schedule_form = ScheduleForm()
+        schedule_form = ScheduleForm()
     return render(request, "books/invoice_form.html", {"form": form, "formset": formset, "schedule_form": schedule_form})
 
 
@@ -296,33 +298,35 @@ def invoice_edit(request, pk):
     if request.method == "POST":
         form = InvoiceForm(request.POST, instance=invoice)
         formset = InvoiceLineFormSet(request.POST, instance=invoice)
-        if form.is_valid():
-            invoice = form.save(commit=False)
-            invoice.status = Invoice.STATUS_DRAFT
-            invoice.save()
-            formset = InvoiceLineFormSet(request.POST, instance=invoice)
-            if formset.is_valid():
-                formset.save()
-                schedule_form = ScheduleForm(request.POST)
-                if schedule_form.is_valid() and schedule_form.cleaned_data.get("months"):
-                    invoice.recalculate()
-                    invoice.build_schedule(
-                        schedule_form.cleaned_data["months"],
-                        schedule_form.cleaned_data["first_due"] or invoice.issue_date,
-                    )
-                else:
-                    invoice.recalculate()
-                try:
+        schedule_form = ScheduleForm(request.POST)
+        if form.is_valid() and formset.is_valid():
+            try:
+                with transaction.atomic():
+                    invoice = form.save(commit=False)
+                    invoice.status = Invoice.STATUS_DRAFT
+                    invoice.save()
+                    formset.instance = invoice
+                    formset.save()
+                    if schedule_form.is_valid() and schedule_form.cleaned_data.get("months"):
+                        invoice.recalculate()
+                        invoice.build_schedule(
+                            schedule_form.cleaned_data["months"],
+                            schedule_form.cleaned_data["first_due"] or invoice.issue_date,
+                        )
+                    else:
+                        invoice.recalculate()
                     invoice.issue(user=request.user)
-                    messages.success(request, f"Invoice {invoice.number} issued.")
-                    return redirect("books:invoice_detail", pk=invoice.pk)
-                except ValidationError as exc:
-                    messages.error(request, "; ".join(exc.messages))
-                    return redirect("books:invoice_detail", pk=invoice.pk)
+            except ValidationError as exc:
+                messages.error(request, "; ".join(exc.messages))
+            else:
+                messages.success(request, f"Invoice {invoice.number} issued.")
+                return redirect("books:invoice_detail", pk=invoice.pk)
+        else:
+            messages.error(request, "Fix the errors below before issuing this invoice.")
     else:
         form = InvoiceForm(instance=invoice)
         formset = InvoiceLineFormSet(instance=invoice)
-    schedule_form = ScheduleForm()
+        schedule_form = ScheduleForm()
     return render(request, "books/invoice_form.html", {
         "form": form, "formset": formset, "schedule_form": schedule_form, "invoice": invoice, "edit_mode": True,
     })
@@ -454,7 +458,7 @@ def payment_void(request, pk):
 
 @books_staff_required
 def receipt_list(request):
-    payments = Payment.objects.exclude(receipt_number="").select_related("client").prefetch_related("allocations__invoice")
+    payments = Payment.objects.exclude(receipt_number__isnull=True).select_related("client").prefetch_related("allocations__invoice")
     status = request.GET.get("status", "active")
     if status == "active":
         payments = payments.filter(voided_at__isnull=True)

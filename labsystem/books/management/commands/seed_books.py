@@ -13,6 +13,7 @@ ACCOUNTS = [
     ("1001", "Cash", "asset", "cash", False, True, True),
     ("1002", "MTN Mobile Money", "asset", "momo_mtn", False, True, True),
     ("1003", "Airtel Mobile Money", "asset", "momo_airtel", False, True, True),
+    ("1004", "Petty cash float", "asset", "", False, True, True),
     ("1010", "Accounts receivable", "asset", "ar", False, True, False),
     ("1030", "Withholding tax receivable", "asset", "wht", False, True, False),
     ("1090", "Prepayments", "asset", "", False, True, False),
@@ -27,6 +28,7 @@ ACCOUNTS = [
     ("2100", "Director's current account", "liability", "director", False, True, False),
     ("2200", "PAYE payable", "liability", "", False, True, False),
     ("2210", "NSSF payable", "liability", "", False, True, False),
+    ("2220", "Withholding tax payable", "liability", "", False, True, False),
 
     ("3000", "Share capital", "equity", "", False, True, False),
     ("3010", "Retained earnings", "equity", "retained", False, True, False),
@@ -42,6 +44,7 @@ ACCOUNTS = [
     ("4070", "Website builds", "income", "", False, True, False),
     ("4080", "Custom development", "income", "", False, True, False),
     ("4090", "Support retainers", "income", "", False, True, False),
+    ("4100", "Ternah Books subscriptions", "income", "", False, True, False),
 
     ("5000", "Hosting & servers", "expense", "", True, True, False),
     ("5010", "Domain names", "expense", "", True, True, False),
@@ -49,6 +52,7 @@ ACCOUNTS = [
     ("5030", "Software licences", "expense", "", True, True, False),
     ("5040", "Contractors & freelancers", "expense", "", True, True, False),
     ("5050", "SMS / email gateway costs", "expense", "", True, True, False),
+    ("5060", "Payment gateway fees", "expense", "", True, True, False),
     ("5900", "Bank & MoMo transaction charges", "expense", "charges", False, True, False),
 
     ("6000", "Salaries & wages", "expense", "", False, True, False),
@@ -70,6 +74,7 @@ ACCOUNTS = [
     ("6160", "Postage & courier", "expense", "", False, True, False),
     ("6170", "Printing & stationery", "expense", "", False, True, False),
     ("6180", "Foreign exchange loss", "expense", "fx", False, True, False),
+    ("6200", "Internal software & tools", "expense", "", False, True, False),
 
     ("6900", "Fines & penalties", "expense", "", False, False, False),
     ("6910", "Entertainment", "expense", "", False, False, False),

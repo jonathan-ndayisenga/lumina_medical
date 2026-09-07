@@ -15,13 +15,17 @@
         {% endfor %}
 
         <h3>Lines</h3>
+        <p style="font-size:0.8rem;color:var(--muted);margin-top:-0.5rem;">Each line needs a product or revenue account, plus a quantity and unit price greater than zero — that's what makes up the invoice total.</p>
         {{ formset.management_form }}
+        {% for error in formset.non_form_errors %}<p style="color:#a12b2b;font-size:0.85rem;">{{ error }}</p>{% endfor %}
         {% for line_form in formset %}
         <div class="card" style="background:var(--bg);">
+            {% for error in line_form.non_field_errors %}<p style="color:#a12b2b;font-size:0.8rem;font-weight:600;">{{ error }}</p>{% endfor %}
             {% for field in line_form.visible_fields %}
             <div style="margin-bottom:0.75rem;">
                 <label style="display:block;font-size:0.8rem;font-weight:600;margin-bottom:0.25rem;">{{ field.label }}</label>
                 {{ field }}
+                {% for error in field.errors %}<p style="color:#a12b2b;font-size:0.78rem;">{{ error }}</p>{% endfor %}
             </div>
             {% endfor %}
             {% for hidden in line_form.hidden_fields %}{{ hidden }}{% endfor %}

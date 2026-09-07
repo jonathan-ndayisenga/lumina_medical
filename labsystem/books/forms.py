@@ -75,6 +75,16 @@ class InvoiceLineForm(forms.ModelForm):
         self.fields["revenue_account"].queryset = Account.objects.filter(active=True, type=Account.TYPE_INCOME)
         _style(self.fields)
 
+    def clean(self):
+        cleaned = super().clean()
+        if cleaned.get("DELETE"):
+            return cleaned
+        if not cleaned.get("product") and not cleaned.get("revenue_account"):
+            raise forms.ValidationError("Pick a product, or an explicit revenue account, for this line.")
+        if (cleaned.get("quantity") or 0) <= 0 or (cleaned.get("unit_price") or 0) <= 0:
+            raise forms.ValidationError("Enter a quantity and a unit price greater than zero for this line.")
+        return cleaned
+
 
 InvoiceLineFormSet = inlineformset_factory(
     Invoice, InvoiceLine, form=InvoiceLineForm, extra=1, can_delete=True,
