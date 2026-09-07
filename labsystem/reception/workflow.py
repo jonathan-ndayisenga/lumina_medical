@@ -1,9 +1,32 @@
 from django.core.exceptions import PermissionDenied
+from django.db.models import Count
 from django.utils import timezone
 
 from accounts.models import AuditLog
 
 from reception.models import QueueEntry, Visit
+
+
+def queue_counts_for_hospital(hospital) -> dict:
+    """Pending (unprocessed) entry counts per operational queue, keyed to
+    match the NAV_SECTIONS tile keys in accounts/views.py — used for the
+    red count badges on the home tiles and sidebar queue links."""
+    empty = {"reception": 0, "doctor": 0, "nurse": 0, "sonographer": 0, "lab": 0}
+    if not hospital:
+        return empty
+    rows = (
+        QueueEntry.objects.filter(hospital=hospital, processed=False)
+        .values("queue_type")
+        .annotate(n=Count("id"))
+    )
+    by_type = {row["queue_type"]: row["n"] for row in rows}
+    return {
+        "reception": by_type.get(QueueEntry.TYPE_RECEPTION, 0),
+        "doctor": by_type.get(QueueEntry.TYPE_DOCTOR, 0),
+        "nurse": by_type.get(QueueEntry.TYPE_NURSE, 0),
+        "sonographer": by_type.get(QueueEntry.TYPE_SONOGRAPHER, 0),
+        "lab": by_type.get(QueueEntry.TYPE_LAB_RECEPTION, 0) + by_type.get(QueueEntry.TYPE_LAB_DOCTOR, 0),
+    }
 
 
 RECEPTION_SOURCE_PREFIX = "Source: "

@@ -11,7 +11,10 @@
 {% if tiles %}
 <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
     {% for tile in tiles %}
-    <a href="{{ tile.url }}" class="card block no-underline hover:-translate-y-0.5 hover:shadow-lg transition-transform duration-150">
+    <a href="{{ tile.url }}" class="relative card block no-underline hover:-translate-y-0.5 hover:shadow-lg transition-transform duration-150">
+        {% if tile.queue_count %}
+        <span class="absolute top-3 right-3 inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 text-xs font-bold text-white bg-red-500 rounded-full">{{ tile.queue_count }}</span>
+        {% endif %}
         <div class="w-11 h-11 rounded-xl flex items-center justify-center mb-4" style="background:#e8eef5;">
             <svg viewBox="0 0 24 24" fill="none" stroke="#1d3557" stroke-width="2" class="w-5 h-5">
                 <path stroke-linecap="round" stroke-linejoin="round" d="{{ tile.icon }}" />

@@ -158,12 +158,19 @@ def app_home(request):
 
     sections = _accessible_sections(user)
     if len(sections) <= 1:
-        request.session.pop("nav_section", None)
         if sections:
+            # Single-module staff never click a tile (enter_nav_section is the
+            # only other place this gets set), so set it here too — otherwise
+            # the sidebar falls back to its bare "Home" stub with no section
+            # links, including the queue badges, for most day-to-day users.
+            request.session["nav_section"] = sections[0]["key"]
             return redirect(_section_url(sections[0], user))
+        request.session.pop("nav_section", None)
         return render(request, "accounts/home.html", {"tiles": [], "hide_sidebar_nav": True})
 
     request.session.pop("nav_section", None)
+    from reception.workflow import queue_counts_for_hospital
+    queue_counts = queue_counts_for_hospital(hospital)
     tiles = [
         {
             "key": s["key"],
@@ -171,6 +178,7 @@ def app_home(request):
             "description": s["description"],
             "icon": s["icon"],
             "url": reverse("enter_nav_section", args=[s["key"]]),
+            "queue_count": queue_counts.get(s["key"], 0),
         }
         for s in sections
     ]

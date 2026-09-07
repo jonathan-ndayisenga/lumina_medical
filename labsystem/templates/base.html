@@ -400,6 +400,9 @@
                                         <path stroke-linecap="round" stroke-linejoin="round" d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" />
                                     </svg>
                                     Reception Queue
+                                    {% if queue_counts.reception %}
+                                    <span class="ml-auto inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold text-white bg-red-500 rounded-full">{{ queue_counts.reception }}</span>
+                                    {% endif %}
                                 </a>
                                 <a href="{% url 'patient_list' %}" class="sidebar-link {% if active_nav == 'reception_patients' %}active{% endif %}">
                                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-5 h-5">
@@ -420,6 +423,9 @@
                                         <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v18M3 12h18" />
                                     </svg>
                                     Doctor Queue
+                                    {% if queue_counts.doctor %}
+                                    <span class="ml-auto inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold text-white bg-red-500 rounded-full">{{ queue_counts.doctor }}</span>
+                                    {% endif %}
                                 </a>
                             </div>
                         </div>
@@ -434,6 +440,9 @@
                                         <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Z" />
                                     </svg>
                                     Nurse Queue
+                                    {% if queue_counts.nurse %}
+                                    <span class="ml-auto inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold text-white bg-red-500 rounded-full">{{ queue_counts.nurse }}</span>
+                                    {% endif %}
                                 </a>
                                 <a href="{% url 'nursing_admissions' %}" class="sidebar-link {% if active_nav == 'nursing_care' %}active{% endif %}">
                                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-5 h-5">
@@ -454,6 +463,9 @@
                                         <path stroke-linecap="round" stroke-linejoin="round" d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2v-4M9 21H5a2 2 0 0 1-2-2v-4m0 0h18" />
                                     </svg>
                                     Scan Queue
+                                    {% if queue_counts.sonographer %}
+                                    <span class="ml-auto inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold text-white bg-red-500 rounded-full">{{ queue_counts.sonographer }}</span>
+                                    {% endif %}
                                 </a>
                             </div>
                         </div>
@@ -512,6 +524,9 @@
                                         <path stroke-linecap="round" stroke-linejoin="round" d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" />
                                     </svg>
                                     Lab Queue
+                                    {% if queue_counts.lab %}
+                                    <span class="ml-auto inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold text-white bg-red-500 rounded-full">{{ queue_counts.lab }}</span>
+                                    {% endif %}
                                 </a>
                                 <a href="{% url 'report_list' %}" class="sidebar-link {% if active_nav == 'dashboard' %}active{% endif %}">
                                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-5 h-5">

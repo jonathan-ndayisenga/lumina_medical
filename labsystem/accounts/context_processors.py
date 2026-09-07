@@ -87,6 +87,10 @@ def notifications(request):
             status__in=[SupportToken.STATUS_OPEN, SupportToken.STATUS_IN_PROGRESS]
         ).count()
 
+    # ── Pending queue counts (Reception/Doctor/Nurse/Sonographer/Lab) ────────
+    from reception.workflow import queue_counts_for_hospital
+    queue_counts = queue_counts_for_hospital(hospital)
+
     return {
         "expiry_alert": expiry_alert,
         "unread_notifications": list(sys_unread_qs[:5]),
@@ -94,4 +98,5 @@ def notifications(request):
         "message_unread_count": total_unread,
         "token_unread_count": token_unread_count,
         "superadmin_open_token_count": superadmin_open_token_count,
+        "queue_counts": queue_counts,
     }
