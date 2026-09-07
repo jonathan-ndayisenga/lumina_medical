@@ -15,6 +15,7 @@ urlpatterns = [
     path("settings/accounts/", views.account_list, name="account_list"),
     path("settings/accounts/new/", views.account_create, name="account_create"),
     path("settings/accounts/<int:pk>/edit/", views.account_edit, name="account_edit"),
+    path("settings/accounts/<int:pk>/delete/", views.account_delete, name="account_delete"),
     path("settings/products/", views.product_list, name="product_list"),
     path("settings/products/new/", views.product_create, name="product_create"),
     path("settings/products/<int:pk>/edit/", views.product_edit, name="product_edit"),

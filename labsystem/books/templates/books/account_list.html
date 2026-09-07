@@ -15,7 +15,7 @@
                 <td>{{ account.get_type_display }}</td>
                 <td>{{ account.get_role_display|default:"-" }}</td>
                 <td>{{ account.active|yesno:"Yes,No" }}</td>
-                <td><a href="{% url 'books:account_edit' account.pk %}">Edit</a></td>
+                <td><a href="{% url 'books:account_edit' account.pk %}">Edit</a> &middot; <a href="{% url 'books:account_delete' account.pk %}">Delete</a></td>
             </tr>
             {% empty %}
             <tr><td colspan="6">No accounts yet.</td></tr>

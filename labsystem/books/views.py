@@ -4,7 +4,7 @@ from django.contrib import messages
 from django.contrib.auth.views import LoginView, LogoutView, PasswordChangeDoneView, PasswordChangeView
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import ProtectedError, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse, reverse_lazy
 from django.utils import timezone
@@ -136,6 +136,28 @@ def account_edit(request, pk):
     else:
         form = AccountForm(instance=account)
     return render(request, "books/account_form.html", {"form": form, "account": account})
+
+
+@books_admin_required
+def account_delete(request, pk):
+    account = get_object_or_404(Account, pk=pk)
+    if request.method == "POST":
+        try:
+            account.delete()
+        except ProtectedError:
+            messages.error(
+                request,
+                f"{account.code} - {account.name} already has transactions posted against it and can't "
+                "be deleted — deactivate it instead so it stops appearing as a choice on new entries "
+                "while its history stays on record.",
+            )
+            return redirect("books:account_edit", pk=account.pk)
+        messages.success(request, f"{account.code} - {account.name} deleted.")
+        return redirect("books:account_list")
+    return render(request, "books/confirm.html", {
+        "message": f"Delete account {account.code} - {account.name}? This cannot be undone.",
+        "cancel_url": reverse("books:account_edit", args=[account.pk]),
+    })
 
 
 @books_admin_required

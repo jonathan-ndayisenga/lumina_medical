@@ -15,6 +15,9 @@
         {% endfor %}
         <button type="submit" class="btn">Save account</button>
         <a href="{% url 'books:account_list' %}" class="btn btn-secondary">Cancel</a>
+        {% if account %}
+        <a href="{% url 'books:account_delete' account.pk %}" class="btn btn-danger">Delete</a>
+        {% endif %}
     </form>
 </div>
 {% endblock %}
