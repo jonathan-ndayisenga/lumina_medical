@@ -491,6 +491,24 @@ class LabEngineOrderToReleaseTests(LabEngineTestBase):
         self.assertIn("High", body)
         self.assertIn("Abnormal", body)
 
+    def test_requested_by_renders_on_the_report_for_each_requester_type(self):
+        visit = self._make_visit("F", "22YRS")
+        order = self._order_for(visit)
+        order.visit_service.requested_by_type = VisitService.REQUESTED_BY_SELF
+        order.visit_service.save(update_fields=["requested_by_type"])
+
+        body = self.client.get(reverse("visit_report", args=[visit.pk])).content.decode()
+        self.assertIn("Requested By", body)
+        self.assertIn("Self-requested", body)
+
+        order.visit_service.requested_by_type = VisitService.REQUESTED_BY_EXTERNAL_DOCTOR
+        order.visit_service.external_requester_name = "Amina Okello"
+        order.visit_service.external_requester_facility = "St. Mary's Clinic"
+        order.visit_service.save(update_fields=["requested_by_type", "external_requester_name", "external_requester_facility"])
+        body2 = self.client.get(reverse("visit_report", args=[visit.pk])).content.decode()
+        self.assertIn("Dr. Amina Okello", body2)
+        self.assertIn("St. Mary&#x27;s Clinic", body2)
+
     def test_release_routes_to_reception_when_not_doctor_requested(self):
         visit = self._make_visit("F", "25YRS")
         order = self._order_for(visit)
@@ -1013,19 +1031,24 @@ class ReportSettingsTests(LabEngineTestBase):
         body2 = self.client.get(reverse("visit_report", args=[self.visit.pk])).content.decode()
         self.assertNotIn("Above results are valid for the sample provided only", body2)
 
-    def test_combine_toggle_controls_page_break_between_defined_option_reports(self):
-        # The CSS rule for .report-block--flow is always present in the
-        # <style> block regardless of this setting -- check the class is
-        # actually applied to a report-block div, not just mentioned anywhere.
-        marker = 'class="report-block report-block--flow"'
+    def test_combine_toggle_merges_both_tests_onto_one_shared_report_block(self):
+        marker = 'class="report-block"'
 
+        # Off (default): each defined-option test still gets its own block/page.
         body_default = self.client.get(reverse("visit_report", args=[self.visit.pk])).content.decode()
-        self.assertNotIn(marker, body_default)
+        self.assertEqual(body_default.count(marker), 2)
+        self.assertIn("Malaria RDT", body_default)
+        self.assertIn("Typhoid Test", body_default)
 
+        # On: exactly one shared block, one heading + table per test inside it.
         self.lab_settings.combine_defined_option_reports = True
         self.lab_settings.save(update_fields=["combine_defined_option_reports"])
         body_combined = self.client.get(reverse("visit_report", args=[self.visit.pk])).content.decode()
-        self.assertEqual(body_combined.count(marker), 2)
+        self.assertEqual(body_combined.count(marker), 1, "both tests must share exactly one report-block")
+        self.assertIn("Malaria RDT", body_combined)
+        self.assertIn("Typhoid Test", body_combined)
+        # Only one header/footer for the whole combined page.
+        self.assertEqual(body_combined.count("Powered by Ternah Health"), 1)
 
 
 class ReportSettingsPermissionTests(LabEngineTestBase):

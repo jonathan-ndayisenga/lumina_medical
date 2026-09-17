@@ -24,19 +24,18 @@
        on paper it just eats margin a real bench report doesn't have. */
     .max-w-7xl { max-width: none !important; margin: 0 !important; padding: 0 !important; }
     body, html { font-size: 11px; }
-    /* Each test gets a full printed page by default, footer pinned to the
-       true bottom of that page (flex + margin-top:auto on the footer area)
-       instead of trailing right after wherever the results table ends —
-       a short Malaria/Typhoid result shouldn't leave the footer stranded
-       halfway down the page. Combined ("flow") blocks opt out of the
-       forced page height, since the whole point there is several small
-       results sharing one page. */
+    /* Every .report-block is one printed page — a standalone test, or (when
+       combine_defined_option_reports is on) one shared block holding every
+       simple Positive/Negative test together, one heading+table per test,
+       a single header and a single footer for the whole page. Either way
+       the footer is pinned to the true bottom of that page (flex +
+       margin-top:auto on the footer area) instead of trailing right after
+       wherever the results happen to end. */
     .report-block {
       page-break-after: always; padding: 8px; margin-bottom: 0; border-radius: 0;
       display: flex; flex-direction: column; min-height: 273mm;
     }
     .report-block:last-child { page-break-after: auto; }
-    .report-block.report-block--flow { page-break-after: auto; min-height: 0; margin-bottom: 6mm; }
     .report-footer-area { margin-top: auto; }
     .report-head-grid { gap: 0.35rem 1rem; margin: 0.5rem 0 0.6rem; }
     .report-field-label { font-size: 0.58rem; }
@@ -79,8 +78,107 @@
   {% endif %}
 </div>
 
-{% for order in orders %}
-<div class="report-block{% if combine_defined_option_reports and order.result.result_type == 'defined_option' %} report-block--flow{% endif %}">
+{% if combined_orders %}
+<div class="report-block">
+  {% with first_order=combined_orders.0 %}
+  {% if first_order.stage == 'released' %}
+  {% include "partials/print_header.html" with hospital=visit.hospital print_title="Released Laboratory Results" print_subtitle="Multiple Tests" %}
+  {% else %}
+  {% include "partials/print_header.html" with hospital=visit.hospital print_title="Draft — Not Yet Released" print_subtitle="Multiple Tests" %}
+  {% endif %}
+
+  <div class="flex justify-between items-center mb-1">
+    <div class="text-xs text-text-muted">Branch Code: {{ visit.hospital.subdomain|upper }}</div>
+    {% if first_order.stage == 'released' %}
+    <span class="report-status-badge" style="background:#d7f5e3;color:#146c3f;">RELEASED</span>
+    {% else %}
+    <span class="report-status-badge" style="background:#fff3cd;color:#8a6100;">{{ first_order.get_stage_display|upper }}</span>
+    {% endif %}
+  </div>
+
+  <div class="report-head-grid">
+    <div>
+      <div class="report-field-label">Patient</div>
+      <div class="report-field-value">{{ visit.patient.name }}</div>
+    </div>
+    <div>
+      <div class="report-field-label">Patient Number</div>
+      <div class="report-field-value">{{ visit.hospital.subdomain|upper }}-PAT-{{ visit.patient.pk|stringformat:"04d" }}</div>
+    </div>
+    <div>
+      <div class="report-field-label">Visit Number</div>
+      <div class="report-field-value">{{ visit.hospital.subdomain|upper }}-VIS-{{ visit.pk|stringformat:"06d" }}</div>
+    </div>
+    <div>
+      <div class="report-field-label">Requested At</div>
+      <div class="report-field-value">{{ first_order.visit_service.created_at|date:"d M Y H:i" }}</div>
+    </div>
+    {% if first_order.visit_service.requested_by_display %}
+    <div>
+      <div class="report-field-label">Requested By</div>
+      <div class="report-field-value">{{ first_order.visit_service.requested_by_display }}</div>
+    </div>
+    {% endif %}
+    {% if first_order.result.released_at %}
+    <div>
+      <div class="report-field-label">Released At</div>
+      <div class="report-field-value">{{ first_order.result.released_at|date:"d M Y H:i" }}</div>
+    </div>
+    <div>
+      <div class="report-field-label">Released By</div>
+      <div class="report-field-value">{{ first_order.result.released_by.get_full_name|default:first_order.result.released_by.username }}</div>
+    </div>
+    {% endif %}
+  </div>
+  {% endwith %}
+
+  {% for order in combined_orders %}
+  <div class="mt-4">
+    <div class="flex justify-between items-center mb-1">
+      <h3 class="font-bold text-sm">{{ order.test.name }}{% if order.test.code %} ({{ order.test.code }}){% endif %}</h3>
+      {% if order.stage != 'released' %}
+      <span class="report-status-badge" style="background:#fff3cd;color:#8a6100;">{{ order.get_stage_display|upper }}</span>
+      {% endif %}
+    </div>
+    {% if order.visit_service.requested_by_display %}
+    <p class="text-xs text-text-muted mb-1">Requested By: {{ order.visit_service.requested_by_display }}</p>
+    {% endif %}
+    {% if not order.result %}
+      <p class="text-sm text-text-muted">No result entered yet.</p>
+    {% else %}
+      <table class="w-full text-sm" style="width:100%; table-layout:fixed;">
+        <colgroup><col style="width:25%"><col style="width:25%"><col style="width:25%"><col style="width:25%"></colgroup>
+        <thead><tr>
+          <th class="text-left" style="width:25%;">Parameter</th>
+          <th class="text-left" style="width:25%;">Result</th>
+          <th class="text-left" style="width:25%;">Unit</th>
+          <th class="text-left" style="width:25%;">Reference Range</th>
+        </tr></thead>
+        <tbody><tr><td>Result</td><td class="font-bold">{{ order.result.chosen_option }}</td><td>&mdash;</td><td>&mdash;</td></tr></tbody>
+      </table>
+    {% endif %}
+    {% if order.result.bench_notes %}
+    <p class="text-xs text-text-muted mt-1"><strong>Bench Notes:</strong> {{ order.result.bench_notes }}</p>
+    {% endif %}
+  </div>
+  {% endfor %}
+
+  <div class="report-footer-area">
+    {% if show_report_footnote %}
+    {% include "lab/partials/report_disclaimer.html" %}
+    {% endif %}
+    <div class="mt-6">
+      {% include "partials/print_footer.html" with hospital=visit.hospital %}
+      {% if combined_orders.0.stage == 'released' %}
+      <p class="text-xs text-text-muted mt-2 text-center">Generated on {% now "d M Y H:i" %} by {{ request.user.get_full_name|default:request.user.username }}</p>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{% for order in standalone_orders %}
+<div class="report-block">
   {% if order.stage == 'released' %}
   {% include "partials/print_header.html" with hospital=visit.hospital print_title="Released Laboratory Result" print_subtitle=order.test.name %}
   {% else %}
@@ -113,6 +211,12 @@
       <div class="report-field-label">Requested At</div>
       <div class="report-field-value">{{ order.visit_service.created_at|date:"d M Y H:i" }}</div>
     </div>
+    {% if order.visit_service.requested_by_display %}
+    <div>
+      <div class="report-field-label">Requested By</div>
+      <div class="report-field-value">{{ order.visit_service.requested_by_display }}</div>
+    </div>
+    {% endif %}
     <div>
       <div class="report-field-label">Test</div>
       <div class="report-field-value">{{ order.test.name }} ({{ order.test.code }})</div>

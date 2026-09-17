@@ -417,6 +417,8 @@ def send_lab_request_api(request, visit_id):
             service=service,
             price_at_time=service.price,
             notes=f"Requested during consultation by {request.user.get_full_name() or request.user.username}",
+            requested_by_type=VisitService.REQUESTED_BY_INTERNAL_DOCTOR,
+            requested_by_user=request.user,
         )
         created_visit_services.append(visit_service)
         added_total += service.price

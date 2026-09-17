@@ -1151,12 +1151,28 @@ def visit_create(request, patient_id):
                     notes=f"Follow-up visit linked to completed visit #{visit.parent_visit_id}. No new billing.",
                 )
             else:
+                lab_requested_by_type = request.POST.get("lab_requested_by_type", "").strip()
+                lab_external_name = request.POST.get("lab_external_requester_name", "").strip()
+                lab_external_facility = request.POST.get("lab_external_requester_facility", "").strip()
                 for service in services:
-                    VisitService.objects.create(
-                        visit=visit,
-                        service=service,
-                        price_at_time=service.price,
-                    )
+                    visit_service_kwargs = {
+                        "visit": visit,
+                        "service": service,
+                        "price_at_time": service.price,
+                    }
+                    # Reception billing a lab service directly (no doctor
+                    # already in the loop) is asked self vs. outside-doctor
+                    # referral by a popup on the services picker; a doctor
+                    # ordering through their own consultation instead sets
+                    # this automatically (see send_lab_request_api).
+                    if service.category == Service.CATEGORY_LAB:
+                        if lab_requested_by_type == VisitService.REQUESTED_BY_SELF:
+                            visit_service_kwargs["requested_by_type"] = VisitService.REQUESTED_BY_SELF
+                        elif lab_requested_by_type == VisitService.REQUESTED_BY_EXTERNAL_DOCTOR:
+                            visit_service_kwargs["requested_by_type"] = VisitService.REQUESTED_BY_EXTERNAL_DOCTOR
+                            visit_service_kwargs["external_requester_name"] = lab_external_name
+                            visit_service_kwargs["external_requester_facility"] = lab_external_facility
+                    VisitService.objects.create(**visit_service_kwargs)
                     for queue_type in queue_types_for_service(service):
                         ensure_pending_queue_entry(
                             visit=visit,

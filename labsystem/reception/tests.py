@@ -841,6 +841,57 @@ class ReceptionVisitFormTests(TestCase):
         )
         self.client.force_login(self.receptionist)
 
+    def test_lab_service_records_self_requested_from_popup(self):
+        lab_service = Service.objects.get(name="CBC")
+        response = self.client.post(
+            reverse("visit_create", args=[self.patient.pk]),
+            {
+                "visit_type": Visit.TYPE_NORMAL,
+                "services": [str(lab_service.pk)],
+                "notes": "",
+                "lab_requested_by_type": "self",
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        visit_service = VisitService.objects.get(visit__patient=self.patient, service=lab_service)
+        self.assertEqual(visit_service.requested_by_type, VisitService.REQUESTED_BY_SELF)
+        self.assertEqual(visit_service.requested_by_display, "Self-requested")
+
+    def test_lab_service_records_external_doctor_referral_from_popup(self):
+        lab_service = Service.objects.get(name="CBC")
+        response = self.client.post(
+            reverse("visit_create", args=[self.patient.pk]),
+            {
+                "visit_type": Visit.TYPE_NORMAL,
+                "services": [str(lab_service.pk)],
+                "notes": "",
+                "lab_requested_by_type": "external_doctor",
+                "lab_external_requester_name": "Amina Okello",
+                "lab_external_requester_facility": "St. Mary's Clinic, Mbarara",
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        visit_service = VisitService.objects.get(visit__patient=self.patient, service=lab_service)
+        self.assertEqual(visit_service.requested_by_type, VisitService.REQUESTED_BY_EXTERNAL_DOCTOR)
+        self.assertEqual(visit_service.external_requester_name, "Amina Okello")
+        self.assertEqual(visit_service.external_requester_facility, "St. Mary's Clinic, Mbarara")
+        self.assertEqual(visit_service.requested_by_display, "Dr. Amina Okello — St. Mary's Clinic, Mbarara")
+
+    def test_non_lab_service_never_gets_requester_fields(self):
+        consult_service = Service.objects.get(name="Consultation")
+        lab_service = Service.objects.get(name="CBC")
+        self.client.post(
+            reverse("visit_create", args=[self.patient.pk]),
+            {
+                "visit_type": Visit.TYPE_NORMAL,
+                "services": [str(consult_service.pk), str(lab_service.pk)],
+                "notes": "",
+                "lab_requested_by_type": "self",
+            },
+        )
+        consult_visit_service = VisitService.objects.get(visit__patient=self.patient, service=consult_service)
+        self.assertEqual(consult_visit_service.requested_by_type, "")
+
     def test_visit_create_page_renders_service_dropdown_picker(self):
         response = self.client.get(reverse("visit_create", args=[self.patient.pk]))
 

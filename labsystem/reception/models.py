@@ -360,6 +360,16 @@ class Service(models.Model):
 
 
 class VisitService(models.Model):
+    REQUESTED_BY_SELF = "self"
+    REQUESTED_BY_INTERNAL_DOCTOR = "internal_doctor"
+    REQUESTED_BY_EXTERNAL_DOCTOR = "external_doctor"
+
+    REQUESTED_BY_CHOICES = [
+        (REQUESTED_BY_SELF, "Self-Requested"),
+        (REQUESTED_BY_INTERNAL_DOCTOR, "Doctor (This Facility)"),
+        (REQUESTED_BY_EXTERNAL_DOCTOR, "Doctor (Outside Facility)"),
+    ]
+
     visit = models.ForeignKey(Visit, on_delete=models.CASCADE, related_name="visit_services")
     service = models.ForeignKey(Service, on_delete=models.PROTECT, related_name="visit_services")
     price_at_time = models.DecimalField(max_digits=10, decimal_places=2)
@@ -369,11 +379,46 @@ class VisitService(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     performed_at = models.DateTimeField(null=True, blank=True)
 
+    # Who asked for this service — mainly meaningful for lab tests, but kept
+    # generic on VisitService rather than lab-specific, same as everything
+    # else billing-related. A doctor ordering through their own consultation
+    # already sets internal_doctor + requested_by_user = whoever's logged
+    # in automatically; reception billing a service directly (no doctor in
+    # the loop) is asked to pick self vs. an outside doctor's referral.
+    requested_by_type = models.CharField(max_length=20, choices=REQUESTED_BY_CHOICES, blank=True)
+    requested_by_user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="+",
+        help_text="Set when requested_by_type is internal_doctor — the doctor who was logged in at request time.",
+    )
+    external_requester_name = models.CharField(
+        max_length=150, blank=True,
+        help_text="Set when requested_by_type is external_doctor — the referring doctor's name.",
+    )
+    external_requester_facility = models.CharField(
+        max_length=150, blank=True,
+        help_text="Set when requested_by_type is external_doctor — the referring doctor's facility.",
+    )
+
     class Meta:
         ordering = ["created_at", "id"]
 
     def __str__(self):
         return f"{self.visit} - {self.service.name}"
+
+    @property
+    def requested_by_display(self):
+        if self.requested_by_type == self.REQUESTED_BY_SELF:
+            return "Self-requested"
+        if self.requested_by_type == self.REQUESTED_BY_INTERNAL_DOCTOR:
+            if self.requested_by_user_id:
+                return f"Dr. {self.requested_by_user.get_full_name() or self.requested_by_user.username}"
+            return "Doctor (this facility)"
+        if self.requested_by_type == self.REQUESTED_BY_EXTERNAL_DOCTOR:
+            name = self.external_requester_name or "External doctor"
+            if self.external_requester_facility:
+                return f"Dr. {name} — {self.external_requester_facility}"
+            return f"Dr. {name}"
+        return ""
 
 
 class QueueEntry(models.Model):

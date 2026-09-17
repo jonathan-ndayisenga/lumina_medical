@@ -187,6 +187,11 @@ class DoctorWorkflowTests(TestCase):
         self.assertEqual(self.visit.total_amount, Decimal("40.00"))
         visit_service = VisitService.objects.get(visit=self.visit, service=self.lab_service)
         self.assertFalse(visit_service.performed)
+        # A doctor ordering through their own consultation is recorded as
+        # the requester automatically -- whoever is logged in, no popup.
+        self.assertEqual(visit_service.requested_by_type, VisitService.REQUESTED_BY_INTERNAL_DOCTOR)
+        self.assertEqual(visit_service.requested_by_user, self.doctor)
+        self.assertEqual(visit_service.requested_by_display, f"Dr. {self.doctor.username}")
         # Lab requests go through reception for approval before routing to lab
         reception_queue = QueueEntry.objects.get(visit=self.visit, queue_type=QueueEntry.TYPE_RECEPTION, processed=False)
         self.assertIn("Lab approval required", reception_queue.reason)

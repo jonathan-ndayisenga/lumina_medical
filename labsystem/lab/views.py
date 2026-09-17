@@ -1229,9 +1229,20 @@ def visit_report(request, visit_id):
             sync_visit_status(visit)
             return redirect("visit_report", visit_id=visit.pk)
 
+    combine_defined_option_reports = settings_row.combine_defined_option_reports if settings_row else False
+    orders_list = list(orders)
+    if combine_defined_option_reports:
+        combined_orders = [o for o in orders_list if o.result and o.result.result_type == ResultType.DEFINED_OPTION]
+        standalone_orders = [o for o in orders_list if o not in combined_orders]
+    else:
+        combined_orders = []
+        standalone_orders = orders_list
+
     return render(request, "lab/report.html", {
         "visit": visit,
         "orders": orders,
+        "combined_orders": combined_orders,
+        "standalone_orders": standalone_orders,
         "can_review": can_review,
         "can_release": can_release,
         "payment_blocked": payment_blocked,
@@ -1240,5 +1251,5 @@ def visit_report(request, visit_id):
         "require_review": require_review,
         "all_released": all_released,
         "show_report_footnote": settings_row.show_report_footnote if settings_row else True,
-        "combine_defined_option_reports": settings_row.combine_defined_option_reports if settings_row else False,
+        "combine_defined_option_reports": combine_defined_option_reports,
     })
