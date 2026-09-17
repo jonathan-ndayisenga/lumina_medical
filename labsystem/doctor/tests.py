@@ -530,3 +530,87 @@ class ConsultationAdminOverrideTests(TestCase):
 
         self.assertEqual(response.status_code, 403)
         self.assertTrue(Consultation.objects.filter(pk=self.consultation.pk).exists())
+
+
+class SonographerReceptionApprovalTests(TestCase):
+    """A doctor referring a patient for a scan must route through reception
+    for approval first -- the same gate lab requests already get -- instead
+    of landing straight in the live sonographer queue unreviewed."""
+
+    def setUp(self):
+        self.User = get_user_model()
+        self.hospital = Hospital.objects.create(name="Sonographer Gate Hospital", subdomain="sono-gate")
+        _enable_modules(self.hospital, "doctor", "reception", "sonographer")
+        self.doctor = self.User.objects.create_user(
+            username="sono_doctor", password="StrongPass123!", role=self.User.ROLE_DOCTOR, hospital=self.hospital,
+        )
+        self.receptionist = self.User.objects.create_user(
+            username="sono_reception", password="StrongPass123!", role=self.User.ROLE_RECEPTIONIST, hospital=self.hospital,
+        )
+        self.patient = Patient.objects.create(hospital=self.hospital, name="Scan Patient", age="40YRS", sex="F")
+        self.consult_service = Service.objects.create(
+            hospital=self.hospital, name="Consultation", category=Service.CATEGORY_CONSULTATION, price="25.00",
+        )
+        self.scan_service = Service.objects.create(
+            hospital=self.hospital, name="Abdominal Ultrasound", category=Service.CATEGORY_SCAN, price="30.00",
+        )
+        self.visit = Visit.objects.create(
+            patient=self.patient, hospital=self.hospital, created_by=self.doctor, total_amount="25.00",
+        )
+        VisitService.objects.create(visit=self.visit, service=self.consult_service, price_at_time="25.00")
+        QueueEntry.objects.create(
+            hospital=self.hospital, visit=self.visit, queue_type=QueueEntry.TYPE_DOCTOR,
+            reason="Initial consultation", requested_by=self.doctor,
+        )
+
+    def test_doctor_referral_lands_in_reception_not_sonographer_queue_directly(self):
+        self.client.force_login(self.doctor)
+        response = self.client.post(
+            reverse("consultation", args=[self.visit.pk]),
+            {
+                "weight_kg": "60.0", "bp_systolic": "120", "bp_diastolic": "80", "pulse": "78",
+                "respiratory_rate": "18", "temperature_celsius": "36.7", "glucose_mg_dl": "98",
+                "oxygen_saturation": "99", "signs_symptoms": "Abdominal pain", "diagnosis": "Rule out gallstones",
+                "treatment": "Ultrasound requested", "follow_up_date": "", "send_to_sonographer": "on",
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+
+        scan_vs = VisitService.objects.get(visit=self.visit, service=self.scan_service)
+        self.assertFalse(scan_vs.is_approved, "a doctor-referred scan must start unapproved, awaiting reception")
+
+        self.assertFalse(
+            QueueEntry.objects.filter(visit=self.visit, queue_type=QueueEntry.TYPE_SONOGRAPHER).exists(),
+            "the sonographer queue must not be touched until reception approves",
+        )
+        reception_entry = QueueEntry.objects.filter(
+            visit=self.visit, queue_type=QueueEntry.TYPE_RECEPTION, processed=False,
+        ).first()
+        self.assertIsNotNone(reception_entry, "the visit must land in reception's queue for approval")
+
+    def test_reception_approve_scan_then_routes_to_sonographer_queue(self):
+        self.client.force_login(self.doctor)
+        self.client.post(
+            reverse("consultation", args=[self.visit.pk]),
+            {
+                "weight_kg": "60.0", "bp_systolic": "120", "bp_diastolic": "80", "pulse": "78",
+                "respiratory_rate": "18", "temperature_celsius": "36.7", "glucose_mg_dl": "98",
+                "oxygen_saturation": "99", "signs_symptoms": "Abdominal pain", "diagnosis": "Rule out gallstones",
+                "treatment": "Ultrasound requested", "follow_up_date": "", "send_to_sonographer": "on",
+            },
+        )
+        reception_entry = QueueEntry.objects.get(visit=self.visit, queue_type=QueueEntry.TYPE_RECEPTION, processed=False)
+
+        self.client.logout()
+        self.client.force_login(self.receptionist)
+        response = self.client.post(reverse("reception_queue_approve_scan", args=[reception_entry.pk]))
+        self.assertEqual(response.status_code, 302)
+
+        scan_vs = VisitService.objects.get(visit=self.visit, service=self.scan_service)
+        self.assertTrue(scan_vs.is_approved)
+        self.assertTrue(
+            QueueEntry.objects.filter(visit=self.visit, queue_type=QueueEntry.TYPE_SONOGRAPHER, processed=False).exists(),
+            "approving must now route the patient to the sonographer queue",
+        )
+        reception_entry.refresh_from_db()
+        self.assertTrue(reception_entry.processed)

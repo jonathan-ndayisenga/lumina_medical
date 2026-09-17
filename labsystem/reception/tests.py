@@ -104,6 +104,27 @@ class SonographerQuickSendWorkflowTests(TestCase):
         services = scan_services_queryset(self.hospital)
         self.assertIn(legacy_service, services)
 
+    def test_quick_send_honors_an_explicitly_picked_service_over_the_first_match(self):
+        """The registration-page popup lets reception pick which service
+        under the module to bill -- picking the second one must not
+        silently fall back to whichever service happens to be first."""
+        second_scan_service = Service.objects.create(
+            hospital=self.hospital, name="Doppler Scan", category=Service.CATEGORY_SCAN,
+            price=Decimal("200.00"), is_active=True,
+        )
+        self.client.force_login(self.receptionist)
+
+        response = self.client.post(
+            reverse("patient_quick_send", kwargs={"patient_id": self.patient.pk}),
+            {"destination": "sonographer", "service_id": str(second_scan_service.pk)},
+        )
+
+        self.assertEqual(response.status_code, 302)
+        visit = Visit.objects.get(patient=self.patient, hospital=self.hospital)
+        self.assertTrue(visit.visit_services.filter(service=second_scan_service).exists())
+        self.assertFalse(visit.visit_services.filter(service=self.scan_service).exists())
+        self.assertEqual(visit.total_amount, Decimal("200.00"))
+
 
 class ReceiptRenderingTests(TestCase):
     def setUp(self):

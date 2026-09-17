@@ -7,6 +7,7 @@ urlpatterns = [
     path("queue/", views.receptionist_queue, name="reception_queue"),
     path("queue/<int:queue_entry_id>/finish/", views.receptionist_queue_finish, name="reception_queue_finish"),
     path("queue/<int:queue_entry_id>/approve-lab/", views.receptionist_queue_approve_lab, name="reception_queue_approve_lab"),
+    path("queue/<int:queue_entry_id>/approve-scan/", views.receptionist_queue_approve_scan, name="reception_queue_approve_scan"),
     path("queue/<int:queue_entry_id>/bill/", views.receptionist_queue_bill, name="reception_queue_bill"),
     path("queue/<int:queue_entry_id>/send-to-doctor/", views.receptionist_queue_send_to_doctor, name="reception_queue_send_to_doctor"),
     path("queue/<int:queue_entry_id>/send-to-sonographer/", views.receptionist_queue_send_to_sonographer, name="reception_queue_send_to_sonographer"),

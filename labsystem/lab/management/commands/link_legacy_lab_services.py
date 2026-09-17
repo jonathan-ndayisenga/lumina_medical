@@ -50,7 +50,7 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         dry_run = options["dry_run"]
         services = (
-            Service.objects.filter(category=Service.CATEGORY_LAB, lab_test_next__isnull=True)
+            Service.objects.filter(category=Service.CATEGORY_LAB, lab_tests_next__isnull=True)
             .select_related("hospital")
             .order_by("hospital__name", "name")
         )
@@ -75,8 +75,7 @@ class Command(BaseCommand):
                     test = self._get_or_create_predefined(service, hospital)
                     created_predefined.append((hospital.name, service.name, test.name))
 
-                service.lab_test_next = test
-                service.save(update_fields=["lab_test_next"])
+                service.lab_tests_next.add(test)
 
             if dry_run:
                 transaction.set_rollback(True)

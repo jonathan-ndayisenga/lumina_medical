@@ -110,6 +110,12 @@
                                                     </form>
                                                 {% endif %}
                                             {% endif %}
+                                            {% if row.has_pending_scan_approval %}
+                                                <form method="post" action="{% url 'reception_queue_approve_scan' row.entry.pk %}">
+                                                    {% csrf_token %}
+                                                    <button type="submit" class="btn btn-primary btn-sm bg-green-600 hover:bg-green-700 border-green-600">Approve Scan</button>
+                                                </form>
+                                            {% endif %}
                                             <form method="post" action="{% url 'reception_queue_bill' row.entry.pk %}">
                                                 {% csrf_token %}
                                                 <button type="submit" class="btn btn-primary btn-sm">Bill Patient</button>

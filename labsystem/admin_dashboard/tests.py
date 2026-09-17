@@ -538,23 +538,48 @@ class ManageServicesLabTestLinkTests(TestCase):
         response = self.client.get(reverse("edit_service", args=[self.service.pk]))
 
         self.assertEqual(response.status_code, 200)
-        queryset = response.context["form"].fields["lab_test_next"].queryset
+        queryset = response.context["form"].fields["lab_tests_next"].queryset
         self.assertIn(self.lab_test, queryset)
         self.assertEqual(queryset.count(), 1)
 
     def test_editing_service_links_it_to_a_lab_test(self):
         self.service.refresh_from_db()
-        self.assertIsNone(self.service.lab_test_next)
+        self.assertFalse(self.service.lab_tests_next.exists())
 
         response = self.client.post(
             reverse("edit_service", args=[self.service.pk]),
             {
                 "name": self.service.name, "category": self.service.category,
-                "price": "15000", "lab_test_next": self.lab_test.pk,
+                "price": "15000", "lab_tests_next": [self.lab_test.pk],
                 "is_active": "on",
             },
         )
 
         self.assertEqual(response.status_code, 302)
         self.service.refresh_from_db()
-        self.assertEqual(self.service.lab_test_next_id, self.lab_test.pk)
+        self.assertEqual(list(self.service.lab_tests_next.values_list("pk", flat=True)), [self.lab_test.pk])
+
+    def test_editing_service_links_it_to_more_than_one_lab_test(self):
+        """A bundled service (e.g. "Malaria Test" -> MRDT + B/S) must be
+        linkable to several tests at once, billed as one line."""
+        from lab.models import LabTest
+
+        second_test = LabTest.objects.create(
+            hospital=self.hospital, name="Blood Slide", category=self.lab_test.category,
+            result_type="defined_option",
+        )
+
+        response = self.client.post(
+            reverse("edit_service", args=[self.service.pk]),
+            {
+                "name": self.service.name, "category": self.service.category,
+                "price": "15000", "lab_tests_next": [self.lab_test.pk, second_test.pk],
+                "is_active": "on",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.service.refresh_from_db()
+        self.assertEqual(
+            set(self.service.lab_tests_next.values_list("pk", flat=True)), {self.lab_test.pk, second_test.pk},
+        )

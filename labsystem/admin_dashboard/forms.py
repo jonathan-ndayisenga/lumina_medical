@@ -415,21 +415,25 @@ class HospitalStaffUserUpdateForm(forms.ModelForm):
 class HospitalServiceForm(forms.ModelForm):
     class Meta:
         model = Service
-        fields = ("name", "category", "price", "lab_test_next", "test_profile", "is_active", "is_per_day")
+        fields = ("name", "category", "price", "lab_tests_next", "test_profile", "is_active", "is_per_day")
+        widgets = {
+            "lab_tests_next": forms.CheckboxSelectMultiple,
+        }
 
     def __init__(self, *args, hospital=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.hospital = hospital
-        self.fields["lab_test_next"].queryset = (
+        self.fields["lab_tests_next"].queryset = (
             LabTest.objects.filter(hospital=hospital).order_by("name") if hospital else LabTest.objects.none()
         )
-        self.fields["lab_test_next"].required = False
-        self.fields["lab_test_next"].empty_label = "— not linked yet —"
-        self.fields["lab_test_next"].label = "Lab Test"
-        self.fields["lab_test_next"].help_text = (
-            "Which lab test this service creates when billed. Without this set, the service still "
-            "bills fine but never turns into an order the lab can actually work — set it up under "
-            "Lab Management → Laboratory Services first if the test you need isn't listed."
+        self.fields["lab_tests_next"].required = False
+        self.fields["lab_tests_next"].label = "Lab Test(s)"
+        self.fields["lab_tests_next"].help_text = (
+            "Which lab test(s) this service creates when billed — pick more than one for a bundled "
+            "service billed once but entered as separate independent tests (e.g. a \"Malaria Test\" "
+            "service linking both MRDT and B/S). Without at least one set, the service still bills "
+            "fine but never turns into an order the lab can actually work — set it up under Lab "
+            "Management → Laboratory Services first if the test you need isn't listed."
         )
         self.fields["test_profile"].queryset = TestProfile.objects.filter(is_active=True).order_by("name")
         self.fields["test_profile"].required = False

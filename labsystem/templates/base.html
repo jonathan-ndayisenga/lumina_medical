@@ -565,7 +565,7 @@
                                     </svg>
                                     Reports
                                 </a>
-                                <details {% if active_nav in 'lab_categories,lab_specimens,lab_result_types,lab_tests,lab_settings' %}open{% endif %}>
+                                <details {% if active_nav in 'lab_categories,lab_specimens,lab_result_types,lab_tests,lab_settings,lab_report_settings' %}open{% endif %}>
                                     <summary class="sidebar-link" style="cursor:pointer;">
                                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-5 h-5">
                                             <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h7" />
@@ -578,6 +578,7 @@
                                         <a href="{% url 'lab_specimen_list' %}" class="sidebar-sublink {% if active_nav == 'lab_specimens' %}active{% endif %}">Specimen Types</a>
                                         <a href="{% url 'lab_result_type_list' %}" class="sidebar-sublink {% if active_nav == 'lab_result_types' %}active{% endif %}">Result Types</a>
                                         <a href="{% url 'lab_settings' %}" class="sidebar-sublink {% if active_nav == 'lab_settings' %}active{% endif %}">Consumables</a>
+                                        <a href="{% url 'lab_report_settings' %}" class="sidebar-sublink {% if active_nav == 'lab_report_settings' %}active{% endif %}">Report Settings</a>
                                     </div>
                                 </details>
                             </div>

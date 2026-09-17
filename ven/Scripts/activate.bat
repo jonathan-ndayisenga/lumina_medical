@@ -8,7 +8,7 @@ if defined _OLD_CODEPAGE (
     "%SystemRoot%\System32\chcp.com" 65001 > nul
 )
 
-set "VIRTUAL_ENV=C:\Users\USER\Desktop\Projects\Lumina_medical_services\ven"
+set "VIRTUAL_ENV=C:\Users\USER\Desktop\Projects\Ternah health\ven"
 
 if not defined PROMPT set PROMPT=$P$G
 

@@ -340,15 +340,15 @@ class Service(models.Model):
         related_name="services",
         help_text="Lab service linked to a test profile (e.g., CBC, Urinalysis)"
     )
-    lab_test_next = models.ForeignKey(
+    lab_tests_next = models.ManyToManyField(
         "lab.LabTest",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
         related_name="services",
-        help_text="Which lab.LabTest this billed service maps to. Required for the service to be "
-                   "picked up by the lab queue; unrelated to `test_profile` above, which only the "
-                   "historical report archive still reads.",
+        blank=True,
+        help_text="Which lab.LabTest(es) this billed service creates orders for. Billed once, but "
+                   "can fan out into more than one order -- e.g. a bundled \"Malaria Test\" service "
+                   "linking both MRDT and B/S, each entered independently. Required for the service "
+                   "to be picked up by the lab queue; unrelated to `test_profile` above, which only "
+                   "the historical report archive still reads.",
     )
 
     class Meta:

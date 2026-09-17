@@ -976,7 +976,13 @@ def consultation(request, visit_id):
                 close_doctor_queue = True
                 feedback.append("Patient sent to nurse queue.")
             elif form.cleaned_data.get("send_to_sonographer"):
-                # Attach the first active scan service to the visit bill
+                # Attach the first active scan service to the visit bill,
+                # unapproved -- like a doctor's lab request, this goes to
+                # reception for approval first, not straight to the
+                # sonographer queue. reception's own "Send to Sonographer"
+                # button is the one path that skips this gate, since that's
+                # reception acting directly, not a doctor referral.
+                # (send_to_reception_queue is already imported at module level.)
                 scan_service = Service.objects.filter(
                     hospital=visit.hospital,
                     category=Service.CATEGORY_SCAN,
@@ -989,21 +995,23 @@ def consultation(request, visit_id):
                             visit=visit,
                             service=scan_service,
                             price_at_time=scan_service.price,
+                            is_approved=False,
                             notes="Added automatically when doctor referred patient to sonographer.",
                         )
                         visit.total_amount = (visit.total_amount or 0) + scan_service.price
                         visit.save(update_fields=["total_amount"])
-                ensure_pending_queue_entry(
+                send_to_reception_queue(
                     visit=visit,
                     hospital=visit.hospital,
-                    queue_type=QueueEntry.TYPE_SONOGRAPHER,
-                    reason=f"Doctor requested scan / ultrasound{': ' + scan_service.name if scan_service else ''}.",
+                    source="Doctor",
+                    detail="Scan approval required",
+                    notes=f"Doctor {request.user.get_full_name() or request.user.username} requested: "
+                          f"{scan_service.name if scan_service else 'a scan / ultrasound'}",
                     requested_by=request.user,
-                    notes="Consultation completed and handed off to sonographer.",
                 )
                 close_doctor_queue = True
                 feedback.append(
-                    f"Patient sent to sonographer queue."
+                    "Patient sent to reception for scan approval."
                     + (f" {scan_service.name} added to bill." if scan_service else " No scan service found — add one under Services.")
                 )
             else:

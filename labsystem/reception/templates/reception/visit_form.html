@@ -55,23 +55,38 @@
     {% if not edit_mode %}
     <div class="card border-2 border-indigo-200 bg-indigo-50">
         <p class="text-sm font-semibold text-indigo-900 mb-4">Just routing this patient, not billing them from scratch?</p>
-        <form method="post" action="{% url 'patient_quick_send' patient.pk %}" class="flex flex-wrap items-center gap-3">
+        <form method="post" action="{% url 'patient_quick_send' patient.pk %}" class="flex flex-wrap items-center gap-3" id="quick-send-form">
             {% csrf_token %}
-            <select name="destination" class="input text-sm py-1.5" required>
+            <input type="hidden" name="service_id" id="quick-send-service-id">
+            <select name="destination" class="input text-sm py-1.5" id="quick-send-destination" required>
                 <option value="" disabled selected>Choose destination&hellip;</option>
                 {% if phlebotomy_enabled %}
                 <option value="phlebotomy">Phlebotomy Queue</option>
                 {% endif %}
-                <option value="doctor">Doctor Queue</option>
-                <option value="lab">Lab Queue</option>
-                <option value="sonographer">Sonographer Queue</option>
-                <option value="nurse">Nurse Queue</option>
+                <option value="doctor" data-category="consultation">Doctor Queue</option>
+                <option value="lab" data-category="lab">Lab Queue</option>
+                <option value="sonographer" data-category="scan">Sonographer Queue</option>
+                <option value="nurse" data-category="triage">Nurse Queue</option>
             </select>
-            <button type="submit" class="btn btn-primary"
-                onclick="return confirm('Create a new visit and send {{ patient.name }} directly to the selected queue?')">
+            <button type="submit" class="btn btn-primary" id="quick-send-submit">
                 Send Directly
             </button>
         </form>
+    </div>
+
+    <!-- Quick Send service picker popup: pick which service under the chosen
+         module to bill, one click, then the form above submits itself. -->
+    <div id="quickSendModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+        <div class="bg-white rounded-xl shadow-xl max-w-md w-full p-5">
+            <div class="flex items-center justify-between mb-3">
+                <h3 class="font-semibold text-text-main" id="quickSendModalTitle">Choose a service</h3>
+                <button type="button" id="quickSendModalClose" class="text-text-muted hover:text-text-main text-xl leading-none">&times;</button>
+            </div>
+            <div id="quickSendServiceList" class="space-y-2 max-h-72 overflow-y-auto"></div>
+            <p id="quickSendEmptyMsg" class="text-sm text-text-muted hidden">
+                No active services found for this queue. Add one under Services before sending patients there.
+            </p>
+        </div>
     </div>
     {% endif %}
 
@@ -402,6 +417,79 @@
     originSelect?.addEventListener('change', updateAdjustmentSummary);
     daysUsedInput?.addEventListener('input', updateAdjustmentSummary);
     toggleVisitTypePanels();
+})();
+
+// Quick Send: pick which service under the chosen module to bill, one
+// click, instead of silently auto-picking the first active one.
+(function () {
+    const form = document.getElementById('quick-send-form');
+    const destSelect = document.getElementById('quick-send-destination');
+    const serviceIdInput = document.getElementById('quick-send-service-id');
+    const modal = document.getElementById('quickSendModal');
+    const modalTitle = document.getElementById('quickSendModalTitle');
+    const modalClose = document.getElementById('quickSendModalClose');
+    const listWrap = document.getElementById('quickSendServiceList');
+    const emptyMsg = document.getElementById('quickSendEmptyMsg');
+    const dataNode = document.getElementById('services-data');
+    if (!form || !destSelect || !serviceIdInput || !modal || !dataNode) return;
+
+    const allServices = JSON.parse(dataNode.textContent);
+    const NEEDS_SERVICE_PICK = new Set(['doctor', 'lab', 'sonographer', 'nurse']);
+
+    function closeModal() {
+        modal.classList.add('hidden');
+    }
+
+    function openModalForSelectedDestination() {
+        const option = destSelect.selectedOptions[0];
+        const category = option ? option.dataset.category : '';
+        const label = option ? option.textContent.replace(' Queue', '') : '';
+        const matches = allServices.filter(function (s) { return s.category === category; });
+
+        modalTitle.textContent = 'Choose a ' + label + ' service';
+        listWrap.innerHTML = '';
+        if (!matches.length) {
+            emptyMsg.classList.remove('hidden');
+        } else {
+            emptyMsg.classList.add('hidden');
+            matches.forEach(function (s) {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'w-full text-left border border-gray-200 rounded-lg px-3 py-2 hover:border-indigo-300 hover:bg-indigo-50 flex items-center justify-between gap-3';
+                btn.innerHTML = '<span class="font-medium text-text-main text-sm">' + s.name + '</span>'
+                    + '<span class="text-xs text-text-muted">UGX ' + s.price + '</span>';
+                btn.addEventListener('click', function () {
+                    serviceIdInput.value = s.id;
+                    closeModal();
+                    form.submit();
+                });
+                listWrap.appendChild(btn);
+            });
+        }
+        modal.classList.remove('hidden');
+    }
+
+    form.addEventListener('submit', function (e) {
+        const destination = destSelect.value;
+        if (NEEDS_SERVICE_PICK.has(destination) && !serviceIdInput.value) {
+            e.preventDefault();
+            openModalForSelectedDestination();
+            return;
+        }
+        if (!confirm('Create a new visit and send this patient directly to the selected queue?')) {
+            e.preventDefault();
+        }
+    });
+
+    // A fresh destination choice needs a fresh service pick.
+    destSelect.addEventListener('change', function () {
+        serviceIdInput.value = '';
+    });
+
+    modalClose?.addEventListener('click', closeModal);
+    modal.addEventListener('click', function (e) {
+        if (e.target === modal) closeModal();
+    });
 })();
 </script>
 {% endblock %}

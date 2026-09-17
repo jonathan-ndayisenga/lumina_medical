@@ -1445,6 +1445,7 @@ def manage_services(request):
             service = form.save(commit=False)
             service.hospital = hospital
             service.save()
+            form.save_m2m()
             messages.success(request, f"Service '{service.name}' saved.")
             return redirect("manage_services")
         messages.error(request, "Please fix the service details below.")

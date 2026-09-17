@@ -375,6 +375,13 @@ def receptionist_queue(request):
         lab_payment_blocked = (
             has_pending_lab_approval and lab_payment_required and visit.is_unbilled
         )
+        has_pending_scan_approval = visit.visit_services.filter(
+            Q(service__category__iexact=Service.CATEGORY_SCAN)
+            | Q(service__category__iexact="sonographer")
+            | Q(service__category__iexact="ultrasound")
+            | Q(service__category__iexact="scan / ultrasound"),
+            is_approved=False,
+        ).exists()
         if visit.is_fully_paid:
             payment_status = "paid"
         elif visit.is_unbilled:
@@ -393,6 +400,7 @@ def receptionist_queue(request):
                 "pending_consultation_line": pending_consultation_line,
                 "has_pending_lab_approval": has_pending_lab_approval,
                 "lab_payment_blocked": lab_payment_blocked,
+                "has_pending_scan_approval": has_pending_scan_approval,
                 "payment_status": payment_status,
                 "balance_due": visit.balance_due,
                 "billed_service_names": ", ".join(visit.visit_services.values_list("service__name", flat=True)),
@@ -507,6 +515,71 @@ def receptionist_queue_approve_lab(request, queue_entry_id):
             messages.success(request, f"Lab requests for {visit.patient.name} have been approved and sent to the lab.")
     except Exception as e:
         messages.error(request, f"Failed to approve lab request: {str(e)}")
+
+    return redirect("reception_queue")
+
+
+def approve_pending_scan_services(visit, queue_entry, actor):
+    """Approve every pending scan VisitService on this visit and route it
+    to the sonographer queue — the scan mirror of approve_pending_lab_services.
+    A doctor referring a patient for a scan bills the service immediately
+    but leaves it unapproved (is_approved=False) and routes here first via
+    TYPE_RECEPTION, exactly like a doctor's lab request; only reception
+    sending the patient here itself (receptionist_queue_send_to_sonographer)
+    skips this gate, since that's reception's own action already.
+
+    Returns "no_pending" or "approved".
+    """
+    scan_services = visit.visit_services.filter(
+        Q(service__category__iexact=Service.CATEGORY_SCAN)
+        | Q(service__category__iexact="sonographer")
+        | Q(service__category__iexact="ultrasound")
+        | Q(service__category__iexact="scan / ultrasound"),
+        is_approved=False,
+    )
+    if not scan_services.exists():
+        return "no_pending"
+
+    pending_names = list(scan_services.values_list("service__name", flat=True))
+    source = reception_source_from_entry(queue_entry) if queue_entry else "Reception"
+    scan_services.update(is_approved=True)
+
+    ensure_pending_queue_entry(
+        visit=visit,
+        hospital=visit.hospital,
+        queue_type=QueueEntry.TYPE_SONOGRAPHER,
+        reason=f"Doctor requested scan: {', '.join(pending_names)}" if pending_names else "Scan follow-up approved.",
+        requested_by=(queue_entry.requested_by if queue_entry else None) or actor,
+        notes=f"Scan services approved by reception. Source: {source}",
+    )
+
+    if queue_entry:
+        queue_entry.processed = True
+        queue_entry.processed_at = timezone.now()
+        queue_entry.save(update_fields=["processed", "processed_at"])
+
+    sync_visit_status(visit)
+    return "approved"
+
+
+@reception_role_required
+@transaction.atomic
+def receptionist_queue_approve_scan(request, queue_entry_id):
+    if request.method != "POST":
+        raise PermissionDenied("Approving scan requests requires a POST request.")
+
+    try:
+        hospital = get_active_hospital(request)
+        queue_entry = get_object_or_404(QueueEntry, pk=queue_entry_id, hospital=hospital)
+        visit = queue_entry.visit
+
+        result = approve_pending_scan_services(visit, queue_entry, request.user)
+        if result == "no_pending":
+            messages.info(request, "No pending scan services found for approval.")
+        else:
+            messages.success(request, f"Scan request for {visit.patient.name} has been approved and sent to the sonographer.")
+    except Exception as e:
+        messages.error(request, f"Failed to approve scan request: {str(e)}")
 
     return redirect("reception_queue")
 
@@ -2144,12 +2217,19 @@ def patient_quick_send(request, patient_id):
 
     config = QUICK_SEND_DESTINATIONS[destination]
 
-    # Find the first active service of the right category
-    service = Service.objects.filter(
+    # The picker popup on the registration page lets reception choose which
+    # service under this module to bill; fall back to the first active one
+    # in the category if a specific id wasn't submitted (JS disabled, or an
+    # older client), same as before this picker existed.
+    services_in_category = Service.objects.filter(
         hospital=hospital,
         category=config["category"],
         is_active=True,
-    ).first()
+    )
+    service_id = request.POST.get("service_id", "").strip()
+    service = services_in_category.filter(pk=service_id).first() if service_id else None
+    if service is None:
+        service = services_in_category.first()
 
     if service is None:
         messages.error(

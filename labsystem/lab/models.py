@@ -334,8 +334,10 @@ class LabTest(models.Model):
     builds its own templates (a CBC's parameters and reference ranges are
     that hospital's own bench/analyzer's, not a platform-wide guess) — a
     newly onboarded hospital starts with zero tests. Pricing/offering lives
-    on `reception.Service.lab_test_next`, same as before; what changed is
-    that the test definition itself is no longer shared across hospitals.
+    on `reception.Service.lab_tests_next` (a service can link more than one
+    test — a bundled offering billed once, entered as separate independent
+    orders); what changed is that the test definition itself is no longer
+    shared across hospitals.
     `test_clone` lets a hospital copy an existing test (its own, or any
     other hospital's — definitions aren't sensitive clinical data) as a
     starting point instead of building one from nothing every time;
@@ -548,6 +550,19 @@ class LabSettings(models.Model):
                    "— 'gated on payment for the print itself'. Separate from payment_required_before_lab, "
                    "which gates sample collection instead.",
     )
+    show_report_footnote = models.BooleanField(
+        default=True,
+        help_text="Shows the standard disclaimer note ('The above results relate only to the specimen "
+                   "submitted...') at the bottom of every printed report. On by default, matching today's "
+                   "behavior — turn off if your hospital doesn't want it printed.",
+    )
+    combine_defined_option_reports = models.BooleanField(
+        default=False,
+        help_text="If on, every simple Positive/Negative-style result (Malaria, Typhoid, ...) on a visit "
+                   "prints together on one shared page instead of each getting its own. Parameter-panel "
+                   "tests (CBC, Urinalysis, ...) always keep their own page either way. Off by default, "
+                   "matching today's behavior — every test on its own page.",
+    )
 
     updated_at = models.DateTimeField(auto_now=True)
     updated_by = models.ForeignKey(
@@ -576,10 +591,15 @@ class LabOrder(models.Model):
     screen. `visit_service` is the billable line (price, approval, payment —
     all read through this link, never copied). `test` is denormalized
     alongside it for query convenience and because a service's linked test
-    shouldn't silently change if the service is edited later."""
+    shouldn't silently change if the service is edited later.
 
-    visit_service = models.OneToOneField(
-        "reception.VisitService", on_delete=models.PROTECT, related_name="lab_order_next",
+    `visit_service` is a plain FK, not one-to-one: a bundled service (e.g. a
+    "Malaria Test" service linked to both MRDT and B/S under
+    Service.lab_tests_next) is billed once but fans out into one LabOrder
+    per linked test, each entered/released independently."""
+
+    visit_service = models.ForeignKey(
+        "reception.VisitService", on_delete=models.PROTECT, related_name="lab_orders_next",
     )
     test = models.ForeignKey(LabTest, on_delete=models.PROTECT, related_name="orders")
 

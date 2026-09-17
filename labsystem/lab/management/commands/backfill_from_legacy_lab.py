@@ -24,11 +24,13 @@ free-text catalog and the new authored LabTest; unmatched values are still
 recorded (frozen as a plain label + value) so nothing is lost, just not
 linked back to a Parameter definition.
 
-IMPORTANT: the conversion trusts Service.lab_test_next (admin-configured) to
+IMPORTANT: the conversion trusts Service.lab_tests_next (admin-configured) to
 decide which LabTest a legacy report's billed service maps to — NOT the
-legacy report's own TestProfile. Verify every lab Service is correctly
-mapped to a LabTest in the admin before running this for real, or reports
-will be converted under the wrong test.
+legacy report's own TestProfile. A legacy report predates the multi-test
+feature, so if its service has since picked up more than one linked test,
+whichever was linked first is used. Verify every lab Service is correctly
+mapped before running this for real, or reports will be converted under
+the wrong test.
 """
 
 from decimal import Decimal, InvalidOperation
@@ -82,8 +84,7 @@ class Command(BaseCommand):
 
         reports = LegacyLabReport.objects.select_related(
             "visit__hospital", "visit__patient",
-            "requested_visit_service__service__lab_test_next",
-        ).prefetch_related("results__test")
+        ).prefetch_related("results__test", "requested_visit_service__service__lab_tests_next")
 
         for report in reports:
             if LabOrder.objects.filter(legacy_report_id=report.pk).exists():
@@ -95,7 +96,11 @@ class Command(BaseCommand):
                 skipped_no_service += 1
                 continue
 
-            test = getattr(visit_service.service, "lab_test_next", None)
+            # A legacy report predates the multi-test-per-service feature --
+            # it was always exactly one report against one test, so take
+            # whichever is linked first if the service has since picked up
+            # more than one.
+            test = visit_service.service.lab_tests_next.all()[:1].first()
             if test is None:
                 skipped_no_test_mapping += 1
                 continue

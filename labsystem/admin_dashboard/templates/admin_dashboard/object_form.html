@@ -34,7 +34,7 @@
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {% for field in form %}
                     {% if field.field.widget.input_type != "checkbox" %}
-                        <div {% if field.html_name == "test_profile" %}id="obj-test-profile-wrap"{% elif field.html_name == "lab_test_next" %}id="obj-lab-test-next-wrap"{% endif %}>
+                        <div {% if field.html_name == "test_profile" %}id="obj-test-profile-wrap"{% endif %}>
                             <label for="{{ field.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">{{ field.label }}</label>
                             {{ field }}
                             {% if field.help_text %}
@@ -51,7 +51,7 @@
             {# Multi-select checkbox fields (ModelMultipleChoiceField / CheckboxSelectMultiple) — pill toggle style #}
             {% for field in form %}
                 {% if field.field.widget.input_type == "checkbox" and field.field.widget.allow_multiple_selected %}
-                <div class="mt-2">
+                <div class="mt-2" {% if field.html_name == "lab_tests_next" %}id="obj-lab-tests-next-wrap"{% endif %}>
                     <p class="block text-sm font-semibold text-text-main mb-2">{{ field.label }}</p>
                     {% if field.help_text %}<p class="text-xs text-text-muted mb-3">{{ field.help_text }}</p>{% endif %}
                     <div class="flex flex-wrap gap-2">
@@ -124,7 +124,7 @@
 (function () {
     const profileWrap = document.getElementById('obj-test-profile-wrap');
     if (!profileWrap) return;
-    const labTestWrap = document.getElementById('obj-lab-test-next-wrap');
+    const labTestWrap = document.getElementById('obj-lab-tests-next-wrap');
     const categorySelect = document.querySelector('select[name="category"]');
     if (!categorySelect) return;
 

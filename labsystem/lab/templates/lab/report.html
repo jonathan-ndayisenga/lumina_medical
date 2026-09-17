@@ -24,8 +24,20 @@
        on paper it just eats margin a real bench report doesn't have. */
     .max-w-7xl { max-width: none !important; margin: 0 !important; padding: 0 !important; }
     body, html { font-size: 11px; }
-    .report-block { page-break-after: always; padding: 8px; margin-bottom: 0; border-radius: 0; }
+    /* Each test gets a full printed page by default, footer pinned to the
+       true bottom of that page (flex + margin-top:auto on the footer area)
+       instead of trailing right after wherever the results table ends —
+       a short Malaria/Typhoid result shouldn't leave the footer stranded
+       halfway down the page. Combined ("flow") blocks opt out of the
+       forced page height, since the whole point there is several small
+       results sharing one page. */
+    .report-block {
+      page-break-after: always; padding: 8px; margin-bottom: 0; border-radius: 0;
+      display: flex; flex-direction: column; min-height: 273mm;
+    }
     .report-block:last-child { page-break-after: auto; }
+    .report-block.report-block--flow { page-break-after: auto; min-height: 0; margin-bottom: 6mm; }
+    .report-footer-area { margin-top: auto; }
     .report-head-grid { gap: 0.35rem 1rem; margin: 0.5rem 0 0.6rem; }
     .report-field-label { font-size: 0.58rem; }
     .report-field-value { font-size: 0.72rem; }
@@ -68,7 +80,7 @@
 </div>
 
 {% for order in orders %}
-<div class="report-block">
+<div class="report-block{% if combine_defined_option_reports and order.result.result_type == 'defined_option' %} report-block--flow{% endif %}">
   {% if order.stage == 'released' %}
   {% include "partials/print_header.html" with hospital=visit.hospital print_title="Released Laboratory Result" print_subtitle=order.test.name %}
   {% else %}
@@ -136,25 +148,25 @@
     <p class="text-sm whitespace-pre-line">{{ order.result.free_text }}</p>
   {% elif order.result.result_type == 'defined_option' %}
     <table class="w-full text-sm" style="width:100%; table-layout:fixed;">
-      <colgroup><col style="width:28%"><col style="width:24%"><col style="width:16%"><col style="width:32%"></colgroup>
+      <colgroup><col style="width:25%"><col style="width:25%"><col style="width:25%"><col style="width:25%"></colgroup>
       <thead><tr>
-        <th class="text-left" style="width:28%;">Parameter</th>
-        <th class="text-left" style="width:24%;">Result</th>
-        <th class="text-left" style="width:16%;">Unit</th>
-        <th class="text-left" style="width:32%;">Reference Range</th>
+        <th class="text-left" style="width:25%;">Parameter</th>
+        <th class="text-left" style="width:25%;">Result</th>
+        <th class="text-left" style="width:25%;">Unit</th>
+        <th class="text-left" style="width:25%;">Reference Range</th>
       </tr></thead>
       <tbody><tr><td>Result</td><td class="font-bold">{{ order.result.chosen_option }}</td><td>&mdash;</td><td>&mdash;</td></tr></tbody>
     </table>
   {% elif order.result.result_type == 'parameter_panel' %}
     {% regroup order.result.values.all by group_label as value_groups %}
     <table class="w-full text-sm" style="width:100%; table-layout:fixed;">
-      <colgroup><col style="width:26%"><col style="width:16%"><col style="width:14%"><col style="width:22%"><col style="width:22%"></colgroup>
+      <colgroup><col style="width:20%"><col style="width:20%"><col style="width:20%"><col style="width:20%"><col style="width:20%"></colgroup>
       <thead><tr>
-        <th class="text-left" style="width:26%;">Parameter</th>
-        <th class="text-left" style="width:16%;">Result</th>
-        <th class="text-left" style="width:14%;">Unit</th>
-        <th class="text-left" style="width:22%;">Reference Range</th>
-        <th class="text-left" style="width:22%;">Comments</th>
+        <th class="text-left" style="width:20%;">Parameter</th>
+        <th class="text-left" style="width:20%;">Result</th>
+        <th class="text-left" style="width:20%;">Unit</th>
+        <th class="text-left" style="width:20%;">Reference Range</th>
+        <th class="text-left" style="width:20%;">Comments</th>
       </tr></thead>
       <tbody>
         {% for group in value_groups %}
@@ -171,6 +183,7 @@
               {% if v.flag == 'H' %}<span class="text-red-600 font-semibold">High</span>
               {% elif v.flag == 'L' %}<span class="text-red-600 font-semibold">Low</span>
               {% elif v.flag == 'A' %}<span class="text-red-600 font-semibold">Abnormal</span>
+              {% elif v.flag == 'N' %}<span class="text-emerald-700">Normal</span>
               {% endif %}
             </td>
           </tr>
@@ -221,13 +234,17 @@
   </div>
   {% endif %}
 
-  {% include "lab/partials/report_disclaimer.html" %}
-
-  <div class="mt-6">
-    {% include "partials/print_footer.html" with hospital=visit.hospital %}
-    {% if order.stage == 'released' %}
-    <p class="text-xs text-text-muted mt-2 text-center">Generated on {% now "d M Y H:i" %} by {{ request.user.get_full_name|default:request.user.username }}</p>
+  <div class="report-footer-area">
+    {% if show_report_footnote %}
+    {% include "lab/partials/report_disclaimer.html" %}
     {% endif %}
+
+    <div class="mt-6">
+      {% include "partials/print_footer.html" with hospital=visit.hospital %}
+      {% if order.stage == 'released' %}
+      <p class="text-xs text-text-muted mt-2 text-center">Generated on {% now "d M Y H:i" %} by {{ request.user.get_full_name|default:request.user.username }}</p>
+      {% endif %}
+    </div>
   </div>
 </div>
 {% endfor %}

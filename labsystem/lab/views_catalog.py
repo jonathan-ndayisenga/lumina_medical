@@ -10,9 +10,10 @@ hospital admins (and superadmins) via catalog_admin_required — lab
 attendants get read-only access to every screen here.
 
 Creating/editing a LabTest here also creates/updates a matching
-`reception.Service` scoped to the current hospital and keeps
-Service.lab_test_next linked, instead of that being a separate manual step
-in Django admin.
+`reception.Service` scoped to the current hospital and keeps it linked via
+Service.lab_tests_next, instead of that being a separate manual step. A
+service can be linked to more than one LabTest (see Manage Services) for a
+bundled offering billed once but entered as separate independent tests.
 """
 
 import re
@@ -20,7 +21,9 @@ from decimal import Decimal, InvalidOperation
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, user_passes_test
+from django.core.exceptions import PermissionDenied
 from django.db import transaction
+from django.db.models import Count
 from django.shortcuts import get_object_or_404, redirect, render
 
 from reception.models import Service
@@ -34,6 +37,7 @@ from .forms_catalog import (
 )
 from .models import (
     DefinedOption,
+    LabSettings,
     LabTest,
     Parameter,
     ParameterRange,
@@ -329,17 +333,26 @@ def _sync_hospital_service(test, hospital, price):
     """Keep this hospital's billable Service in sync with the LabTest catalog
     entry. No price submitted -> this hospital doesn't offer it (the link is
     cleared, not deleted, so past orders keep their history). A price ->
-    get_or_create/update the Service and link it via lab_test_next.
+    get_or_create/update the Service and link it via lab_tests_next.
+
+    Only ever touches a service that's linked to THIS test alone -- a
+    service someone has manually bundled with other tests (e.g. "Malaria
+    Test" -> MRDT + B/S) is a deliberate grouping and must never get its
+    name/price silently overwritten by editing just one of its tests here.
 
     Returns an error string on a name clash with an unrelated existing
     Service at this hospital, else None.
     """
-    existing_link = Service.objects.filter(hospital=hospital, lab_test_next=test).first()
+    existing_link = (
+        Service.objects.filter(hospital=hospital, lab_tests_next=test)
+        .annotate(_test_count=Count("lab_tests_next"))
+        .filter(_test_count=1)
+        .first()
+    )
 
     if price is None:
         if existing_link:
-            existing_link.lab_test_next = None
-            existing_link.save(update_fields=["lab_test_next"])
+            existing_link.lab_tests_next.remove(test)
         return None
 
     if existing_link:
@@ -349,17 +362,18 @@ def _sync_hospital_service(test, hospital, price):
         existing_link.save(update_fields=["name", "price", "is_active"])
         return None
 
-    name_clash = Service.objects.filter(hospital=hospital, name=test.name).exclude(lab_test_next=test).first()
+    name_clash = Service.objects.filter(hospital=hospital, name=test.name).exclude(lab_tests_next=test).first()
     if name_clash:
         return (
             f'A service named "{test.name}" already exists for your hospital and isn\'t linked to this '
-            "test. Rename or relink it in Django admin before setting a price here."
+            "test. Rename or relink it under Manage Services before setting a price here."
         )
 
-    Service.objects.create(
+    service = Service.objects.create(
         hospital=hospital, name=test.name, category=Service.CATEGORY_LAB,
-        price=price, is_active=test.active_for_ordering, lab_test_next=test,
+        price=price, is_active=test.active_for_ordering,
     )
+    service.lab_tests_next.add(test)
     return None
 
 
@@ -369,8 +383,9 @@ def test_list(request):
     hospital = get_active_hospital(request)
     services_by_test = {}
     if hospital:
-        for svc in Service.objects.filter(hospital=hospital, lab_test_next__isnull=False):
-            services_by_test[svc.lab_test_next_id] = svc
+        for svc in Service.objects.filter(hospital=hospital, lab_tests_next__isnull=False).prefetch_related("lab_tests_next"):
+            for test in svc.lab_tests_next.all():
+                services_by_test[test.pk] = svc
 
     tests = LabTest.objects.select_related("category").prefetch_related("accepted_specimens")
     if hospital and getattr(request.user, "role", "") != "superadmin":
@@ -434,7 +449,7 @@ def test_edit(request, pk):
     if hospital and getattr(request.user, "role", "") != "superadmin":
         tests = tests.filter(hospital=hospital)
     test = get_object_or_404(tests, pk=pk)
-    existing_service = Service.objects.filter(hospital=hospital, lab_test_next=test).first()
+    existing_service = Service.objects.filter(hospital=hospital, lab_tests_next=test).first()
 
     if request.method == "POST":
         form = LabTestForm(request.POST, instance=test)
@@ -519,3 +534,36 @@ def test_clone(request, pk):
         "the parameters/ranges before it's orderable, since your lab's own reference values may differ.",
     )
     return redirect("lab_test_edit", pk=clone.pk)
+
+
+@login_required
+@staff_required
+def report_settings(request):
+    """How this hospital's printed lab reports are formatted: whether the
+    standard disclaimer footnote prints, and whether simple Positive/Negative
+    results share one page instead of each getting its own. Separate from
+    Consumables (`lab_settings` view) -- this is purely report layout, not
+    stock. Same view/edit split as the rest of Lab Management: anyone with
+    lab access can see current settings, only hospital admins (and
+    superadmins) can change them -- lab attendants get read-only."""
+    hospital = get_active_hospital(request)
+    if not hospital:
+        messages.error(request, "Select a hospital first.")
+        return redirect("lab_test_list")
+
+    is_admin = _catalog_admin_ok(request.user)
+    settings_row, _ = LabSettings.objects.get_or_create(hospital=hospital)
+
+    if request.method == "POST":
+        if not is_admin:
+            raise PermissionDenied("Only hospital admins can change report settings.")
+        settings_row.show_report_footnote = bool(request.POST.get("show_report_footnote"))
+        settings_row.combine_defined_option_reports = bool(request.POST.get("combine_defined_option_reports"))
+        settings_row.updated_by = request.user
+        settings_row.save(update_fields=["show_report_footnote", "combine_defined_option_reports", "updated_by", "updated_at"])
+        messages.success(request, "Report settings updated.")
+        return redirect("lab_report_settings")
+
+    return render(request, "lab/catalog_report_settings.html", {
+        "settings_row": settings_row, "is_admin": is_admin, "active_nav": "lab_report_settings",
+    })

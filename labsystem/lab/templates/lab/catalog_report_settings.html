@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block page_title %}Report Settings{% endblock %}
+{% block page_subtitle %}How this hospital's printed lab reports are laid out.{% endblock %}
+{% block content %}
+<div class="card" style="max-width:640px;">
+  {% if not is_admin %}
+  <p class="text-xs text-text-muted mb-4 uppercase tracking-wide font-semibold">View only — ask a hospital admin to change these.</p>
+  {% endif %}
+  <form method="post" class="space-y-6">
+    {% csrf_token %}
+
+    <label class="flex items-start gap-3 {% if is_admin %}cursor-pointer{% else %}opacity-70{% endif %}">
+      <input type="checkbox" name="show_report_footnote" {% if settings_row.show_report_footnote %}checked{% endif %} {% if not is_admin %}disabled{% endif %} class="mt-1">
+      <span>
+        <span class="block font-semibold text-text-main">Show the disclaimer footnote</span>
+        <span class="block text-sm text-text-muted mt-1">
+          Prints the standard note at the bottom of every report — "Above results are valid for the sample
+          provided only. Laboratory test results should not be used exclusively to determine treatment.
+          Consult your Doctor for medical Evaluation." On by default.
+        </span>
+      </span>
+    </label>
+
+    <label class="flex items-start gap-3 {% if is_admin %}cursor-pointer{% else %}opacity-70{% endif %}">
+      <input type="checkbox" name="combine_defined_option_reports" {% if settings_row.combine_defined_option_reports %}checked{% endif %} {% if not is_admin %}disabled{% endif %} class="mt-1">
+      <span>
+        <span class="block font-semibold text-text-main">Combine simple results onto one page</span>
+        <span class="block text-sm text-text-muted mt-1">
+          When on, every Positive/Negative-style result on a visit (Malaria, Typhoid, ...) prints together
+          on one shared page instead of each getting its own. Parameter-panel tests like CBC and Urinalysis
+          always keep their own page regardless of this setting. Off by default — every test prints on its
+          own page, same as today.
+        </span>
+      </span>
+    </label>
+
+    {% if is_admin %}
+    <div class="pt-2">
+      <button type="submit" class="btn">Save Report Settings</button>
+    </div>
+    {% endif %}
+  </form>
+</div>
+{% endblock %}

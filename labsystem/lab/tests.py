@@ -6,6 +6,7 @@ from django.db import connection
 from django.db.migrations.executor import MigrationExecutor
 from django.test import TestCase, TransactionTestCase
 from django.urls import reverse
+from django.utils import timezone
 
 from accounts.models import AuditLog, Hospital, HospitalModuleSubscription, Module
 from lab.models import (
@@ -357,8 +358,9 @@ class LabEngineTestBase(TestCase):
 
         self.service = Service.objects.create(
             hospital=self.hospital, name="Full Panel", category=Service.CATEGORY_LAB,
-            price=Decimal("10.00"), lab_test_next=self.test,
+            price=Decimal("10.00"),
         )
+        self.service.lab_tests_next.add(self.test)
         self.client.force_login(self.lab_user)
 
     def _make_visit(self, sex, age_str):
@@ -598,8 +600,9 @@ class LabEngineTenantIsolationTests(LabEngineTestBase):
         )
         other_service = Service.objects.create(
             hospital=other_hospital, name="Full Panel", category=Service.CATEGORY_LAB,
-            price=Decimal("10.00"), lab_test_next=self.test,
+            price=Decimal("10.00"),
         )
+        other_service.lab_tests_next.add(self.test)
         other_visit_service = VisitService.objects.create(
             visit=other_visit, service=other_service, price_at_time=Decimal("10.00"),
         )
@@ -630,7 +633,16 @@ class LabTestHospitalBackfillMigrationTests(TransactionTestCase):
 
     def test_shared_labtest_splits_by_order_history_on_first_run(self):
         executor = MigrationExecutor(connection)
-        executor.migrate([("lab", "0029_labtest_hospital")])
+        # Both apps have to be rolled back together -- reception.0024 (the
+        # FK-to-M2M conversion of lab_test_next) runs after lab.0029, but if
+        # only `lab` is targeted here, the real reception_service table
+        # still has lab_test_next physically dropped while the historical
+        # model below still thinks the column exists, and every insert
+        # errors out.
+        executor.migrate([
+            ("lab", "0029_labtest_hospital"),
+            ("reception", "0023_alter_service_lab_test_next"),
+        ])
 
         # Reload so project_state reflects the rollback just performed. Also
         # pull in reception's migration that adds Service.lab_test_next —
@@ -719,9 +731,12 @@ class LabTestHospitalBackfillMigrationTests(TransactionTestCase):
         self.assertEqual(clone_range.ref_high, Decimal("16.000"))
 
         svc_other_current = Service.objects.get(pk=svc_other.pk)
-        self.assertEqual(svc_other_current.lab_test_next_id, clone.pk, "the other hospital's service should repoint to its clone")
+        self.assertEqual(
+            list(svc_other_current.lab_tests_next.values_list("pk", flat=True)), [clone.pk],
+            "the other hospital's service should repoint to its clone",
+        )
         svc_keeper_current = Service.objects.get(pk=svc_keeper.pk)
-        self.assertEqual(svc_keeper_current.lab_test_next_id, shared_test.pk)
+        self.assertEqual(list(svc_keeper_current.lab_tests_next.values_list("pk", flat=True)), [shared_test.pk])
 
         other_orders = LabOrder.objects.filter(hospital_id=other.pk)
         self.assertTrue(all(o.test_id == clone.pk for o in other_orders))
@@ -820,7 +835,7 @@ class LinkLegacyLabServicesCommandTests(TestCase):
         call_command("link_legacy_lab_services", "--dry-run", stdout=out)
         self.assertIn("Complete Blood Count", out.getvalue())
         self.cbc_service.refresh_from_db()
-        self.assertIsNone(self.cbc_service.lab_test_next)
+        self.assertFalse(self.cbc_service.lab_tests_next.exists())
 
     def test_links_cbc_and_urinalysis_to_cloned_templates_and_rest_to_predefined(self):
         from django.core.management import call_command
@@ -832,17 +847,18 @@ class LinkLegacyLabServicesCommandTests(TestCase):
         self.other_service.refresh_from_db()
         self.consultation_service.refresh_from_db()
 
-        self.assertIsNotNone(self.cbc_service.lab_test_next)
-        cbc_test = self.cbc_service.lab_test_next
+        cbc_test = self.cbc_service.lab_tests_next.first()
+        self.assertIsNotNone(cbc_test)
         self.assertEqual(cbc_test.hospital_id, self.hospital.pk, "the clone must belong to this hospital, not the Ternah template tenant")
         self.assertEqual(cbc_test.parameters.count(), 20)
 
-        self.assertIsNotNone(self.urinalysis_service.lab_test_next)
-        self.assertEqual(self.urinalysis_service.lab_test_next.hospital_id, self.hospital.pk)
-        self.assertEqual(self.urinalysis_service.lab_test_next.parameters.count(), 20)
+        urinalysis_test = self.urinalysis_service.lab_tests_next.first()
+        self.assertIsNotNone(urinalysis_test)
+        self.assertEqual(urinalysis_test.hospital_id, self.hospital.pk)
+        self.assertEqual(urinalysis_test.parameters.count(), 20)
 
-        self.assertIsNotNone(self.other_service.lab_test_next)
-        fallback_test = self.other_service.lab_test_next
+        fallback_test = self.other_service.lab_tests_next.first()
+        self.assertIsNotNone(fallback_test)
         self.assertEqual(fallback_test.hospital_id, self.hospital.pk)
         self.assertEqual(fallback_test.result_type, ResultType.DEFINED_OPTION)
         self.assertEqual(
@@ -850,13 +866,13 @@ class LinkLegacyLabServicesCommandTests(TestCase):
         )
 
         self.stool_service.refresh_from_db()
-        self.assertIsNotNone(self.stool_service.lab_test_next)
-        stool_test = self.stool_service.lab_test_next
+        stool_test = self.stool_service.lab_tests_next.first()
+        self.assertIsNotNone(stool_test)
         self.assertEqual(stool_test.hospital_id, self.hospital.pk)
         self.assertEqual(stool_test.result_type, ResultType.FREE_ENTRY, "Stool Analysis should match live's existing free-text behavior")
         self.assertEqual(stool_test.options.count(), 0)
 
-        self.assertIsNone(self.consultation_service.lab_test_next, "non-lab services must never be touched")
+        self.assertFalse(self.consultation_service.lab_tests_next.exists(), "non-lab services must never be touched")
 
     def test_idempotent_on_rerun(self):
         from django.core.management import call_command
@@ -871,3 +887,173 @@ class LinkLegacyLabServicesCommandTests(TestCase):
         self.assertEqual(
             LabTest.objects.filter(hospital=self.hospital, name="Random Antigen Test").count(), 1,
         )
+
+
+class BundledServiceMultiTestOrderTests(LabEngineTestBase):
+    """A Service can link more than one LabTest -- e.g. a "Malaria Test"
+    service linking both MRDT and B/S -- billed once but fanning out into
+    one independent LabOrder per linked test, neither blocking the other."""
+
+    def setUp(self):
+        super().setUp()
+        self.mrdt = LabTest.objects.create(
+            hospital=self.hospital, name="MRDT", category=self.test.category, result_type=ResultType.DEFINED_OPTION,
+        )
+        from lab.models import DefinedOption
+        DefinedOption.objects.create(test=self.mrdt, label="Positive", sort_order=1, is_abnormal=True)
+        DefinedOption.objects.create(test=self.mrdt, label="Negative", sort_order=2, is_abnormal=False)
+
+        self.bs = LabTest.objects.create(
+            hospital=self.hospital, name="B/S", category=self.test.category, result_type=ResultType.DEFINED_OPTION,
+        )
+        DefinedOption.objects.create(test=self.bs, label="Positive", sort_order=1, is_abnormal=True)
+        DefinedOption.objects.create(test=self.bs, label="Negative", sort_order=2, is_abnormal=False)
+
+        self.bundle_service = Service.objects.create(
+            hospital=self.hospital, name="Malaria Test", category=Service.CATEGORY_LAB, price=Decimal("8.00"),
+        )
+        self.bundle_service.lab_tests_next.add(self.mrdt, self.bs)
+
+        self.patient = Patient.objects.create(hospital=self.hospital, name="Bundle Patient", age="30YRS", sex="F")
+        self.visit = Visit.objects.create(
+            patient=self.patient, hospital=self.hospital, created_by=self.lab_user, total_amount=Decimal("8.00"),
+        )
+        self.visit_service = VisitService.objects.create(
+            visit=self.visit, service=self.bundle_service, price_at_time=Decimal("8.00"),
+        )
+        QueueEntry.objects.create(
+            hospital=self.hospital, visit=self.visit,
+            queue_type=QueueEntry.TYPE_LAB_RECEPTION, reason="Reception sent patient to lab",
+        )
+
+    def test_billing_once_creates_one_order_per_linked_test(self):
+        response = self.client.get(reverse("queue"))
+        self.assertEqual(response.status_code, 200)
+
+        orders = LabOrder.objects.filter(visit_service=self.visit_service)
+        self.assertEqual(orders.count(), 2, "one VisitService, but one LabOrder per linked test")
+        self.assertEqual(
+            set(orders.values_list("test_id", flat=True)), {self.mrdt.pk, self.bs.pk},
+        )
+
+        # Re-visiting the queue must not fan out a second time.
+        self.client.get(reverse("queue"))
+        self.assertEqual(LabOrder.objects.filter(visit_service=self.visit_service).count(), 2)
+
+    def test_entering_one_test_does_not_require_or_touch_the_other(self):
+        from lab.services_next import save_results
+
+        self.client.get(reverse("queue"))
+        mrdt_order = LabOrder.objects.get(visit_service=self.visit_service, test=self.mrdt)
+        bs_order = LabOrder.objects.get(visit_service=self.visit_service, test=self.bs)
+
+        save_results(mrdt_order, self.lab_user, {"chosen_option": "Positive"})
+        mrdt_order.refresh_from_db()
+        bs_order.refresh_from_db()
+
+        self.assertEqual(mrdt_order.stage, OrderStage.ENTERED)
+        self.assertEqual(bs_order.stage, OrderStage.PENDING, "the other linked test must stay untouched and unentered")
+
+
+class ReportSettingsTests(LabEngineTestBase):
+    """LabSettings.show_report_footnote and .combine_defined_option_reports
+    control the printed report: the disclaimer note, and whether simple
+    Positive/Negative results share one page instead of each forcing its
+    own. Default (off) must render exactly like it always has."""
+
+    def setUp(self):
+        super().setUp()
+        from lab.models import DefinedOption
+        from lab.services_next import save_results
+
+        self.malaria_test = LabTest.objects.create(
+            hospital=self.hospital, name="Malaria RDT", category=self.test.category, result_type=ResultType.DEFINED_OPTION,
+        )
+        DefinedOption.objects.create(test=self.malaria_test, label="Positive", sort_order=1, is_abnormal=True)
+        DefinedOption.objects.create(test=self.malaria_test, label="Negative", sort_order=2, is_abnormal=False)
+        self.typhoid_test = LabTest.objects.create(
+            hospital=self.hospital, name="Typhoid Test", category=self.test.category, result_type=ResultType.DEFINED_OPTION,
+        )
+        DefinedOption.objects.create(test=self.typhoid_test, label="Positive", sort_order=1, is_abnormal=True)
+        DefinedOption.objects.create(test=self.typhoid_test, label="Negative", sort_order=2, is_abnormal=False)
+
+        self.malaria_service = Service.objects.create(
+            hospital=self.hospital, name="Malaria", category=Service.CATEGORY_LAB, price=Decimal("5"),
+        )
+        self.malaria_service.lab_tests_next.add(self.malaria_test)
+        self.typhoid_service = Service.objects.create(
+            hospital=self.hospital, name="Typhoid", category=Service.CATEGORY_LAB, price=Decimal("5"),
+        )
+        self.typhoid_service.lab_tests_next.add(self.typhoid_test)
+
+        self.patient = Patient.objects.create(hospital=self.hospital, name="Combine Patient", age="20YRS", sex="M")
+        self.visit = Visit.objects.create(
+            patient=self.patient, hospital=self.hospital, created_by=self.lab_user, total_amount=Decimal("10"),
+        )
+        malaria_vs = VisitService.objects.create(visit=self.visit, service=self.malaria_service, price_at_time=Decimal("5"))
+        typhoid_vs = VisitService.objects.create(visit=self.visit, service=self.typhoid_service, price_at_time=Decimal("5"))
+
+        self.malaria_order = LabOrder.objects.create(visit_service=malaria_vs, test=self.malaria_test, hospital=self.hospital)
+        self.typhoid_order = LabOrder.objects.create(visit_service=typhoid_vs, test=self.typhoid_test, hospital=self.hospital)
+        save_results(self.malaria_order, self.lab_user, {"chosen_option": "Negative"})
+        save_results(self.typhoid_order, self.lab_user, {"chosen_option": "Negative"})
+        for order in (self.malaria_order, self.typhoid_order):
+            order.stage = OrderStage.RELEASED
+            order.save(update_fields=["stage"])
+            order.result.released_by = self.lab_user
+            order.result.released_at = timezone.now()
+            order.result.save(update_fields=["released_by", "released_at"])
+
+    def test_footnote_shown_by_default_and_hidden_when_disabled(self):
+        body = self.client.get(reverse("visit_report", args=[self.visit.pk])).content.decode()
+        self.assertIn("Above results are valid for the sample provided only", body)
+
+        self.lab_settings.show_report_footnote = False
+        self.lab_settings.save(update_fields=["show_report_footnote"])
+        body2 = self.client.get(reverse("visit_report", args=[self.visit.pk])).content.decode()
+        self.assertNotIn("Above results are valid for the sample provided only", body2)
+
+    def test_combine_toggle_controls_page_break_between_defined_option_reports(self):
+        # The CSS rule for .report-block--flow is always present in the
+        # <style> block regardless of this setting -- check the class is
+        # actually applied to a report-block div, not just mentioned anywhere.
+        marker = 'class="report-block report-block--flow"'
+
+        body_default = self.client.get(reverse("visit_report", args=[self.visit.pk])).content.decode()
+        self.assertNotIn(marker, body_default)
+
+        self.lab_settings.combine_defined_option_reports = True
+        self.lab_settings.save(update_fields=["combine_defined_option_reports"])
+        body_combined = self.client.get(reverse("visit_report", args=[self.visit.pk])).content.decode()
+        self.assertEqual(body_combined.count(marker), 2)
+
+
+class ReportSettingsPermissionTests(LabEngineTestBase):
+    """Lab Management is admin-editable, view-only for lab attendants --
+    Report Settings has to follow the same rule as every other screen
+    under Lab Management (category/specimen/test lists)."""
+
+    def test_lab_attendant_can_view_but_not_submit_changes(self):
+        get_response = self.client.get(reverse("lab_report_settings"))
+        self.assertEqual(get_response.status_code, 200)
+        self.assertNotContains(get_response, "Save Report Settings")
+
+        original = self.lab_settings.combine_defined_option_reports
+        post_response = self.client.post(reverse("lab_report_settings"), {"combine_defined_option_reports": "on"})
+        self.assertEqual(post_response.status_code, 403)
+        self.lab_settings.refresh_from_db()
+        self.assertEqual(self.lab_settings.combine_defined_option_reports, original, "a lab attendant's POST must not change anything")
+
+    def test_hospital_admin_can_view_and_save(self):
+        admin = self.User.objects.create_user(
+            username="engine_admin", password="StrongPass123!", role=self.User.ROLE_HOSPITAL_ADMIN, hospital=self.hospital,
+        )
+        self.client.force_login(admin)
+
+        get_response = self.client.get(reverse("lab_report_settings"))
+        self.assertContains(get_response, "Save Report Settings")
+
+        response = self.client.post(reverse("lab_report_settings"), {"combine_defined_option_reports": "on"}, follow=True)
+        self.assertEqual(response.status_code, 200)
+        self.lab_settings.refresh_from_db()
+        self.assertTrue(self.lab_settings.combine_defined_option_reports)

@@ -770,31 +770,35 @@ def _parse_age_years(age_str):
 def _pending_lab_visit_services(visit):
     return (
         VisitService.objects.filter(visit=visit, service__category=Service.CATEGORY_LAB, performed=False)
-        .select_related("service__lab_test_next")
+        .prefetch_related("service__lab_tests_next", "lab_orders_next")
     )
 
 
 def _ensure_orders_for_visit(visit):
-    """Every pending lab VisitService whose service has been mapped to a
-    LabTest gets a LabOrder, if it doesn't have one yet. Services not yet
-    mapped (service.lab_test_next is unset) are reported back so the queue
+    """Every pending lab VisitService whose service has been mapped to one
+    or more LabTests gets a LabOrder per linked test that doesn't have one
+    yet -- a bundled service (e.g. "Malaria Test" -> MRDT + B/S) is billed
+    once but fans out into one order per test, each entered independently.
+    Services not yet mapped to any LabTest are reported back so the queue
     screen can flag them instead of silently doing nothing."""
     unmapped = []
     for vs in _pending_lab_visit_services(visit):
-        if hasattr(vs, "lab_order_next"):
-            continue
-        test = vs.service.lab_test_next
-        if not test:
+        tests = list(vs.service.lab_tests_next.all())
+        if not tests:
             unmapped.append(vs)
             continue
+        existing_test_ids = {o.test_id for o in vs.lab_orders_next.all()}
         patient = visit.patient
-        LabOrder.objects.create(
-            visit_service=vs,
-            test=test,
-            hospital=visit.hospital,
-            patient_sex={"M": Sex.MALE, "F": Sex.FEMALE}.get(patient.sex, Sex.ANY),
-            patient_age_years=_parse_age_years(patient.age),
-        )
+        for test in tests:
+            if test.pk in existing_test_ids:
+                continue
+            LabOrder.objects.create(
+                visit_service=vs,
+                test=test,
+                hospital=visit.hospital,
+                patient_sex={"M": Sex.MALE, "F": Sex.FEMALE}.get(patient.sex, Sex.ANY),
+                patient_age_years=_parse_age_years(patient.age),
+            )
     return unmapped
 
 
@@ -1235,4 +1239,6 @@ def visit_report(request, visit_id):
         "is_doctor_request": is_doctor_request,
         "require_review": require_review,
         "all_released": all_released,
+        "show_report_footnote": settings_row.show_report_footnote if settings_row else True,
+        "combine_defined_option_reports": settings_row.combine_defined_option_reports if settings_row else False,
     })
