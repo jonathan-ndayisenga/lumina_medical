@@ -1128,3 +1128,76 @@ class ReportSettingsPermissionTests(LabEngineTestBase):
         self.assertEqual(response.status_code, 200)
         self.lab_settings.refresh_from_db()
         self.assertTrue(self.lab_settings.combine_defined_option_reports)
+
+
+class ReportListFilterTests(LabEngineTestBase):
+    """The Laboratory Reports list adds test/technician/date filters after
+    the search bar -- each must narrow the merged (legacy + new engine)
+    patient rows without breaking the unfiltered view."""
+
+    def setUp(self):
+        super().setUp()
+        from lab.models import DefinedOption
+        from lab.services_next import save_results
+
+        self.other_tech = self.User.objects.create_user(
+            username="engine_lab_2", password="StrongPass123!", role=self.User.ROLE_LAB_ATTENDANT, hospital=self.hospital,
+        )
+
+        self.malaria_test = LabTest.objects.create(
+            hospital=self.hospital, name="Malaria RDT", category=self.test.category, result_type=ResultType.DEFINED_OPTION,
+        )
+        DefinedOption.objects.create(test=self.malaria_test, label="Positive", sort_order=1, is_abnormal=True)
+        DefinedOption.objects.create(test=self.malaria_test, label="Negative", sort_order=2, is_abnormal=False)
+        self.malaria_service = Service.objects.create(
+            hospital=self.hospital, name="Malaria", category=Service.CATEGORY_LAB, price=Decimal("5"),
+        )
+        self.malaria_service.lab_tests_next.add(self.malaria_test)
+
+        self.patient_a = Patient.objects.create(hospital=self.hospital, name="Alpha Patient", age="20YRS", sex="M")
+        visit_a = Visit.objects.create(patient=self.patient_a, hospital=self.hospital, created_by=self.lab_user, total_amount=Decimal("10"))
+        vs_a = VisitService.objects.create(visit=visit_a, service=self.malaria_service, price_at_time=Decimal("5"))
+        order_a = LabOrder.objects.create(visit_service=vs_a, test=self.malaria_test, hospital=self.hospital)
+        order_a.mark_sample_collected(self.lab_user, self.specimen, timezone.now())
+        save_results(order_a, self.lab_user, {"chosen_option": "Negative"})
+
+        self.patient_b = Patient.objects.create(hospital=self.hospital, name="Bravo Patient", age="30YRS", sex="F")
+        visit_b = Visit.objects.create(patient=self.patient_b, hospital=self.hospital, created_by=self.lab_user, total_amount=Decimal("10"))
+        vs_b = VisitService.objects.create(visit=visit_b, service=self.service, price_at_time=Decimal("10"))
+        order_b = LabOrder.objects.create(visit_service=vs_b, test=self.test, hospital=self.hospital)
+        order_b.mark_sample_collected(self.other_tech, self.specimen, timezone.now())
+
+    def test_unfiltered_list_shows_both_patients(self):
+        body = self.client.get(reverse("report_list")).content.decode()
+        self.assertIn("Alpha Patient", body)
+        self.assertIn("Bravo Patient", body)
+
+    def test_test_filter_narrows_to_matching_patient(self):
+        body = self.client.get(reverse("report_list"), {"test": "Malaria RDT"}).content.decode()
+        self.assertIn("Alpha Patient", body)
+        self.assertNotIn("Bravo Patient", body)
+
+    def test_technician_filter_narrows_to_matching_patient(self):
+        technician_name = self.other_tech.get_full_name() or self.other_tech.username
+        body = self.client.get(reverse("report_list"), {"technician": technician_name}).content.decode()
+        self.assertIn("Bravo Patient", body)
+        self.assertNotIn("Alpha Patient", body)
+
+    def test_date_range_filter_excludes_out_of_range_patients(self):
+        from datetime import timedelta
+        future = (timezone.now().date() + timedelta(days=5)).isoformat()
+        body = self.client.get(reverse("report_list"), {"date_from": future}).content.decode()
+        self.assertNotIn("Alpha Patient", body)
+        self.assertNotIn("Bravo Patient", body)
+
+        today = timezone.now().date().isoformat()
+        body2 = self.client.get(reverse("report_list"), {"date_from": today}).content.decode()
+        self.assertIn("Alpha Patient", body2)
+        self.assertIn("Bravo Patient", body2)
+
+    def test_filter_dropdowns_are_populated_with_available_choices(self):
+        response = self.client.get(reverse("report_list"))
+        self.assertIn("Malaria RDT", response.context["available_tests"])
+        self.assertIn("Full Panel", response.context["available_tests"])
+        technician_name = self.other_tech.get_full_name() or self.other_tech.username
+        self.assertIn(technician_name, response.context["available_technicians"])

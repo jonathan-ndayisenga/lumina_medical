@@ -32,8 +32,41 @@
                    class="flex-1 min-w-0 px-4 py-2 border border-gray-300 rounded-lg bg-white text-text-main placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-brand-dark focus:border-transparent"
                    placeholder="Search patient name, specimen, or referral"
                    value="{{ search }}">
-            <button type="button" class="btn btn-primary whitespace-nowrap" onclick="searchReports()">Search</button>
+            <button type="button" class="btn btn-primary whitespace-nowrap" onclick="applyFilters()">Search</button>
             <a href="{% url 'queue' %}" class="btn btn-primary whitespace-nowrap">Open Live Lab Queue</a>
+        </div>
+        <div class="flex flex-col md:flex-row gap-3 md:items-end">
+            <div class="flex-1 min-w-0">
+                <label class="block text-xs font-semibold text-text-muted uppercase tracking-widest mb-1">Test Undertaken</label>
+                <select id="testFilter" class="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-text-main focus:outline-none focus:ring-2 focus:ring-brand-dark focus:border-transparent">
+                    <option value="">All tests</option>
+                    {% for t in available_tests %}
+                    <option value="{{ t }}" {% if t == test_filter %}selected{% endif %}>{{ t }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex-1 min-w-0">
+                <label class="block text-xs font-semibold text-text-muted uppercase tracking-widest mb-1">Lab Technician</label>
+                <select id="technicianFilter" class="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-text-main focus:outline-none focus:ring-2 focus:ring-brand-dark focus:border-transparent">
+                    <option value="">All technicians</option>
+                    {% for tech in available_technicians %}
+                    <option value="{{ tech }}" {% if tech == technician_filter %}selected{% endif %}>{{ tech }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="block text-xs font-semibold text-text-muted uppercase tracking-widest mb-1">From</label>
+                <input type="date" id="dateFromFilter" value="{{ date_from }}"
+                       class="px-3 py-2 border border-gray-300 rounded-lg bg-white text-text-main focus:outline-none focus:ring-2 focus:ring-brand-dark focus:border-transparent">
+            </div>
+            <div>
+                <label class="block text-xs font-semibold text-text-muted uppercase tracking-widest mb-1">To</label>
+                <input type="date" id="dateToFilter" value="{{ date_to }}"
+                       class="px-3 py-2 border border-gray-300 rounded-lg bg-white text-text-main focus:outline-none focus:ring-2 focus:ring-brand-dark focus:border-transparent">
+            </div>
+            {% if test_filter or technician_filter or date_from or date_to or search %}
+            <a href="{% url 'report_list' %}" class="btn btn-secondary whitespace-nowrap">Clear Filters</a>
+            {% endif %}
         </div>
     </div>
 
@@ -110,17 +143,17 @@
     {% if patients.has_other_pages %}
     <div class="flex flex-wrap gap-2 justify-center mt-6">
         {% if patients.has_previous %}
-            <a href="?page={{ patients.previous_page_number }}{% if search %}&search={{ search }}{% endif %}" class="btn btn-secondary btn-sm">Previous</a>
+            <a href="?page={{ patients.previous_page_number }}{{ extra_query_string }}" class="btn btn-secondary btn-sm">Previous</a>
         {% endif %}
         {% for i in patients.paginator.page_range %}
             {% if patients.number == i %}
                 <span class="btn btn-sm bg-gray-100 text-gray-600 cursor-default">{{ i }}</span>
             {% else %}
-                <a href="?page={{ i }}{% if search %}&search={{ search }}{% endif %}" class="btn btn-secondary btn-sm">{{ i }}</a>
+                <a href="?page={{ i }}{{ extra_query_string }}" class="btn btn-secondary btn-sm">{{ i }}</a>
             {% endif %}
         {% endfor %}
         {% if patients.has_next %}
-            <a href="?page={{ patients.next_page_number }}{% if search %}&search={{ search }}{% endif %}" class="btn btn-secondary btn-sm">Next</a>
+            <a href="?page={{ patients.next_page_number }}{{ extra_query_string }}" class="btn btn-secondary btn-sm">Next</a>
         {% endif %}
     </div>
     {% endif %}
@@ -129,12 +162,35 @@
 
 {% block extra_js %}
 <script>
-function searchReports() {
-    const searchTerm = document.getElementById('searchInput').value;
-    window.location.href = searchTerm ? `?search=${encodeURIComponent(searchTerm)}` : window.location.pathname;
+function applyFilters() {
+    const params = new URLSearchParams();
+    const search = document.getElementById('searchInput').value.trim();
+    const test = document.getElementById('testFilter').value;
+    const technician = document.getElementById('technicianFilter').value;
+    const dateFrom = document.getElementById('dateFromFilter').value;
+    const dateTo = document.getElementById('dateToFilter').value;
+    if (search) params.set('search', search);
+    if (test) params.set('test', test);
+    if (technician) params.set('technician', technician);
+    if (dateFrom) params.set('date_from', dateFrom);
+    if (dateTo) params.set('date_to', dateTo);
+    const qs = params.toString();
+    window.location.href = qs ? `?${qs}` : window.location.pathname;
 }
+
+let filterDebounceTimer = null;
+function scheduleFilterApply() {
+    clearTimeout(filterDebounceTimer);
+    filterDebounceTimer = setTimeout(applyFilters, 500);
+}
+
+document.getElementById('searchInput').addEventListener('input', scheduleFilterApply);
 document.getElementById('searchInput').addEventListener('keypress', function(e) {
-    if (e.key === 'Enter') { e.preventDefault(); searchReports(); }
+    if (e.key === 'Enter') { e.preventDefault(); clearTimeout(filterDebounceTimer); applyFilters(); }
 });
+document.getElementById('testFilter').addEventListener('change', applyFilters);
+document.getElementById('technicianFilter').addEventListener('change', applyFilters);
+document.getElementById('dateFromFilter').addEventListener('change', applyFilters);
+document.getElementById('dateToFilter').addEventListener('change', applyFilters);
 </script>
 {% endblock %}

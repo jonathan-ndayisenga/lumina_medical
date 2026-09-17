@@ -322,6 +322,10 @@ def report_list(request):
     base_qs = scoped_reports_queryset(request)
 
     search = (request.GET.get('search') or '').strip()
+    test_filter = (request.GET.get('test') or '').strip()
+    technician_filter = (request.GET.get('technician') or '').strip()
+    date_from = (request.GET.get('date_from') or '').strip()
+    date_to = (request.GET.get('date_to') or '').strip()
 
     if search:
         filters = (
@@ -417,8 +421,50 @@ def report_list(request):
     merged_rows.sort(key=lambda r: r['patient_name'])
     merged_rows.sort(key=lambda r: r['latest_date'] or date_cls.min, reverse=True)
 
+    # Distinct filter choices, drawn from the (search-only) dataset above so
+    # the dropdowns stay stable regardless of which filters are currently applied.
+    available_tests = sorted({t for pd in patient_details.values() for t in pd['tests']})
+    available_technicians = sorted({pd['technician'] for pd in patient_details.values() if pd['technician']})
+
+    if test_filter:
+        merged_rows = [
+            row for row in merged_rows
+            if test_filter in patient_details.get(row['patient_name'], {}).get('tests', [])
+        ]
+    if technician_filter:
+        merged_rows = [
+            row for row in merged_rows
+            if patient_details.get(row['patient_name'], {}).get('technician') == technician_filter
+        ]
+    if date_from:
+        try:
+            date_from_value = date_cls.fromisoformat(date_from)
+            merged_rows = [row for row in merged_rows if row['latest_date'] and row['latest_date'] >= date_from_value]
+        except ValueError:
+            date_from = ''
+    if date_to:
+        try:
+            date_to_value = date_cls.fromisoformat(date_to)
+            merged_rows = [row for row in merged_rows if row['latest_date'] and row['latest_date'] <= date_to_value]
+        except ValueError:
+            date_to = ''
+
     paginator = Paginator(merged_rows, 20)
     patients = paginator.get_page(request.GET.get('page'))
+
+    from urllib.parse import urlencode
+    extra_params = {}
+    if search:
+        extra_params['search'] = search
+    if test_filter:
+        extra_params['test'] = test_filter
+    if technician_filter:
+        extra_params['technician'] = technician_filter
+    if date_from:
+        extra_params['date_from'] = date_from
+    if date_to:
+        extra_params['date_to'] = date_to
+    extra_query_string = ('&' + urlencode(extra_params)) if extra_params else ''
 
     context = {
         'patients': patients,
@@ -429,6 +475,13 @@ def report_list(request):
         'next_engine_count': sum(g['report_count'] for g in next_groups.values()),
         'active_nav': 'dashboard',
         'search': search,
+        'test_filter': test_filter,
+        'technician_filter': technician_filter,
+        'date_from': date_from,
+        'date_to': date_to,
+        'available_tests': available_tests,
+        'available_technicians': available_technicians,
+        'extra_query_string': extra_query_string,
     }
     return render(request, 'lab/report_list.html', context)
 
