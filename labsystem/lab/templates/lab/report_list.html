@@ -7,10 +7,10 @@
 
 {% block content %}
 <div class="space-y-6">
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div class="card">
             <div class="text-4xl font-bold text-text-main">{{ total_reports }}</div>
-            <div class="text-xs text-text-muted uppercase tracking-widest mt-2">Total Reports</div>
+            <div class="text-xs text-text-muted uppercase tracking-widest mt-2">Total Reports (legacy)</div>
         </div>
         <div class="card">
             <div class="text-4xl font-bold text-text-main">{{ printed_count }}</div>
@@ -19,6 +19,10 @@
         <div class="card">
             <div class="text-4xl font-bold text-text-main">{{ draft_count }}</div>
             <div class="text-xs text-text-muted uppercase tracking-widest mt-2">Draft Reports</div>
+        </div>
+        <div class="card">
+            <div class="text-4xl font-bold text-text-main">{{ next_engine_count }}</div>
+            <div class="text-xs text-text-muted uppercase tracking-widest mt-2">New Engine Orders</div>
         </div>
     </div>
 
@@ -29,7 +33,7 @@
                    placeholder="Search patient name, specimen, or referral"
                    value="{{ search }}">
             <button type="button" class="btn btn-primary whitespace-nowrap" onclick="searchReports()">Search</button>
-            <a href="{% url 'lab_queue' %}" class="btn btn-primary whitespace-nowrap">Open Live Lab Queue</a>
+            <a href="{% url 'queue' %}" class="btn btn-primary whitespace-nowrap">Open Live Lab Queue</a>
         </div>
     </div>
 
@@ -54,6 +58,9 @@
                         <td class="px-4 py-3">
                             <strong class="block text-text-main">{{ patient.patient_name }}</strong>
                             <div class="text-sm text-text-muted">{{ detail.age }} &middot; {{ detail.sex }}</div>
+                            {% if 'next' in detail.engines %}
+                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 mt-1">New engine</span>
+                            {% endif %}
                         </td>
                         <td class="px-4 py-3">
                             {% if detail and detail.tests %}
@@ -77,8 +84,13 @@
                                 {{ patient.report_count }} report{{ patient.report_count|pluralize }}
                             </span>
                         </td>
-                        <td class="px-4 py-3 text-right">
-                            <a href="{% url 'patient_reports' patient.latest_id %}" class="btn btn-primary btn-sm">View Reports</a>
+                        <td class="px-4 py-3 text-right space-x-1 whitespace-nowrap">
+                            {% if patient.legacy_latest_id %}
+                            <a href="{% url 'patient_reports' patient.legacy_latest_id %}" class="btn btn-primary btn-sm">Legacy Reports</a>
+                            {% endif %}
+                            {% if patient.next_patient_id %}
+                            <a href="{% url 'patient_reports_next' patient.next_patient_id %}" class="btn btn-secondary btn-sm">View Report</a>
+                            {% endif %}
                         </td>
                     </tr>
                     {% endwith %}
@@ -91,7 +103,7 @@
     <div class="card text-center py-12 border-2 border-dashed border-gray-300">
         <h3 class="text-lg font-semibold text-text-main mb-2">No reports found</h3>
         <p class="text-text-muted mb-4">New reports start from the live lab queue so every result stays tied to a real patient request.</p>
-        <a href="{% url 'lab_queue' %}" class="btn btn-primary inline-block">Go to Lab Queue</a>
+        <a href="{% url 'queue' %}" class="btn btn-primary inline-block">Go to Lab Queue</a>
     </div>
     {% endif %}
 

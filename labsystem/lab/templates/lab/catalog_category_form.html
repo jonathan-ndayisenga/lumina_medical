@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block page_title %}{% if is_edit %}Edit Service Category{% else %}Add Service Category{% endif %}{% endblock %}
+{% block content %}
+<div class="card" style="max-width:520px;">
+  <form method="post">
+    {% csrf_token %}
+    <label class="block text-sm font-semibold mb-1">Name</label>
+    {{ form.name }}
+    {% if form.name.errors %}<p class="text-xs text-red-600 mt-1">{{ form.name.errors.0 }}</p>{% endif %}
+
+    <label class="block text-sm font-semibold mb-1 mt-4">Description</label>
+    {{ form.description }}
+
+    <div class="mt-6">
+      <button type="submit" class="btn">{% if is_edit %}Save Changes{% else %}Add Category{% endif %}</button>
+      <a href="{% url 'lab_category_list' %}" class="btn btn-secondary">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

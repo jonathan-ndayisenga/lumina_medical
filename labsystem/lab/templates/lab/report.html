@@ -1,0 +1,234 @@
+{% extends "base.html" %}
+{% block title %}{{ visit.hospital.name }} - Laboratory Report{% endblock %}
+{% block page_title %}Lab Report{% endblock %}
+{% block page_subtitle %}{{ visit.patient.name }} &mdash; {{ visit.patient.age }} {{ visit.patient.get_sex_display }}{% endblock %}
+{% block print_header %}{% endblock %}
+{% block extra_css %}
+<style>
+  /* Screen sizing stays roomy (this is also the in-app review screen); print
+     is what actually needs to be compact — a CBC-sized panel must fit one
+     printed page, matching a real bench report, not a padded web card. */
+  .report-block { border: 1px solid #cfd8e3; border-radius: 0.9rem; padding: 1.5rem; margin-bottom: 1.5rem; background: #fff; }
+  .report-head-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem 1.5rem; margin: 1rem 0 1.25rem; }
+  .report-field-label { font-size: 0.65rem; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: #5f6b7a; }
+  .report-field-value { font-size: 0.85rem; font-weight: 700; color: #1f2a37; }
+  .report-status-badge { font-size: 0.75rem; font-weight: 700; padding: 0.2rem 0.6rem; border-radius: 999px; }
+  .report-note-box { background: #f7f9fc; border-radius: 0.6rem; padding: 0.7rem 0.9rem; font-size: 0.82rem; }
+  .sig-block { margin-top: 1.5rem; padding-top: 0.75rem; border-top: 1px solid #cfd8e3; display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; }
+  .sig-line { border-top: 1px solid #1f2a37; margin-top: 1.75rem; padding-top: 0.4rem; font-size: 0.78rem; color: #5f6b7a; }
+
+  @media print {
+    @page { size: A4 portrait; margin: 10mm; }
+    .no-print { display: none !important; }
+    /* The app shell's own centering/padding is for the on-screen view —
+       on paper it just eats margin a real bench report doesn't have. */
+    .max-w-7xl { max-width: none !important; margin: 0 !important; padding: 0 !important; }
+    body, html { font-size: 11px; }
+    .report-block { page-break-after: always; padding: 8px; margin-bottom: 0; border-radius: 0; }
+    .report-block:last-child { page-break-after: auto; }
+    .report-head-grid { gap: 0.35rem 1rem; margin: 0.5rem 0 0.6rem; }
+    .report-field-label { font-size: 0.58rem; }
+    .report-field-value { font-size: 0.72rem; }
+    .report-note-box { padding: 0.4rem 0.6rem; font-size: 0.68rem; }
+    h3, h4 { font-size: 0.78rem !important; margin: 0.5rem 0 0.3rem !important; }
+    table { font-size: 0.68rem; border-collapse: collapse; width: 100%; }
+    table th, table td { padding: 3px 6px; }
+    table th { border-bottom: 1.5px solid #1d3557; text-transform: uppercase; font-size: 0.6rem; letter-spacing: 0.03em; }
+    table td { border-bottom: 1px solid #e6ecf3; }
+    .sig-block { margin-top: 0.9rem; padding-top: 0.5rem; gap: 1rem; }
+    .sig-line { margin-top: 1rem; font-size: 0.6rem; }
+  }
+</style>
+{% endblock %}
+{% block content %}
+
+<div class="no-print mb-4 flex gap-2 items-center flex-wrap">
+  {% if release_payment_blocked %}
+  <span class="text-sm text-red-600 font-semibold">Balance must be settled before this report can be released.</span>
+  {% elif payment_blocked %}
+  <span class="text-sm text-amber-600 font-semibold">Balance outstanding — results can still go to the doctor, but this report can't be printed until it's settled.</span>
+  {% endif %}
+  {% if can_review %}
+  <form method="post"><input type="hidden" name="action" value="mark_reviewed">{% csrf_token %}
+    <button type="submit" class="btn btn-secondary">Mark Reviewed</button>
+  </form>
+  {% endif %}
+  {% if can_release %}
+  <form method="post"><input type="hidden" name="action" value="release">{% csrf_token %}
+    <button type="submit" class="btn" {% if release_payment_blocked %}disabled{% endif %}>Release Report</button>
+  </form>
+  {% endif %}
+  {% if all_released %}
+    {% if payment_blocked %}
+    <button type="button" class="btn btn-secondary" disabled title="Settle the balance to print this report">Print</button>
+    {% else %}
+    <button type="button" class="btn btn-secondary" onclick="window.print()">Print</button>
+    {% endif %}
+  {% endif %}
+</div>
+
+{% for order in orders %}
+<div class="report-block">
+  {% if order.stage == 'released' %}
+  {% include "partials/print_header.html" with hospital=visit.hospital print_title="Released Laboratory Result" print_subtitle=order.test.name %}
+  {% else %}
+  {% include "partials/print_header.html" with hospital=visit.hospital print_title="Draft — Not Yet Released" print_subtitle=order.test.name %}
+  {% endif %}
+
+  <div class="flex justify-between items-center mb-1">
+    <div class="text-xs text-text-muted">Branch Code: {{ visit.hospital.subdomain|upper }}</div>
+    {% if order.stage == 'released' %}
+    <span class="report-status-badge" style="background:#d7f5e3;color:#146c3f;">RELEASED</span>
+    {% else %}
+    <span class="report-status-badge" style="background:#fff3cd;color:#8a6100;">{{ order.get_stage_display|upper }}</span>
+    {% endif %}
+  </div>
+
+  <div class="report-head-grid">
+    <div>
+      <div class="report-field-label">Patient</div>
+      <div class="report-field-value">{{ visit.patient.name }}</div>
+    </div>
+    <div>
+      <div class="report-field-label">Patient Number</div>
+      <div class="report-field-value">{{ visit.hospital.subdomain|upper }}-PAT-{{ visit.patient.pk|stringformat:"04d" }}</div>
+    </div>
+    <div>
+      <div class="report-field-label">Visit Number</div>
+      <div class="report-field-value">{{ visit.hospital.subdomain|upper }}-VIS-{{ visit.pk|stringformat:"06d" }}</div>
+    </div>
+    <div>
+      <div class="report-field-label">Requested At</div>
+      <div class="report-field-value">{{ order.visit_service.created_at|date:"d M Y H:i" }}</div>
+    </div>
+    <div>
+      <div class="report-field-label">Test</div>
+      <div class="report-field-value">{{ order.test.name }} ({{ order.test.code }})</div>
+    </div>
+    <div>
+      <div class="report-field-label">Priority</div>
+      <div class="report-field-value">{% if order.priority_routine %}Routine{% else %}Urgent{% endif %}</div>
+    </div>
+    <div>
+      <div class="report-field-label">Specimen</div>
+      <div class="report-field-value">{{ order.specimen.name|default:"N/A" }}{% if order.is_outside_sample %} (referred: {{ order.outside_source }}){% endif %}</div>
+    </div>
+    <div>
+      <div class="report-field-label">Accession Number</div>
+      <div class="report-field-value">N/A</div>
+    </div>
+    {% if order.result.released_at %}
+    <div>
+      <div class="report-field-label">Released At</div>
+      <div class="report-field-value">{{ order.result.released_at|date:"d M Y H:i" }}</div>
+    </div>
+    <div>
+      <div class="report-field-label">Released By</div>
+      <div class="report-field-value">{{ order.result.released_by.get_full_name|default:order.result.released_by.username }}</div>
+    </div>
+    {% endif %}
+  </div>
+
+  <h3 class="font-bold mb-2">Result Values</h3>
+  {% if not order.result %}
+    <p class="text-sm text-text-muted">No result entered yet.</p>
+  {% elif order.result.result_type == 'free_entry' %}
+    <p class="text-sm whitespace-pre-line">{{ order.result.free_text }}</p>
+  {% elif order.result.result_type == 'defined_option' %}
+    <table class="w-full text-sm" style="width:100%; table-layout:fixed;">
+      <colgroup><col style="width:28%"><col style="width:24%"><col style="width:16%"><col style="width:32%"></colgroup>
+      <thead><tr>
+        <th class="text-left" style="width:28%;">Parameter</th>
+        <th class="text-left" style="width:24%;">Result</th>
+        <th class="text-left" style="width:16%;">Unit</th>
+        <th class="text-left" style="width:32%;">Reference Range</th>
+      </tr></thead>
+      <tbody><tr><td>Result</td><td class="font-bold">{{ order.result.chosen_option }}</td><td>&mdash;</td><td>&mdash;</td></tr></tbody>
+    </table>
+  {% elif order.result.result_type == 'parameter_panel' %}
+    {% regroup order.result.values.all by group_label as value_groups %}
+    <table class="w-full text-sm" style="width:100%; table-layout:fixed;">
+      <colgroup><col style="width:26%"><col style="width:16%"><col style="width:14%"><col style="width:22%"><col style="width:22%"></colgroup>
+      <thead><tr>
+        <th class="text-left" style="width:26%;">Parameter</th>
+        <th class="text-left" style="width:16%;">Result</th>
+        <th class="text-left" style="width:14%;">Unit</th>
+        <th class="text-left" style="width:22%;">Reference Range</th>
+        <th class="text-left" style="width:22%;">Comments</th>
+      </tr></thead>
+      <tbody>
+        {% for group in value_groups %}
+          {% if group.grouper %}
+          <tr><td colspan="5" class="text-xs font-bold uppercase tracking-widest text-text-muted pt-3">{{ group.grouper }}</td></tr>
+          {% endif %}
+          {% for v in group.list %}
+          <tr>
+            <td>{{ v.label }}</td>
+            <td class="font-bold">{{ v.value_num|default:v.value_text }}{% if v.flag == 'H' %} <span class="text-red-600">&uarr;</span>{% elif v.flag == 'L' %} <span class="text-red-600">&darr;</span>{% endif %}</td>
+            <td>{{ v.unit }}</td>
+            <td>{{ v.ref_display }}</td>
+            <td>
+              {% if v.flag == 'H' %}<span class="text-red-600 font-semibold">High</span>
+              {% elif v.flag == 'L' %}<span class="text-red-600 font-semibold">Low</span>
+              {% elif v.flag == 'A' %}<span class="text-red-600 font-semibold">Abnormal</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        {% endfor %}
+      </tbody>
+    </table>
+  {% elif order.result.result_type == 'culture' %}
+    <p class="text-sm mb-2"><strong>Organism isolated:</strong> {{ order.result.organism }}</p>
+    <table class="w-full text-sm" style="width:100%; table-layout:fixed;">
+      <colgroup><col style="width:40%"><col style="width:35%"><col style="width:25%"></colgroup>
+      <thead><tr>
+        <th class="text-left" style="width:40%;">Antibiotic</th>
+        <th class="text-left" style="width:35%;">Class</th>
+        <th class="text-left" style="width:25%;">S/I/R</th>
+      </tr></thead>
+      <tbody>
+        {% for v in order.result.values.all %}
+        <tr><td>{{ v.label }}</td><td>{{ v.group_label }}</td><td class="font-bold">{{ v.value_code }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% endif %}
+
+  {% if order.result.bench_notes %}
+  <h4 class="font-bold text-sm mt-4 mb-1">Bench Notes</h4>
+  <div class="report-note-box">{{ order.result.bench_notes }}</div>
+  {% endif %}
+
+  {% if order.visit_service.notes %}
+  <h4 class="font-bold text-sm mt-4 mb-1">Clinical Notes</h4>
+  <div class="report-note-box">{{ order.visit_service.notes }}</div>
+  {% endif %}
+
+  {% if order.stage == 'released' %}
+  <div class="sig-block">
+    <div>
+      <div class="sig-line">
+        <strong>{{ order.result.released_by.get_full_name|default:order.result.released_by.username }}</strong><br>
+        {{ order.result.released_at|date:"d M Y H:i" }}
+      </div>
+      <div class="report-field-label mt-1">Authorized By</div>
+    </div>
+    <div>
+      <div class="sig-line">Authorized laboratory sign-off</div>
+      <div class="report-field-label mt-1">Signature</div>
+    </div>
+  </div>
+  {% endif %}
+
+  {% include "lab/partials/report_disclaimer.html" %}
+
+  <div class="mt-6">
+    {% include "partials/print_footer.html" with hospital=visit.hospital %}
+    {% if order.stage == 'released' %}
+    <p class="text-xs text-text-muted mt-2 text-center">Generated on {% now "d M Y H:i" %} by {{ request.user.get_full_name|default:request.user.username }}</p>
+    {% endif %}
+  </div>
+</div>
+{% endfor %}
+{% endblock %}

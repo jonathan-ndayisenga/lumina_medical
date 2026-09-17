@@ -153,6 +153,23 @@ class SuperadminHospitalManagementTests(TestCase):
         self.assertFalse(Hospital.objects.filter(subdomain="mercy").exists())
         self.assertContains(response, "Hospital onboarding could not be completed")
 
+    def test_hospital_onboarding_payment_before_lab_defaults_off(self):
+        response = self.client.post(reverse("manage_hospitals"), data=self.payload())
+        self.assertEqual(response.status_code, 302)
+        hospital = Hospital.objects.get(subdomain="mercy")
+        from lab.models import LabSettings
+        settings_row = LabSettings.objects.get(hospital=hospital)
+        self.assertFalse(settings_row.payment_required_before_lab)
+
+    def test_hospital_onboarding_can_turn_on_payment_before_lab(self):
+        payload = self.payload(lab_payment_before_sampling="on")
+        response = self.client.post(reverse("manage_hospitals"), data=payload)
+        self.assertEqual(response.status_code, 302)
+        hospital = Hospital.objects.get(subdomain="mercy")
+        from lab.models import LabSettings
+        settings_row = LabSettings.objects.get(hospital=hospital)
+        self.assertTrue(settings_row.payment_required_before_lab)
+
     def test_hospital_list_filters_by_name_or_subdomain(self):
         Hospital.objects.create(name="Alpha Hospital", subdomain="alpha")
         Hospital.objects.create(name="Beta Clinic", subdomain="beta-clinic")
@@ -289,7 +306,7 @@ class MultiRoleNavigationTests(TestCase):
         self.assertContains(response, reverse("reception_dashboard"))
         self.assertContains(response, reverse("patient_list"))
         self.assertContains(response, reverse("nurse_queue"))
-        self.assertContains(response, reverse("lab_queue"))
+        self.assertContains(response, reverse("queue"))
         self.assertContains(response, reverse("report_list"))
         self.assertNotContains(response, reverse("doctor_queue"))
         self.assertContains(response, "Receptionist, Nurse, Lab")
@@ -481,3 +498,63 @@ class InventoryManagementTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Restock Priorities")
         self.assertContains(response, "Pharmacy Income vs Net Profit")
+
+
+class ManageServicesLabTestLinkTests(TestCase):
+    """A lab service must be linkable to a LabTest from the normal hospital
+    admin Manage Services screen -- not just Django admin -- otherwise a
+    billed lab service silently never becomes a workable Lab Queue order."""
+
+    def setUp(self):
+        from lab.models import LabTest, ServiceCategory
+        from reception.models import Service
+
+        self.User = get_user_model()
+        self.hospital = Hospital.objects.create(name="Link UI Hospital", subdomain="link-ui-hospital")
+        _enable_modules(self.hospital, "lab")
+        self.admin_user = self.User.objects.create_user(
+            username="linkuiadmin", password="StrongPass123!",
+            role=self.User.ROLE_HOSPITAL_ADMIN, hospital=self.hospital,
+        )
+        self.client.force_login(self.admin_user)
+
+        category, _ = ServiceCategory.objects.get_or_create(name="Hematology")
+        self.lab_test = LabTest.objects.create(
+            hospital=self.hospital, name="Complete Blood Count", category=category,
+            result_type="defined_option",
+        )
+        self.service = Service.objects.create(
+            hospital=self.hospital, name="CBC", category=Service.CATEGORY_LAB, price=Decimal("15000"),
+        )
+
+    def test_edit_form_offers_only_this_hospitals_lab_tests(self):
+        other_hospital = Hospital.objects.create(name="Other Link Hospital", subdomain="other-link-hospital")
+        from lab.models import LabTest
+        LabTest.objects.create(
+            hospital=other_hospital, name="Someone Else's Test",
+            category=self.lab_test.category, result_type="defined_option",
+        )
+
+        response = self.client.get(reverse("edit_service", args=[self.service.pk]))
+
+        self.assertEqual(response.status_code, 200)
+        queryset = response.context["form"].fields["lab_test_next"].queryset
+        self.assertIn(self.lab_test, queryset)
+        self.assertEqual(queryset.count(), 1)
+
+    def test_editing_service_links_it_to_a_lab_test(self):
+        self.service.refresh_from_db()
+        self.assertIsNone(self.service.lab_test_next)
+
+        response = self.client.post(
+            reverse("edit_service", args=[self.service.pk]),
+            {
+                "name": self.service.name, "category": self.service.category,
+                "price": "15000", "lab_test_next": self.lab_test.pk,
+                "is_active": "on",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.service.refresh_from_db()
+        self.assertEqual(self.service.lab_test_next_id, self.lab_test.pk)

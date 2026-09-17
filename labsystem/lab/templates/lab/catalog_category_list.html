@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block page_title %}Service Categories{% endblock %}
+{% block page_subtitle %}Groupings for lab tests (Chemistry, Hematology, Microbiology...). Shared across every hospital.{% endblock %}
+{% block content %}
+<div class="space-y-4">
+  {% if is_admin %}
+  <div class="flex justify-end">
+    <a href="{% url 'lab_category_create' %}" class="btn btn-primary">+ Add Service Category</a>
+  </div>
+  {% endif %}
+  <div class="card">
+    <table class="w-full text-sm">
+      <thead>
+        <tr class="text-left text-text-muted">
+          <th class="py-2">Name</th>
+          <th class="py-2">Description</th>
+          {% if is_admin %}<th class="py-2"></th>{% endif %}
+        </tr>
+      </thead>
+      <tbody class="divide-y" style="border-color:#eef1f5;">
+        {% for category in categories %}
+        <tr>
+          <td class="py-2 font-semibold">{{ category.name }}</td>
+          <td class="py-2 text-text-muted">{{ category.description|default:"—" }}</td>
+          {% if is_admin %}
+          <td class="py-2 text-right">
+            <a href="{% url 'lab_category_edit' category.pk %}" class="btn btn-secondary btn-sm">Edit</a>
+          </td>
+          {% endif %}
+        </tr>
+        {% empty %}
+        <tr><td colspan="3" class="py-6 text-center text-text-muted">No service categories yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

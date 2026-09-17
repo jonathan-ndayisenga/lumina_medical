@@ -56,7 +56,6 @@
                         <td class="px-4 py-3">
                             <div class="flex flex-wrap gap-2 justify-end">
                                 <a href="{% url 'report_detail' report.pk %}" class="btn btn-secondary btn-sm">View</a>
-                                <a href="{% url 'report_edit' report.pk %}" class="btn btn-secondary btn-sm">Edit</a>
                                 <a href="{% url 'report_print' report.pk %}" class="btn btn-secondary btn-sm" target="_blank">Print</a>
                                 {% if request.user.role == 'superadmin' or request.user.role == 'hospital_admin' %}
                                 <a href="{% url 'report_delete' report.pk %}?next={{ request.get_full_path|urlencode }}" class="btn btn-danger btn-sm">Delete</a>

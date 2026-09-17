@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+{% block page_title %}Enter Results{% endblock %}
+{% block page_subtitle %}{{ order.test.name }} &mdash; {{ visit.patient.name }}, {{ visit.patient.age }} {{ visit.patient.get_sex_display }}{% endblock %}
+{% block extra_css %}
+<style>
+  .option-card { display:flex; align-items:center; justify-content:space-between; padding:0.75rem 1rem; border:1px solid #cfd8e3; border-radius:0.6rem; margin-bottom:0.5rem; cursor:pointer; }
+  .option-card input { margin-right:0.6rem; }
+  .option-card:has(input:checked) { border-color:#1d3557; box-shadow:0 0 0 2px rgba(29,53,87,0.15); }
+  .badge-abnormal { background:#fdecec; color:#a12b2b; font-size:0.7rem; font-weight:700; padding:0.15rem 0.55rem; border-radius:999px; }
+  .flag-badge { font-size:0.7rem; font-weight:700; padding:0.15rem 0.55rem; border-radius:999px; white-space:nowrap; }
+  .flag-normal { background:#d7f5e3; color:#146c3f; }
+  .flag-high, .flag-low { background:#fdecec; color:#a12b2b; }
+  .sir-group { display:flex; gap:0.35rem; }
+  .sir-btn { position:relative; display:inline-block; cursor:pointer; }
+  .sir-btn input { position:absolute; opacity:0; }
+  .sir-btn span { display:flex; align-items:center; justify-content:center; width:2.1rem; height:2.1rem; border:1px solid #cfd8e3; border-radius:0.4rem; font-size:0.8rem; font-weight:700; color:#5f6b7a; }
+  .sir-btn:has(input:checked) span { background:#1d3557; color:#fff; border-color:#1d3557; }
+  .param-row { display:grid; grid-template-columns:1fr auto; gap:0.25rem 1rem; padding:0.9rem 0; border-bottom:1px solid #eef1f5; align-items:start; }
+  .param-row:last-of-type { border-bottom:none; }
+</style>
+{% endblock %}
+{% block content %}
+<div class="card" style="max-width:720px;">
+  <form method="post">
+    {% csrf_token %}
+
+    {% if hydrated.result_type == 'free_entry' %}
+      <label class="block text-sm font-semibold mb-1">Result</label>
+      <textarea name="free_text" class="form-control" rows="6" placeholder="Macroscopic, microscopic, conclusion&hellip;">{{ hydrated.free_text }}</textarea>
+
+    {% elif hydrated.result_type == 'defined_option' %}
+      <label class="block text-sm font-semibold mb-2">Result &mdash; choose one</label>
+      {% for opt in hydrated.options %}
+      <label class="option-card">
+        <span class="flex items-center">
+          <input type="radio" name="chosen_option" value="{{ opt.label }}" {% if hydrated.chosen_option == opt.label %}checked{% endif %}>
+          {{ opt.label }}
+        </span>
+        {% if opt.is_abnormal %}<span class="badge-abnormal">abnormal</span>{% endif %}
+      </label>
+      {% endfor %}
+
+    {% elif hydrated.result_type == 'parameter_panel' %}
+      {% for group in hydrated.parameter_groups %}
+        {% if group.group_label %}
+        <div class="text-xs font-bold uppercase tracking-widest text-text-muted mt-4 mb-1">{{ group.group_label }}</div>
+        {% endif %}
+        {% for p in group.parameters %}
+        <div class="param-row">
+          <div>
+            <div class="font-bold">{{ p.name }}</div>
+            {% if p.value_type == 'numeric' %}
+            <div class="text-xs text-text-muted">Unit: {{ p.unit|default:"—" }} &middot; Reference: {{ p.ref_display|default:"—" }}</div>
+            {% endif %}
+          </div>
+          <div>
+            {% if p.flag_code == 'H' %}<span class="flag-badge flag-high">High</span>
+            {% elif p.flag_code == 'L' %}<span class="flag-badge flag-low">Low</span>
+            {% elif p.flag_code == 'N' %}<span class="flag-badge flag-normal">Normal</span>
+            {% elif p.flag_code == 'A' %}<span class="flag-badge flag-high">Abnormal</span>
+            {% endif %}
+          </div>
+          <div style="grid-column:1 / -1;">
+            {% if p.value_type == 'coded' %}
+            <div class="sir-group">
+              {% for code in "SIR" %}
+              <label class="sir-btn">
+                <input type="radio" name="param_{{ p.parameter_id }}" value="{{ code }}" {% if p.value == code %}checked{% endif %}>
+                <span>{{ code }}</span>
+              </label>
+              {% endfor %}
+            </div>
+            {% elif p.value_type == 'growth' %}
+            <select name="param_{{ p.parameter_id }}" class="form-control">
+              <option value="">&mdash; Select &mdash;</option>
+              <option value="Growth Observed" {% if p.value == "Growth Observed" %}selected{% endif %}>Growth Observed</option>
+              <option value="No Significant Growth" {% if p.value == "No Significant Growth" %}selected{% endif %}>No Significant Growth</option>
+            </select>
+            {% elif p.value_type == 'level' %}
+            <select name="param_{{ p.parameter_id }}" class="form-control">
+              <option value="">&mdash; Select &mdash;</option>
+              <option value="Negative" {% if p.value == "Negative" %}selected{% endif %}>Negative</option>
+              <option value="Trace" {% if p.value == "Trace" %}selected{% endif %}>Trace</option>
+              <option value="1+" {% if p.value == "1+" %}selected{% endif %}>1+</option>
+              <option value="2+" {% if p.value == "2+" %}selected{% endif %}>2+</option>
+              <option value="3+" {% if p.value == "3+" %}selected{% endif %}>3+</option>
+              <option value="4+" {% if p.value == "4+" %}selected{% endif %}>4+</option>
+            </select>
+            {% else %}
+            <input type="text" name="param_{{ p.parameter_id }}" value="{{ p.value|default:'' }}" class="form-control" placeholder="Enter value">
+            {% endif %}
+          </div>
+        </div>
+        {% endfor %}
+      {% endfor %}
+      <label class="block text-sm font-semibold mb-1 mt-4">Bench notes</label>
+      <textarea name="bench_notes" class="form-control" rows="2">{{ hydrated.bench_notes }}</textarea>
+
+    {% elif hydrated.result_type == 'culture' %}
+      <label class="block text-sm font-semibold mb-1">Organism isolated</label>
+      <input type="text" name="organism" value="{{ hydrated.organism }}" class="form-control mb-4" placeholder="e.g. Staphylococcus aureus">
+      {% for group in hydrated.antibiotic_groups %}
+      <div class="text-xs uppercase tracking-widest text-text-muted mt-3 mb-1">{{ group.class_name }}</div>
+      {% for a in group.antibiotics %}
+      <div class="flex items-center justify-between py-2 border-b" style="border-color:#eef1f5;">
+        <span class="font-semibold text-sm">{{ a.name }}</span>
+        <div class="sir-group">
+          {% for code in "SIR" %}
+          <label class="sir-btn">
+            <input type="radio" name="abx_{{ a.antibiotic_id }}" value="{{ code }}" {% if a.sir == code %}checked{% endif %}>
+            <span>{{ code }}</span>
+          </label>
+          {% endfor %}
+        </div>
+      </div>
+      {% endfor %}
+      {% endfor %}
+    {% endif %}
+
+    <div class="mt-6">
+      <button type="submit" class="btn">Save Results</button>
+      <a href="{% url 'queue' %}" class="btn btn-secondary">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

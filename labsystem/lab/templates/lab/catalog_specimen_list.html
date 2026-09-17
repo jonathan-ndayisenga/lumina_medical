@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block page_title %}Specimen Types{% endblock %}
+{% block page_subtitle %}Blood, Serum, Urine, Stool, Swab... shared across every hospital.{% endblock %}
+{% block content %}
+<div class="space-y-4">
+  {% if is_admin %}
+  <div class="flex justify-end">
+    <a href="{% url 'lab_specimen_create' %}" class="btn btn-primary">+ Add Specimen Type</a>
+  </div>
+  {% endif %}
+
+  <div class="rounded-xl border border-dashed px-4 py-3 text-sm text-text-muted" style="border-color:#cfd8e3;">
+    Default records are system-provided and stay locked. Create a custom record if you want something you can edit or delete.
+  </div>
+
+  <div class="card">
+    <table class="w-full text-sm">
+      <thead>
+        <tr class="text-left text-text-muted">
+          <th class="py-2">Name</th>
+          <th class="py-2">Description</th>
+          <th class="py-2">Scope</th>
+          <th class="py-2">Status</th>
+          {% if is_admin %}<th class="py-2">Actions</th>{% endif %}
+        </tr>
+      </thead>
+      <tbody class="divide-y" style="border-color:#eef1f5;">
+        {% for specimen in specimens %}
+        <tr>
+          <td class="py-2 font-semibold">{{ specimen.name }}</td>
+          <td class="py-2 text-text-muted">{{ specimen.description|default:"—" }}</td>
+          <td class="py-2">
+            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-700">
+              {% if specimen.is_default %}Default{% else %}Custom{% endif %}
+            </span>
+          </td>
+          <td class="py-2">
+            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-800">Active</span>
+          </td>
+          {% if is_admin %}
+          <td class="py-2">
+            {% if specimen.is_default %}
+            <span class="text-xs text-text-muted italic">System default</span>
+            {% else %}
+            <a href="{% url 'lab_specimen_edit' specimen.pk %}" class="btn btn-secondary btn-sm">Edit</a>
+            <a href="{% url 'lab_specimen_delete' specimen.pk %}" class="btn btn-danger btn-sm">Delete</a>
+            {% endif %}
+          </td>
+          {% endif %}
+        </tr>
+        {% empty %}
+        <tr><td colspan="5" class="py-6 text-center text-text-muted">No specimen types yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

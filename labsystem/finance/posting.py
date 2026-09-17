@@ -13,12 +13,23 @@ from decimal import Decimal
 
 from django.utils import timezone
 
+from .accounts_seed import provision_chart_of_accounts
 from .models import Account, JournalEntry, JournalLine
 
 
 # ---------------------------------------------------------------------------
 # Account resolution helpers
 # ---------------------------------------------------------------------------
+
+def _ensure_accounts(hospital):
+    """Provisioning used to only happen when someone opened the Finance
+    Dashboard — so any charge/payment recorded before that page was ever
+    visited silently posted nowhere, permanently, since nothing re-posts a
+    skipped entry later. Call this first in every post_* entry point so
+    posting never depends on dashboard-visit ordering again."""
+    if not Account.objects.filter(hospital=hospital).exists():
+        provision_chart_of_accounts(hospital)
+
 
 def _get_account(hospital, sub_type, account_type=None):
     """Return the first active account matching sub_type (and optionally account_type)."""
@@ -160,6 +171,7 @@ def post_visit_service(visit_service):
         return
 
     hospital = visit_service.visit.hospital
+    _ensure_accounts(hospital)
     receivable = _get_account(hospital, Account.SUB_RECEIVABLE, Account.TYPE_ASSET)
     revenue = _revenue_account(hospital, visit_service.service.category)
 
@@ -194,6 +206,7 @@ def post_payment(payment):
 
     hospital = payment.visit.hospital
     amount = payment.amount_paid
+    _ensure_accounts(hospital)
 
     if payment.status == Pmt.STATUS_WAIVED or amount <= 0:
         _reverse_existing(hospital, source_payment=payment)
@@ -230,6 +243,7 @@ def post_expense(expense):
         return
 
     hospital = expense.hospital
+    _ensure_accounts(hospital)
     expense_acc = _expense_account(hospital, expense)
     cash_acc = _cash_account_for_expense(hospital, expense)
 
@@ -259,6 +273,7 @@ def post_salary(salary):
     If not yet paid, reverse any existing entry (unpaid salaries aren't in the books yet).
     """
     hospital = salary.hospital
+    _ensure_accounts(hospital)
 
     if not salary.paid or not salary.amount or salary.amount <= 0:
         _reverse_salary(salary)

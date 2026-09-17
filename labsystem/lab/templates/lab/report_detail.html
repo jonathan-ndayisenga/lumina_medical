@@ -1,7 +1,7 @@
 {% extends 'base.html' %}
 {% load static lab_extras %}
 
-{% block title %}Laboratory Report - Lumina Medical Services{% endblock %}
+{% block title %}{{ report.hospital.name }} - Laboratory Report{% endblock %}
 {% block print_header %}{% endblock %}
 {% block page_title %}Laboratory Report{% endblock %}
 {% block page_subtitle %}Review the finalized report in the same compact format used for printing.{% endblock %}
@@ -144,7 +144,6 @@
 <div class="space-y-4 no-print">
     <div class="flex gap-3 flex-wrap">
         <button type="button" class="btn btn-primary" onclick="window.print()">Print Report</button>
-        <a href="{% url 'report_edit' report.pk %}" class="btn btn-secondary">Edit</a>
         {% if can_route_direct_lab %}
             <form method="post" action="{% url 'route_lab_report' report.pk %}" class="inline">
                 {% csrf_token %}
@@ -308,6 +307,8 @@
         <div class="remarks-body px-4 py-3 leading-relaxed">{{ report.comments }}</div>
     </section>
     {% endif %}
+
+    {% include "lab/partials/report_disclaimer.html" %}
 
     {% include "partials/print_footer.html" with hospital=hospital %}
 </div>

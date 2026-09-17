@@ -16,6 +16,11 @@ from .views import (
     notification_list,
     notification_mark_all_read,
     notification_mark_read,
+    org_branch_home,
+    org_branch_modules,
+    org_dashboard,
+    org_enter_branch,
+    org_revenue_comparison,
 )
 
 urlpatterns = [
@@ -23,6 +28,13 @@ urlpatterns = [
     path("home/", app_home, name="app_home"),
     path("home/section/<str:section_key>/", enter_nav_section, name="enter_nav_section"),
     path("welcome/", landing, name="landing"),
+
+    # ── Organization / multi-branch Owner views ─────────────────────────────────
+    path("org/", org_dashboard, name="org_dashboard"),
+    path("org/branch/<int:hospital_id>/enter/", org_enter_branch, name="org_enter_branch"),
+    path("org/branch/", org_branch_home, name="org_branch_home"),
+    path("org/branch/modules/", org_branch_modules, name="org_branch_modules"),
+    path("org/revenue/", org_revenue_comparison, name="org_revenue_comparison"),
 
     # ── Unified Messages Inbox ────────────────────────────────────────────────
     path("messages/", messages_inbox, name="messages_inbox"),

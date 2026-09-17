@@ -17,6 +17,13 @@
                         <div>
                             <h5 class="text-sm font-semibold text-text-main">{{ entry.visit.patient.name }}</h5>
                             <p class="text-xs text-text-muted">{{ entry.visit.patient.age }} / {{ entry.visit.patient.get_sex_display }}</p>
+                            {% if item.payment_status == 'paid' %}
+                            <span class="inline-flex items-center px-2 py-0.5 mt-1 rounded-full text-[11px] font-semibold bg-green-100 text-green-800">Paid</span>
+                            {% elif item.payment_status == 'partial' %}
+                            <span class="inline-flex items-center px-2 py-0.5 mt-1 rounded-full text-[11px] font-semibold bg-amber-100 text-amber-800">Partially Paid · Bal. UGX {{ item.balance_due|floatformat:2 }} for {{ item.billed_service_names }}</span>
+                            {% else %}
+                            <span class="inline-flex items-center px-2 py-0.5 mt-1 rounded-full text-[11px] font-semibold bg-gray-100 text-gray-600">Unpaid · Bal. UGX {{ item.balance_due|floatformat:2 }} for {{ item.billed_service_names }}</span>
+                            {% endif %}
                         </div>
                         {% if item.is_results_ready %}
                             <span class="inline-flex items-center px-2 py-1 rounded-full text-[11px] font-semibold bg-emerald-100 text-emerald-800">Lab results ready</span>
@@ -82,7 +89,17 @@
                     {% for item in queue_entries %}
                         {% with entry=item.entry %}
                         <tr class="border-b border-gray-100 transition-colors {% if item.is_results_ready %}bg-emerald-50/50 hover:bg-emerald-50{% else %}hover:bg-gray-50{% endif %}">
-                            <td class="px-4 py-3 text-sm font-medium text-text-main">{{ entry.visit.patient.name }}</td>
+                            <td class="px-4 py-3 text-sm font-medium text-text-main">
+                                {{ entry.visit.patient.name }}
+                                <br>
+                                {% if item.payment_status == 'paid' %}
+                                <span class="inline-flex items-center px-2 py-0.5 mt-1 rounded-full text-[11px] font-semibold bg-green-100 text-green-800">Paid</span>
+                                {% elif item.payment_status == 'partial' %}
+                                <span class="inline-flex items-center px-2 py-0.5 mt-1 rounded-full text-[11px] font-semibold bg-amber-100 text-amber-800">Partial · UGX {{ item.balance_due|floatformat:2 }} for {{ item.billed_service_names }}</span>
+                                {% else %}
+                                <span class="inline-flex items-center px-2 py-0.5 mt-1 rounded-full text-[11px] font-semibold bg-gray-100 text-gray-600">Unpaid · UGX {{ item.balance_due|floatformat:2 }} for {{ item.billed_service_names }}</span>
+                                {% endif %}
+                            </td>
                             <td class="px-4 py-3 text-sm text-text-muted">{{ entry.visit.patient.age }} / {{ entry.visit.patient.get_sex_display }}</td>
                             <td class="px-4 py-3 text-sm text-text-muted">{{ entry.visit.visit_date|date:"M d, Y H:i" }}</td>
                             <td class="px-4 py-3 text-sm text-text-muted">{{ entry.hospital.name }}</td>

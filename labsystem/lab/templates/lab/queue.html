@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block page_title %}Lab Queue (Rework){% endblock %}
+{% block page_subtitle %}New lab engine — opt-in per hospital via Lab Settings.{% endblock %}
+{% block content %}
+<div class="space-y-4">
+  {% for row in rows %}
+  <div class="card">
+    <div class="flex items-center justify-between mb-2">
+      <div>
+        <div class="font-bold">{{ row.entry.visit.patient.name }}</div>
+        <div class="text-sm text-text-muted">{{ row.entry.visit.patient.age }} &middot; {{ row.entry.visit.patient.get_sex_display }}</div>
+        {% if row.payment_status == 'paid' %}
+        <span class="inline-flex items-center px-2 py-0.5 mt-1 rounded-full text-xs font-semibold bg-green-100 text-green-800">Paid &middot; In Lab Queue</span>
+        {% elif row.payment_status == 'partial' %}
+        <span class="inline-flex items-center px-2 py-0.5 mt-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-800">Partially Paid &middot; Balance UGX {{ row.balance_due|floatformat:2 }} for {{ row.billed_service_names }} &middot; In Progress</span>
+        {% else %}
+        <span class="inline-flex items-center px-2 py-0.5 mt-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-600">Unpaid &middot; Balance UGX {{ row.balance_due|floatformat:2 }} for {{ row.billed_service_names }} &middot; On Credit</span>
+        {% endif %}
+      </div>
+      <div class="text-right">
+        <div class="text-xs text-text-muted mb-1">{{ row.entry.reason }}</div>
+        <a class="text-xs text-indigo-600 underline" href="{% url 'visit_report' row.entry.visit_id %}">View Report</a>
+      </div>
+    </div>
+    {% if row.unmapped %}
+    <div class="text-sm text-red-600 mb-2">
+      Not yet configured for the new engine:
+      {% for vs in row.unmapped %}{{ vs.service.name }}{% if not forloop.last %}, {% endif %}{% endfor %}.
+      Link these under Service &rarr; "Lab test (rework)" in the admin first.
+    </div>
+    {% endif %}
+    <table class="w-full text-sm">
+      <thead><tr><th class="text-left">Test</th><th class="text-left">Stage</th><th></th></tr></thead>
+      <tbody>
+        {% for order in row.orders %}
+        <tr>
+          <td>{{ order.test.name }}</td>
+          <td>{{ order.get_stage_display }}</td>
+          <td>
+            {% if order.stage == 'pending' %}
+            <a class="btn btn-secondary btn-sm" href="{% url 'pick_sample' order.pk %}">Pick Sample</a>
+            {% else %}
+            <a class="btn btn-secondary btn-sm" href="{% url 'enter_result' order.pk %}">Enter Results</a>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% empty %}
+  <div class="card">Nothing in the queue.</div>
+  {% endfor %}
+</div>
+{% endblock %}

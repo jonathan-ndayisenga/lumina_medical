@@ -2,7 +2,9 @@ from decimal import Decimal, InvalidOperation
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.core.exceptions import ValidationError
 from django.db import transaction
+from django.db.models import Q
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -12,7 +14,7 @@ from django.views.decorators.http import require_http_methods
 
 from accounts.models import User
 from admin_dashboard.models import InventoryItem, InventoryTransaction
-from lab.models import LabReport
+from lab.models import LabOrder, LabReport
 from nurse.models import NurseNote
 from reception.models import QueueEntry, Service, Triage, Visit, VisitService
 from reception.workflow import (
@@ -679,6 +681,12 @@ def remove_lab_service_api(request, visit_id, visit_service_id):
             status=400,
         )
 
+    from lab.guards import release_visit_service_for_lab
+    try:
+        release_visit_service_for_lab(visit_service)
+    except ValidationError as exc:
+        return JsonResponse({"error": "; ".join(exc.messages)}, status=400)
+
     removed_price = visit_service.price_at_time
     service_name = visit_service.service.name
     service_pk = visit_service.service.pk
@@ -771,9 +779,35 @@ def doctor_queue(request):
     ).select_related("visit__patient", "hospital", "requested_by")
     if hospital and getattr(request.user, "role", "") != User.ROLE_SUPERADMIN:
         queue_entries = queue_entries.filter(hospital=hospital)
+
+    # A "lab results ready" entry is addressed to the one doctor who
+    # actually ordered that test — another doctor at the same hospital
+    # shouldn't see it on their own queue. A plain new-consultation request
+    # has no single addressee, so it stays a shared pickup pool for every
+    # doctor. Admins/superadmins keep full oversight of everything.
+    is_admin_viewer = getattr(request.user, "role", "") in (User.ROLE_SUPERADMIN, User.ROLE_HOSPITAL_ADMIN)
+    if not is_admin_viewer:
+        queue_entries = queue_entries.filter(
+            Q(requested_by=request.user) | ~Q(reason__icontains="lab results ready")
+        )
+
     queue_entries = queue_entries.order_by("created_at")
+
+    def _payment_status(visit):
+        if visit.is_fully_paid:
+            return "paid"
+        if visit.is_unbilled:
+            return "unpaid"
+        return "partial"
+
     queued_items = [
-        {"entry": entry, "is_results_ready": queue_reason_is_results_ready(entry.reason)}
+        {
+            "entry": entry,
+            "is_results_ready": queue_reason_is_results_ready(entry.reason),
+            "payment_status": _payment_status(entry.visit),
+            "balance_due": entry.visit.balance_due,
+            "billed_service_names": ", ".join(entry.visit.visit_services.values_list("service__name", flat=True)),
+        }
         for entry in queue_entries
     ]
 
@@ -831,7 +865,18 @@ def consultation(request, visit_id):
     except Triage.DoesNotExist:
         triage_instance = None
     from nurse.models import ScanReport
+    # Legacy engine (LabReport) and the current engine (LabOrder) both need
+    # to show here; a visit's lab work is on whichever one the hospital is
+    # actually using, and the consultation screen shouldn't go blank on the
+    # results a doctor is specifically waiting on just because it only ever
+    # looked at the retired model.
     lab_reports = LabReport.objects.filter(visit=visit).prefetch_related("results__test")
+    lab_orders = (
+        LabOrder.objects.filter(visit_service__visit=visit)
+        .select_related("test", "result")
+        .prefetch_related("result__values")
+        .order_by("created_at")
+    )
     scan_reports = ScanReport.objects.filter(visit=visit).select_related("sonographer").order_by("-created_at")
     nurse_queue_entries = visit.queue_entries.filter(queue_type=QueueEntry.TYPE_NURSE).order_by("-created_at")
     nurse_queue_is_open = nurse_queue_entries.filter(processed=False).exists()
@@ -1001,6 +1046,7 @@ def consultation(request, visit_id):
             "active_nav": "doctor",
             "visit": visit,
             "lab_reports": lab_reports,
+            "lab_orders": lab_orders,
             "form": form,
             "consultation_instance": consultation_instance,
             "nurse_queue_entries": nurse_queue_entries,
@@ -1036,6 +1082,12 @@ def consultation_detail(request, visit_id):
     triage = Triage.objects.filter(visit=visit).first()
     from nurse.models import ScanReport
     lab_reports = LabReport.objects.filter(visit=visit).prefetch_related("results__test")
+    lab_orders = (
+        LabOrder.objects.filter(visit_service__visit=visit)
+        .select_related("test", "result")
+        .prefetch_related("result__values")
+        .order_by("created_at")
+    )
     scan_reports = ScanReport.objects.filter(visit=visit).select_related("sonographer").order_by("-created_at")
     nurse_queue_entries = visit.queue_entries.filter(queue_type=QueueEntry.TYPE_NURSE).order_by("-created_at")
     nurse_notes = NurseNote.objects.filter(visit=visit).select_related("created_by")
@@ -1049,6 +1101,7 @@ def consultation_detail(request, visit_id):
             "triage": triage,
             "consultation_instance": consultation_instance,
             "lab_reports": lab_reports,
+            "lab_orders": lab_orders,
             "scan_reports": scan_reports,
             "nurse_queue_entries": nurse_queue_entries,
             "nurse_notes": nurse_notes,

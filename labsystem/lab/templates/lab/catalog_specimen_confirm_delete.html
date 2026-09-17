@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block page_title %}Delete Specimen Type{% endblock %}
+{% block content %}
+<div class="card" style="max-width:520px;">
+  <p class="mb-4">Delete specimen type <strong>{{ specimen.name }}</strong>? Any lab test still accepting it will simply drop that option.</p>
+  <form method="post">
+    {% csrf_token %}
+    <button type="submit" class="btn btn-danger">Delete</button>
+    <a href="{% url 'lab_specimen_list' %}" class="btn btn-secondary">Cancel</a>
+  </form>
+</div>
+{% endblock %}

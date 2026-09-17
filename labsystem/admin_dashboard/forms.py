@@ -9,7 +9,7 @@ from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 
 from accounts.models import Hospital, HospitalModuleSubscription, Module, PlatformSettings, SupportToken, User
-from lab.models import TestProfile
+from lab.models import LabTest, TestProfile
 from reception.models import Service
 
 from .models import (
@@ -47,6 +47,28 @@ class HospitalForm(forms.ModelForm):
         widget=forms.CheckboxSelectMultiple,
         help_text="Select which modules this hospital is subscribed to. Core modules (e.g. Reception) are always included.",
     )
+    lab_mode = forms.ChoiceField(
+        choices=[
+            ("standard", "Standard — tests ordered by doctor/reception, straight to lab (current behavior)"),
+            ("phlebotomy", "Phlebotomy intake — lab attendant adds tests first, reception bills before sampling (typical for lab-only facilities)"),
+        ],
+        required=False,
+        initial="standard",
+        widget=forms.RadioSelect,
+        label="How does this facility bring patients into the lab?",
+        help_text="Only matters once the Lab module is enabled. Editable later from this same edit screen.",
+    )
+    lab_payment_before_sampling = forms.BooleanField(
+        required=False,
+        initial=False,
+        label="Bill first — require payment before sample collection",
+        help_text="If on: at least some payment (a partial receipt is fine) is required before a lab "
+                   "service can be approved and sent to the lab queue, and the balance must be fully "
+                   "cleared before that report can be released. If off (current default), the lab can "
+                   "proceed on credit end to end and reception bills whenever it settles the visit. "
+                   "Independent of the intake mode above — applies either way. Editable later from "
+                   "this same edit screen.",
+    )
 
     class Meta:
         model = Hospital
@@ -60,6 +82,7 @@ class HospitalForm(forms.ModelForm):
             "phone_number",
             "email",
             "logo",
+            "organization",
             "subscription_plan",
             "reactivation_alert_days",
         )
@@ -73,6 +96,7 @@ class HospitalForm(forms.ModelForm):
             "phone_number": forms.TextInput(attrs={"placeholder": "+256...", "class": "form-control"}),
             "email": forms.EmailInput(attrs={"placeholder": "hospital@example.com", "class": "form-control"}),
             "logo": forms.ClearableFileInput(attrs={"class": "form-control"}),
+            "organization": forms.Select(attrs={"class": "form-control"}),
             "subscription_plan": forms.Select(attrs={"class": "form-control"}),
             "reactivation_alert_days": forms.NumberInput(attrs={"class": "form-control", "min": "0", "max": "90", "placeholder": "e.g. 7"}),
         }
@@ -93,6 +117,16 @@ class HospitalForm(forms.ModelForm):
                     hospital_subscriptions__is_active=True,
                 ).values_list("pk", flat=True)
             ) or core_module_ids
+
+            from lab.models import LabSettings
+            existing_lab_settings = LabSettings.objects.filter(hospital=self.instance).first()
+            if existing_lab_settings and existing_lab_settings.phlebotomy_enabled:
+                self.fields["lab_mode"].initial = "phlebotomy"
+            else:
+                self.fields["lab_mode"].initial = "standard"
+            self.fields["lab_payment_before_sampling"].initial = bool(
+                existing_lab_settings and existing_lab_settings.payment_required_before_lab
+            )
         else:
             self.fields["modules"].initial = core_module_ids
 
@@ -113,6 +147,37 @@ class HospitalForm(forms.ModelForm):
         hospital.subscription_end_date = date.today() + timedelta(days=30 * months)
         hospital.is_active = True
         hospital.save(update_fields=["subscription_end_date", "is_active"])
+
+    def save_lab_settings(self, hospital):
+        """Write the Lab-module rework's per-hospital toggles from the
+        onboarding choices — the intake-mode preset plus the payment gate,
+        which is its own independent checkbox (applies under either intake
+        mode). See lab.models.LabSettings for what each field means.
+        Everything here is editable later from this same edit screen; it's
+        not a one-time decision.
+
+        "Bill-first" is one policy expressed as one checkbox, but it's
+        backed by the two separate LabSettings fields that already existed
+        for each half of it: some payment gets a patient to sample
+        collection (payment_required_before_lab — enforced with
+        Visit.is_unbilled, so a partial payment is enough); full payment is
+        still required before results actually release
+        (payment_required_before_release, unchanged/stricter). Turning the
+        one checkbox on sets both; turning it off clears both."""
+        from lab.models import LabSettings, ServiceEntryMode
+
+        mode = self.cleaned_data.get("lab_mode") or "standard"
+        settings_row, _ = LabSettings.objects.get_or_create(hospital=hospital)
+        if mode == "phlebotomy":
+            settings_row.phlebotomy_enabled = True
+            settings_row.service_entry_mode = ServiceEntryMode.FROM_LAB
+        else:
+            settings_row.phlebotomy_enabled = False
+            settings_row.service_entry_mode = ServiceEntryMode.FROM_RECEPTION
+        bill_first = bool(self.cleaned_data.get("lab_payment_before_sampling"))
+        settings_row.payment_required_before_lab = bill_first
+        settings_row.payment_required_before_release = bill_first
+        settings_row.save()
 
     def save_module_subscriptions(self, hospital):
         """Sync HospitalModuleSubscription rows to match the selected modules.
@@ -350,14 +415,28 @@ class HospitalStaffUserUpdateForm(forms.ModelForm):
 class HospitalServiceForm(forms.ModelForm):
     class Meta:
         model = Service
-        fields = ("name", "category", "price", "test_profile", "is_active", "is_per_day")
+        fields = ("name", "category", "price", "lab_test_next", "test_profile", "is_active", "is_per_day")
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, hospital=None, **kwargs):
         super().__init__(*args, **kwargs)
+        self.hospital = hospital
+        self.fields["lab_test_next"].queryset = (
+            LabTest.objects.filter(hospital=hospital).order_by("name") if hospital else LabTest.objects.none()
+        )
+        self.fields["lab_test_next"].required = False
+        self.fields["lab_test_next"].empty_label = "— not linked yet —"
+        self.fields["lab_test_next"].label = "Lab Test"
+        self.fields["lab_test_next"].help_text = (
+            "Which lab test this service creates when billed. Without this set, the service still "
+            "bills fine but never turns into an order the lab can actually work — set it up under "
+            "Lab Management → Laboratory Services first if the test you need isn't listed."
+        )
         self.fields["test_profile"].queryset = TestProfile.objects.filter(is_active=True).order_by("name")
         self.fields["test_profile"].required = False
         self.fields["test_profile"].empty_label = "— no template —"
-        self.fields["test_profile"].help_text = "Lab services only. Links this service to a test template so results are auto-structured."
+        self.fields["test_profile"].help_text = (
+            "Legacy link, only read by historical reports. Use \"Lab Test\" above instead."
+        )
         for field in self.fields.values():
             field.widget.attrs.setdefault("class", "form-control")
 

@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block page_title %}Reviewing Results{% endblock %}
+{% block page_subtitle %}Results entered, awaiting review and release &mdash; across every patient.{% endblock %}
+{% block content %}
+<div class="space-y-4">
+  {% for row in rows %}
+  <div class="card">
+    <div class="flex items-center justify-between mb-2 flex-wrap gap-2">
+      <div>
+        <div class="font-bold">{{ row.visit.patient.name }}</div>
+        <div class="text-sm text-text-muted">{{ row.visit.patient.age }} &middot; {{ row.visit.patient.get_sex_display }}</div>
+        {% if row.payment_status == 'paid' %}
+        <span class="inline-flex items-center px-2 py-0.5 mt-1 rounded-full text-xs font-semibold bg-green-100 text-green-800">Paid</span>
+        {% elif row.payment_status == 'partial' %}
+        <span class="inline-flex items-center px-2 py-0.5 mt-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-800">Partially Paid &middot; Balance UGX {{ row.balance_due|floatformat:2 }} for {{ row.billed_service_names }}</span>
+        {% else %}
+        <span class="inline-flex items-center px-2 py-0.5 mt-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-600">Unpaid &middot; Balance UGX {{ row.balance_due|floatformat:2 }} for {{ row.billed_service_names }}</span>
+        {% endif %}
+      </div>
+      <div class="text-right flex items-center gap-2">
+        {% if row.is_doctor_request %}
+        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-indigo-100 text-indigo-700">Doctor Request</span>
+        {% else %}
+        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-600">Self-test</span>
+        {% endif %}
+        {% if row.release_blocked_by_payment %}
+        <a class="btn btn-secondary btn-sm" href="{% url 'visit_report' row.visit.pk %}" title="Balance must be cleared before this report can release">Clear the Bill to Release</a>
+        {% else %}
+        <a class="btn btn-primary btn-sm" href="{% url 'visit_report' row.visit.pk %}">Review &amp; Release</a>
+        {% endif %}
+      </div>
+    </div>
+    <table class="w-full text-sm">
+      <thead><tr><th class="text-left">Test</th><th class="text-left">Stage</th></tr></thead>
+      <tbody>
+        {% for order in row.orders %}
+        <tr>
+          <td>{{ order.test.name }}</td>
+          <td>{{ order.get_stage_display }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% empty %}
+  <div class="card">Nothing waiting on review right now.</div>
+  {% endfor %}
+</div>
+{% endblock %}

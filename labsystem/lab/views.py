@@ -1,20 +1,21 @@
-import json
+from decimal import Decimal
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, user_passes_test
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.core.paginator import Paginator
 from django.db import transaction
 from django.db.models import Q
-from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 
 from accounts.models import User
-from reception.models import QueueEntry, Service, Visit, VisitService
+from reception.models import Patient, QueueEntry, Service, Visit, VisitService
 from reception.workflow import (
     ensure_pending_queue_entry,
+    mark_queue_entries_processed,
     record_admin_override,
     require_admin_override,
     send_to_reception_queue,
@@ -22,16 +23,12 @@ from reception.workflow import (
 )
 from doctor.models import LabRequest, Notification
 
-from .forms import LabConsumableForm, LabConsumableUsageFormSet, LabReportForm, TestResultFormSet
-from .models import (
-    LabConsumable,
-    LabConsumableUsage,
-    LabReport,
-    ReferenceRangeDefault,
-    TestCatalog,
-    TestProfile,
-    TestProfileParameter,
-)
+from .forms import LabConsumableForm
+from .models import LabConsumable, LabReport
+# Merged in from the former `lab_next` app — the reworked engine's models.
+from .models import LabOrder, OrderStage, ResultType, Sex
+from .guards import release_visit_service_for_lab
+from .services_next import hydrate_entry_form, save_results
 
 def _lab_access_ok(user):
     if not user.is_active:
@@ -78,16 +75,6 @@ def scoped_reports_queryset(request):
     return qs
 
 
-def sync_report_snapshot_from_visit(report: LabReport) -> None:
-    if not report.visit_id:
-        return
-    patient = report.visit.patient
-    report.patient_name = patient.name
-    report.patient_age = patient.age
-    report.patient_sex = patient.sex
-    report.hospital = report.visit.hospital
-
-
 def report_test_summary(report: LabReport) -> str:
     test_names = [name for name in report.results.values_list("test__name", flat=True) if name]
     if test_names:
@@ -109,26 +96,6 @@ def lab_visit_services(visit, *, performed=None):
     elif performed is False:
         qs = qs.filter(performed=False)
     return qs.order_by("created_at", "id")
-
-
-def serialize_requested_service(visit_service, *, combined_manual_report=None):
-    profile = getattr(visit_service.service, "test_profile", None)
-    manual = profile is None
-    report = getattr(visit_service, "lab_report", None)
-    # Manual services share the combined report rather than having their own.
-    if report is None and manual and combined_manual_report:
-        report = combined_manual_report
-    return {
-        "visit_service_id": visit_service.pk,
-        "service_id": visit_service.service_id,
-        "service_name": visit_service.service.name,
-        "performed": visit_service.performed,
-        "performed_at": visit_service.performed_at.isoformat() if visit_service.performed_at else "",
-        "test_profile_id": profile.pk if profile else None,
-        "test_profile_name": profile.name if profile else "",
-        "report_id": report.pk if report else None,
-        "is_manual": manual,
-    }
 
 
 def mark_visit_service_performed(visit_service):
@@ -156,95 +123,6 @@ def reconcile_lab_visit_services(visit):
     if repaired:
         refresh_lab_doctor_queue_reason(visit)
     return repaired
-
-
-def _resolve_referred_by(visit):
-    """Return the referring account name for a visit (doctor first, then receptionist)."""
-    doctor_entry = (
-        QueueEntry.objects.filter(visit=visit, queue_type=QueueEntry.TYPE_LAB_DOCTOR)
-        .select_related("requested_by")
-        .order_by("-created_at")
-        .first()
-    )
-    if doctor_entry and doctor_entry.requested_by:
-        return doctor_entry.requested_by.get_full_name() or doctor_entry.requested_by.username
-    reception_entry = (
-        QueueEntry.objects.filter(visit=visit, queue_type=QueueEntry.TYPE_LAB_RECEPTION)
-        .select_related("requested_by")
-        .order_by("-created_at")
-        .first()
-    )
-    if reception_entry and reception_entry.requested_by:
-        return reception_entry.requested_by.get_full_name() or reception_entry.requested_by.username
-    return ""
-
-
-def is_manual_visit_service(visit_service):
-    """True when a lab service has no linked TestProfile (i.e. manual/ad-hoc test)."""
-    return getattr(visit_service.service, "test_profile", None) is None
-
-
-def ensure_manual_report_for_visit(visit, *, attendant=None):
-    """
-    Find or create the single combined manual LabReport for a visit.
-    All manual (no TestProfile) lab services share this one report so their
-    results print on one page with separate section headings.
-    Identified by: visit set, profile NULL, requested_visit_service NULL.
-    """
-    report = LabReport.objects.filter(
-        visit=visit,
-        profile__isnull=True,
-        requested_visit_service__isnull=True,
-    ).first()
-    if report:
-        return report
-
-    patient = visit.patient
-    return LabReport.objects.create(
-        profile=None,
-        hospital=visit.hospital,
-        visit=visit,
-        requested_visit_service=None,
-        patient_name=patient.name,
-        patient_age=patient.age,
-        patient_sex=patient.sex,
-        referred_by=_resolve_referred_by(visit),
-        sample_date=visit.visit_date,
-        specimen_type="",
-        attendant=attendant,
-        attendant_name=(attendant.get_full_name() or attendant.username) if attendant else "",
-    )
-
-
-def ensure_report_for_visit_service(visit_service, *, attendant=None):
-    # Manual services (no TestProfile) share one combined report per visit.
-    if is_manual_visit_service(visit_service):
-        return ensure_manual_report_for_visit(visit_service.visit, attendant=attendant)
-
-    # Structured services (CBC, Urinalysis, etc.) get their own dedicated report.
-    report = getattr(visit_service, "lab_report", None)
-    if report:
-        return report
-
-    visit = visit_service.visit
-    patient = visit.patient
-    profile = visit_service.service.test_profile
-
-    report = LabReport.objects.create(
-        profile=profile,
-        hospital=visit.hospital,
-        visit=visit,
-        requested_visit_service=visit_service,
-        patient_name=patient.name,
-        patient_age=patient.age,
-        patient_sex=patient.sex,
-        referred_by=_resolve_referred_by(visit),
-        sample_date=visit.visit_date,
-        specimen_type=profile.default_specimen_type if profile and profile.default_specimen_type else "BLOOD",
-        attendant=attendant,
-        attendant_name=(attendant.get_full_name() or attendant.username) if attendant else "",
-    )
-    return report
 
 
 def pending_lab_doctor_entry(report: LabReport):
@@ -368,47 +246,6 @@ def report_needs_doctor_send(report: LabReport) -> bool:
     )
 
 
-def report_ready_to_send_to_doctor(report: LabReport) -> bool:
-    return bool(report_needs_doctor_send(report) and not lab_visit_services(report.visit, performed=False).exists())
-
-
-def mark_lab_queue_complete(report: LabReport) -> bool:
-    if not report.visit_id:
-        return False
-    pending_lab_entries = list(
-        QueueEntry.objects.filter(
-            visit=report.visit,
-            queue_type__in=[QueueEntry.TYPE_LAB_RECEPTION, QueueEntry.TYPE_LAB_DOCTOR],
-            processed=False,
-        )
-    )
-    mark_open_lab_queue_entries_processed(report.visit)
-    doctor_request_entry = next(
-        (entry for entry in pending_lab_entries if entry.queue_type == QueueEntry.TYPE_LAB_DOCTOR),
-        None,
-    )
-    if doctor_request_entry:
-        ensure_pending_queue_entry(
-            visit=report.visit,
-            hospital=report.visit.hospital,
-            queue_type=QueueEntry.TYPE_DOCTOR,
-            reason=f"Lab results ready for: {report_test_summary(report)}",
-            requested_by=doctor_request_entry.requested_by,
-            notes="Laboratory work completed and ready for doctor review.",
-        )
-    else:
-        send_to_reception_queue(
-            visit=report.visit,
-            hospital=report.visit.hospital,
-            source="Lab",
-            detail=f"Lab completed: {report_test_summary(report)}",
-            notes="Lab work completed from a reception referral. Reception should review billing, dispensing, or doctor follow-up.",
-            requested_by=report.attendant,
-        )
-    sync_visit_status(report.visit)
-    return doctor_request_entry is not None
-
-
 def send_report_results_to_doctor(report: LabReport) -> bool:
     if not report.visit_id:
         return False
@@ -456,119 +293,6 @@ def send_report_results_to_doctor(report: LabReport) -> bool:
     return True
 
 
-def get_age_category(age_str: str, sex: str = "") -> str:
-    """Convert age text into an age category for defaults."""
-    if not age_str:
-        return 'general'
-    age_str = age_str.upper().strip()
-    digits = ''.join(filter(str.isdigit, age_str))
-    if not digits:
-        return 'general'
-    sex = (sex or "").upper().strip()
-    age_value = int(digits)
-    if any(token in age_str for token in ("DAY", "DYS", "DAYS")):
-        return "neonate" if age_value <= 28 else "child"
-    if 'M' in age_str:
-        return 'neonate' if age_value == 0 else 'child'
-    if 'Y' in age_str:
-        if age_value < 18:
-            return 'child'
-        if sex == "F":
-            return "woman"
-        if sex == "M":
-            return "man"
-        return "general"
-    return 'general'
-
-
-def get_or_create_test_definition(test_name: str, unit: str = '') -> TestCatalog:
-    """Normalize free-text test names into our known-test table."""
-    normalized_name = ' '.join((test_name or '').split())
-    test = TestCatalog.objects.filter(name__iexact=normalized_name).first()
-    if test:
-        if unit and not test.unit:
-            test.unit = unit
-            test.save(update_fields=['unit'])
-        return test
-    return TestCatalog.objects.create(name=normalized_name, unit=unit or '')
-
-
-def save_results_from_formset(report: LabReport, formset) -> None:
-    """Persist edited/new rows and handle row deletion in one place."""
-    age_category = get_age_category(report.patient_age, report.patient_sex)
-
-    for result_form in formset.forms:
-        cleaned = getattr(result_form, 'cleaned_data', None)
-        if not cleaned:
-            continue
-
-        instance = result_form.instance
-        if cleaned.get('DELETE', False):
-            if instance and instance.pk:
-                instance.delete()
-            continue
-
-        test_name = ' '.join((cleaned.get('test_name') or '').split())
-        result_value = cleaned.get('result_value') or ''
-        reference_range = cleaned.get('reference_range') or ''
-        unit = cleaned.get('unit') or ''
-        comment = cleaned.get('comment') or ''
-        section_name = cleaned.get('section_name') or ''
-        display_order = cleaned.get('display_order') or 0
-
-        # Skip untouched blank extra rows.
-        if not any([test_name, result_value, reference_range, unit, comment]):
-            continue
-
-        instance = result_form.save(commit=False)
-        instance.lab_report = report
-        instance.test = get_or_create_test_definition(test_name, unit)
-        instance.source_profile = cleaned.get("source_profile")
-        instance.section_name = section_name
-        instance.display_order = int(display_order or 0)
-        instance.reference_range = reference_range
-        instance.unit = unit
-        instance.comment = comment
-        instance.save()
-
-        default_exists = ReferenceRangeDefault.objects.filter(
-            test=instance.test,
-            age_category=age_category,
-        ).exists()
-        if not default_exists and reference_range:
-            ReferenceRangeDefault.objects.create(
-                test=instance.test,
-                age_category=age_category,
-                reference_range=reference_range,
-                unit=unit,
-            )
-
-
-def serialize_profile_payload(profiles):
-    payload = {}
-    for profile in profiles:
-        parameters = []
-        for parameter in profile.parameters.select_related('test').all():
-            parameters.append({
-                'test_name': parameter.test.name,
-                'section_name': parameter.section_name,
-                'display_order': parameter.display_order,
-                'reference_range': parameter.default_reference_range,
-                'unit': parameter.default_unit or parameter.test.unit,
-                'comment': parameter.default_comment,
-                'input_type': parameter.input_type,
-                'choice_options': parameter.choice_list(),
-            })
-        payload[str(profile.pk)] = {
-            'name': profile.name,
-            'code': profile.code,
-            'default_specimen_type': profile.default_specimen_type,
-            'description': profile.description,
-            'parameters': parameters,
-        }
-    return payload
-
-
 def group_results(report, results):
     grouped = []
     for result in results:
@@ -588,326 +312,13 @@ def group_results(report, results):
     return grouped
 
 
-def build_report_form_context(form, formset, **extra_context):
-    profiles = TestProfile.objects.filter(is_active=True).prefetch_related('parameters__test')
-    pending_requested_services = extra_context.pop("pending_requested_services", [])
-    completed_requested_services = extra_context.pop("completed_requested_services", [])
-    selected_requested_service_id = extra_context.pop("selected_requested_service_id", "")
-
-    context = {
-        'form': form,
-        'formset': formset,
-        'existing_tests': list(TestCatalog.objects.order_by('name').values_list('name', flat=True)),
-        'test_profiles': profiles,
-        'test_profile_payload': serialize_profile_payload(profiles),
-        'active_nav': 'lab_queue',
-        'pending_requested_services': pending_requested_services,
-        'completed_requested_services': completed_requested_services,
-        'selected_requested_service_id': str(selected_requested_service_id or ""),
-    }
-    context.update(extra_context)
-    return context
-
-
-def _save_consumable_usages(usage_formset, user):
-    """Deduct stock for new usages, restore stock for deleted ones."""
-    for form in usage_formset.forms:
-        if not form.cleaned_data:
-            continue
-        if form.cleaned_data.get('DELETE') and form.instance.pk:
-            consumable = form.instance.consumable
-            consumable.current_quantity += form.instance.quantity_used
-            consumable.save(update_fields=['current_quantity', 'updated_at'])
-            form.instance.delete()
-        elif (
-            not form.instance.pk
-            and form.cleaned_data.get('consumable')
-            and form.cleaned_data.get('quantity_used')
-        ):
-            usage = form.save(commit=False)
-            usage.used_by = user
-            usage.save()
-            consumable = usage.consumable
-            consumable.current_quantity = max(0, consumable.current_quantity - usage.quantity_used)
-            consumable.save(update_fields=['current_quantity', 'updated_at'])
-
-
-def handle_report_form(request, report=None):
-    """Shared create/edit handler for report entry."""
-    is_edit = report is not None
-    report = report or LabReport(attendant=request.user)
-
-    if report.visit_id:
-        sync_report_snapshot_from_visit(report)
-    elif not report.hospital_id:
-        report.hospital = get_active_hospital(request)
-
-    pending_requested_services = []
-    completed_requested_services = []
-    combined_manual_report = None
-    selected_service_name = ""
-    selected_requested_service_id = (request.POST.get("requested_service_id") or request.GET.get("requested_service_id") or "").strip()
-
-    # Determine whether this report is the combined manual hub (profile=None, no linked service).
-    is_combined_manual_report = bool(
-        report.pk
-        and report.visit_id
-        and not report.profile_id
-        and not report.requested_visit_service_id
-    )
-
-    # For structured (non-manual) reports: if no service is linked yet, link it now.
-    if (
-        report.visit_id
-        and selected_requested_service_id
-        and not report.requested_visit_service_id
-        and not is_combined_manual_report
-    ):
-        selected_service = VisitService.objects.filter(
-            visit=report.visit,
-            service__category="lab",
-            pk=selected_requested_service_id,
-        ).select_related("service__test_profile").first()
-        if selected_service and not is_manual_visit_service(selected_service) and not getattr(selected_service, "lab_report", None):
-            report.requested_visit_service = selected_service
-            if selected_service.service.test_profile_id and not report.profile_id:
-                report.profile = selected_service.service.test_profile
-            if report.pk:
-                report.save(update_fields=["requested_visit_service", "profile"])
-
-    if report.visit_id:
-        pending_services_qs = list(lab_visit_services(report.visit, performed=False))
-        completed_services_qs = list(lab_visit_services(report.visit, performed=True))
-        # Pre-create reports for structured services on GET only so the sidebar has report IDs.
-        # On POST the auto-advance logic creates the next report as needed; running this on POST
-        # would claim a OneToOneField slot before the save logic can link the current report.
-        if request.method == "GET":
-            for visit_service in pending_services_qs:
-                ensure_report_for_visit_service(visit_service, attendant=request.user)
-
-        # Resolve combined manual report once for this visit so all manual services share it.
-        all_services = pending_services_qs + completed_services_qs
-        if any(is_manual_visit_service(vs) for vs in all_services):
-            combined_manual_report = ensure_manual_report_for_visit(report.visit, attendant=request.user)
-
-        pending_requested_services = [
-            serialize_requested_service(item, combined_manual_report=combined_manual_report)
-            for item in pending_services_qs
-        ]
-        completed_requested_services = [
-            serialize_requested_service(item, combined_manual_report=combined_manual_report)
-            for item in completed_services_qs
-        ]
-
-        # Derive the display name for the currently-selected manual service (for the session name input).
-        if selected_requested_service_id:
-            _sel = next((vs for vs in pending_services_qs if str(vs.pk) == selected_requested_service_id), None)
-            if _sel and is_manual_visit_service(_sel):
-                selected_service_name = _sel.service.name
-
-    if (
-        request.method == "GET"
-        and report.visit_id
-        and report.requested_visit_service_id
-        and selected_requested_service_id
-        and str(report.requested_visit_service_id) != str(selected_requested_service_id)
-    ):
-        selected_service = VisitService.objects.filter(
-            visit=report.visit,
-            service__category="lab",
-            pk=selected_requested_service_id,
-        ).first()
-        if selected_service:
-            target_report = ensure_report_for_visit_service(selected_service, attendant=request.user)
-            return redirect(
-                f"{reverse('report_edit', kwargs={'pk': target_report.pk})}?requested_service_id={selected_service.pk}"
-            )
-
-    # On the combined manual report: if the selected service is structured, redirect to its own report.
-    if (
-        request.method == "GET"
-        and is_combined_manual_report
-        and selected_requested_service_id
-    ):
-        _sel_svc = VisitService.objects.filter(
-            visit=report.visit,
-            service__category="lab",
-            pk=selected_requested_service_id,
-        ).select_related("service__test_profile").first()
-        if _sel_svc and not is_manual_visit_service(_sel_svc):
-            target_report = ensure_report_for_visit_service(_sel_svc, attendant=request.user)
-            return redirect(
-                f"{reverse('report_edit', kwargs={'pk': target_report.pk})}?requested_service_id={_sel_svc.pk}"
-            )
-
-    if report.requested_visit_service_id and not selected_requested_service_id:
-        selected_requested_service_id = str(report.requested_visit_service_id)
-
-    can_send_to_doctor = report_ready_to_send_to_doctor(report)
-
-    _hospital = report.hospital or get_active_hospital(request)
-
-    if request.method == 'POST':
-        form = LabReportForm(request.POST, instance=report)
-        formset = TestResultFormSet(request.POST, instance=report)
-        usage_formset = LabConsumableUsageFormSet(request.POST, instance=report, prefix='consumable', hospital=_hospital)
-        if form.is_valid() and formset.is_valid():
-            action = request.POST.get("action", "save_report")
-            selected_visit_service = None
-            if report.visit_id and pending_requested_services:
-                selected_visit_service = next(
-                    (item for item in lab_visit_services(report.visit, performed=False) if str(item.pk) == selected_requested_service_id),
-                    None,
-                )
-                if action == "send_to_doctor":
-                    form.add_error(None, "Finish every requested lab test before sending results to the doctor.")
-                elif not selected_visit_service:
-                    form.add_error(None, "Choose the requested lab test you are working on before saving this report.")
-
-        if form.is_valid() and formset.is_valid() and not form.non_field_errors():
-            action = request.POST.get("action", "save_report")
-            report = form.save(commit=False)
-            if report.visit_id:
-                sync_report_snapshot_from_visit(report)
-            elif not report.hospital_id:
-                report.hospital = get_active_hospital(request)
-            if report.profile and not report.specimen_type:
-                report.specimen_type = report.profile.default_specimen_type
-            if not report.attendant:
-                report.attendant = request.user
-            if not report.attendant_name:
-                report.attendant_name = request.user.get_full_name() or request.user.username
-            report.save()
-            save_results_from_formset(report, formset)
-            if usage_formset.is_valid():
-                _save_consumable_usages(usage_formset, request.user)
-
-            selected_visit_service = None
-            if report.visit_id and selected_requested_service_id:
-                selected_visit_service = lab_visit_services(report.visit, performed=False).filter(pk=selected_requested_service_id).first()
-                if selected_visit_service:
-                    # Combined manual report must never be linked to a specific service —
-                    # it covers multiple services and stays with profile=None, service=None.
-                    _this_is_combined_manual = (not report.profile_id and not report.requested_visit_service_id)
-                    if not _this_is_combined_manual:
-                        if not report.requested_visit_service_id:
-                            report.requested_visit_service = selected_visit_service
-                        if selected_visit_service.service.test_profile_id and not report.profile_id:
-                            report.profile = selected_visit_service.service.test_profile
-                        report.save(update_fields=["requested_visit_service", "profile"])
-                    mark_visit_service_performed(selected_visit_service)
-                    refresh_lab_doctor_queue_reason(report.visit)
-
-            remaining_pending_services = []
-            if report.visit_id:
-                remaining_pending_services = list(lab_visit_services(report.visit, performed=False))
-
-            if selected_visit_service and remaining_pending_services:
-                next_pending_service = remaining_pending_services[0]
-                next_report = ensure_report_for_visit_service(next_pending_service, attendant=request.user)
-                messages.success(
-                    request,
-                    f"{selected_visit_service.service.name} saved. Loading the next pending test so you can finish this request in one pass.",
-                )
-                return redirect(
-                    f"{reverse('report_edit', kwargs={'pk': next_report.pk})}?requested_service_id={next_pending_service.pk}"
-                )
-
-            if action == "send_to_doctor" and report_ready_to_send_to_doctor(report):
-                send_report_results_to_doctor(report)
-                cleanup_stale_lab_queue_entries(visit=report.visit)
-                messages.success(request, "Report saved and sent to doctor.")
-                return redirect('report_detail', pk=report.pk)
-
-            if report_needs_doctor_send(report) and not remaining_pending_services:
-                messages.success(
-                    request,
-                    "Report saved. All requested tests are now completed. Review the report and use Send to Doctor when you are ready.",
-                )
-                return redirect('report_edit', pk=report.pk)
-
-            if not report_needs_doctor_send(report) and not remaining_pending_services:
-                returned_to_doctor = mark_lab_queue_complete(report)
-                cleanup_stale_lab_queue_entries(visit=report.visit)
-                if returned_to_doctor:
-                    messages.success(
-                        request,
-                        ('Report updated. ' if is_edit else 'Report saved successfully. ')
-                        + 'Results sent back to doctor.',
-                    )
-                else:
-                    messages.success(
-                        request,
-                        ('Report updated.' if is_edit else 'Report saved successfully.')
-                        + ' Lab work is complete and the patient is ready for reception billing.',
-                    )
-                return redirect('report_detail', pk=report.pk)
-
-            if selected_visit_service:
-                messages.success(request, f"{selected_visit_service.service.name} saved successfully.")
-                return redirect("lab_queue")
-
-            messages.success(request, 'Report updated.' if is_edit else 'Report saved successfully.')
-            return redirect('report_edit', pk=report.pk)
-        messages.error(request, 'Please fix the errors below.')
-    else:
-        if not report.attendant_name:
-            report.attendant_name = request.user.get_full_name() or request.user.username
-        form = LabReportForm(instance=report)
-        formset = TestResultFormSet(instance=report)
-        usage_formset = LabConsumableUsageFormSet(instance=report, prefix='consumable', hospital=_hospital)
-
-    context = {
-        'edit_mode': is_edit,
-        'report': report if is_edit else None,
-        'linked_visit': report.visit if report and report.visit_id else None,
-        'can_send_to_doctor': can_send_to_doctor,
-        'pending_requested_services': pending_requested_services,
-        'completed_requested_services': completed_requested_services,
-        'selected_requested_service_id': selected_requested_service_id,
-        'selected_service_name': selected_service_name,
-        'is_combined_manual_report': is_combined_manual_report,
-        'usage_formset': usage_formset,
-    }
-
-    return render(
-        request,
-        'lab/report_form.html',
-        build_report_form_context(
-            form,
-            formset,
-            **context
-        ),
-    )
-
-
-@login_required
-@staff_required
-def lab_queue(request):
-    hospital = get_active_hospital(request)
-    cleanup_stale_lab_queue_entries(hospital=hospital)
-    queue_entries = QueueEntry.objects.filter(
-        queue_type__in=[QueueEntry.TYPE_LAB_RECEPTION, QueueEntry.TYPE_LAB_DOCTOR],
-        processed=False,
-    ).select_related('visit__patient', 'hospital', 'requested_by').prefetch_related('visit__visit_services__service')
-    
-    if hospital and getattr(request.user, 'role', '') != 'superadmin':
-        queue_entries = queue_entries.filter(hospital=hospital)
-        
-    return render(
-        request,
-        'lab/lab_queue.html',
-        {
-            'queue_entries': queue_entries.order_by('created_at'),
-            'active_nav': 'lab_queue',
-        },
-    )
-
-
 @login_required
 @staff_required
 def report_list(request):
+    from datetime import date as date_cls
+    from collections import defaultdict
     from django.db.models import Count, Max
+
     base_qs = scoped_reports_queryset(request)
 
     search = (request.GET.get('search') or '').strip()
@@ -926,35 +337,22 @@ def report_list(request):
         draft_total=Count("id", filter=Q(printed=False)),
     )
 
-    # Group only by patient_name — one row per patient regardless of age/sex changes across visits
-    patient_groups = (
-        base_qs
-        .values('patient_name')
-        .annotate(
-            report_count=Count('id'),
-            latest_date=Max('sample_date'),
-            latest_id=Max('id'),
+    patient_details = defaultdict(lambda: {'tests': [], 'technician': None, 'age': '', 'sex': '', 'engines': set()})
+
+    # ---- Legacy (old lab app) side, grouped by patient name ----
+    legacy_groups = {
+        row['patient_name']: row
+        for row in base_qs.values('patient_name').annotate(
+            report_count=Count('id'), latest_date=Max('sample_date'), latest_id=Max('id'),
         )
-        .order_by('-latest_date', 'patient_name')
+    }
+    legacy_reports = (
+        base_qs.filter(patient_name__in=legacy_groups.keys())
+        .select_related('profile', 'attendant').order_by('-sample_date')
     )
-
-    paginator = Paginator(patient_groups, 20)
-    patients = paginator.get_page(request.GET.get('page'))
-
-    # For each patient group, fetch their reports to show test names + technician
-    patient_name_list = [p['patient_name'] for p in patients]
-    recent_reports = (
-        base_qs
-        .filter(patient_name__in=patient_name_list)
-        .select_related('profile', 'attendant')
-        .order_by('-sample_date')
-    )
-
-    # Build a dict: patient_name -> {tests, technician, age, sex}
-    from collections import defaultdict
-    patient_details = defaultdict(lambda: {'tests': [], 'technician': None, 'age': '', 'sex': ''})
-    for r in recent_reports:
+    for r in legacy_reports:
         pd = patient_details[r.patient_name]
+        pd['engines'].add('legacy')
         label = r.profile.name if r.profile else r.specimen_type
         if label not in pd['tests']:
             pd['tests'].append(label)
@@ -967,12 +365,68 @@ def report_list(request):
             pd['age'] = r.patient_age
             pd['sex'] = r.get_patient_sex_display()
 
+    # ---- New engine side, grouped by patient name — same hospital scoping ----
+    hospital = get_active_hospital(request)
+    next_qs = LabOrder.objects.select_related('test', 'visit_service__visit__patient', 'collected_by')
+    if hospital and getattr(request.user, 'role', '') != 'superadmin':
+        next_qs = next_qs.filter(hospital=hospital)
+    if search:
+        next_qs = next_qs.filter(visit_service__visit__patient__name__icontains=search)
+
+    next_groups = {}
+    for order in next_qs.order_by('-created_at'):
+        patient = order.visit_service.visit.patient
+        name = patient.name
+        group = next_groups.setdefault(name, {'report_count': 0, 'latest_date': None, 'latest_visit_id': None, 'patient_id': patient.pk})
+        group['report_count'] += 1
+        order_date = order.created_at.date()
+        if group['latest_date'] is None or order_date > group['latest_date']:
+            group['latest_date'] = order_date
+            group['latest_visit_id'] = order.visit_service.visit_id
+
+        pd = patient_details[name]
+        pd['engines'].add('next')
+        if order.test.name not in pd['tests']:
+            pd['tests'].append(order.test.name)
+        if not pd['technician'] and order.collected_by_id:
+            pd['technician'] = order.collected_by.get_full_name() or order.collected_by.username
+        if not pd['age']:
+            pd['age'] = patient.age
+            pd['sex'] = patient.get_sex_display()
+
+    # ---- Merge both sources into one row per patient ----
+    all_names = set(legacy_groups.keys()) | set(next_groups.keys())
+    merged_rows = []
+    for name in all_names:
+        legacy = legacy_groups.get(name)
+        nxt = next_groups.get(name)
+        # legacy sample_date is a DateTimeField (Max() returns a datetime); the new
+        # engine's latest_date is already a plain date — normalize before comparing.
+        legacy_date = legacy['latest_date'] if legacy else None
+        if legacy_date is not None and hasattr(legacy_date, 'date'):
+            legacy_date = legacy_date.date()
+        dates = [d for d in (legacy_date, nxt['latest_date'] if nxt else None) if d]
+        merged_rows.append({
+            'patient_name': name,
+            'latest_date': max(dates) if dates else None,
+            'report_count': (legacy['report_count'] if legacy else 0) + (nxt['report_count'] if nxt else 0),
+            'legacy_latest_id': legacy['latest_id'] if legacy else None,
+            'next_latest_visit_id': nxt['latest_visit_id'] if nxt else None,
+            'next_patient_id': nxt['patient_id'] if nxt else None,
+        })
+    merged_rows.sort(key=lambda r: r['patient_name'])
+    merged_rows.sort(key=lambda r: r['latest_date'] or date_cls.min, reverse=True)
+
+    paginator = Paginator(merged_rows, 20)
+    patients = paginator.get_page(request.GET.get('page'))
+
     context = {
         'patients': patients,
         'patient_details': dict(patient_details),
         'total_reports': base_stats['total'],
         'printed_count': base_stats['printed_total'],
         'draft_count': base_stats['draft_total'],
+        'next_engine_count': sum(g['report_count'] for g in next_groups.values()),
         'active_nav': 'dashboard',
         'search': search,
     }
@@ -999,269 +453,60 @@ def patient_reports(request, report_id):
     return render(request, 'lab/patient_reports.html', context)
 
 
-@login_required
-@staff_required
-def template_library(request):
-    profiles = TestProfile.objects.filter(is_active=True).prefetch_related('parameters__test')
-    return render(
-        request,
-        'lab/template_library.html',
-        {'profiles': profiles, 'active_nav': 'templates'},
-    )
+def _visit_resume_target(orders):
+    """Where should 'continue this patient's lab work' land? The first
+    order that hasn't reached ENTERED yet decides — pick_sample if no
+    sample collected, enter_result if collected but not entered. Once
+    every order is at least ENTERED, there's nothing left to resume: the
+    only remaining step is review/release on the report itself."""
+    for order in orders:
+        if order.stage == OrderStage.PENDING:
+            return 'pick_sample', order.pk
+        if order.stage == OrderStage.SAMPLE_COLLECTED:
+            return 'enter_result', order.pk
+    return 'visit_report', None
 
 
 @login_required
 @staff_required
-def template_catalog_api(request):
-    """Autocomplete endpoint: returns matching TestCatalog names."""
-    q = (request.GET.get('q') or '').strip()
-    qs = TestCatalog.objects.all()
-    if q:
-        qs = qs.filter(name__icontains=q)
-    qs = qs.values('name', 'unit')[:30]
-    return JsonResponse({'results': list(qs)})
-
-
-@login_required
-@staff_required
-@transaction.atomic
-def template_save(request):
-    """Create or update a TestProfile + its parameters from a JSON payload."""
-    if request.method != 'POST':
-        return JsonResponse({'error': 'POST required'}, status=405)
-
-    try:
-        body = json.loads(request.body)
-    except (json.JSONDecodeError, ValueError):
-        return JsonResponse({'error': 'Invalid JSON'}, status=400)
-
-    profile_id = body.get('profile_id')
-    name = (body.get('name') or '').strip()
-    code = (body.get('code') or '').strip()
-    specimen_type = (body.get('specimen_type') or '').strip()
-    description = (body.get('description') or '').strip()
-    sections = body.get('sections') or []
-
-    if not name or not code:
-        return JsonResponse({'error': 'Template name and code are required.'}, status=400)
-
-    # Check code uniqueness
-    qs = TestProfile.objects.filter(code=code)
-    if profile_id:
-        qs = qs.exclude(pk=profile_id)
-    if qs.exists():
-        return JsonResponse({'error': f'A template with code "{code}" already exists.'}, status=400)
-
-    if profile_id:
-        profile = get_object_or_404(TestProfile, pk=profile_id)
-        profile.name = name
-        profile.code = code
-        profile.default_specimen_type = specimen_type
-        profile.description = description
-        profile.save()
-        profile.parameters.all().delete()
-    else:
-        profile = TestProfile.objects.create(
-            name=name,
-            code=code,
-            default_specimen_type=specimen_type,
-            description=description,
-            is_active=True,
-        )
-
-    order = 0
-    for section in sections:
-        section_name = (section.get('name') or '').strip()
-        for test_row in (section.get('tests') or []):
-            test_name = (test_row.get('name') or '').strip()
-            if not test_name:
-                continue
-            test_obj, _ = TestCatalog.objects.get_or_create(name=test_name)
-            TestProfileParameter.objects.create(
-                profile=profile,
-                test=test_obj,
-                section_name=section_name,
-                display_order=order,
-                input_type=test_row.get('input_type', 'text'),
-                default_reference_range=test_row.get('reference_range', ''),
-                default_unit=test_row.get('unit', ''),
-                default_comment=test_row.get('comment', ''),
-            )
-            order += 1
-
-    return JsonResponse({'ok': True, 'profile_id': profile.pk, 'redirect': reverse('template_library')})
-
-
-@login_required
-@staff_required
-def template_builder(request, profile_id=None):
-    """Render the template builder. If profile_id given, loads that profile for editing."""
-    clone_id = request.GET.get('clone')
-    source = None
-    if profile_id:
-        source = get_object_or_404(TestProfile, pk=profile_id)
-    elif clone_id:
-        source = get_object_or_404(TestProfile, pk=clone_id)
-
-    initial_data = None
-    if source:
-        params = source.parameters.select_related('test').order_by('display_order', 'id')
-        sections_map = {}
-        for p in params:
-            sec = p.section_name or ''
-            if sec not in sections_map:
-                sections_map[sec] = []
-            sections_map[sec].append({
-                'name': p.test.name,
-                'reference_range': p.default_reference_range,
-                'unit': p.default_unit,
-                'input_type': p.input_type,
-                'comment': p.default_comment,
-            })
-        initial_data = {
-            'profile_id': source.pk if profile_id else None,
-            'name': source.name if profile_id else f'Copy of {source.name}',
-            'code': source.code if profile_id else f'{source.code}-copy',
-            'specimen_type': source.default_specimen_type,
-            'description': source.description,
-            'sections': [{'name': k, 'tests': v} for k, v in sections_map.items()],
-        }
-
-    all_profiles = TestProfile.objects.filter(is_active=True).values('id', 'name')
-    return render(request, 'lab/template_builder.html', {
-        'active_nav': 'templates',
-        'editing': bool(profile_id),
-        'source': source,
-        'initial_data_json': json.dumps(initial_data) if initial_data else 'null',
-        'all_profiles': list(all_profiles),
-    })
-
-
-@login_required
-@staff_required
-@transaction.atomic
-def template_delete(request, profile_id):
-    profile = get_object_or_404(TestProfile, pk=profile_id)
-    if request.method == 'POST':
-        name = profile.name
-        profile.delete()
-        messages.success(request, f'Template "{name}" deleted.')
-        return redirect('template_library')
-    return render(request, 'lab/template_confirm_delete.html', {
-        'profile': profile,
-        'active_nav': 'templates',
-    })
-
-
-@login_required
-@staff_required
-@transaction.atomic
-def report_create(request):
-    messages.info(
-        request,
-        "Start lab work from the live queue only. Manual report creation has been removed to keep the workflow clean.",
-    )
-    return redirect("lab_queue")
-
-
-@login_required
-@staff_required
-@transaction.atomic
-def report_create_from_lab_request(request, lab_request_id):
-    """Create a lab report from a doctor's lab request with auto-filled doctor info"""
+def patient_reports_next(request, patient_id):
     hospital = get_active_hospital(request)
-    
-    # Get the lab request - allow both PENDING and IN_PROGRESS statuses
-    lab_requests = LabRequest.objects.filter(
-        requested_by_role=LabRequest.REQUESTED_BY_DOCTOR,
-        status__in=[LabRequest.STATUS_PENDING, LabRequest.STATUS_IN_PROGRESS],
-    ).select_related('visit__patient', 'visit__hospital', 'requested_by')
-    
+    patients = Patient.objects.all()
     if hospital and getattr(request.user, 'role', '') != 'superadmin':
-        lab_requests = lab_requests.filter(visit__hospital=hospital)
-    
-    lab_request = get_object_or_404(lab_requests, pk=lab_request_id)
-    visit = lab_request.visit
-    
-    # Create or get the report for this lab request
-    report = LabReport.objects.filter(lab_request=lab_request).first()
-    
-    if not report:
-        # Create new report with auto-filled data
-        doctor_name = lab_request.requested_by.get_full_name() or lab_request.requested_by.username
-        report = LabReport(
-            lab_request=lab_request,
-            visit=visit,
-            patient_name=visit.patient.name,
-            patient_age=visit.patient.age,
-            patient_sex=visit.patient.sex,
-            referred_by=doctor_name,  # Auto-filled with doctor's name
-            specimen_type='BLOOD',
-            attendant=request.user,
-            attendant_name=request.user.get_full_name() or request.user.username,
-            hospital=visit.hospital,
-        )
-        # Update lab request status to in_progress
-        lab_request.status = LabRequest.STATUS_IN_PROGRESS
-        lab_request.save(update_fields=['status'])
-    
-    return redirect("report_edit", pk=report.pk)
+        patients = patients.filter(hospital=hospital)
+    patient = get_object_or_404(patients, pk=patient_id)
 
-
-@login_required
-@staff_required
-def perform_lab_test(request, queue_entry_id):
-    hospital = get_active_hospital(request)
-    queue_entries = QueueEntry.objects.select_related('visit__patient', 'hospital').filter(
-        pk=queue_entry_id,
-        queue_type__in=[QueueEntry.TYPE_LAB_RECEPTION, QueueEntry.TYPE_LAB_DOCTOR],
+    orders = (
+        LabOrder.objects.filter(visit_service__visit__patient=patient)
+        .select_related('test', 'result', 'visit_service__visit')
+        .order_by('visit_service__visit_id', 'created_at')
     )
-    if hospital and getattr(request.user, 'role', '') != 'superadmin':
-        queue_entries = queue_entries.filter(hospital=hospital)
-    queue_entry = get_object_or_404(queue_entries)
-    visit = queue_entry.visit
-    if visit.status == Visit.STATUS_CANCELLED:
-        messages.error(request, "This visit was terminated by an administrator and cannot continue in the lab queue.")
-        queue_entry.processed = True
-        queue_entry.processed_at = timezone.now()
-        queue_entry.save(update_fields=['processed', 'processed_at'])
-        return redirect('lab_queue')
-    pending_services = list(lab_visit_services(visit, performed=False))
-    if pending_services:
-        requested_service_id = (request.GET.get("requested_service_id") or "").strip()
-        selected_visit_service = next(
-            (item for item in pending_services if str(item.pk) == requested_service_id),
-            pending_services[0],
-        )
-        report = ensure_report_for_visit_service(selected_visit_service, attendant=request.user)
-        return redirect(
-            f"{reverse('report_edit', kwargs={'pk': report.pk})}?requested_service_id={selected_visit_service.pk}"
-        )
 
-    report = LabReport.objects.filter(visit=visit, requested_visit_service__isnull=True).first()
-    if not report:
-        report = LabReport.objects.create(
-            hospital=visit.hospital,
-            visit=visit,
-            patient_name=visit.patient.name,
-            patient_age=visit.patient.age,
-            patient_sex=visit.patient.sex,
-            sample_date=visit.visit_date,
-            specimen_type='BLOOD',
-            attendant=request.user,
-            attendant_name=request.user.get_full_name() or request.user.username,
-        )
-    return redirect('report_edit', pk=report.pk)
+    visits = {}
+    for order in orders:
+        visit = order.visit_service.visit
+        row = visits.setdefault(visit.pk, {'visit': visit, 'orders': []})
+        row['orders'].append(order)
 
+    rows = []
+    for row in visits.values():
+        stages = [o.stage for o in row['orders']]
+        resume_url_name, resume_order_id = _visit_resume_target(row['orders'])
+        rows.append({
+            'visit': row['visit'],
+            'orders': row['orders'],
+            'all_released': all(s == OrderStage.RELEASED for s in stages),
+            'in_progress': resume_url_name != 'visit_report',
+            'resume_url_name': resume_url_name,
+            'resume_order_id': resume_order_id,
+        })
+    rows.sort(key=lambda r: r['visit'].visit_date, reverse=True)
 
-@login_required
-@staff_required
-def report_edit(request, pk):
-    report = get_object_or_404(scoped_reports_queryset(request), pk=pk)
-    if report.visit_id and report.visit and report.visit.status == Visit.STATUS_CANCELLED:
-        messages.error(request, "This visit was terminated by an administrator and the lab report can no longer be edited.")
-        return redirect('report_detail', pk=report.pk)
-    return handle_report_form(request, report=report)
+    return render(request, 'lab/patient_reports_next.html', {
+        'patient': patient,
+        'rows': rows,
+        'active_nav': 'dashboard',
+    })
 
 
 @login_required
@@ -1357,30 +602,6 @@ def report_delete(request, pk):
             'next_url': resolve_next_url(request, reverse('report_list')),
         },
     )
-
-
-@login_required
-@staff_required
-def default_range(request):
-    """AJAX endpoint to fetch default reference range for a test name + age."""
-    test_name = ' '.join((request.GET.get('test') or '').split())
-    age = request.GET.get('age', '')
-    sex = request.GET.get('sex', '')
-    if not test_name:
-        return JsonResponse({})
-
-    test = TestCatalog.objects.filter(name__iexact=test_name).first()
-    if not test:
-        return JsonResponse({})
-
-    age_cat = get_age_category(age, sex)
-    default = ReferenceRangeDefault.objects.filter(test=test, age_category=age_cat).first()
-    if not default:
-        return JsonResponse({})
-    return JsonResponse({
-        'reference_range': default.reference_range,
-        'unit': default.unit,
-    })
 
 
 @login_required
@@ -1523,4 +744,495 @@ def lab_settings(request):
         'form': form,
         'is_admin': is_admin,
         'active_nav': 'lab_settings',
+    })
+
+
+# ===========================================================================
+# Lab module rework — merged in from the former `lab_next` app. Reuses
+# staff_required / get_active_hospital defined above; nothing duplicated.
+# ===========================================================================
+
+def _parse_age_years(age_str):
+    """'22YRS' -> 22, '6MTH' -> 0 (under a year — range bands are in whole
+    years, an infant reads as age 0 for matching purposes)."""
+    if not age_str:
+        return None
+    raw = age_str.upper().strip()
+    digits = "".join(ch for ch in raw if ch.isdigit())
+    if not digits:
+        return None
+    value = int(digits)
+    if "MTH" in raw or "MON" in raw:
+        return 0
+    return value
+
+
+def _pending_lab_visit_services(visit):
+    return (
+        VisitService.objects.filter(visit=visit, service__category=Service.CATEGORY_LAB, performed=False)
+        .select_related("service__lab_test_next")
+    )
+
+
+def _ensure_orders_for_visit(visit):
+    """Every pending lab VisitService whose service has been mapped to a
+    LabTest gets a LabOrder, if it doesn't have one yet. Services not yet
+    mapped (service.lab_test_next is unset) are reported back so the queue
+    screen can flag them instead of silently doing nothing."""
+    unmapped = []
+    for vs in _pending_lab_visit_services(visit):
+        if hasattr(vs, "lab_order_next"):
+            continue
+        test = vs.service.lab_test_next
+        if not test:
+            unmapped.append(vs)
+            continue
+        patient = visit.patient
+        LabOrder.objects.create(
+            visit_service=vs,
+            test=test,
+            hospital=visit.hospital,
+            patient_sex={"M": Sex.MALE, "F": Sex.FEMALE}.get(patient.sex, Sex.ANY),
+            patient_age_years=_parse_age_years(patient.age),
+        )
+    return unmapped
+
+
+@login_required
+@staff_required
+def queue(request):
+    hospital = get_active_hospital(request)
+    queue_entries = QueueEntry.objects.filter(
+        queue_type__in=[QueueEntry.TYPE_LAB_RECEPTION, QueueEntry.TYPE_LAB_DOCTOR],
+        processed=False,
+    ).select_related("visit__patient", "hospital")
+    if hospital and getattr(request.user, "role", "") != "superadmin":
+        queue_entries = queue_entries.filter(hospital=hospital)
+
+    rows = []
+    for entry in queue_entries.order_by("created_at"):
+        visit = entry.visit
+        unmapped = _ensure_orders_for_visit(visit)
+        # Only orders still needing sample collection or result entry belong
+        # here — once entered, that's Reviewing Results' job, not this
+        # queue's. Without this, an order sat on both screens at once from
+        # the moment it was entered until it was actually released.
+        orders = (
+            LabOrder.objects.filter(visit_service__visit=visit)
+            .filter(stage__in=[OrderStage.PENDING, OrderStage.SAMPLE_COLLECTED])
+            .select_related("test", "result")
+        )
+        if not orders.exists() and not unmapped:
+            continue
+        if visit.is_fully_paid:
+            payment_status = "paid"
+        elif visit.is_unbilled:
+            payment_status = "unpaid"
+        else:
+            payment_status = "partial"
+        billed_service_names = ", ".join(visit.visit_services.values_list("service__name", flat=True))
+        rows.append({
+            "entry": entry, "orders": orders, "unmapped": unmapped,
+            "payment_status": payment_status, "balance_due": visit.balance_due,
+            "billed_service_names": billed_service_names,
+        })
+
+    return render(request, "lab/queue.html", {"rows": rows, "active_nav": "lab_queue"})
+
+
+@login_required
+@staff_required
+def reviewing_results(request):
+    """A focused, hospital-wide worklist of everything sitting at ENTERED —
+    results are in but not yet reviewed/released. `queue` already lists
+    in-flight orders per visit, but there's no single place to see just
+    "what's waiting on me to review" across every patient at once; this is
+    that screen. Review/release itself isn't duplicated here — each card
+    links into the same visit_report page that already owns that logic
+    (mark reviewed, release, and the doctor-vs-reception routing on
+    release), so there's one source of truth for what release actually does."""
+    hospital = get_active_hospital(request)
+    orders = (
+        LabOrder.objects.filter(stage=OrderStage.ENTERED)
+        .select_related("test", "result", "visit_service__visit__patient")
+        .order_by("visit_service__visit_id", "created_at")
+    )
+    if hospital and getattr(request.user, "role", "") != "superadmin":
+        orders = orders.filter(hospital=hospital)
+
+    settings_row = getattr(hospital, "lab_settings_next", None)
+    payment_required_before_release = bool(settings_row and settings_row.payment_required_before_release)
+
+    groups = {}
+    ordered_visit_ids = []
+    for order in orders:
+        visit = order.visit_service.visit
+        if visit.pk not in groups:
+            is_doctor_request = QueueEntry.objects.filter(
+                visit=visit, queue_type=QueueEntry.TYPE_LAB_DOCTOR, processed=False,
+            ).exists()
+            if visit.is_fully_paid:
+                payment_status = "paid"
+            elif visit.is_unbilled:
+                payment_status = "unpaid"
+            else:
+                payment_status = "partial"
+            groups[visit.pk] = {
+                "visit": visit, "orders": [], "is_doctor_request": is_doctor_request,
+                "payment_status": payment_status, "balance_due": visit.balance_due,
+                # Doctor-requested results go back to the doctor even with a
+                # balance outstanding — only printing stays gated on payment.
+                "release_blocked_by_payment": payment_required_before_release and not visit.is_fully_paid and not is_doctor_request,
+                "billed_service_names": ", ".join(visit.visit_services.values_list("service__name", flat=True)),
+            }
+            ordered_visit_ids.append(visit.pk)
+        groups[visit.pk]["orders"].append(order)
+
+    rows = [groups[vid] for vid in ordered_visit_ids]
+    return render(request, "lab/reviewing_results.html", {"rows": rows, "active_nav": "lab_reviewing_results"})
+
+
+def _payload_from_post(test, post):
+    if test.result_type == ResultType.FREE_ENTRY:
+        return {"free_text": post.get("free_text", "")}
+    if test.result_type == ResultType.DEFINED_OPTION:
+        return {"chosen_option": post.get("chosen_option", "")}
+    if test.result_type == ResultType.PARAMETER_PANEL:
+        values = [
+            {"parameter_id": p.pk, "value": post.get(f"param_{p.pk}", "")}
+            for p in test.parameters.all()
+            if post.get(f"param_{p.pk}", "").strip()
+        ]
+        return {"values": values, "bench_notes": post.get("bench_notes", "")}
+    if test.result_type == ResultType.CULTURE:
+        sensitivities = [
+            {"antibiotic_id": a.pk, "sir": post.get(f"abx_{a.pk}", "")}
+            for a in test.antibiotics.all()
+            if post.get(f"abx_{a.pk}", "")
+        ]
+        return {"organism": post.get("organism", ""), "sensitivities": sensitivities}
+    return {}
+
+
+@login_required
+@staff_required
+def pick_sample(request, order_id):
+    hospital = get_active_hospital(request)
+    orders = LabOrder.objects.select_related("test", "visit_service__visit__patient")
+    if hospital and getattr(request.user, "role", "") != "superadmin":
+        orders = orders.filter(hospital=hospital)
+    order = get_object_or_404(orders, pk=order_id)
+    visit = order.visit_service.visit
+
+    settings_row = getattr(order.hospital, "lab_settings_next", None)
+    outside_enabled = settings_row.outside_samples_enabled if settings_row else True
+
+    if request.method == "POST":
+        specimen_id = request.POST.get("specimen")
+        specimen = order.test.accepted_specimens.filter(pk=specimen_id).first() if specimen_id else None
+        outside_source = (request.POST.get("outside_source", "").strip() if outside_enabled else "")
+        notes = request.POST.get("collection_notes", "").strip()
+        order.mark_sample_collected(
+            user=request.user, specimen=specimen, when=timezone.now(),
+            outside_source=outside_source, notes=notes,
+        )
+        order.priority_routine = not request.POST.get("urgent")
+        order.save(update_fields=["priority_routine"])
+        messages.success(request, f"Sample collected for {order.test.name}.")
+        return redirect("enter_result", order_id=order.pk)
+
+    return render(request, "lab/pick_sample.html", {
+        "order": order, "visit": visit, "outside_enabled": outside_enabled,
+    })
+
+
+@login_required
+@staff_required
+def enter_result(request, order_id):
+    hospital = get_active_hospital(request)
+    orders = LabOrder.objects.select_related("test", "visit_service__visit__patient", "visit_service__service")
+    if hospital and getattr(request.user, "role", "") != "superadmin":
+        orders = orders.filter(hospital=hospital)
+    order = get_object_or_404(orders, pk=order_id)
+    visit = order.visit_service.visit
+
+    if order.stage == OrderStage.PENDING:
+        messages.error(request, "Collect the sample before entering results.")
+        return redirect("pick_sample", order_id=order.pk)
+
+    if request.method == "POST":
+        payload = _payload_from_post(order.test, request.POST)
+        save_results(order, request.user, payload)
+
+        order.visit_service.performed = True
+        order.visit_service.save(update_fields=["performed"])
+
+        messages.success(request, f"{order.test.name} saved.")
+
+        if not _pending_lab_visit_services(visit).exclude(pk=order.visit_service_id).exists():
+            # Entered, not yet routed anywhere — routing happens at release
+            # (see visit_report's "release" action), so reception/doctor
+            # never act on a report still awaiting review or payment. But if
+            # there's still a balance, flip the visit to READY_FOR_BILLING
+            # right now rather than waiting for a blocked release attempt to
+            # surface it — that's what puts it on reception's "Ready for
+            # Billing" dashboard so someone actually goes and clears it,
+            # instead of the report just sitting silently in Reviewing
+            # Results until someone happens to try releasing it.
+            if not visit.is_fully_paid and visit.status not in (Visit.STATUS_CANCELLED, Visit.STATUS_COMPLETED):
+                visit.status = Visit.STATUS_READY_FOR_BILLING
+                visit.save(update_fields=["status"])
+            messages.success(request, "All requested tests are complete. Review and release the report to send this patient onward.")
+            return redirect("visit_report", visit_id=visit.pk)
+
+        return redirect("queue")
+
+    hydrated = hydrate_entry_form(order)
+    return render(request, "lab/enter_result.html", {"order": order, "visit": visit, "hydrated": hydrated})
+
+
+# ---------------------------------------------------------------------------
+# Phlebotomy — the pre-billing intake step. Only reachable for hospitals with
+# LabSettings.phlebotomy_enabled; not tied to `engine`, since a hospital
+# could plausibly want phlebotomy without being on the new result-entry
+# engine yet. In practice today the queue/enter-result screens above are
+# 'next'-only, so phlebotomy effectively implies 'next' for now.
+# ---------------------------------------------------------------------------
+
+def phlebotomy_enabled_for(hospital):
+    """The one function reception imports (lazily) to decide whether to show
+    its 'Send to Phlebotomy' button at all — see
+    reception.views.receptionist_queue_send_to_phlebotomy, which owns the
+    actual queue-routing action since it needs reception's own
+    close_reception_queue_for_visit / reception_queue_other_open_work guards,
+    already used by its send-to-doctor/send-to-sonographer siblings."""
+    settings_row = getattr(hospital, "lab_settings_next", None)
+    return bool(settings_row and settings_row.phlebotomy_enabled)
+
+
+@login_required
+@staff_required
+def phlebotomy_queue(request):
+    hospital = get_active_hospital(request)
+    queue_entries = QueueEntry.objects.filter(
+        queue_type=QueueEntry.TYPE_PHLEBOTOMY, processed=False,
+    ).select_related("visit__patient", "hospital")
+    if hospital and getattr(request.user, "role", "") != "superadmin":
+        queue_entries = queue_entries.filter(hospital=hospital)
+    return render(request, "lab/phlebotomy_queue.html", {
+        "queue_entries": queue_entries.order_by("created_at"),
+        "active_nav": "phlebotomy_queue",
+    })
+
+
+@login_required
+@staff_required
+def phlebotomy_intake(request, queue_entry_id):
+    hospital = get_active_hospital(request)
+    entries = QueueEntry.objects.filter(queue_type=QueueEntry.TYPE_PHLEBOTOMY).select_related(
+        "visit__patient", "visit__hospital",
+    )
+    if hospital and getattr(request.user, "role", "") != "superadmin":
+        entries = entries.filter(hospital=hospital)
+    entry = get_object_or_404(entries, pk=queue_entry_id)
+    visit = entry.visit
+
+    added_services = VisitService.objects.filter(
+        visit=visit, service__category=Service.CATEGORY_LAB,
+    ).select_related("service")
+    available_services = (
+        Service.objects.filter(hospital=visit.hospital, category=Service.CATEGORY_LAB, is_active=True)
+        .exclude(pk__in=added_services.values_list("service_id", flat=True))
+        .order_by("name")
+    )
+
+    if request.method == "POST":
+        action = request.POST.get("action")
+
+        if action == "add_service":
+            service = get_object_or_404(
+                Service, pk=request.POST.get("service_id"), hospital=visit.hospital, category=Service.CATEGORY_LAB,
+            )
+            if VisitService.objects.filter(visit=visit, service=service).exists():
+                messages.error(request, f"{service.name} is already on this visit — it's already under way, not added again.")
+            else:
+                VisitService.objects.create(visit=visit, service=service, price_at_time=service.price)
+                visit.total_amount = (visit.total_amount or Decimal("0")) + service.price
+                visit.save(update_fields=["total_amount"])
+                messages.success(request, f"{service.name} added.")
+            return redirect("phlebotomy_intake", queue_entry_id=entry.pk)
+
+        if action == "remove_service":
+            vs = get_object_or_404(
+                VisitService, pk=request.POST.get("visit_service_id"), visit=visit, service__category=Service.CATEGORY_LAB,
+            )
+            try:
+                release_visit_service_for_lab(vs)
+            except DjangoValidationError as exc:
+                messages.error(request, "; ".join(exc.messages))
+                return redirect("phlebotomy_intake", queue_entry_id=entry.pk)
+            visit.total_amount = max(Decimal("0"), (visit.total_amount or Decimal("0")) - vs.price_at_time)
+            visit.save(update_fields=["total_amount"])
+            vs.delete()
+            return redirect("phlebotomy_intake", queue_entry_id=entry.pk)
+
+        if action == "send_to_reception":
+            notes = request.POST.get("notes", "").strip()
+            if not added_services.exists():
+                messages.error(request, "Add at least one lab service before sending to reception.")
+                return redirect("phlebotomy_intake", queue_entry_id=entry.pk)
+            if notes:
+                # Carry the assessment onto every test added here so it
+                # shows up as Clinical Notes on the final report — the
+                # queue entry's own notes field doesn't reach the report.
+                added_services.update(notes=notes)
+            entry.notes = notes
+            entry.processed = True
+            entry.processed_at = timezone.now()
+            entry.save(update_fields=["notes", "processed", "processed_at"])
+            send_to_reception_queue(
+                visit=visit, hospital=visit.hospital, source="Phlebotomy",
+                detail="Lab tests added during phlebotomy intake.",
+                notes=notes, requested_by=request.user,
+            )
+            sync_visit_status(visit)
+            messages.success(request, f"{visit.patient.name} sent to reception for approval and billing.")
+            return redirect("phlebotomy_queue")
+
+    return render(request, "lab/phlebotomy_intake.html", {
+        "entry": entry, "visit": visit,
+        "available_services": available_services, "added_services": added_services,
+        "active_nav": "phlebotomy_queue",
+    })
+
+
+# ---------------------------------------------------------------------------
+# Report — review, release, print. The tail end of the pipeline: results
+# entered on individual LabOrders are grouped per-visit into one report here.
+# ---------------------------------------------------------------------------
+
+@login_required
+@staff_required
+def visit_report(request, visit_id):
+    hospital = get_active_hospital(request)
+    visits = Visit.objects.select_related("patient", "hospital")
+    if hospital and getattr(request.user, "role", "") != "superadmin":
+        visits = visits.filter(hospital=hospital)
+    visit = get_object_or_404(visits, pk=visit_id)
+
+    orders = (
+        LabOrder.objects.filter(visit_service__visit=visit)
+        .select_related("test", "result")
+        .prefetch_related("result__values")
+        .order_by("created_at")
+    )
+    if not orders.exists():
+        messages.error(request, "No lab orders exist for this visit yet.")
+        return redirect("queue")
+
+    settings_row = getattr(visit.hospital, "lab_settings_next", None)
+    require_review = settings_row.require_review_before_release if settings_row else True
+    payment_gate = settings_row.payment_required_before_release if settings_row else False
+
+    stages = [o.stage for o in orders]
+    all_entered_or_later = all(s in (OrderStage.ENTERED, OrderStage.REVIEWED, OrderStage.RELEASED) for s in stages)
+    all_reviewed_or_later = all(s in (OrderStage.REVIEWED, OrderStage.RELEASED) for s in stages)
+    all_released = all(s == OrderStage.RELEASED for s in stages)
+
+    can_review = require_review and all_entered_or_later and not all_reviewed_or_later
+    can_release = (all_reviewed_or_later if require_review else all_entered_or_later) and not all_released
+
+    is_doctor_request = QueueEntry.objects.filter(
+        visit=visit, queue_type=QueueEntry.TYPE_LAB_DOCTOR, processed=False,
+    ).exists()
+    # Doctor-requested results are allowed back to the requesting doctor
+    # even with a balance outstanding — only printing the report stays
+    # gated on payment, for every visit regardless of who requested it.
+    payment_blocked = payment_gate and not visit.is_fully_paid
+    release_payment_blocked = payment_blocked and not is_doctor_request
+
+    if request.method == "POST":
+        action = request.POST.get("action")
+
+        if action == "mark_reviewed" and can_review:
+            for order in orders:
+                if order.stage == OrderStage.ENTERED:
+                    order.stage = OrderStage.REVIEWED
+                    order.save(update_fields=["stage"])
+                    if hasattr(order, "result"):
+                        order.result.reviewed_by = request.user
+                        order.result.reviewed_at = timezone.now()
+                        order.result.save(update_fields=["reviewed_by", "reviewed_at"])
+            messages.success(request, "Results marked reviewed.")
+            return redirect("visit_report", visit_id=visit.pk)
+
+        if action == "release":
+            if release_payment_blocked:
+                messages.error(request, "This visit's balance must be settled before results can be released.")
+                return redirect("visit_report", visit_id=visit.pk)
+            if not can_release:
+                messages.error(request, "Not all results are ready to release yet.")
+                return redirect("visit_report", visit_id=visit.pk)
+            release_time = timezone.now()
+            for order in orders:
+                order.stage = OrderStage.RELEASED
+                order.save(update_fields=["stage"])
+                if hasattr(order, "result"):
+                    order.result.released_by = request.user
+                    order.result.released_at = release_time
+                    order.result.save(update_fields=["released_by", "released_at"])
+
+            # Route onward only now that the report is actually final — not
+            # at raw entry, so reception/doctor never act on a draft that's
+            # still awaiting review or payment. Doctor-requested work goes
+            # back to the requesting doctor; everything else (reception or
+            # self-test) goes back to reception for billing/next step.
+            doctor_entry = (
+                QueueEntry.objects.filter(visit=visit, queue_type=QueueEntry.TYPE_LAB_DOCTOR, processed=False)
+                .select_related("requested_by")
+                .order_by("created_at")
+                .first()
+            )
+            mark_queue_entries_processed(visit=visit, queue_type=QueueEntry.TYPE_LAB_RECEPTION)
+            mark_queue_entries_processed(visit=visit, queue_type=QueueEntry.TYPE_LAB_DOCTOR)
+            test_names = ", ".join(o.test.name for o in orders[:4])
+
+            if doctor_entry:
+                ensure_pending_queue_entry(
+                    visit=visit, hospital=visit.hospital, queue_type=QueueEntry.TYPE_DOCTOR,
+                    reason=f"Lab results ready for review: {test_names}",
+                    requested_by=doctor_entry.requested_by,
+                    notes="Laboratory results are ready for clinical review.",
+                )
+                if doctor_entry.requested_by:
+                    Notification.objects.create(
+                        user=doctor_entry.requested_by,
+                        notification_type=Notification.TYPE_LAB_RESULT,
+                        title=f"Lab Results Ready for {visit.patient.name}",
+                        message=f"Results for {test_names} are ready for review.",
+                        reference_id=visit.pk,
+                    )
+                messages.success(request, "Report released and sent to the requesting doctor.")
+            else:
+                send_to_reception_queue(
+                    visit=visit, hospital=visit.hospital, source="Lab",
+                    detail=f"Lab completed: {test_names}",
+                    notes="Lab work completed and released. Reception should decide billing/next step.",
+                    requested_by=request.user,
+                )
+                messages.success(request, "Report released and sent back to reception.")
+
+            sync_visit_status(visit)
+            return redirect("visit_report", visit_id=visit.pk)
+
+    return render(request, "lab/report.html", {
+        "visit": visit,
+        "orders": orders,
+        "can_review": can_review,
+        "can_release": can_release,
+        "payment_blocked": payment_blocked,
+        "release_payment_blocked": release_payment_blocked,
+        "is_doctor_request": is_doctor_request,
+        "require_review": require_review,
+        "all_released": all_released,
     })

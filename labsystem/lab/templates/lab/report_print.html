@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Print Report - Lumina Medical Services</title>
+    <title>{{ hospital.name }} - Laboratory Report</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -330,6 +330,8 @@
         <div class="remarks-body">{{ report.comments }}</div>
     </div>
     {% endif %}
+
+    {% include "lab/partials/report_disclaimer.html" %}
 
     <div class="report-footer">
         <div><strong style="color:#374151;">{% if hospital %}{{ hospital.name }}{% else %}Hospital EMR{% endif %}</strong>{% if hospital and hospital.tagline %} &nbsp;·&nbsp; {{ hospital.tagline }}{% endif %}{% if hospital and hospital.email %} &nbsp;·&nbsp; {{ hospital.email }}{% endif %}</div>

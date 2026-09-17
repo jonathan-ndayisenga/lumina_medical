@@ -16,7 +16,7 @@ from django.views.decorators.http import require_http_methods
 from accounts.models import User
 from admin_dashboard.models import InventoryItem, InventoryTransaction
 from doctor.models import Consultation, Prescription
-from lab.models import LabReport
+from lab.models import LabReport, LabSettings
 from .forms import CompleteVisitForm, PatientForm, QuickDispenseStartForm, VisitCreateForm
 from .models import Patient, Payment, QueueEntry, Service, Triage, Visit, VisitService
 from .workflow import (
@@ -97,6 +97,36 @@ def queue_types_for_service(service):
     return []
 
 
+# Friendly labels for the "this visit will route to..." preview on the
+# Create/Edit Visit screen — keyed off queue_types_for_service's own output
+# so the preview can never drift from what actually happens on submit.
+_ROUTE_QUEUE_LABELS = {
+    QueueEntry.TYPE_DOCTOR: "Doctor",
+    QueueEntry.TYPE_RECEPTION: "Lab (after reception approval)",
+    QueueEntry.TYPE_NURSE: "Nurse",
+    QueueEntry.TYPE_SONOGRAPHER: "Sonographer (after reception approval)",
+}
+
+
+def services_picker_payload(services_queryset):
+    """Serializable service list for the Create/Edit Visit page's JS-driven
+    picker — id/name/price plus where picking it will route the visit, so
+    that routing outcome (previously invisible until after submit) shows
+    live as services are selected."""
+    payload = []
+    for service in services_queryset:
+        destinations = [_ROUTE_QUEUE_LABELS.get(qt, qt) for qt in queue_types_for_service(service)]
+        payload.append({
+            "id": service.pk,
+            "name": service.name,
+            "category": service.category,
+            "category_display": service.get_category_display(),
+            "price": str(service.price),
+            "destinations": destinations,
+        })
+    return payload
+
+
 def queue_reason_for_service(service):
     category = normalize_service_category(getattr(service, "category", ""))
     if category in {service.CATEGORY_LAB, "lab"}:
@@ -157,6 +187,38 @@ def reception_queue_queryset(hospital):
         .prefetch_related("visit__visit_services__service", "visit__prescriptions__drug", "visit__queue_entries")
         .order_by("created_at", "id")
     )
+
+
+def resolve_open_reception_entry(request, hospital, queue_entry_id):
+    """
+    Look up an OPEN receptionist-queue entry for one of the queue action
+    buttons (Finish, Bill, Send to Doctor/Sonographer/Phlebotomy). These
+    buttons live on a page that can go stale — e.g. a bill-first payment
+    auto-queues the patient to lab and closes this same entry in the
+    background — so a second click on an already-processed entry must not
+    404. Returns (queue_entry, None) when the entry is still open, or
+    (None, redirect_response) when it's stale and the caller should bail
+    out immediately, sending the receptionist somewhere useful instead of
+    an error page: the payment receipt if the visit is fully paid, or back
+    to the live queue otherwise.
+    """
+    queue_entry = reception_queue_queryset(hospital).filter(pk=queue_entry_id).first()
+    if queue_entry is not None:
+        return queue_entry, None
+
+    stale_entry = get_object_or_404(
+        QueueEntry.objects.select_related("visit__patient"),
+        pk=queue_entry_id, hospital=hospital, queue_type=QueueEntry.TYPE_RECEPTION,
+    )
+    visit = stale_entry.visit
+    if visit.is_fully_paid:
+        latest_payment = visit.payments.order_by("-paid_at", "-id").first()
+        if latest_payment:
+            messages.info(request, f"{visit.patient.name} was already billed — here's the receipt.")
+            return None, redirect("print_payment_receipt", payment_id=latest_payment.pk)
+
+    messages.info(request, f"{visit.patient.name} has already moved on from the receptionist queue.")
+    return None, redirect("reception_queue")
 
 
 def consultation_services_queryset(hospital):
@@ -280,6 +342,11 @@ def reception_dashboard(request):
     return render(request, "reception/dashboard.html", context)
 
 
+def _phlebotomy_enabled_for(hospital):
+    from lab.views import phlebotomy_enabled_for
+    return phlebotomy_enabled_for(hospital)
+
+
 @reception_role_required
 def receptionist_queue(request):
     hospital = get_active_hospital(request)
@@ -287,6 +354,8 @@ def receptionist_queue(request):
     scan_services = list(scan_services_queryset(hospital)) if hospital else []
     queue_entries = list(reception_queue_queryset(hospital)) if hospital else []
     queue_rows = []
+    lab_settings_row = LabSettings.objects.filter(hospital=hospital).first() if hospital else None
+    lab_payment_required = bool(lab_settings_row and lab_settings_row.payment_required_before_lab)
 
     for entry in queue_entries:
         visit = entry.visit
@@ -303,6 +372,15 @@ def receptionist_queue(request):
             service__category=Service.CATEGORY_LAB,
             is_approved=False
         ).exists()
+        lab_payment_blocked = (
+            has_pending_lab_approval and lab_payment_required and visit.is_unbilled
+        )
+        if visit.is_fully_paid:
+            payment_status = "paid"
+        elif visit.is_unbilled:
+            payment_status = "unpaid"
+        else:
+            payment_status = "partial"
         queue_rows.append(
             {
                 "entry": entry,
@@ -314,6 +392,10 @@ def receptionist_queue(request):
                 "open_work_count": status_payload["other_open_work"],
                 "pending_consultation_line": pending_consultation_line,
                 "has_pending_lab_approval": has_pending_lab_approval,
+                "lab_payment_blocked": lab_payment_blocked,
+                "payment_status": payment_status,
+                "balance_due": visit.balance_due,
+                "billed_service_names": ", ".join(visit.visit_services.values_list("service__name", flat=True)),
                 "selected_consultation_service_id": (
                     pending_consultation_line.service_id
                     if pending_consultation_line
@@ -335,8 +417,70 @@ def receptionist_queue(request):
             "pending_dispense_count": sum(row["pending_dispense_count"] for row in queue_rows),
             "consultation_services": consultation_services,
             "scan_services": scan_services,
+            "phlebotomy_enabled": _phlebotomy_enabled_for(hospital),
         },
     )
+
+
+def approve_pending_lab_services(visit, queue_entry, actor):
+    """Approve every pending lab VisitService on this visit and route it to
+    the lab queue. The one place this happens — the reception queue's
+    "Approve Lab" button and the automatic bill-first hand-off in
+    complete_visit both call this, so "send to lab" means exactly the same
+    thing everywhere it's triggered from.
+
+    `queue_entry` is the open TYPE_RECEPTION entry this visit is sitting on,
+    if any — used to read Doctor-vs-self-test origin and to mark it
+    processed. Pass None when there isn't one (still works; falls back to
+    treating it as a self-test attributed to `actor`).
+
+    Returns "no_pending", "payment_blocked", or "approved".
+    """
+    lab_services = visit.visit_services.filter(
+        service__category=Service.CATEGORY_LAB,
+        is_approved=False,
+    )
+    if not lab_services.exists():
+        return "no_pending"
+
+    settings_row = LabSettings.objects.filter(hospital=visit.hospital).first()
+    payment_required = bool(settings_row and settings_row.payment_required_before_lab)
+    # Any real payment is enough to send the patient on to sample collection
+    # — full settlement isn't required until report release (a separate
+    # gate, payment_required_before_release), not here.
+    if payment_required and visit.is_unbilled:
+        return "payment_blocked"
+
+    # Read names/source before the update — lab_services is a lazy queryset
+    # filtered on is_approved=False, so evaluating it again afterward would
+    # come back empty and silently drop the test names from the reason text.
+    pending_names = list(lab_services.values_list("service__name", flat=True))
+    source = reception_source_from_entry(queue_entry) if queue_entry else "Reception"
+    lab_services.update(is_approved=True)
+
+    if source == "Doctor":
+        queue_type = QueueEntry.TYPE_LAB_DOCTOR
+        reason = f"Doctor requested: {', '.join(pending_names)}" if pending_names else "Laboratory follow-up approved."
+    else:
+        queue_type = QueueEntry.TYPE_LAB_RECEPTION
+        reason = f"Reception self-test: {', '.join(pending_names)}" if pending_names else "Self-test laboratory work."
+
+    ensure_pending_queue_entry(
+        visit=visit,
+        hospital=visit.hospital,
+        queue_type=queue_type,
+        reason=reason,
+        requested_by=(queue_entry.requested_by if queue_entry else None) or actor,
+        notes=f"Lab services approved by reception. Source: {source}",
+    )
+
+    if queue_entry:
+        queue_entry.processed = True
+        queue_entry.processed_at = timezone.now()
+        queue_entry.save(update_fields=["processed", "processed_at"])
+
+    sync_visit_status(visit)
+    return "approved"
 
 
 @reception_role_required
@@ -350,43 +494,16 @@ def receptionist_queue_approve_lab(request, queue_entry_id):
         queue_entry = get_object_or_404(QueueEntry, pk=queue_entry_id, hospital=hospital)
         visit = queue_entry.visit
 
-        # 1. Mark all lab services as approved
-        lab_services = visit.visit_services.filter(
-            service__category=Service.CATEGORY_LAB,
-            is_approved=False
-        )
-        
-        if not lab_services.exists():
+        result = approve_pending_lab_services(visit, queue_entry, request.user)
+        if result == "no_pending":
             messages.info(request, "No pending lab services found for approval.")
-        else:
-            lab_services.update(is_approved=True)
-            
-            # 2. Create the lab queue entry
-            pending_names = list(lab_services.values_list("service__name", flat=True))
-            source = reception_source_from_entry(queue_entry)
-            
-            if source == "Doctor":
-                queue_type = QueueEntry.TYPE_LAB_DOCTOR
-                reason = f"Doctor requested: {', '.join(pending_names)}" if pending_names else "Laboratory follow-up approved."
-            else:
-                queue_type = QueueEntry.TYPE_LAB_RECEPTION
-                reason = f"Reception self-test: {', '.join(pending_names)}" if pending_names else "Self-test laboratory work."
-
-            ensure_pending_queue_entry(
-                visit=visit,
-                hospital=visit.hospital,
-                queue_type=queue_type,
-                reason=reason,
-                requested_by=queue_entry.requested_by or request.user,
-                notes=f"Lab services approved by reception. Source: {source}",
+        elif result == "payment_blocked":
+            messages.error(
+                request,
+                f"{visit.patient.name} hasn't paid anything yet (UGX {visit.balance_due:,.2f} due) — "
+                "at least a partial payment is required before this can be sent to the lab.",
             )
-            
-            # 3. Mark the reception queue entry as processed
-            queue_entry.processed = True
-            queue_entry.processed_at = timezone.now()
-            queue_entry.save(update_fields=["processed", "processed_at"])
-            
-            sync_visit_status(visit)
+        else:
             messages.success(request, f"Lab requests for {visit.patient.name} have been approved and sent to the lab.")
     except Exception as e:
         messages.error(request, f"Failed to approve lab request: {str(e)}")
@@ -401,7 +518,9 @@ def receptionist_queue_finish(request, queue_entry_id):
         raise PermissionDenied("Finishing a receptionist queue task requires a POST request.")
 
     hospital = get_active_hospital(request)
-    queue_entry = get_object_or_404(reception_queue_queryset(hospital), pk=queue_entry_id)
+    queue_entry, stale_response = resolve_open_reception_entry(request, hospital, queue_entry_id)
+    if stale_response is not None:
+        return stale_response
     visit = queue_entry.visit
 
     if reception_queue_other_open_work(visit).exists():
@@ -423,13 +542,17 @@ def receptionist_queue_bill(request, queue_entry_id):
         raise PermissionDenied("Opening billing from the receptionist queue requires a POST request.")
 
     hospital = get_active_hospital(request)
-    queue_entry = get_object_or_404(reception_queue_queryset(hospital), pk=queue_entry_id)
+    queue_entry, stale_response = resolve_open_reception_entry(request, hospital, queue_entry_id)
+    if stale_response is not None:
+        return stale_response
     visit = queue_entry.visit
 
-    if reception_queue_other_open_work(visit).exists():
-        messages.error(request, "This visit still has other open queue work and cannot move to billing yet.")
-        return redirect("reception_queue")
-
+    # Billing is its own independent action now — collecting a payment
+    # shouldn't be gated on whether some other department (doctor, nurse,
+    # lab) still has open work for this visit. complete_visit already knows
+    # not to mark the visit COMPLETED while other queue work is open; it
+    # just records the payment and the patient carries a payment badge
+    # wherever they're queued next.
     close_reception_queue_for_visit(visit)
     visit.status = Visit.STATUS_READY_FOR_BILLING
     visit.save(update_fields=["status"])
@@ -450,7 +573,9 @@ def receptionist_queue_send_to_doctor(request, queue_entry_id):
         raise PermissionDenied("Sending a patient to doctor from receptionist queue requires a POST request.")
 
     hospital = get_active_hospital(request)
-    queue_entry = get_object_or_404(reception_queue_queryset(hospital), pk=queue_entry_id)
+    queue_entry, stale_response = resolve_open_reception_entry(request, hospital, queue_entry_id)
+    if stale_response is not None:
+        return stale_response
     visit = queue_entry.visit
 
     if reception_queue_other_open_work(visit).exists():
@@ -501,7 +626,9 @@ def receptionist_queue_send_to_sonographer(request, queue_entry_id):
         raise PermissionDenied("Sending a patient to sonographer requires a POST request.")
 
     hospital = get_active_hospital(request)
-    queue_entry = get_object_or_404(reception_queue_queryset(hospital), pk=queue_entry_id)
+    queue_entry, stale_response = resolve_open_reception_entry(request, hospital, queue_entry_id)
+    if stale_response is not None:
+        return stale_response
     visit = queue_entry.visit
 
     if reception_queue_other_open_work(visit).exists():
@@ -547,6 +674,48 @@ def receptionist_queue_send_to_sonographer(request, queue_entry_id):
     )
     sync_visit_status(visit)
     messages.success(request, f"{visit.patient.name} sent to sonographer. {scan_service.name} added to bill.")
+    return redirect("reception_queue")
+
+
+@reception_role_required
+@transaction.atomic
+def receptionist_queue_send_to_phlebotomy(request, queue_entry_id):
+    """Lab module rework: routes to the Phlebotomy queue instead of billing
+    a service here directly — the attendant picks tests from the shared
+    catalog on the Phlebotomy side, then sends the visit back here.
+    Gated per-hospital by lab.LabSettings.phlebotomy_enabled; the view
+    itself lives here (not in lab) because it needs the same
+    close_reception_queue_for_visit / reception_queue_other_open_work guards
+    its send-to-doctor and send-to-sonographer siblings already use."""
+    if request.method != "POST":
+        raise PermissionDenied("Sending a patient to Phlebotomy requires a POST request.")
+
+    hospital = get_active_hospital(request)
+    queue_entry, stale_response = resolve_open_reception_entry(request, hospital, queue_entry_id)
+    if stale_response is not None:
+        return stale_response
+    visit = queue_entry.visit
+
+    from lab.views import phlebotomy_enabled_for
+    if not phlebotomy_enabled_for(visit.hospital):
+        messages.error(request, "Phlebotomy is not enabled for this hospital.")
+        return redirect("reception_queue")
+
+    if reception_queue_other_open_work(visit).exists():
+        messages.error(request, "This visit still has other open queue work and cannot be routed to Phlebotomy yet.")
+        return redirect("reception_queue")
+
+    close_reception_queue_for_visit(visit)
+    ensure_pending_queue_entry(
+        visit=visit,
+        hospital=visit.hospital,
+        queue_type=QueueEntry.TYPE_PHLEBOTOMY,
+        reason="Sent to Phlebotomy for lab consultation and test selection.",
+        requested_by=request.user,
+        notes=f"Sent to Phlebotomy from receptionist queue after {reception_source_from_entry(queue_entry).lower()} handoff.",
+    )
+    sync_visit_status(visit)
+    messages.success(request, f"{visit.patient.name} sent to Phlebotomy.")
     return redirect("reception_queue")
 
 
@@ -896,6 +1065,18 @@ def visit_create(request, patient_id):
                         f"Days already used: {visit.adjustment_days_used}. Remaining days: {visit.adjustment_remaining_days}."
                     ),
                 )
+            elif visit.visit_type == Visit.TYPE_FOLLOW_UP:
+                # No consultation service to route off of — the linked
+                # completed visit is what earns this a free trip straight
+                # to the doctor queue.
+                ensure_pending_queue_entry(
+                    visit=visit,
+                    hospital=hospital,
+                    queue_type=QueueEntry.TYPE_DOCTOR,
+                    reason=f"Follow-up review for visit from {visit.parent_visit.visit_date:%d %b %Y}.",
+                    requested_by=request.user,
+                    notes=f"Follow-up visit linked to completed visit #{visit.parent_visit_id}. No new billing.",
+                )
             else:
                 for service in services:
                     VisitService.objects.create(
@@ -955,6 +1136,8 @@ def visit_create(request, patient_id):
             "patient": patient,
             "form": form,
             "edit_mode": False,
+            "phlebotomy_enabled": _phlebotomy_enabled_for(hospital),
+            "services_json": services_picker_payload(form.fields["services"].queryset),
         },
     )
 
@@ -982,6 +1165,15 @@ def visit_edit(request, visit_id):
     if request.method == "POST":
         form = VisitCreateForm(request.POST, instance=visit, hospital=hospital, patient=visit.patient)
         if form.is_valid():
+            from lab.guards import release_visit_services_for_lab
+            try:
+                release_visit_services_for_lab(
+                    visit.visit_services.filter(service__category=Service.CATEGORY_LAB)
+                )
+            except ValidationError as exc:
+                messages.error(request, "; ".join(exc.messages))
+                return redirect("visit_edit", visit_id=visit.pk)
+
             visit = form.save(commit=False)
             visit.total_amount = form.calculate_total()
             visit.save()
@@ -989,21 +1181,33 @@ def visit_edit(request, visit_id):
             visit.visit_services.all().delete()
             visit.queue_entries.filter(processed=False).delete()
 
-            services = list(form.cleaned_data["services"])
-            for service in services:
-                VisitService.objects.create(
+            if visit.visit_type == Visit.TYPE_FOLLOW_UP:
+                # No consultation service to route off of — the linked
+                # completed visit earns this a free trip to the doctor queue.
+                ensure_pending_queue_entry(
                     visit=visit,
-                    service=service,
-                    price_at_time=service.price,
+                    hospital=hospital,
+                    queue_type=QueueEntry.TYPE_DOCTOR,
+                    reason=f"Follow-up review for visit from {visit.parent_visit.visit_date:%d %b %Y}.",
+                    requested_by=request.user,
+                    notes=f"Follow-up visit linked to completed visit #{visit.parent_visit_id}. No new billing.",
                 )
-                for queue_type in queue_types_for_service(service):
-                    QueueEntry.objects.create(
-                        hospital=hospital,
+            else:
+                services = list(form.cleaned_data["services"])
+                for service in services:
+                    VisitService.objects.create(
                         visit=visit,
-                        queue_type=queue_type,
-                        reason=queue_reason_for_service(service),
-                        requested_by=request.user,
+                        service=service,
+                        price_at_time=service.price,
                     )
+                    for queue_type in queue_types_for_service(service):
+                        QueueEntry.objects.create(
+                            hospital=hospital,
+                            visit=visit,
+                            queue_type=queue_type,
+                            reason=queue_reason_for_service(service),
+                            requested_by=request.user,
+                        )
 
             sync_visit_status(visit)
             
@@ -1035,6 +1239,7 @@ def visit_edit(request, visit_id):
             "visit": visit,
             "form": form,
             "edit_mode": True,
+            "services_json": services_picker_payload(form.fields["services"].queryset),
         },
     )
 
@@ -1202,17 +1407,115 @@ def complete_visit(request, visit_id):
             )
             payment.save()
 
-            # Update visit status based on remaining balance.
+            # Update visit status based on remaining balance. A visit with
+            # lab services still awaiting approval isn't actually done just
+            # because it's paid — sample collection hasn't happened yet —
+            # so don't close it out or the reception queue entry until that
+            # work is actually sent on.
             visit.refresh_from_db()
-            if visit.is_fully_paid:
+            has_pending_lab_approval = visit.visit_services.filter(
+                service__category=Service.CATEGORY_LAB, is_approved=False,
+            ).exists()
+
+            settings_row = LabSettings.objects.filter(hospital=hospital).first()
+            bill_first = bool(settings_row and settings_row.payment_required_before_lab)
+            auto_queued = False
+            if has_pending_lab_approval and bill_first and not visit.is_unbilled:
+                # Bill-first: ANY real payment (partial is fine) is enough to
+                # send the patient on to sample collection — the results
+                # themselves stay behind the separate, stricter
+                # payment_required_before_release gate at visit_report, so a
+                # partial payer can be sampled but won't get results released
+                # until the balance is actually cleared.
+                reception_entry = QueueEntry.objects.filter(
+                    visit=visit, queue_type=QueueEntry.TYPE_RECEPTION, processed=False,
+                ).order_by("-created_at").first()
+                if approve_pending_lab_services(visit, reception_entry, request.user) == "approved":
+                    auto_queued = True
+                    visit.refresh_from_db()
+                    has_pending_lab_approval = False
+
+            # A visit is only truly "done" when nothing else is queued for
+            # it anywhere OUTSIDE a *self-test* lab hand-off — a patient
+            # waiting on the doctor, nurse, or sonographer still needs to
+            # keep moving through the app after paying, just carrying a
+            # payment badge instead of the visit closing out from under
+            # them. A self-test lab_reception entry (or an in-flight
+            # phlebotomy intake) doesn't count here — that's the
+            # established "billed and sent to lab" being reception's own
+            # finish line. A lab_doctor entry is deliberately NOT excluded,
+            # though: ensure_pending_queue_entry refuses to create a new
+            # entry once a visit is COMPLETED, so marking the visit done
+            # here would silently break visit_report's release action from
+            # ever routing the results back to the requesting doctor later.
+            has_other_open_work = visit.queue_entries.exclude(
+                queue_type__in=[
+                    QueueEntry.TYPE_RECEPTION, QueueEntry.TYPE_LAB_RECEPTION,
+                    QueueEntry.TYPE_PHLEBOTOMY,
+                ]
+            ).filter(processed=False).exists()
+            visit_fully_wrapped_up = not has_pending_lab_approval and not has_other_open_work
+
+            if visit.is_fully_paid and visit_fully_wrapped_up:
                 visit.status = Visit.STATUS_COMPLETED
                 visit.save(update_fields=["status"])
                 mark_queue_entries_processed(visit=visit, queue_type=QueueEntry.TYPE_RECEPTION)
-                messages.success(request, "Payment recorded. Visit is now fully paid and completed.")
-            else:
-                visit.status = Visit.STATUS_READY_FOR_BILLING
+                if auto_queued:
+                    messages.success(
+                        request,
+                        "Payment recorded in full — receipt is ready, and the patient has been "
+                        "sent to the lab queue.",
+                    )
+                else:
+                    messages.success(request, "Payment recorded. Visit is now fully paid and completed.")
+            elif visit.is_fully_paid:
+                # Fully paid, but something else is still open (lab approval
+                # pending, or another department's queue entry) — receipt is
+                # ready, the visit just stays open and carries a "Paid"
+                # badge wherever it's queued next.
+                visit.status = Visit.STATUS_IN_PROGRESS
                 visit.save(update_fields=["status"])
-                messages.success(request, f"Partial payment recorded. Balance due: {visit.balance_due}.")
+                if has_pending_lab_approval:
+                    messages.success(
+                        request,
+                        "Payment received in full — receipt is ready. Use \"Approve Lab\" on the "
+                        "reception queue when you're ready to send this patient for sample collection.",
+                    )
+                else:
+                    messages.success(
+                        request,
+                        "Payment received in full — receipt is ready. The patient stays queued for "
+                        "their next step.",
+                    )
+            else:
+                # Not fully paid.
+                still_owes_and_otherwise_idle = not auto_queued and not has_other_open_work
+                visit.status = (
+                    Visit.STATUS_READY_FOR_BILLING if still_owes_and_otherwise_idle
+                    else Visit.STATUS_IN_PROGRESS
+                )
+                visit.save(update_fields=["status"])
+                if still_owes_and_otherwise_idle:
+                    # "Bill Patient" already closed out the reception entry
+                    # that got them here — without reopening one, a partial
+                    # payer with nothing else pending would simply vanish
+                    # from the reception queue with no way to find them again
+                    # to collect the rest and release their report.
+                    ensure_pending_queue_entry(
+                        visit=visit, hospital=hospital, queue_type=QueueEntry.TYPE_RECEPTION,
+                        reason=f"Balance due: UGX {visit.balance_due:,.2f}",
+                        requested_by=request.user,
+                        notes="Partial payment recorded — return to finish billing and release the report.",
+                    )
+                if auto_queued:
+                    messages.success(
+                        request,
+                        f"Partial payment recorded — receipt is ready, and the patient has been sent "
+                        f"to the lab queue. Balance due: {visit.balance_due}. Results won't release "
+                        "until the balance is cleared.",
+                    )
+                else:
+                    messages.success(request, f"Partial payment recorded. Balance due: {visit.balance_due}.")
 
             return redirect("print_payment_receipt", payment_id=payment.pk)
         messages.error(request, "Please correct the billing details below.")
@@ -1302,6 +1605,12 @@ def remove_visit_service_api(request, visit_id, visit_service_id):
             status=400,
         )
 
+    from lab.guards import release_visit_service_for_lab
+    try:
+        release_visit_service_for_lab(visit_service)
+    except ValidationError as exc:
+        return JsonResponse({"error": "; ".join(exc.messages)}, status=400)
+
     reason = admin_override_reason(request)
     if not reason:
         return JsonResponse({"error": "Enter a reason for removing this service."}, status=400)
@@ -1361,6 +1670,15 @@ def void_dispense_visit(request, visit_id):
             request,
             "This visit already has payments recorded and cannot be voided here. Contact the administrator.",
         )
+        return redirect("complete_visit", visit_id=visit.pk)
+
+    from lab.guards import release_visit_services_for_lab
+    try:
+        release_visit_services_for_lab(
+            visit.visit_services.filter(service__category=Service.CATEGORY_LAB)
+        )
+    except ValidationError as exc:
+        messages.error(request, "; ".join(exc.messages))
         return redirect("complete_visit", visit_id=visit.pk)
 
     from doctor.views import remove_prescription_workflow
@@ -1534,6 +1852,19 @@ def print_payment_receipt(request, payment_id):
         from .whatsapp import build_receipt_message, build_walink
         walink = build_walink(raw_number, build_receipt_message(payment, visit))
 
+    # Billing a visit with lab services still awaiting approval doesn't end
+    # it (see complete_visit) — the reception queue entry stays open so the
+    # receptionist can send the patient on. Surface that same action right
+    # here instead of making them go find the row again on the queue page.
+    has_pending_lab_approval = visit.visit_services.filter(
+        service__category=Service.CATEGORY_LAB, is_approved=False,
+    ).exists()
+    reception_queue_entry = None
+    if has_pending_lab_approval:
+        reception_queue_entry = QueueEntry.objects.filter(
+            visit=visit, queue_type=QueueEntry.TYPE_RECEPTION, processed=False,
+        ).order_by("-created_at").first()
+
     return render(
         request,
         "reception/payment_receipt.html",
@@ -1547,6 +1878,7 @@ def print_payment_receipt(request, payment_id):
             "total_paid": visit.total_paid,
             "balance_due": visit.balance_due,
             "walink": walink,
+            "reception_queue_entry": reception_queue_entry,
         },
     )
 
@@ -1677,7 +2009,7 @@ def view_visit_report(request, visit_id):
     # Import here to avoid circular imports
     from doctor.models import Consultation
     from nurse.models import NurseNote
-    from lab.models import LabReport
+    from lab.models import LabOrder, LabReport
     # Get doctor consultation
     consultation = getattr(visit, "consultation", None)
 
@@ -1690,8 +2022,17 @@ def view_visit_report(request, visit_id):
     # Get nurse notes
     nurse_notes = NurseNote.objects.filter(visit=visit).select_related("created_by").order_by("-created_at")
 
-    # Get lab reports
+    # Get lab reports — legacy engine (LabReport) and the current engine
+    # (LabOrder) both need to show here; a visit's lab work is on whichever
+    # one the hospital is actually using, and this summary shouldn't go
+    # blank just because it only ever looked at the retired model.
     lab_reports = LabReport.objects.filter(visit=visit).prefetch_related("results__test").order_by("-created_at")
+    lab_orders = (
+        LabOrder.objects.filter(visit_service__visit=visit)
+        .select_related("test", "result", "specimen")
+        .prefetch_related("result__values")
+        .order_by("created_at")
+    )
 
     age_at_visit = visit.patient.age_at(visit.visit_date)
 
@@ -1700,6 +2041,14 @@ def view_visit_report(request, visit_id):
         vs for vs in visit.visit_services.all()
         if vs.service.category != Service.CATEGORY_PHARMACY
     ]
+
+    # Doctor-requested lab results can reach the doctor with a balance still
+    # outstanding, but this page is the printable record — the actual
+    # result values stay withheld here until the visit is fully paid.
+    lab_settings_row = LabSettings.objects.filter(hospital=visit.hospital).first()
+    lab_print_blocked = bool(
+        lab_settings_row and lab_settings_row.payment_required_before_release and not visit.is_fully_paid
+    )
 
     context = {
         "active_nav": "reception_patients",
@@ -1711,6 +2060,8 @@ def view_visit_report(request, visit_id):
         "triage": triage,
         "nurse_notes": nurse_notes,
         "lab_reports": lab_reports,
+        "lab_orders": lab_orders,
+        "lab_print_blocked": lab_print_blocked,
         "age_at_visit": age_at_visit,
         "non_pharmacy_services": non_pharmacy_services,
         "payments": visit.payments.select_related("bank_account", "mobile_account", "recorded_by").order_by("-paid_at", "-id"),
@@ -1758,6 +2109,34 @@ def patient_quick_send(request, patient_id):
     hospital = get_active_hospital(request)
     patient = get_object_or_404(Patient, pk=patient_id, hospital=hospital)
     destination = request.POST.get("destination", "").strip()
+
+    if destination == "phlebotomy":
+        if not _phlebotomy_enabled_for(hospital):
+            messages.error(request, "Phlebotomy is not enabled for this hospital.")
+            return redirect("patient_visits", patient_id=patient.pk)
+
+        # No service picked yet on purpose — the lab attendant chooses the
+        # actual tests once the patient reaches Phlebotomy, same as the
+        # regular "Send to Phlebotomy" action from the reception queue.
+        visit = Visit.objects.create(
+            patient=patient,
+            hospital=hospital,
+            status=Visit.STATUS_IN_PROGRESS,
+            total_amount=0,
+            created_by=request.user,
+            notes=f"Quick send to Phlebotomy by {request.user.get_full_name() or request.user.username}.",
+        )
+        ensure_pending_queue_entry(
+            visit=visit,
+            hospital=hospital,
+            queue_type=QueueEntry.TYPE_PHLEBOTOMY,
+            reason="Sent to Phlebotomy for lab consultation and test selection.",
+            requested_by=request.user,
+            notes=f"Quick send to Phlebotomy by {request.user.get_full_name() or request.user.username}.",
+        )
+        sync_visit_status(visit)
+        messages.success(request, f"{patient.name} sent to Phlebotomy.")
+        return redirect("reception_queue")
 
     if destination not in QUICK_SEND_DESTINATIONS:
         messages.error(request, "Invalid destination selected.")

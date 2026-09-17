@@ -1,0 +1,20 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ hospital.name }} - Ternah EMR{% endblock %}
+
+{% block content %}
+<div class="mb-6">
+    <a href="{% url 'org_dashboard' %}" class="text-sm text-brand hover:underline">&larr; All branches</a>
+    <h1 class="mt-2 text-2xl font-bold text-text-main">{{ hospital.name }}</h1>
+    <p class="mt-1 text-sm text-text-muted">Manage staff, view active modules, and review revenue for this branch.</p>
+</div>
+
+<div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+    {% for tile in tiles %}
+    <a href="{{ tile.url }}" class="card block no-underline hover:-translate-y-0.5 hover:shadow-lg transition-transform duration-150">
+        <h2 class="text-base font-bold text-text-main">{{ tile.label }}</h2>
+        <p class="mt-1 text-sm text-text-muted">{{ tile.description }}</p>
+    </a>
+    {% endfor %}
+</div>
+{% endblock %}

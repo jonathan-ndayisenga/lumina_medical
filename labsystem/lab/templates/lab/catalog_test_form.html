@@ -1,0 +1,395 @@
+{% extends "base.html" %}
+{% block page_title %}{% if is_edit %}Edit Lab Test{% else %}Create Lab Test{% endif %}{% endblock %}
+{% block page_subtitle %}Configure the orderable test, valid specimen types, and the result structure the laboratory team will use.{% endblock %}
+{% block extra_css %}
+<style>
+  .row-card { border: 1px solid #cfd8e3; border-radius: 0.7rem; padding: 1rem; margin-bottom: 0.75rem; }
+  .row-card .grid { display: grid; gap: 0.75rem; }
+</style>
+{% endblock %}
+{% block content %}
+<div class="card" style="max-width:780px;">
+  <form method="post">
+    {% csrf_token %}
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div>
+        <label class="block text-sm font-semibold mb-1">Test Name</label>
+        {{ form.name }}
+        {% if form.name.errors %}<p class="text-xs text-red-600 mt-1">{{ form.name.errors.0 }}</p>{% endif %}
+      </div>
+      <div>
+        <label class="block text-sm font-semibold mb-1">Test Code</label>
+        {{ form.code }}
+      </div>
+      <div>
+        <label class="block text-sm font-semibold mb-1">Category</label>
+        {{ form.category }}
+        {% if form.category.errors %}<p class="text-xs text-red-600 mt-1">{{ form.category.errors.0 }}</p>{% endif %}
+      </div>
+      <div>
+        <label class="block text-sm font-semibold mb-1">{{ form.price.label }}</label>
+        {{ form.price }}
+        <p class="text-xs text-text-muted mt-1">{{ form.price.help_text }}</p>
+      </div>
+    </div>
+
+    <label class="block text-sm font-semibold mb-1 mt-4">Description</label>
+    {{ form.description }}
+
+    <label class="flex items-center gap-2 mt-4 text-sm font-semibold">
+      {{ form.active_for_ordering }}
+      Active for ordering
+    </label>
+
+    <hr class="my-5" style="border-color:#eef1f5;">
+
+    <h3 class="font-bold mb-1">Accepted Specimen Types</h3>
+    <p class="text-sm text-text-muted mb-2">Choose every specimen type this test can be run on.</p>
+    <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+      {% for checkbox in form.accepted_specimens %}
+      <label class="flex items-center gap-2 rounded-lg border px-3 py-2 text-sm" style="border-color:#cfd8e3;">
+        {{ checkbox.tag }}
+        {{ checkbox.choice_label }}
+      </label>
+      {% endfor %}
+    </div>
+
+    <hr class="my-5" style="border-color:#eef1f5;">
+
+    <h3 class="font-bold mb-1">Result Configuration</h3>
+    <p class="text-sm text-text-muted mb-2">Define how results should be entered for this test.</p>
+
+    {% if not is_edit %}
+    <div class="mb-3 rounded-xl border px-4 py-3 text-sm flex items-center justify-between gap-3 flex-wrap" style="border-color:#fde68a; background:#fffbeb;">
+      <span>Building something standard — CBC, Malaria, Typhoid, Urinalysis, or <strong>Culture &amp; Sensitivity</strong> (grouped antibiotics, pre-filled and fully editable)? Don't retype it.</span>
+      <a href="{% url 'lab_test_clone_picker' %}" class="btn btn-secondary btn-sm whitespace-nowrap">Clone a Starter Template</a>
+    </div>
+    {% endif %}
+
+    <label class="block text-sm font-semibold mb-1">Result Type</label>
+    {{ form.result_type }}
+
+    <div class="mt-3 rounded-xl border px-4 py-3 text-sm" style="border-color:#cfd8e3; background:#f7f9fc;" id="result-type-note"></div>
+
+    <!-- Defined Option rows -->
+    <div id="options-section" class="mt-4" hidden>
+      <h4 class="font-bold mb-1">Allowed Result Options</h4>
+      <p class="text-xs text-text-muted mb-2">Add the exact choices technicians should use when entering this result.</p>
+      {{ options_formset.management_form }}
+      <div id="options-body">
+        {% for row in options_formset %}
+        <div class="row-card" data-row>
+          <div class="grid" style="grid-template-columns:1fr auto;">
+            <div>
+              <label class="block text-xs font-semibold mb-1">Option Label</label>
+              {{ row.label }}
+            </div>
+            <div class="flex items-end">
+              <button type="button" class="btn btn-secondary btn-sm" data-remove-row>Remove</button>
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      <button type="button" class="btn btn-secondary btn-sm" id="add-option">+ Add Option</button>
+      <template id="option-empty-form">
+        <div class="row-card" data-row>
+          <div class="grid" style="grid-template-columns:1fr auto;">
+            <div>
+              <label class="block text-xs font-semibold mb-1">Option Label</label>
+              {{ options_formset.empty_form.label }}
+            </div>
+            <div class="flex items-end">
+              <button type="button" class="btn btn-secondary btn-sm" data-remove-row>Remove</button>
+            </div>
+          </div>
+        </div>
+      </template>
+    </div>
+
+    <!-- Parameter Panel rows -->
+    <div id="params-section" class="mt-4" hidden>
+      <h4 class="font-bold mb-1">Panel Parameters</h4>
+      <p class="text-xs text-text-muted mb-2">
+        Name a parameter once, then add a reference range row for every sex/age band it needs —
+        no need to re-enter the parameter for each band.
+      </p>
+      {{ params_formset.management_form }}
+      <div id="params-body">
+        {% for block in param_blocks %}
+        <div class="param-block" data-param-block>
+          {% for row in block %}
+            {% if forloop.first %}
+            <div class="row-card" data-row data-primary-row>
+              <div class="grid grid-cols-1 md:grid-cols-3">
+                <div>
+                  <label class="block text-xs font-semibold mb-1">Parameter</label>
+                  {{ row.name }}
+                </div>
+                <div>
+                  <label class="block text-xs font-semibold mb-1">Group (optional)</label>
+                  {{ row.group_label }}
+                </div>
+                <div>
+                  <label class="block text-xs font-semibold mb-1">Unit</label>
+                  {{ row.unit }}
+                </div>
+                <div>
+                  <label class="block text-xs font-semibold mb-1">Value Type</label>
+                  {{ row.value_type }}
+                </div>
+                <div>
+                  <label class="block text-xs font-semibold mb-1">Gender</label>
+                  {{ row.sex }}
+                </div>
+                <div>
+                  <label class="block text-xs font-semibold mb-1">Min Age</label>
+                  {{ row.age_min }}
+                </div>
+                <div>
+                  <label class="block text-xs font-semibold mb-1">Max Age</label>
+                  {{ row.age_max }}
+                </div>
+                <div class="md:col-span-2">
+                  <label class="block text-xs font-semibold mb-1">Reference Range (Label)</label>
+                  {{ row.ref_range }}
+                </div>
+                <div class="flex items-end gap-2">
+                  <button type="button" class="btn btn-secondary btn-sm" data-add-range>+ Add Reference Range</button>
+                  <button type="button" class="btn btn-secondary btn-sm" data-remove-block>Remove Parameter</button>
+                </div>
+              </div>
+            </div>
+            {% else %}
+            <div class="row-card range-row" data-row>
+              <div style="display:none" data-hidden-fields>{{ row.name }}{{ row.group_label }}{{ row.unit }}{{ row.value_type }}</div>
+              <div class="grid grid-cols-1 md:grid-cols-3">
+                <div>
+                  <label class="block text-xs font-semibold mb-1">Gender</label>
+                  {{ row.sex }}
+                </div>
+                <div>
+                  <label class="block text-xs font-semibold mb-1">Min Age</label>
+                  {{ row.age_min }}
+                </div>
+                <div>
+                  <label class="block text-xs font-semibold mb-1">Max Age</label>
+                  {{ row.age_max }}
+                </div>
+                <div class="md:col-span-2">
+                  <label class="block text-xs font-semibold mb-1">Reference Range (Label)</label>
+                  {{ row.ref_range }}
+                </div>
+                <div class="flex items-end">
+                  <button type="button" class="btn btn-secondary btn-sm" data-remove-row>Remove</button>
+                </div>
+              </div>
+            </div>
+            {% endif %}
+          {% endfor %}
+        </div>
+        {% endfor %}
+      </div>
+      <button type="button" class="btn btn-secondary btn-sm" id="add-param">+ Add Parameter</button>
+
+      <template id="param-block-template">
+        <div class="param-block" data-param-block>
+          <div class="row-card" data-row data-primary-row>
+            <div class="grid grid-cols-1 md:grid-cols-3">
+              <div>
+                <label class="block text-xs font-semibold mb-1">Parameter</label>
+                {{ params_formset.empty_form.name }}
+              </div>
+              <div>
+                <label class="block text-xs font-semibold mb-1">Group (optional)</label>
+                {{ params_formset.empty_form.group_label }}
+              </div>
+              <div>
+                <label class="block text-xs font-semibold mb-1">Unit</label>
+                {{ params_formset.empty_form.unit }}
+              </div>
+              <div>
+                <label class="block text-xs font-semibold mb-1">Value Type</label>
+                {{ params_formset.empty_form.value_type }}
+              </div>
+              <div>
+                <label class="block text-xs font-semibold mb-1">Gender</label>
+                {{ params_formset.empty_form.sex }}
+              </div>
+              <div>
+                <label class="block text-xs font-semibold mb-1">Min Age</label>
+                {{ params_formset.empty_form.age_min }}
+              </div>
+              <div>
+                <label class="block text-xs font-semibold mb-1">Max Age</label>
+                {{ params_formset.empty_form.age_max }}
+              </div>
+              <div class="md:col-span-2">
+                <label class="block text-xs font-semibold mb-1">Reference Range (Label)</label>
+                {{ params_formset.empty_form.ref_range }}
+              </div>
+              <div class="flex items-end gap-2">
+                <button type="button" class="btn btn-secondary btn-sm" data-add-range>+ Add Reference Range</button>
+                <button type="button" class="btn btn-secondary btn-sm" data-remove-block>Remove Parameter</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </template>
+
+      <template id="param-range-template">
+        <div class="row-card range-row" data-row>
+          <div style="display:none" data-hidden-fields>
+            {{ params_formset.empty_form.name }}{{ params_formset.empty_form.group_label }}{{ params_formset.empty_form.unit }}{{ params_formset.empty_form.value_type }}
+          </div>
+          <div class="grid grid-cols-1 md:grid-cols-3">
+            <div>
+              <label class="block text-xs font-semibold mb-1">Gender</label>
+              {{ params_formset.empty_form.sex }}
+            </div>
+            <div>
+              <label class="block text-xs font-semibold mb-1">Min Age</label>
+              {{ params_formset.empty_form.age_min }}
+            </div>
+            <div>
+              <label class="block text-xs font-semibold mb-1">Max Age</label>
+              {{ params_formset.empty_form.age_max }}
+            </div>
+            <div class="md:col-span-2">
+              <label class="block text-xs font-semibold mb-1">Reference Range (Label)</label>
+              {{ params_formset.empty_form.ref_range }}
+            </div>
+            <div class="flex items-end">
+              <button type="button" class="btn btn-secondary btn-sm" data-remove-row>Remove</button>
+            </div>
+          </div>
+        </div>
+      </template>
+    </div>
+
+    <div class="mt-6">
+      <button type="submit" class="btn">{% if is_edit %}Save Changes{% else %}Create Lab Test{% endif %}</button>
+      <a href="{% url 'lab_test_list' %}" class="btn btn-secondary">Cancel</a>
+    </div>
+  </form>
+</div>
+
+{{ result_type_notes|json_script:"result-type-notes-data" }}
+<script>
+  (function () {
+    var notes = JSON.parse(document.getElementById("result-type-notes-data").textContent);
+    var select = document.getElementById("{{ form.result_type.id_for_label }}");
+    var note = document.getElementById("result-type-note");
+    var sections = {
+      "defined_option": document.getElementById("options-section"),
+      "parameter_panel": document.getElementById("params-section")
+    };
+
+    function refresh() {
+      note.textContent = notes[select.value] || "";
+      Object.keys(sections).forEach(function (key) {
+        sections[key].hidden = (select.value !== key);
+      });
+    }
+    if (select) {
+      select.addEventListener("change", refresh);
+      refresh();
+    }
+
+    function wireRemove(container) {
+      container.addEventListener("click", function (evt) {
+        var btn = evt.target.closest("[data-remove-row]");
+        if (!btn) return;
+        var row = btn.closest("[data-row]");
+        if (row) row.remove();
+      });
+    }
+    wireRemove(document.getElementById("options-body"));
+    wireRemove(document.getElementById("params-body"));
+
+    function nextIndex(totalForms) {
+      return parseInt(totalForms.value, 10);
+    }
+
+    function cloneTemplate(templateId, index) {
+      var template = document.getElementById(templateId);
+      var html = template.innerHTML.replace(/__prefix__/g, index);
+      var wrapper = document.createElement("div");
+      wrapper.innerHTML = html.trim();
+      return wrapper.firstElementChild;
+    }
+
+    function wireAdd(buttonId, bodyId, templateId, totalFormsName) {
+      var button = document.getElementById(buttonId);
+      var body = document.getElementById(bodyId);
+      var totalForms = document.querySelector('input[name="' + totalFormsName + '"]');
+      if (!button || !body || !totalForms) return;
+      button.addEventListener("click", function () {
+        var index = nextIndex(totalForms);
+        body.appendChild(cloneTemplate(templateId, index));
+        totalForms.value = index + 1;
+      });
+    }
+    wireAdd("add-option", "options-body", "option-empty-form", "options-TOTAL_FORMS");
+
+    // Panel Parameters: two-level UI. Each block's primary row carries the
+    // real Parameter/Unit/Value Type fields; range-only rows within the
+    // same block carry hidden copies of those three, kept in sync here, so
+    // the server still receives one flat set of rows (grouped back into
+    // one Parameter with several ranges by name — see views_catalog.py).
+    var paramsBody = document.getElementById("params-body");
+    var paramsTotalForms = document.querySelector('input[name="params-TOTAL_FORMS"]');
+
+    function syncBlock(block) {
+      var primary = block.querySelector("[data-primary-row]");
+      if (!primary) return;
+      var nameEl = primary.querySelector('[name$="-name"]');
+      var groupEl = primary.querySelector('[name$="-group_label"]');
+      var unitEl = primary.querySelector('[name$="-unit"]');
+      var vtEl = primary.querySelector('[name$="-value_type"]');
+      block.querySelectorAll(".range-row").forEach(function (row) {
+        row.querySelector('[name$="-name"]').value = nameEl.value;
+        row.querySelector('[name$="-group_label"]').value = groupEl.value;
+        row.querySelector('[name$="-unit"]').value = unitEl.value;
+        row.querySelector('[name$="-value_type"]').value = vtEl.value;
+      });
+    }
+
+    var addParamButton = document.getElementById("add-param");
+    if (addParamButton && paramsBody && paramsTotalForms) {
+      addParamButton.addEventListener("click", function () {
+        var index = nextIndex(paramsTotalForms);
+        paramsBody.appendChild(cloneTemplate("param-block-template", index));
+        paramsTotalForms.value = index + 1;
+      });
+    }
+
+    if (paramsBody) {
+      paramsBody.addEventListener("click", function (evt) {
+        var addRangeBtn = evt.target.closest("[data-add-range]");
+        if (addRangeBtn) {
+          var block = addRangeBtn.closest("[data-param-block]");
+          var index = nextIndex(paramsTotalForms);
+          var row = cloneTemplate("param-range-template", index);
+          block.appendChild(row);
+          paramsTotalForms.value = index + 1;
+          syncBlock(block);
+          return;
+        }
+        var removeBlockBtn = evt.target.closest("[data-remove-block]");
+        if (removeBlockBtn) {
+          var blockToRemove = removeBlockBtn.closest("[data-param-block]");
+          if (blockToRemove) blockToRemove.remove();
+        }
+      });
+
+      paramsBody.addEventListener("input", function (evt) {
+        var primaryRow = evt.target.closest("[data-primary-row]");
+        if (!primaryRow) return;
+        syncBlock(primaryRow.closest("[data-param-block]"));
+      });
+    }
+  })();
+</script>
+{% endblock %}

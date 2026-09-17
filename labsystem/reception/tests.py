@@ -824,9 +824,9 @@ class ReceptionVisitFormTests(TestCase):
         response = self.client.get(reverse("visit_create", args=[self.patient.pk]))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'id="service-results-select"', html=False)
-        self.assertContains(response, 'id="add-service-btn"', html=False)
-        self.assertContains(response, "Browse the full dropdown or type to narrow the services list")
+        self.assertContains(response, 'id="service-dropdown"', html=False)
+        self.assertContains(response, 'id="services-data"', html=False)
+        self.assertContains(response, "Start typing, then click a result")
 
     def test_reception_can_create_adjustment_visit_without_billable_services(self):
         original_visit = Visit.objects.create(
@@ -949,11 +949,11 @@ class ReceptionVisitFormTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Choose the completed visit this follow-up is linked to.")
 
-    def test_follow_up_visit_requires_consultation_service(self):
+    def test_follow_up_visit_rejects_new_services(self):
         previous_visit = Visit.objects.create(
             patient=self.patient,
             hospital=self.hospital,
-            total_amount=Decimal("20.00"),
+            total_amount=Decimal("0.00"),
             status=Visit.STATUS_COMPLETED,
             created_by=self.receptionist,
         )
@@ -964,14 +964,14 @@ class ReceptionVisitFormTests(TestCase):
                 "visit_type": Visit.TYPE_FOLLOW_UP,
                 "services": [str(lab_service.pk)],
                 "follow_up_parent_visit": str(previous_visit.pk),
-                "notes": "Follow-up without consultation.",
+                "notes": "Follow-up shouldn't take new services.",
             },
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Follow-up visits must include a doctor consultation service.")
+        self.assertContains(response, "Follow-up visits don&#x27;t take new billable services")
 
-    def test_follow_up_visit_can_be_created_with_completed_parent_and_consultation(self):
+    def test_follow_up_visit_can_be_created_free_and_routes_to_doctor(self):
         previous_visit = Visit.objects.create(
             patient=self.patient,
             hospital=self.hospital,
@@ -979,13 +979,12 @@ class ReceptionVisitFormTests(TestCase):
             status=Visit.STATUS_COMPLETED,
             created_by=self.receptionist,
         )
-        consult_service = Service.objects.get(name="Consultation")
 
         response = self.client.post(
             reverse("visit_create", args=[self.patient.pk]),
             {
                 "visit_type": Visit.TYPE_FOLLOW_UP,
-                "services": [str(consult_service.pk)],
+                "services": [],
                 "follow_up_parent_visit": str(previous_visit.pk),
                 "notes": "Follow-up review.",
             },
@@ -996,7 +995,13 @@ class ReceptionVisitFormTests(TestCase):
         follow_up_visit = Visit.objects.exclude(pk=previous_visit.pk).latest("id")
         self.assertEqual(follow_up_visit.visit_type, Visit.TYPE_FOLLOW_UP)
         self.assertEqual(follow_up_visit.parent_visit, previous_visit)
-        self.assertEqual(follow_up_visit.total_amount, consult_service.price)
+        self.assertEqual(follow_up_visit.total_amount, Decimal("0"))
+        self.assertFalse(follow_up_visit.visit_services.exists())
+        self.assertTrue(
+            QueueEntry.objects.filter(
+                visit=follow_up_visit, queue_type=QueueEntry.TYPE_DOCTOR, processed=False,
+            ).exists()
+        )
 
 
 class ReceptionQueueWorkflowTests(TestCase):
@@ -1115,6 +1120,116 @@ class ReceptionQueueWorkflowTests(TestCase):
                 processed=False,
             ).exists()
         )
+
+
+class LabPaymentGateWorkflowTests(TestCase):
+    """payment_required_before_lab: reception must collect payment before a
+    lab service can be approved and sent to the lab queue — and collecting
+    that payment must NOT close the visit out from under the lab work still
+    to come (sample collection hasn't happened yet)."""
+
+    def setUp(self):
+        from lab.models import LabSettings
+
+        plan = SubscriptionPlan.objects.create(
+            name="Standard", price_monthly=Decimal("0.00"), price_yearly=Decimal("0.00"),
+        )
+        self.hospital = Hospital.objects.create(
+            name="Lumina Gate Hospital", subdomain="lumina-gate", subscription_plan=plan,
+        )
+        _enable_modules(self.hospital, "lab")
+        LabSettings.objects.create(hospital=self.hospital, payment_required_before_lab=True)
+        self.receptionist = User.objects.create_user(
+            username="gate-reception", password="pass12345",
+            role=User.ROLE_RECEPTIONIST, hospital=self.hospital, is_active=True,
+        )
+        self.patient = Patient.objects.create(
+            hospital=self.hospital, name="Gate Patient",
+            registration_date=timezone.localdate(), age="30YRS", sex="M",
+        )
+        self.lab_service = Service.objects.create(
+            hospital=self.hospital, name="CBC", category=Service.CATEGORY_LAB,
+            price=Decimal("15.00"), is_active=True,
+        )
+        self.visit = Visit.objects.create(
+            patient=self.patient, hospital=self.hospital, total_amount=Decimal("15.00"),
+            status=Visit.STATUS_IN_PROGRESS, created_by=self.receptionist,
+        )
+        VisitService.objects.create(
+            visit=self.visit, service=self.lab_service, price_at_time=self.lab_service.price,
+        )
+        self.queue_entry = ensure_pending_queue_entry(
+            visit=self.visit, hospital=self.hospital, queue_type=QueueEntry.TYPE_RECEPTION,
+            reason="Lab tests added during phlebotomy intake.", requested_by=self.receptionist,
+        )
+        self.client.force_login(self.receptionist)
+
+    def test_approve_lab_blocked_while_unpaid(self):
+        response = self.client.post(reverse("reception_queue_approve_lab", args=[self.queue_entry.pk]))
+        self.assertRedirects(response, reverse("reception_queue"))
+        self.assertFalse(
+            VisitService.objects.get(visit=self.visit, service=self.lab_service).is_approved
+        )
+        self.assertFalse(
+            QueueEntry.objects.filter(visit=self.visit, queue_type=QueueEntry.TYPE_LAB_RECEPTION).exists()
+        )
+
+    def test_full_payment_auto_queues_for_lab(self):
+        """Full payment on a bill-first hospital sends the patient to the lab
+        queue automatically — no separate "Approve Lab" click needed."""
+        response = self.client.post(
+            reverse("complete_visit", args=[self.visit.pk]),
+            {"amount_paid": "15.00", "payment_mode": Payment.MODE_CASH,
+             "bank_account": "", "mobile_account": "", "payment_notes": ""},
+        )
+        self.assertEqual(response.status_code, 302)
+
+        self.visit.refresh_from_db()
+        self.queue_entry.refresh_from_db()
+        self.assertTrue(self.visit.is_fully_paid)
+        self.assertEqual(self.visit.status, Visit.STATUS_COMPLETED)
+        self.assertTrue(self.queue_entry.processed, "auto-queueing should close the reception queue entry")
+        self.assertTrue(
+            VisitService.objects.get(visit=self.visit, service=self.lab_service).is_approved
+        )
+        self.assertTrue(
+            QueueEntry.objects.filter(visit=self.visit, queue_type=QueueEntry.TYPE_LAB_RECEPTION, processed=False).exists()
+        )
+
+    def test_partial_payment_allows_sampling_but_blocks_release(self):
+        """A partial payment is enough to send the patient to sample
+        collection on a bill-first hospital, but the report still can't be
+        released until the balance is actually cleared."""
+        response = self.client.post(
+            reverse("complete_visit", args=[self.visit.pk]),
+            {"amount_paid": "5.00", "payment_mode": Payment.MODE_CASH,
+             "bank_account": "", "mobile_account": "", "payment_notes": ""},
+        )
+        self.assertEqual(response.status_code, 302)
+
+        self.visit.refresh_from_db()
+        self.queue_entry.refresh_from_db()
+        self.assertFalse(self.visit.is_fully_paid)
+        self.assertEqual(self.visit.status, Visit.STATUS_IN_PROGRESS)
+        self.assertTrue(self.queue_entry.processed, "partial payment should still auto-queue on bill-first")
+        self.assertTrue(
+            VisitService.objects.get(visit=self.visit, service=self.lab_service).is_approved
+        )
+        lab_entry = QueueEntry.objects.get(visit=self.visit, queue_type=QueueEntry.TYPE_LAB_RECEPTION, processed=False)
+        self.assertIsNotNone(lab_entry)
+
+    def test_payment_without_pending_lab_work_still_completes_visit_normally(self):
+        VisitService.objects.filter(visit=self.visit, service=self.lab_service).update(is_approved=True)
+        response = self.client.post(
+            reverse("complete_visit", args=[self.visit.pk]),
+            {"amount_paid": "15.00", "payment_mode": Payment.MODE_CASH,
+             "bank_account": "", "mobile_account": "", "payment_notes": ""},
+        )
+        self.assertEqual(response.status_code, 302)
+        self.visit.refresh_from_db()
+        self.queue_entry.refresh_from_db()
+        self.assertEqual(self.visit.status, Visit.STATUS_COMPLETED)
+        self.assertTrue(self.queue_entry.processed)
 
 
 class AdminOverridePolicyTests(TestCase):

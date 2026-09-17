@@ -2,7 +2,7 @@ from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 
 from .forms import LuminaUserChangeForm, LuminaUserCreationForm
-from .models import AuditLog, Hospital, HospitalSubscriptionPayment, SubscriptionPlan, User
+from .models import AuditLog, Hospital, HospitalSubscriptionPayment, Organization, SubscriptionPlan, User
 
 
 @admin.register(SubscriptionPlan)
@@ -12,10 +12,16 @@ class SubscriptionPlanAdmin(admin.ModelAdmin):
     search_fields = ("name",)
 
 
+@admin.register(Organization)
+class OrganizationAdmin(admin.ModelAdmin):
+    list_display = ("name", "created_at")
+    search_fields = ("name",)
+
+
 @admin.register(Hospital)
 class HospitalAdmin(admin.ModelAdmin):
-    list_display = ("name", "subdomain", "subscription_plan", "is_active", "subscription_end_date")
-    list_filter = ("is_active", "subscription_plan")
+    list_display = ("name", "subdomain", "organization", "subscription_plan", "is_active", "subscription_end_date")
+    list_filter = ("is_active", "organization", "subscription_plan")
     search_fields = ("name", "subdomain")
 
 
@@ -31,15 +37,16 @@ class UserAdmin(BaseUserAdmin):
         "last_name",
         "role",
         "hospital",
+        "organization",
         "is_active",
         "is_staff",
     )
-    list_filter = ("role", "hospital", "is_active", "is_staff", "is_superuser")
+    list_filter = ("role", "hospital", "organization", "is_active", "is_staff", "is_superuser")
     fieldsets = BaseUserAdmin.fieldsets + (
-        ("Lumina Access", {"fields": ("role", "hospital")}),
+        ("Lumina Access", {"fields": ("role", "hospital", "organization")}),
     )
     add_fieldsets = BaseUserAdmin.add_fieldsets + (
-        ("Lumina Access", {"fields": ("email", "first_name", "last_name", "role", "hospital")}),
+        ("Lumina Access", {"fields": ("email", "first_name", "last_name", "role", "hospital", "organization")}),
     )
 
 

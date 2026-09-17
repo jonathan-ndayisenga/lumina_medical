@@ -57,6 +57,13 @@
                                     <p class="font-semibold text-text-main">{{ row.visit.patient.name }}</p>
                                     <p class="text-xs text-text-muted">Visit #{{ row.visit.pk }} · {{ row.visit.visit_date|date:"M d, Y H:i" }}</p>
                                     <p class="text-xs text-text-muted">Age: {{ row.visit.patient.age }} · {{ row.visit.patient.get_sex_display }}</p>
+                                    {% if row.payment_status == 'paid' %}
+                                    <span class="inline-flex items-center px-2 py-0.5 mt-1 rounded-full text-xs font-semibold bg-green-100 text-green-800">Paid</span>
+                                    {% elif row.payment_status == 'partial' %}
+                                    <span class="inline-flex items-center px-2 py-0.5 mt-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-800">Partially Paid · Bal. UGX {{ row.balance_due|floatformat:2 }} for {{ row.billed_service_names }}</span>
+                                    {% else %}
+                                    <span class="inline-flex items-center px-2 py-0.5 mt-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-600">Unpaid · Bal. UGX {{ row.balance_due|floatformat:2 }} for {{ row.billed_service_names }}</span>
+                                    {% endif %}
                                 </td>
                                 <td class="py-4 pr-4">
                                     <span class="inline-flex px-2 py-1 rounded-full text-xs font-semibold bg-sky-100 text-sky-700">
@@ -92,10 +99,16 @@
                                     <div class="space-y-3 min-w-[300px]">
                                         <div class="flex gap-2 flex-wrap">
                                             {% if row.has_pending_lab_approval %}
-                                                <form method="post" action="{% url 'reception_queue_approve_lab' row.entry.pk %}">
-                                                    {% csrf_token %}
-                                                    <button type="submit" class="btn btn-primary btn-sm bg-green-600 hover:bg-green-700 border-green-600">Approve Lab</button>
-                                                </form>
+                                                {% if row.lab_payment_blocked %}
+                                                    <span class="btn btn-sm bg-amber-50 text-amber-800 border border-amber-200 cursor-default" title="Collect payment before this can go to the lab">
+                                                        Balance UGX {{ row.visit.balance_due|floatformat:2 }} — bill first
+                                                    </span>
+                                                {% else %}
+                                                    <form method="post" action="{% url 'reception_queue_approve_lab' row.entry.pk %}">
+                                                        {% csrf_token %}
+                                                        <button type="submit" class="btn btn-primary btn-sm bg-green-600 hover:bg-green-700 border-green-600">Approve Lab</button>
+                                                    </form>
+                                                {% endif %}
                                             {% endif %}
                                             <form method="post" action="{% url 'reception_queue_bill' row.entry.pk %}">
                                                 {% csrf_token %}
@@ -150,6 +163,13 @@
                                                 Send to Sonographer
                                             </button>
                                         </form>
+
+                                        {% if phlebotomy_enabled %}
+                                        <form method="post" action="{% url 'reception_queue_send_to_phlebotomy' row.entry.pk %}">
+                                            {% csrf_token %}
+                                            <button type="submit" class="btn btn-secondary btn-sm">Send to Phlebotomy</button>
+                                        </form>
+                                        {% endif %}
                                     </div>
                                 </td>
                             </tr>

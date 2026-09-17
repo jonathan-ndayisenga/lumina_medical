@@ -213,7 +213,9 @@ class Visit(models.Model):
                 )
 
         elif self.visit_type == self.TYPE_FOLLOW_UP:
-            # Follow-up visits MUST have a valid completed parent visit and a consultation
+            # Follow-up visits MUST have a valid completed, fully paid parent
+            # visit. That link is what earns the free trip to the doctor
+            # queue — no consultation fee or any other service is billed.
             if not self.parent_visit:
                 raise ValidationError(
                     "Follow-up visits must be linked to a completed previous visit."
@@ -226,20 +228,9 @@ class Visit(models.Model):
                 raise ValidationError(
                     "Follow-up visits must link to a fully paid previous visit."
                 )
-            
-            # Follow-up MUST have services with at least one consultation
-            service_count = self.visit_services.count()
-            if service_count == 0:
+            if self.visit_services.exists():
                 raise ValidationError(
-                    "Follow-up visits must have at least one service selection."
-                )
-            
-            has_consultation = self.visit_services.filter(
-                service__category=Service.CATEGORY_CONSULTATION
-            ).exists()
-            if not has_consultation:
-                raise ValidationError(
-                    "Follow-up visits must include a doctor consultation service."
+                    "Follow-up visits cannot include new billable services."
                 )
 
         elif self.visit_type == self.TYPE_ADJUSTMENT:
@@ -349,6 +340,16 @@ class Service(models.Model):
         related_name="services",
         help_text="Lab service linked to a test profile (e.g., CBC, Urinalysis)"
     )
+    lab_test_next = models.ForeignKey(
+        "lab.LabTest",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="services",
+        help_text="Which lab.LabTest this billed service maps to. Required for the service to be "
+                   "picked up by the lab queue; unrelated to `test_profile` above, which only the "
+                   "historical report archive still reads.",
+    )
 
     class Meta:
         ordering = ["category", "name"]
@@ -382,6 +383,7 @@ class QueueEntry(models.Model):
     TYPE_NURSE = "nurse"
     TYPE_SONOGRAPHER = "sonographer"
     TYPE_RECEPTION = "reception"
+    TYPE_PHLEBOTOMY = "phlebotomy"
 
     QUEUE_TYPE_CHOICES = [
         (TYPE_LAB_RECEPTION, "Lab Reception"),
@@ -390,6 +392,7 @@ class QueueEntry(models.Model):
         (TYPE_NURSE, "Nurse"),
         (TYPE_SONOGRAPHER, "Sonographer"),
         (TYPE_RECEPTION, "Reception Queue"),
+        (TYPE_PHLEBOTOMY, "Phlebotomy"),
     ]
 
     hospital = models.ForeignKey(Hospital, on_delete=models.CASCADE, related_name="queue_entries")

@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block page_title %}Clone a Test{% endblock %}
+{% block page_subtitle %}Copy a test definition into your own catalog as a starting point, then adjust ranges/pricing to match your lab.{% endblock %}
+{% block content %}
+<div class="space-y-4">
+  <div class="flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
+    <a href="{% url 'lab_test_list' %}" class="btn btn-secondary self-start">&larr; Laboratory Services</a>
+    <form method="get" class="flex gap-2">
+      <input type="text" name="q" value="{{ q }}" placeholder="Search by test name..." class="form-control text-sm py-1.5">
+      <button type="submit" class="btn btn-primary text-sm py-1.5">Search</button>
+    </form>
+  </div>
+
+  <div class="card overflow-x-auto">
+    <table class="w-full text-sm">
+      <thead>
+        <tr class="text-left text-text-muted">
+          <th class="py-2 whitespace-nowrap">Test</th>
+          <th class="py-2 whitespace-nowrap">Source</th>
+          <th class="py-2 whitespace-nowrap">Category</th>
+          <th class="py-2 whitespace-nowrap">Capture Type</th>
+          <th class="py-2"></th>
+        </tr>
+      </thead>
+      <tbody class="divide-y" style="border-color:#eef1f5;">
+        {% for test in tests %}
+        <tr>
+          <td class="py-2 font-semibold whitespace-nowrap">{{ test.name }}</td>
+          <td class="py-2 text-text-muted whitespace-nowrap">
+            {% if test.is_starter_template %}
+            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800">&#9733; Starter Template</span>
+            {% else %}
+            {{ test.hospital.name }}
+            {% endif %}
+          </td>
+          <td class="py-2 whitespace-nowrap">{{ test.category.name }}</td>
+          <td class="py-2 whitespace-nowrap">{{ test.get_result_type_display }}</td>
+          <td class="py-2">
+            <form method="post" action="{% url 'lab_test_clone' test.pk %}">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-primary btn-sm">Clone Into My Catalog</button>
+            </form>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="5" class="py-6 text-center text-text-muted">No other tests to clone from yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

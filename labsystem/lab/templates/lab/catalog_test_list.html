@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block page_title %}Laboratory Services{% endblock %}
+{% block page_subtitle %}Your hospital's own test catalog and templates.{% endblock %}
+{% block content %}
+<div class="space-y-4">
+  {% if is_admin %}
+  <div class="flex justify-end gap-2">
+    <a href="{% url 'lab_test_clone_picker' %}" class="btn btn-secondary">Clone a Test</a>
+    <a href="{% url 'lab_test_create' %}" class="btn btn-primary">+ Add Lab Test</a>
+  </div>
+  {% endif %}
+
+  <div class="card overflow-x-auto">
+    <table class="w-full text-sm">
+      <thead>
+        <tr class="text-left text-text-muted">
+          <th class="py-2 whitespace-nowrap">Test</th>
+          <th class="py-2 whitespace-nowrap">Code</th>
+          <th class="py-2 whitespace-nowrap">Category</th>
+          <th class="py-2 whitespace-nowrap">Specimen</th>
+          <th class="py-2 whitespace-nowrap">Capture Type</th>
+          <th class="py-2 whitespace-nowrap">Unit Price</th>
+          <th class="py-2 whitespace-nowrap">Status</th>
+          {% if is_admin %}<th class="py-2"></th>{% endif %}
+        </tr>
+      </thead>
+      <tbody class="divide-y" style="border-color:#eef1f5;">
+        {% for row in rows %}
+        <tr>
+          <td class="py-2 font-semibold whitespace-nowrap">{{ row.test.name }}</td>
+          <td class="py-2 text-text-muted whitespace-nowrap">{{ row.test.code|default:"—" }}</td>
+          <td class="py-2 whitespace-nowrap">{{ row.test.category.name }}</td>
+          <td class="py-2 text-text-muted whitespace-nowrap">
+            {% for s in row.test.accepted_specimens.all %}{{ s.name }}{% if not forloop.last %}, {% endif %}{% empty %}—{% endfor %}
+          </td>
+          <td class="py-2 whitespace-nowrap">{{ row.test.get_result_type_display }}</td>
+          <td class="py-2 whitespace-nowrap">
+            {% if row.service %}{{ row.service.price|floatformat:2 }}{% else %}<span class="text-text-muted italic">Not offered</span>{% endif %}
+          </td>
+          <td class="py-2 whitespace-nowrap">
+            {% if row.test.active_for_ordering %}
+            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-800">Active</span>
+            {% else %}
+            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-600">Inactive</span>
+            {% endif %}
+          </td>
+          {% if is_admin %}
+          <td class="py-2">
+            <a href="{% url 'lab_test_edit' row.test.pk %}" class="btn btn-secondary btn-sm">Edit</a>
+          </td>
+          {% endif %}
+        </tr>
+        {% empty %}
+        <tr><td colspan="8" class="py-6 text-center text-text-muted">
+          No lab tests yet. {% if is_admin %}<a href="{% url 'lab_test_clone_picker' %}" class="text-brand">Clone one</a> from another hospital to get started fast, or <a href="{% url 'lab_test_create' %}" class="text-brand">add one from scratch</a>.{% endif %}
+        </td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

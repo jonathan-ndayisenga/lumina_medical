@@ -16,6 +16,7 @@ from django.views.decorators.http import require_POST
 
 from .models import (
     DirectMessage,
+    Hospital,
     InternalNotification,
     InternalNotificationRead,
     NotificationRead,
@@ -33,6 +34,13 @@ def _hospital_admin_home(user) -> str:
         if "home_care" in codes and "hospital_mgmt" not in codes:
             return reverse("homecare_dashboard")
     return reverse("hospital_dashboard")
+
+
+def _lab_queue_home(user) -> str:
+    """Which lab engine's queue this user's hospital is actually on —
+    single source of truth is lab.routing.lab_queue_url."""
+    from lab.routing import lab_queue_url
+    return lab_queue_url(getattr(user, "hospital", None))
 
 
 # Ordered registry of "sections" a user can land in from the Home tile picker.
@@ -109,7 +117,7 @@ NAV_SECTIONS = [
         "description": "Lab queue, reports, templates",
         "icon": "M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01",
         "check": "can_access_lab",
-        "url": "lab_queue",
+        "url": _lab_queue_home,
     },
 ]
 
@@ -150,6 +158,8 @@ def app_home(request):
     user = request.user
     if user.is_superadmin:
         return redirect("developer_dashboard")
+    if user.is_owner:
+        return redirect("org_dashboard")
 
     hospital = getattr(user, "hospital", None)
     if hospital is not None and hospital.subdomain == settings.TERNAH_BOOKS_HOSPITAL_SUBDOMAIN:
@@ -178,7 +188,16 @@ def app_home(request):
             "description": s["description"],
             "icon": s["icon"],
             "url": reverse("enter_nav_section", args=[s["key"]]),
-            "queue_count": queue_counts.get(s["key"], 0),
+            # The Lab tile is one door into Phlebotomy + Lab Queue both — its
+            # badge needs to reflect work waiting in either, not just the lab
+            # queue proper, or a patient sent to Phlebotomy never shows up as
+            # "something to do" from Home. The sidebar's own separate
+            # Phlebotomy Queue / Lab Queue links keep their individual counts
+            # unchanged — this combination is Home-tile-only.
+            "queue_count": (
+                queue_counts.get(s["key"], 0) + queue_counts.get("phlebotomy", 0)
+                if s["key"] == "lab" else queue_counts.get(s["key"], 0)
+            ),
         }
         for s in sections
     ]
@@ -193,6 +212,148 @@ def enter_nav_section(request, section_key):
         raise PermissionDenied("You do not have access to that section.")
     request.session["nav_section"] = section_key
     return redirect(_section_url(section, user))
+
+
+# ── Organization / multi-branch Owner views ───────────────────────────────────
+
+def _owner_required(user):
+    if not getattr(user, "is_owner", False):
+        raise PermissionDenied("This page is available to organization owner accounts only.")
+
+
+@login_required
+def org_dashboard(request):
+    """Landing page for an Owner: one tile per branch in their organization,
+    plus a tile into the cross-branch revenue comparison."""
+    user = request.user
+    _owner_required(user)
+    request.session.pop("owner_active_hospital_id", None)
+
+    org = user.organization
+    hospitals = org.hospitals.order_by("name") if org else Hospital.objects.none()
+    tiles = [
+        {
+            "hospital": h,
+            "user_count": h.users.filter(is_active=True).count(),
+            "module_count": len(h.active_module_codes),
+        }
+        for h in hospitals
+    ]
+    return render(request, "accounts/org_dashboard.html", {
+        "organization": org,
+        "tiles": tiles,
+        "hide_sidebar_nav": True,
+    })
+
+
+@login_required
+def org_enter_branch(request, hospital_id):
+    """Select a branch as the active hospital for this Owner's session, then
+    drop them into that branch's mini dashboard (Users / Modules / Revenue)."""
+    user = request.user
+    _owner_required(user)
+    hospital = get_object_or_404(Hospital, pk=hospital_id)
+    if not user.owns_hospital(hospital):
+        raise PermissionDenied("That branch is not part of your organization.")
+    request.session["owner_active_hospital_id"] = hospital.pk
+    return redirect("org_branch_home")
+
+
+@login_required
+def org_branch_home(request):
+    """Mini tile picker inside one branch — Users, Modules (read-only), Revenue."""
+    user = request.user
+    _owner_required(user)
+    hospital = getattr(request, "hospital", None)
+    if hospital is None or not user.owns_hospital(hospital):
+        return redirect("org_dashboard")
+
+    tiles = [
+        {
+            "key": "users",
+            "label": "Users",
+            "description": "Staff accounts for this branch",
+            "url": reverse("manage_users"),
+        },
+        {
+            "key": "modules",
+            "label": "Modules",
+            "description": "Modules this branch has active (read-only)",
+            "url": reverse("org_branch_modules"),
+        },
+        {
+            "key": "revenue",
+            "label": "Revenue Report",
+            "description": "Revenue by category, with receipts",
+            "url": reverse("finance_revenue"),
+        },
+    ]
+    return render(request, "accounts/org_branch_home.html", {
+        "organization": user.organization,
+        "hospital": hospital,
+        "tiles": tiles,
+        "hide_sidebar_nav": True,
+    })
+
+
+@login_required
+def org_branch_modules(request):
+    """Read-only view of a branch's active modules. Owners cannot toggle
+    subscriptions — that stays exclusively superadmin-controlled."""
+    user = request.user
+    _owner_required(user)
+    hospital = getattr(request, "hospital", None)
+    if hospital is None or not user.owns_hospital(hospital):
+        return redirect("org_dashboard")
+
+    subscriptions = hospital.module_subscriptions.select_related("module").order_by("module__display_order", "module__name")
+    return render(request, "accounts/org_branch_modules.html", {
+        "organization": user.organization,
+        "hospital": hospital,
+        "subscriptions": subscriptions,
+    })
+
+
+@login_required
+def org_revenue_comparison(request):
+    """Cross-branch revenue comparison for an Owner's organization — total
+    revenue per branch (and per category) over a chosen date range."""
+    from django.db.models import Sum
+    from django.utils import timezone as _tz
+    from finance.models import Account, JournalLine
+
+    user = request.user
+    _owner_required(user)
+    org = user.organization
+    hospitals = list(org.hospitals.order_by("name")) if org else []
+
+    today = _tz.localdate()
+    date_from = request.GET.get("from", today.replace(day=1).isoformat())
+    date_to = request.GET.get("to", today.isoformat())
+
+    rows = []
+    grand_total = 0
+    for h in hospitals:
+        total = (
+            JournalLine.objects.filter(
+                account__hospital=h,
+                account__account_type=Account.TYPE_REVENUE,
+                entry__date__gte=date_from,
+                entry__date__lte=date_to,
+                entry__is_reversal=False,
+                entry__reversal_of__isnull=True,
+            ).aggregate(t=Sum("credit"))["t"] or 0
+        )
+        rows.append({"hospital": h, "total": total})
+        grand_total += total
+
+    return render(request, "accounts/org_revenue_comparison.html", {
+        "organization": org,
+        "rows": rows,
+        "grand_total": grand_total,
+        "date_from": date_from,
+        "date_to": date_to,
+    })
 
 
 def landing(request):

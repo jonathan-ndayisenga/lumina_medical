@@ -1,0 +1,71 @@
+{% extends 'base.html' %}
+
+{% block title %}Reports for {{ patient.name }}{% endblock %}
+{% block page_title %}{{ patient.name }}{% endblock %}
+{% block page_subtitle %}Every lab visit for this patient. Resume anything still in progress, or view a finished report.{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+
+    <div class="flex items-center gap-3">
+        <a href="{% url 'report_list' %}" class="btn btn-secondary btn-sm">&larr; Back to Patients</a>
+    </div>
+
+    {% if rows %}
+    <div class="card overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="w-full">
+                <thead class="bg-gray-50 border-b border-gray-200">
+                    <tr>
+                        <th class="text-left px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-widest">Tests</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-widest">Visit Date</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-widest">Status</th>
+                        <th class="text-right px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-widest">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200">
+                    {% for row in rows %}
+                    <tr class="hover:bg-gray-50 transition-colors">
+                        <td class="px-4 py-3">
+                            <div class="flex flex-wrap gap-1">
+                                {% for order in row.orders %}
+                                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-indigo-50 text-indigo-700">{{ order.test.name }}</span>
+                                {% endfor %}
+                            </div>
+                        </td>
+                        <td class="px-4 py-3">
+                            <span class="text-sm text-text-main">{{ row.visit.visit_date|date:"d M Y H:i" }}</span>
+                        </td>
+                        <td class="px-4 py-3">
+                            {% if row.all_released %}
+                            <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-bold uppercase tracking-wide bg-green-100 text-green-700">Released</span>
+                            {% elif row.in_progress %}
+                            <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-bold uppercase tracking-wide bg-amber-100 text-amber-700">In Progress</span>
+                            {% else %}
+                            <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-bold uppercase tracking-wide bg-brand-soft text-brand-dark">Awaiting Review</span>
+                            {% endif %}
+                        </td>
+                        <td class="px-4 py-3 text-right">
+                            {% if row.in_progress %}
+                            <a href="{% url row.resume_url_name row.resume_order_id %}" class="btn btn-primary btn-sm">Resume</a>
+                            {% else %}
+                            <a href="{% url 'visit_report' row.visit.pk %}" class="btn btn-secondary btn-sm">
+                                {% if row.all_released %}View Report{% else %}Review / Release{% endif %}
+                            </a>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% else %}
+    <div class="card text-center py-12 border-2 border-dashed border-gray-300">
+        <h3 class="text-lg font-semibold text-text-main mb-2">No lab reports found for this patient</h3>
+        <a href="{% url 'report_list' %}" class="btn btn-primary inline-block mt-4">Back to Patients</a>
+    </div>
+    {% endif %}
+
+</div>
+{% endblock %}

@@ -16,11 +16,19 @@ from .models import Account, JournalEntry, JournalLine
 
 
 def _hospital(request):
-    return request.user.hospital
+    # Owners have no single request.user.hospital (they're org-scoped) — the
+    # branch they're currently working in comes from HospitalMiddleware via
+    # the org dashboard's session selection instead.
+    return getattr(request, "hospital", None) or request.user.hospital
 
 
 def _require_finance(request):
-    if not request.user.can_access_finance:
+    user = request.user
+    if getattr(user, "role", "") == user.ROLE_OWNER:
+        if user.owns_hospital(getattr(request, "hospital", None)):
+            return None
+        return HttpResponseForbidden("Finance access required.")
+    if not user.can_access_finance:
         return HttpResponseForbidden("Finance access required.")
     return None
 

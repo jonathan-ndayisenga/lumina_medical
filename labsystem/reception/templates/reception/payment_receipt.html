@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>Receipt</title>
+<title>{{ hospital.name }} - Receipt</title>
 <style>
     @page { size: 48mm auto; margin: 0mm; }
 
@@ -58,8 +58,11 @@
         text-decoration: none;
     }
     .wa { background: #25d366; color: #fff; border-color: #25d366; }
+    .lab-btn { background: #1d3557; color: #fff; border-color: #1d3557; }
+    form.btn-form { margin-top: 5px; }
+    form.btn-form .btn { margin-top: 0; }
 
-    @media print { .btn { display: none !important; } }
+    @media print { .btn, form.btn-form { display: none !important; } }
 </style>
 </head>
 <body>
@@ -120,6 +123,13 @@
 <a href="{{ walink }}" target="_blank" class="btn wa">Send via WhatsApp</a>
 {% endif %}
 <button onclick="window.print()" class="btn">Print / Save as PDF</button>
+
+{% if reception_queue_entry %}
+<form method="post" action="{% url 'reception_queue_approve_lab' reception_queue_entry.pk %}" class="btn-form">
+    {% csrf_token %}
+    <button type="submit" class="btn lab-btn">Send Patient to Lab Queue</button>
+</form>
+{% endif %}
 
 </body>
 </html>

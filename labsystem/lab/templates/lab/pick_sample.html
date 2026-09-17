@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block page_title %}Pick Sample &mdash; {{ order.test.name }}{% endblock %}
+{% block page_subtitle %}{{ visit.patient.name }} &mdash; {{ visit.patient.age }} {{ visit.patient.get_sex_display }}{% endblock %}
+{% block content %}
+<div class="card" style="max-width:600px;">
+  <form method="post">
+    {% csrf_token %}
+
+    <label class="block text-sm font-semibold mb-1">Specimen</label>
+    <select name="specimen" class="form-control mb-4" required>
+      <option value="">Select specimen&hellip;</option>
+      {% for s in order.test.accepted_specimens.all %}
+      <option value="{{ s.pk }}">{{ s.name }}</option>
+      {% endfor %}
+    </select>
+
+    {% if outside_enabled %}
+    <label class="block text-sm font-semibold mb-1">Outside / referred sample source (leave blank if collected here)</label>
+    <input type="text" name="outside_source" class="form-control mb-4" placeholder="e.g. referring clinic name">
+    {% endif %}
+
+    <label class="block text-sm font-semibold mb-1">Collection notes</label>
+    <textarea name="collection_notes" class="form-control mb-4" rows="2"></textarea>
+
+    <label class="flex items-center gap-2 mb-4 text-sm font-semibold">
+      <input type="checkbox" name="urgent" value="1" class="h-4 w-4">
+      Urgent
+    </label>
+
+    <button type="submit" class="btn">Sample Collected</button>
+    <a href="{% url 'queue' %}" class="btn btn-secondary">Cancel</a>
+  </form>
+</div>
+{% endblock %}

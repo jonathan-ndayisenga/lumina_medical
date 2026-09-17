@@ -58,6 +58,80 @@
 
     <div class="card">
         <h3 class="text-lg font-bold text-text-main mb-4">Linked Lab Results</h3>
+        {% for order in lab_orders %}
+            <div class="mb-4 last:mb-0">
+                <div class="flex justify-between items-center gap-4 flex-wrap mb-3">
+                    <strong class="text-text-main">{{ order.test.name }}</strong>
+                    <a href="{% url 'visit_report' order.visit_service.visit_id %}" class="btn btn-secondary btn-sm">Open Full Report</a>
+                </div>
+                <p class="text-xs text-text-muted mb-2">{{ order.get_stage_display }}{% if order.result.released_at %} &middot; {{ order.result.released_at|date:"Y-m-d H:i" }}{% endif %}</p>
+                {% if not order.result %}
+                <p class="text-sm text-text-muted italic">No result entered yet.</p>
+                {% elif order.result.result_type == 'free_entry' %}
+                <p class="text-sm whitespace-pre-line">{{ order.result.free_text }}</p>
+                {% elif order.result.result_type == 'defined_option' %}
+                <p class="text-sm font-semibold text-text-main">{{ order.result.chosen_option }}</p>
+                {% elif order.result.result_type == 'culture' %}
+                <p class="text-sm mb-2"><strong>Organism isolated:</strong> {{ order.result.organism|default:"—" }}</p>
+                <div class="overflow-x-auto">
+                    <table class="w-full">
+                        <thead class="bg-gray-50 border-b">
+                            <tr>
+                                <th class="text-left px-4 py-3 text-xs font-semibold uppercase">Antibiotic</th>
+                                <th class="text-left px-4 py-3 text-xs font-semibold uppercase">Class</th>
+                                <th class="text-left px-4 py-3 text-xs font-semibold uppercase">S/I/R</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y">
+                            {% for v in order.result.values.all %}
+                            <tr class="hover:bg-gray-50">
+                                <td class="px-4 py-3 text-sm text-text-main">{{ v.label }}</td>
+                                <td class="px-4 py-3 text-sm text-text-muted">{{ v.group_label }}</td>
+                                <td class="px-4 py-3 text-sm font-semibold text-text-main">{{ v.value_code }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                {% regroup order.result.values.all by group_label as order_value_groups %}
+                <div class="overflow-x-auto">
+                    <table class="w-full">
+                        <thead class="bg-gray-50 border-b">
+                            <tr>
+                                <th class="text-left px-4 py-3 text-xs font-semibold uppercase">Parameter</th>
+                                <th class="text-left px-4 py-3 text-xs font-semibold uppercase">Result</th>
+                                <th class="text-left px-4 py-3 text-xs font-semibold uppercase">Reference Range</th>
+                                <th class="text-left px-4 py-3 text-xs font-semibold uppercase">Unit</th>
+                                <th class="text-left px-4 py-3 text-xs font-semibold uppercase">Comment</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y">
+                            {% for group in order_value_groups %}
+                                {% if group.grouper %}
+                                <tr><td colspan="5" class="px-4 py-1 text-xs font-bold uppercase tracking-wide text-text-muted">{{ group.grouper }}</td></tr>
+                                {% endif %}
+                                {% for v in group.list %}
+                                <tr class="hover:bg-gray-50">
+                                    <td class="px-4 py-3 text-sm text-text-main">{{ v.label }}</td>
+                                    <td class="px-4 py-3 text-sm font-semibold text-text-main">{{ v.value_num|default:v.value_text }}</td>
+                                    <td class="px-4 py-3 text-sm text-text-muted">{{ v.ref_display|default:"-" }}</td>
+                                    <td class="px-4 py-3 text-sm text-text-muted">{{ v.unit|default:"-" }}</td>
+                                    <td class="px-4 py-3 text-sm text-text-muted">
+                                        {% if v.flag == "H" %}<span class="text-red-600 font-semibold">High</span>
+                                        {% elif v.flag == "L" %}<span class="text-red-600 font-semibold">Low</span>
+                                        {% elif v.flag == "A" %}<span class="text-red-600 font-semibold">Abnormal</span>
+                                        {% else %}-{% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% endif %}
+            </div>
+        {% endfor %}
         {% for report in lab_reports %}
             <div class="mb-4 last:mb-0">
                 <div class="flex justify-between items-center gap-4 flex-wrap mb-3">
@@ -93,9 +167,10 @@
                     </table>
                 </div>
             </div>
-        {% empty %}
-            <p class="text-sm text-text-muted italic">No lab reports are linked to this visit yet.</p>
         {% endfor %}
+        {% if not lab_orders and not lab_reports %}
+            <p class="text-sm text-text-muted italic">No lab reports are linked to this visit yet.</p>
+        {% endif %}
     </div>
 
     <div class="card">

@@ -272,7 +272,6 @@ class VisitCreateForm(forms.ModelForm):
 
     def _clean_follow_up_visit(self, cleaned_data):
         parent_visit = cleaned_data.get("follow_up_parent_visit")
-        services = cleaned_data.get("services")
 
         if parent_visit is None:
             self.add_error("follow_up_parent_visit", "Choose the completed visit this follow-up is linked to.")
@@ -284,12 +283,8 @@ class VisitCreateForm(forms.ModelForm):
         if not parent_visit.is_fully_paid:
             self.add_error("follow_up_parent_visit", "The previous visit must be fully paid before a follow-up can be created.")
 
-        if not services:
-            self.add_error("services", "Follow-up visits require at least one service selection.")
-            return cleaned_data
-        has_consultation = any(service.category == Service.CATEGORY_CONSULTATION for service in services)
-        if not has_consultation:
-            self.add_error("services", "Follow-up visits must include a doctor consultation service.")
+        # No service/consultation requirement: the referenced prior visit is
+        # what earns this one a free trip straight to the doctor queue.
         return cleaned_data
 
     def _clean_adjustment_visit(self, cleaned_data):
@@ -326,20 +321,26 @@ class VisitCreateForm(forms.ModelForm):
     def clean_services(self):
         services = self.cleaned_data["services"]
         visit_type = self.cleaned_data.get("visit_type") or getattr(self.instance, "visit_type", Visit.TYPE_NORMAL)
-        
-        # NORMAL and FOLLOW-UP visits require billable services
-        if visit_type in (Visit.TYPE_NORMAL, Visit.TYPE_FOLLOW_UP):
+
+        # NORMAL visits require billable services. FOLLOW-UP visits don't —
+        # referencing the completed prior visit is what routes them to the
+        # doctor queue, free, same as Adjustment visits below.
+        if visit_type == Visit.TYPE_NORMAL:
             if not services:
                 raise forms.ValidationError(
                     "You must select at least one billable service. This ensures the patient is properly billed and routed to the appropriate department."
                 )
-        
-        # ADJUSTMENT visits must NOT have services (they are already paid for)
-        if visit_type == Visit.TYPE_ADJUSTMENT:
-            if services:
-                raise forms.ValidationError(
-                    "Adjustment visits cannot include new services. The replacement is covered by the original payment."
-                )
+
+        # ADJUSTMENT and FOLLOW-UP visits must NOT have services (they're
+        # either already paid for, or free by policy).
+        if visit_type == Visit.TYPE_ADJUSTMENT and services:
+            raise forms.ValidationError(
+                "Adjustment visits cannot include new services. The replacement is covered by the original payment."
+            )
+        if visit_type == Visit.TYPE_FOLLOW_UP and services:
+            raise forms.ValidationError(
+                "Follow-up visits don't take new billable services — the referenced prior visit routes this straight to the doctor, free."
+            )
         
         return services
 

@@ -91,10 +91,19 @@ def notifications(request):
     from reception.workflow import queue_counts_for_hospital
     queue_counts = queue_counts_for_hospital(hospital)
 
+    # ── Which lab engine this hospital's sidebar link goes to, and whether
+    # the Phlebotomy queue should show at all ────────────────────────────────
+    from lab.routing import lab_queue_url
+    from lab.views import phlebotomy_enabled_for
+    lab_queue_url_value = lab_queue_url(hospital)
+    phlebotomy_enabled = phlebotomy_enabled_for(hospital)
+
     return {
         "expiry_alert": expiry_alert,
         "unread_notifications": list(sys_unread_qs[:5]),
         "notification_unread_count": total_unread,
+        "lab_queue_url": lab_queue_url_value,
+        "phlebotomy_enabled": phlebotomy_enabled,
         "message_unread_count": total_unread,
         "token_unread_count": token_unread_count,
         "superadmin_open_token_count": superadmin_open_token_count,

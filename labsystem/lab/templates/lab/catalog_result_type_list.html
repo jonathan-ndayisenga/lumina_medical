@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block page_title %}Result Types{% endblock %}
+{% block page_subtitle %}How a test's results get entered and printed. Fixed by the system.{% endblock %}
+{% block content %}
+<div class="space-y-4">
+  <div class="rounded-xl border border-dashed px-4 py-3 text-sm text-text-muted" style="border-color:#cfd8e3;">
+    These result types are built into the system and can't be added, edited, or removed here —
+    each one drives its own entry screen and printed report layout. Pick one per test on the
+    Laboratory Services screen.
+  </div>
+
+  <div class="card">
+    <table class="w-full text-sm">
+      <thead>
+        <tr class="text-left text-text-muted">
+          <th class="py-2">Name</th>
+          <th class="py-2">Code</th>
+          <th class="py-2">Description</th>
+          <th class="py-2">Scope</th>
+          <th class="py-2">Status</th>
+          <th class="py-2"></th>
+        </tr>
+      </thead>
+      <tbody class="divide-y" style="border-color:#eef1f5;">
+        {% for row in rows %}
+        <tr>
+          <td class="py-2 font-semibold">{{ row.name }}</td>
+          <td class="py-2 text-text-muted"><code>{{ row.code }}</code></td>
+          <td class="py-2 text-text-muted">
+            {{ row.description }}
+            {% if row.retired %}
+            <br><span class="text-xs">Not selectable when creating a test — built today as a <strong>Parameter Panel</strong> instead (Coded S/I/R parameters grouped by drug class, plus a Growth/organism field). Clone the starter template below rather than picking this type.</span>
+            {% endif %}
+          </td>
+          <td class="py-2">
+            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-700">Default</span>
+          </td>
+          <td class="py-2">
+            {% if row.retired %}
+            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-600">Retired</span>
+            {% else %}
+            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-800">Active</span>
+            {% endif %}
+          </td>
+          <td class="py-2 whitespace-nowrap">
+            {% if row.starter and is_admin %}
+            <form method="post" action="{% url 'lab_test_clone' row.starter.pk %}">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-primary btn-sm">Clone Culture &amp; Sensitivity Starter</button>
+            </form>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

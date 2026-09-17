@@ -11,7 +11,7 @@ def queue_counts_for_hospital(hospital) -> dict:
     """Pending (unprocessed) entry counts per operational queue, keyed to
     match the NAV_SECTIONS tile keys in accounts/views.py — used for the
     red count badges on the home tiles and sidebar queue links."""
-    empty = {"reception": 0, "doctor": 0, "nurse": 0, "sonographer": 0, "lab": 0}
+    empty = {"reception": 0, "doctor": 0, "nurse": 0, "sonographer": 0, "lab": 0, "phlebotomy": 0}
     if not hospital:
         return empty
     rows = (
@@ -26,6 +26,7 @@ def queue_counts_for_hospital(hospital) -> dict:
         "nurse": by_type.get(QueueEntry.TYPE_NURSE, 0),
         "sonographer": by_type.get(QueueEntry.TYPE_SONOGRAPHER, 0),
         "lab": by_type.get(QueueEntry.TYPE_LAB_RECEPTION, 0) + by_type.get(QueueEntry.TYPE_LAB_DOCTOR, 0),
+        "phlebotomy": by_type.get(QueueEntry.TYPE_PHLEBOTOMY, 0),
     }
 
 
@@ -39,6 +40,7 @@ QUEUE_TYPE_TO_MODULE_CODE = {
     QueueEntry.TYPE_LAB_RECEPTION: "lab",
     QueueEntry.TYPE_LAB_DOCTOR: "lab",
     QueueEntry.TYPE_SONOGRAPHER: "sonographer",
+    QueueEntry.TYPE_PHLEBOTOMY: "lab",
 }
 
 

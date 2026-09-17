@@ -22,9 +22,43 @@ class SubscriptionPlan(models.Model):
         return self.name
 
 
+class Organization(models.Model):
+    """A group of Hospital branches under one owner account. Opt-in — a
+    Hospital with no organization behaves exactly as before; nothing about
+    single-branch hospitals changes. Superadmin-provisioned, same as
+    Hospital itself."""
+    name = models.CharField(max_length=200)
+    logo = models.ImageField(upload_to="organization_logos/", blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["name"]
+
+    def __str__(self):
+        return self.name
+
+    @property
+    def logo_url(self):
+        if self.logo:
+            try:
+                return self.logo.url
+            except ValueError:
+                pass
+        return static("images/default_hospital_logo.png")
+
+
 class Hospital(models.Model):
     name = models.CharField(max_length=200)
     subdomain = models.CharField(max_length=100, unique=True)
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="hospitals",
+        help_text="Optional — group this branch under an Organization so its owner can see it "
+                   "alongside sibling branches. Leave blank for a standalone hospital.",
+    )
     location = models.CharField(max_length=255, blank=True)
     city = models.CharField(max_length=100, blank=True)
     box_number = models.CharField(max_length=50, blank=True)
@@ -118,6 +152,7 @@ class HospitalModuleSubscription(models.Model):
 
 class User(AbstractUser):
     ROLE_SUPERADMIN = "superadmin"
+    ROLE_OWNER = "owner"
     ROLE_HOSPITAL_ADMIN = "hospital_admin"
     ROLE_ACCOUNTANT = "accountant"
     ROLE_RECEPTIONIST = "receptionist"
@@ -128,6 +163,7 @@ class User(AbstractUser):
 
     ROLE_CHOICES = [
         (ROLE_SUPERADMIN, "Super Admin"),
+        (ROLE_OWNER, "Owner (multi-branch)"),
         (ROLE_HOSPITAL_ADMIN, "Hospital Admin"),
         (ROLE_ACCOUNTANT, "Accountant"),
         (ROLE_RECEPTIONIST, "Receptionist"),
@@ -144,6 +180,15 @@ class User(AbstractUser):
         blank=True,
         related_name="users",
     )
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="owners",
+        help_text="Set for ROLE_OWNER users only — the group of branches this account can see. "
+                   "Not scoped to a single Hospital the way every other role is.",
+    )
     role = models.CharField(max_length=20, choices=ROLE_CHOICES, default=ROLE_LAB_ATTENDANT)
 
     class Meta:
@@ -156,6 +201,19 @@ class User(AbstractUser):
     @property
     def is_hospital_admin(self):
         return self.role == self.ROLE_HOSPITAL_ADMIN
+
+    @property
+    def is_owner(self):
+        return self.role == self.ROLE_OWNER
+
+    def owns_hospital(self, hospital):
+        """True if this Owner's organization includes the given branch.
+        Object-level check — never trust the role alone for a specific
+        hospital's data, since an Owner's org is a real, checkable scope."""
+        return bool(
+            self.is_owner and hospital is not None
+            and self.organization_id and hospital.organization_id == self.organization_id
+        )
 
     @cached_property
     def module_group_names(self):
@@ -279,8 +337,15 @@ class User(AbstractUser):
         if self.is_superuser or self.role == self.ROLE_SUPERADMIN:
             self.role = self.ROLE_SUPERADMIN
             self.hospital = None
+            self.organization = None
             self.is_staff = True
             self.is_superuser = True
+        elif self.role == self.ROLE_OWNER:
+            # Org-scoped, not hospital-scoped — mirrors superadmin's
+            # "no single hospital" shape, just bounded to one organization.
+            self.hospital = None
+            self.is_staff = True
+            self.is_superuser = False
         elif self.role in {
             self.ROLE_HOSPITAL_ADMIN,
             self.ROLE_ACCOUNTANT,
@@ -289,6 +354,7 @@ class User(AbstractUser):
             self.ROLE_DOCTOR,
             self.ROLE_NURSE,
         }:
+            self.organization = None
             self.is_staff = True
             self.is_superuser = False
         super().save(*args, **kwargs)

@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block page_title %}Phlebotomy Queue{% endblock %}
+{% block page_subtitle %}Patients sent for lab consultation, before billing.{% endblock %}
+{% block content %}
+<div class="card">
+  <table class="w-full text-sm">
+    <thead><tr><th class="text-left">Patient</th><th class="text-left">Sent</th><th></th></tr></thead>
+    <tbody>
+      {% for entry in queue_entries %}
+      <tr>
+        <td>{{ entry.visit.patient.name }} <span class="text-text-muted">({{ entry.visit.patient.age }}, {{ entry.visit.patient.get_sex_display }})</span></td>
+        <td>{{ entry.created_at|timesince }} ago</td>
+        <td><a class="btn btn-secondary btn-sm" href="{% url 'phlebotomy_intake' entry.pk %}">Open</a></td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="3">Nothing in the Phlebotomy queue.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

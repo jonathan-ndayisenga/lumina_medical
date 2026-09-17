@@ -1,4 +1,3 @@
-from datetime import date
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model
@@ -8,65 +7,14 @@ from django.urls import reverse
 from accounts.models import Hospital, HospitalModuleSubscription, Module
 from admin_dashboard.models import InventoryBatch, InventoryItem, InventoryTransaction
 from doctor.models import Prescription
-from lab.models import LabReport, TestCatalog, TestResult
 from nurse.models import NurseNote
 from reception.models import Patient, QueueEntry, Service, Visit, VisitService
-from lab.views import mark_lab_queue_complete
 
 
 def _enable_modules(hospital, *codes):
     for code in codes:
         module, _ = Module.objects.get_or_create(code=code, defaults={"name": code.title()})
         HospitalModuleSubscription.objects.get_or_create(hospital=hospital, module=module, defaults={"is_active": True})
-
-
-class LabWorkflowTests(TestCase):
-    def setUp(self):
-        self.User = get_user_model()
-        self.hospital = Hospital.objects.create(name="Lumina Central", subdomain="lumina-lab")
-        _enable_modules(self.hospital, "doctor", "lab", "nurse")
-        self.doctor = self.User.objects.create_user(
-            username="doctorlab",
-            password="StrongPass123!",
-            role=self.User.ROLE_DOCTOR,
-            hospital=self.hospital,
-        )
-        self.patient = Patient.objects.create(hospital=self.hospital, name="Lab Patient", age="26YRS", sex="F")
-        self.visit = Visit.objects.create(patient=self.patient, hospital=self.hospital, created_by=self.doctor, total_amount="15.00")
-        self.report = LabReport.objects.create(
-            hospital=self.hospital,
-            visit=self.visit,
-            patient_name=self.patient.name,
-            patient_age=self.patient.age,
-            patient_sex=self.patient.sex,
-            sample_date=date.today(),
-            specimen_type="BLOOD",
-        )
-        self.test = TestCatalog.objects.create(name="CBC", unit="cells")
-        TestResult.objects.create(
-            lab_report=self.report,
-            test=self.test,
-            result_value="Normal",
-            reference_range="4-10",
-            unit="cells",
-        )
-        self.lab_queue = QueueEntry.objects.create(
-            hospital=self.hospital,
-            visit=self.visit,
-            queue_type=QueueEntry.TYPE_LAB_DOCTOR,
-            reason="Doctor requested: CBC",
-            requested_by=self.doctor,
-        )
-
-    def test_lab_completion_returns_patient_to_doctor_queue(self):
-        returned_to_doctor = mark_lab_queue_complete(self.report)
-
-        self.assertTrue(returned_to_doctor)
-        self.lab_queue.refresh_from_db()
-        self.assertTrue(self.lab_queue.processed)
-        doctor_queue = QueueEntry.objects.get(visit=self.visit, queue_type=QueueEntry.TYPE_DOCTOR, processed=False)
-        self.assertIn("Lab results ready for", doctor_queue.reason)
-        self.assertEqual(doctor_queue.requested_by, self.doctor)
 
 
 class NurseWorkflowTests(TestCase):

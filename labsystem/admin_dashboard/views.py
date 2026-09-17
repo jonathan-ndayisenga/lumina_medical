@@ -82,6 +82,32 @@ def role_required(*allowed_roles):
     return decorator
 
 
+def owner_or_role_required(*allowed_roles):
+    """Like role_required, but also admits an Owner scoped into a branch
+    they actually own (request.hospital, set by HospitalMiddleware from the
+    org dashboard's branch selection). Object-level, not role-only — never
+    grants an Owner reach into a hospital outside their organization.
+    Use only on screens an Owner is meant to reach for any branch (Users,
+    Revenue); do not swap this in for role_required generally."""
+    def decorator(view_func):
+        @login_required
+        def wrapped(request, *args, **kwargs):
+            user = request.user
+            if user.is_superuser or getattr(user, "role", "") == User.ROLE_SUPERADMIN:
+                return view_func(request, *args, **kwargs)
+            if getattr(user, "role", "") == User.ROLE_OWNER:
+                if user.owns_hospital(getattr(request, "hospital", None)):
+                    return view_func(request, *args, **kwargs)
+                return HttpResponseForbidden("You do not have access to this page.")
+            if getattr(user, "role", "") not in allowed_roles:
+                return HttpResponseForbidden("You do not have access to this page.")
+            return view_func(request, *args, **kwargs)
+
+        return wrapped
+
+    return decorator
+
+
 def hospital_admin_only(view_func):
     @login_required
     def wrapped(request, *args, **kwargs):
@@ -1258,7 +1284,7 @@ def financial_report(request):
     return render(request, "admin_dashboard/financial_report.html", context)
 
 
-@role_required(User.ROLE_HOSPITAL_ADMIN)
+@owner_or_role_required(User.ROLE_HOSPITAL_ADMIN)
 def manage_users(request):
     from django.core.paginator import Paginator
 
@@ -1291,7 +1317,7 @@ def manage_users(request):
     return render(request, "admin_dashboard/manage_users.html", context)
 
 
-@role_required(User.ROLE_HOSPITAL_ADMIN)
+@owner_or_role_required(User.ROLE_HOSPITAL_ADMIN)
 def edit_user(request, user_id):
     user = hospital_owned_or_404(User, request, pk=user_id)
     hospital = active_hospital(request)
@@ -1313,7 +1339,7 @@ def edit_user(request, user_id):
     return render(request, "admin_dashboard/object_form.html", context)
 
 
-@role_required(User.ROLE_HOSPITAL_ADMIN)
+@owner_or_role_required(User.ROLE_HOSPITAL_ADMIN)
 def deactivate_user(request, user_id):
     user = hospital_owned_or_404(User, request, pk=user_id)
     if user == request.user:
@@ -1414,7 +1440,7 @@ def manage_services(request):
     ) if hospital else Service.objects.none()
 
     if request.method == "POST":
-        form = HospitalServiceForm(request.POST)
+        form = HospitalServiceForm(request.POST, hospital=hospital)
         if form.is_valid():
             service = form.save(commit=False)
             service.hospital = hospital
@@ -1423,7 +1449,7 @@ def manage_services(request):
             return redirect("manage_services")
         messages.error(request, "Please fix the service details below.")
     else:
-        form = HospitalServiceForm()
+        form = HospitalServiceForm(hospital=hospital)
 
     paginator = Paginator(services_qs, 20)
     page_obj = paginator.get_page(request.GET.get("page"))
@@ -1441,7 +1467,7 @@ def manage_services(request):
 @role_required(User.ROLE_HOSPITAL_ADMIN)
 def edit_service(request, service_id):
     service = hospital_owned_or_404(Service, request, pk=service_id)
-    form = HospitalServiceForm(request.POST or None, instance=service)
+    form = HospitalServiceForm(request.POST or None, instance=service, hospital=service.hospital)
     if request.method == "POST":
         if form.is_valid():
             form.save()
@@ -3205,6 +3231,7 @@ def manage_hospitals(request):
                     hospital = form.save()
                     form.save_subscription_end_date(hospital)
                     form.save_module_subscriptions(hospital)
+                    form.save_lab_settings(hospital)
                     User.objects.create_user(
                         username=form.cleaned_data["admin_username"],
                         password=form.cleaned_data["admin_password"],
@@ -3252,6 +3279,7 @@ def edit_hospital(request, hospital_id):
             form.save()
             form.save_subscription_end_date(hospital)
             form.save_module_subscriptions(hospital)
+            form.save_lab_settings(hospital)
             messages.success(request, f"Hospital '{hospital.name}' updated.")
             return redirect("manage_hospitals")
         messages.error(request, "Please fix the hospital details below.")

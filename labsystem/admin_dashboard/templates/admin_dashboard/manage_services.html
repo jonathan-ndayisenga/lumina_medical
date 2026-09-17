@@ -21,7 +21,7 @@
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {% for field in form %}
                     {% if field.field.widget.input_type != "checkbox" %}
-                        <div {% if field.html_name == "test_profile" %}id="test-profile-wrap" style="display:none;"{% endif %}>
+                        <div {% if field.html_name == "test_profile" %}id="test-profile-wrap" style="display:none;"{% elif field.html_name == "lab_test_next" %}id="lab-test-next-wrap" style="display:none;"{% endif %}>
                             <label for="{{ field.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">{{ field.label }}</label>
                             {{ field }}
                             {% if field.help_text %}<p class="text-xs text-text-muted mt-1">{{ field.help_text }}</p>{% endif %}
@@ -57,7 +57,7 @@
                         <th class="text-left px-4 py-3 text-xs font-semibold uppercase">Name</th>
                         <th class="text-left px-4 py-3 text-xs font-semibold uppercase">Category</th>
                         <th class="text-left px-4 py-3 text-xs font-semibold uppercase">Price</th>
-                        <th class="text-left px-4 py-3 text-xs font-semibold uppercase">Lab Template</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold uppercase">Lab Test</th>
                         <th class="text-left px-4 py-3 text-xs font-semibold uppercase">Status</th>
                         <th class="text-left px-4 py-3 text-xs font-semibold uppercase">Actions</th>
                     </tr>
@@ -69,10 +69,12 @@
                             <td class="px-4 py-3 text-sm text-text-muted">{{ service.get_category_display }}</td>
                             <td class="px-4 py-3 text-sm font-semibold text-text-main">{{ service.price }}</td>
                             <td class="px-4 py-3 text-sm">
-                                {% if service.test_profile %}
-                                    <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">{{ service.test_profile.name }}</span>
+                                {% if service.lab_test_next %}
+                                    <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">{{ service.lab_test_next.name }}</span>
+                                {% elif service.test_profile %}
+                                    <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-600 border border-gray-200" title="Legacy template link — the lab queue no longer reads this">{{ service.test_profile.name }} (legacy)</span>
                                 {% elif service.category == "lab" %}
-                                    <span class="text-xs text-amber-600 font-medium">Not linked</span>
+                                    <a href="{% url 'lab_test_list' %}" class="text-xs text-amber-600 font-medium underline">Not linked — set up in Lab Management</a>
                                 {% else %}
                                     <span class="text-xs text-text-muted">—</span>
                                 {% endif %}
@@ -118,10 +120,13 @@
 (function () {
     const categorySelect = document.querySelector('#add-service-form select[name="category"]');
     const profileWrap = document.getElementById('test-profile-wrap');
+    const labTestWrap = document.getElementById('lab-test-next-wrap');
     if (!categorySelect || !profileWrap) return;
 
     function toggle() {
-        profileWrap.style.display = categorySelect.value === 'lab' ? '' : 'none';
+        const show = categorySelect.value === 'lab' ? '' : 'none';
+        profileWrap.style.display = show;
+        if (labTestWrap) labTestWrap.style.display = show;
     }
     categorySelect.addEventListener('change', toggle);
     toggle();

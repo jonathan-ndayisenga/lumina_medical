@@ -97,6 +97,28 @@ class HospitalMiddleware:
         if getattr(user, "is_authenticated", False):
             if getattr(user, "is_superuser", False) or getattr(user, "role", "") == "superadmin":
                 return self.get_response(request)
+            if getattr(user, "role", "") == "owner":
+                # Org-scoped, not pinned to one Hospital — the branch they're
+                # currently "in" is whatever they picked from the org
+                # dashboard, held in the session, not derived from user.hospital
+                # (always None for Owners) or the request subdomain.
+                selected_id = request.session.get("owner_active_hospital_id")
+                hospital = None
+                if selected_id:
+                    hospital = Hospital.objects.filter(
+                        pk=selected_id, organization_id=user.organization_id,
+                    ).first()
+                    if hospital is None:
+                        request.session.pop("owner_active_hospital_id", None)
+                request.hospital = hospital
+                if hospital is not None:
+                    if not getattr(hospital, "is_active", True):
+                        return HttpResponse(SUBSCRIPTION_EXPIRED_HTML, status=402)
+                    if _hospital_subscription_expired(hospital):
+                        hospital.is_active = False
+                        hospital.save(update_fields=["is_active"])
+                        return HttpResponse(SUBSCRIPTION_EXPIRED_HTML, status=402)
+                return self.get_response(request)
             if getattr(user, "hospital_id", None):
                 hospital = user.hospital
                 request.hospital = hospital
