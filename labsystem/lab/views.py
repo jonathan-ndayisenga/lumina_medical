@@ -371,7 +371,9 @@ def report_list(request):
 
     # ---- New engine side, grouped by patient name — same hospital scoping ----
     hospital = get_active_hospital(request)
-    next_qs = LabOrder.objects.select_related('test', 'visit_service__visit__patient', 'collected_by')
+    next_qs = LabOrder.objects.select_related(
+        'test', 'visit_service__visit__patient', 'collected_by', 'result__entered_by',
+    )
     if hospital and getattr(request.user, 'role', '') != 'superadmin':
         next_qs = next_qs.filter(hospital=hospital)
     if search:
@@ -392,8 +394,15 @@ def report_list(request):
         pd['engines'].add('next')
         if order.test.name not in pd['tests']:
             pd['tests'].append(order.test.name)
-        if not pd['technician'] and order.collected_by_id:
-            pd['technician'] = order.collected_by.get_full_name() or order.collected_by.username
+        if not pd['technician']:
+            # Prefer whoever actually entered the result -- every released
+            # order goes through save_results, while "mark sample collected"
+            # is a separate step some workflows skip, leaving collected_by
+            # null even though a real technician did the work.
+            result = getattr(order, 'result', None)
+            technician_user = (result.entered_by if result else None) or order.collected_by
+            if technician_user:
+                pd['technician'] = technician_user.get_full_name() or technician_user.username
         if not pd['age']:
             pd['age'] = patient.age
             pd['sex'] = patient.get_sex_display()

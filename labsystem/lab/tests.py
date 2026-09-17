@@ -1201,3 +1201,51 @@ class ReportListFilterTests(LabEngineTestBase):
         self.assertIn("Full Panel", response.context["available_tests"])
         technician_name = self.other_tech.get_full_name() or self.other_tech.username
         self.assertIn(technician_name, response.context["available_technicians"])
+
+    def test_technician_dropdown_is_identical_for_admin_and_lab_attendant(self):
+        """Same hospital, same underlying reports -- the 'Lab Technician'
+        filter must list every technician regardless of who is viewing it,
+        not just the admin's own account."""
+        admin = self.User.objects.create_user(
+            username="engine_admin_view", password="StrongPass123!",
+            role=self.User.ROLE_HOSPITAL_ADMIN, hospital=self.hospital,
+        )
+
+        self.client.force_login(admin)
+        admin_response = self.client.get(reverse("report_list"))
+
+        self.client.force_login(self.lab_user)
+        attendant_response = self.client.get(reverse("report_list"))
+
+        self.assertEqual(
+            sorted(admin_response.context["available_technicians"]),
+            sorted(attendant_response.context["available_technicians"]),
+        )
+        technician_name = self.other_tech.get_full_name() or self.other_tech.username
+        self.assertIn(technician_name, attendant_response.context["available_technicians"])
+
+    def test_technician_who_only_entered_results_without_marking_collection_still_appears(self):
+        """Regression: entering results (save_results) is the step every
+        released order goes through; marking "sample collected" is a
+        separate, sometimes-skipped step. A technician who only entered
+        results (collected_by left null) must still show up in the filter --
+        this was the actual reported bug (only accounts that had also
+        marked collection, typically the admin during setup, ever appeared)."""
+        from lab.services_next import save_results
+
+        third_tech = self.User.objects.create_user(
+            username="engine_lab_3", password="StrongPass123!", role=self.User.ROLE_LAB_ATTENDANT, hospital=self.hospital,
+        )
+        patient_c = Patient.objects.create(hospital=self.hospital, name="Charlie Patient", age="40YRS", sex="M")
+        visit_c = Visit.objects.create(patient=patient_c, hospital=self.hospital, created_by=self.lab_user, total_amount=Decimal("5"))
+        vs_c = VisitService.objects.create(visit=visit_c, service=self.malaria_service, price_at_time=Decimal("5"))
+        order_c = LabOrder.objects.create(visit_service=vs_c, test=self.malaria_test, hospital=self.hospital)
+        # No mark_sample_collected call -- collected_by stays null.
+        save_results(order_c, third_tech, {"chosen_option": "Negative"})
+
+        technician_name = third_tech.get_full_name() or third_tech.username
+        response = self.client.get(reverse("report_list"))
+        self.assertIn(technician_name, response.context["available_technicians"])
+
+        filtered = self.client.get(reverse("report_list"), {"technician": technician_name}).content.decode()
+        self.assertIn("Charlie Patient", filtered)
