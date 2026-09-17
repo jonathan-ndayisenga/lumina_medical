@@ -1398,6 +1398,84 @@ class AdminOverridePolicyTests(TestCase):
             ).exists()
         )
 
+    def test_hospital_admin_can_delete_patient_with_released_lab_results(self):
+        """Regression: LabOrder.visit_service uses on_delete=PROTECT to stop
+        a casual "remove this service" click from destroying real released
+        results -- but that PROTECT was never accounted for in this
+        already-sanctioned, audited "wipe this patient" action, so it
+        crashed with an unhandled ProtectedError for any patient with real
+        lab history instead of actually deleting them."""
+        from lab.models import LabOrder, LabTest, OrderStage, ServiceCategory
+
+        lab_service = Service.objects.create(
+            hospital=self.hospital, name="CBC", category=Service.CATEGORY_LAB, price=Decimal("15.00"),
+        )
+        category = ServiceCategory.objects.create(name="Delete Test Hematology")
+        lab_test = LabTest.objects.create(
+            hospital=self.hospital, name="CBC", category=category, result_type="defined_option",
+        )
+        lab_service.lab_tests_next.add(lab_test)
+        lab_visit_service = VisitService.objects.create(
+            visit=self.visit, service=lab_service, price_at_time=lab_service.price,
+        )
+        LabOrder.objects.create(
+            visit_service=lab_visit_service, test=lab_test, hospital=self.hospital, stage=OrderStage.RELEASED,
+        )
+
+        self.client.force_login(self.admin_user)
+        response = self.client.post(
+            reverse("patient_delete", args=[self.patient.pk]),
+            {"admin_reason": "Duplicate registration created in error.", "next": reverse("patient_list")},
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "ProtectedError")
+        self.assertFalse(Patient.objects.filter(pk=self.patient.pk).exists())
+        self.assertFalse(LabOrder.objects.filter(visit_service=lab_visit_service).exists())
+
+    def test_delete_patient_is_a_hard_delete_of_the_financial_trail_too(self):
+        """The patient explicitly asked for a hard delete "regardless of
+        what is attached" -- including money. JournalEntry/JournalLine and
+        CashTransaction use on_delete=SET_NULL against visit_service/
+        payment (correct for normal billing corrections, where the ledger
+        entry should survive), but for this sanctioned, audited wipe
+        they must actually be gone, not just orphaned in the books."""
+        from admin_dashboard.models import CashDrawer, CashTransaction
+        from finance.models import Account, JournalEntry, JournalLine
+
+        payment = Payment.objects.create(
+            visit=self.visit, amount=self.visit.total_amount, amount_paid=self.visit.total_amount,
+            mode=Payment.MODE_CASH, recorded_by=self.admin_user,
+        )
+        drawer = CashDrawer.objects.create(hospital=self.hospital, opening_balance=Decimal("0"))
+        cash_txn = CashTransaction.objects.create(
+            cash_drawer=drawer, payment=payment, amount=payment.amount_paid,
+            transaction_type=CashTransaction.TYPE_CASH_IN, description="Visit payment",
+        )
+        revenue_account = Account.objects.create(
+            hospital=self.hospital, code="4000", name="Service Revenue",
+            account_type=Account.TYPE_REVENUE, sub_type=Account.SUB_REVENUE,
+        )
+        entry = JournalEntry.objects.create(
+            hospital=self.hospital, description="Test charge", source_payment=payment,
+        )
+        JournalLine.objects.create(entry=entry, account=revenue_account, credit=payment.amount_paid, debit=Decimal("0"))
+
+        self.client.force_login(self.admin_user)
+        response = self.client.post(
+            reverse("patient_delete", args=[self.patient.pk]),
+            {"admin_reason": "Duplicate registration created in error.", "next": reverse("patient_list")},
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(Patient.objects.filter(pk=self.patient.pk).exists())
+        self.assertFalse(JournalEntry.objects.filter(pk=entry.pk).exists(), "the journal entry must be gone, not just orphaned")
+        self.assertFalse(CashTransaction.objects.filter(pk=cash_txn.pk).exists(), "the cash transaction must be gone")
+        # The account itself is hospital-level chart of accounts, untouched.
+        self.assertTrue(Account.objects.filter(pk=revenue_account.pk).exists())
+
     def test_non_admin_cannot_delete_patient(self):
         self.client.force_login(self.receptionist)
 

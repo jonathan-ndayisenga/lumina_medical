@@ -14,9 +14,10 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_http_methods
 
 from accounts.models import User
-from admin_dashboard.models import InventoryItem, InventoryTransaction
+from admin_dashboard.models import CashTransaction, InventoryItem, InventoryTransaction
 from doctor.models import Consultation, Prescription
-from lab.models import LabReport, LabSettings
+from finance.models import JournalEntry
+from lab.models import LabOrder, LabReport, LabSettings
 from .forms import CompleteVisitForm, PatientForm, QuickDispenseStartForm, VisitCreateForm
 from .models import Patient, Payment, QueueEntry, Service, Triage, Visit, VisitService
 from .workflow import (
@@ -1038,6 +1039,26 @@ def patient_delete(request, patient_id):
     linked_visits = Visit.objects.filter(patient=patient)
     linked_reports = LabReport.objects.filter(visit__patient=patient)
     linked_consultations = Consultation.objects.filter(visit__patient=patient)
+    # LabOrder.visit_service uses on_delete=PROTECT -- deliberately, so a
+    # phlebotomy/reception "remove this service" click can't silently
+    # destroy real released results. But this whole view is already the
+    # sanctioned, audited "wipe this patient's entire record" action (it
+    # already unconditionally deletes the legacy LabReport rows below) --
+    # patient.delete() cascading into Visit -> VisitService still hits that
+    # PROTECT wall unless these are cleared first, same as linked_reports.
+    linked_lab_orders = LabOrder.objects.filter(visit_service__visit__patient=patient)
+    # This is a hard delete: the patient's whole record, money included --
+    # not just the clinical trail. JournalEntry/JournalLine and
+    # CashTransaction all use on_delete=SET_NULL against visit_service/
+    # payment (correct for normal edits: a ledger entry shouldn't vanish
+    # just because someone corrects a billing line), but that would leave
+    # this patient's revenue/receivable entries sitting in the books
+    # forever, orphaned but never actually gone. Explicitly deleted here,
+    # scoped to this patient's own visits only.
+    linked_cash_transactions = CashTransaction.objects.filter(payment__visit__patient=patient)
+    linked_journal_entries = JournalEntry.objects.filter(
+        Q(source_visit_service__visit__patient=patient) | Q(source_payment__visit__patient=patient)
+    )
 
     if request.method == "POST":
         reason = admin_override_reason(request)
@@ -1049,9 +1070,15 @@ def patient_delete(request, patient_id):
                 "reason": reason,
                 "visit_count": linked_visits.count(),
                 "lab_report_count": linked_reports.count(),
+                "lab_order_count": linked_lab_orders.count(),
                 "consultation_count": linked_consultations.count(),
+                "journal_entry_count": linked_journal_entries.count(),
+                "cash_transaction_count": linked_cash_transactions.count(),
             }
             linked_reports.delete()
+            linked_lab_orders.delete()  # cascades to LabResult/ResultValue
+            linked_cash_transactions.delete()
+            linked_journal_entries.delete()  # cascades to JournalLine
             patient_id_value = patient.pk
             patient_name = patient.name
             patient.delete()
@@ -1075,8 +1102,11 @@ def patient_delete(request, patient_id):
             "object_label": patient.name,
             "object_type": "patient",
             "danger_note": (
-                f"This will remove {linked_visits.count()} visit(s), {linked_consultations.count()} consultation(s), "
-                f"and {linked_reports.count()} linked lab report(s)."
+                f"This is a hard delete — it cannot be undone. It will remove {linked_visits.count()} visit(s), "
+                f"{linked_consultations.count()} consultation(s), {linked_reports.count()} linked lab report(s), "
+                f"{linked_lab_orders.count()} lab order(s) (including released results), "
+                f"{linked_journal_entries.count()} journal entr(y/ies), and {linked_cash_transactions.count()} "
+                "cash transaction(s) — the patient's entire financial trail included."
             ),
             "confirm_label": "Delete Patient",
             "cancel_href": cancel_url,
