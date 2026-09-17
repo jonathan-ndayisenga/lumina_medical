@@ -972,6 +972,28 @@ class BundledServiceMultiTestOrderTests(LabEngineTestBase):
         self.assertEqual(mrdt_order.stage, OrderStage.ENTERED)
         self.assertEqual(bs_order.stage, OrderStage.PENDING, "the other linked test must stay untouched and unentered")
 
+    def test_entering_the_form_for_one_test_does_not_prematurely_mark_the_bundle_complete(self):
+        """Regression: entering MRDT alone used to mark the shared
+        VisitService performed=True immediately, which made enter_result
+        think the whole bundle was done and bounce the attendant straight
+        to the report -- while B/S was still sitting unentered."""
+        self.client.get(reverse("queue"))
+        mrdt_order = LabOrder.objects.get(visit_service=self.visit_service, test=self.mrdt)
+        bs_order = LabOrder.objects.get(visit_service=self.visit_service, test=self.bs)
+
+        for order in (mrdt_order, bs_order):
+            self.client.post(reverse("pick_sample", args=[order.pk]), {"specimen": self.specimen.pk, "collection_notes": ""})
+
+        response = self.client.post(reverse("enter_result", args=[mrdt_order.pk]), {"chosen_option": "Positive"})
+        self.assertRedirects(response, reverse("queue"), fetch_redirect_response=False)
+        self.visit_service.refresh_from_db()
+        self.assertFalse(self.visit_service.performed, "must stay unfinished while B/S is still pending")
+
+        response2 = self.client.post(reverse("enter_result", args=[bs_order.pk]), {"chosen_option": "Negative"})
+        self.assertRedirects(response2, reverse("visit_report", args=[self.visit.pk]))
+        self.visit_service.refresh_from_db()
+        self.assertTrue(self.visit_service.performed, "both tests entered -- now it's actually done")
+
 
 class ReportSettingsTests(LabEngineTestBase):
     """LabSettings.show_report_footnote and .combine_defined_option_reports
@@ -1021,6 +1043,32 @@ class ReportSettingsTests(LabEngineTestBase):
             order.result.released_by = self.lab_user
             order.result.released_at = timezone.now()
             order.result.save(update_fields=["released_by", "released_at"])
+
+    def test_report_does_not_crash_when_another_order_is_still_unentered(self):
+        """Regression: viewing the report for a visit with combine on used to
+        crash with RelatedObjectDoesNotExist ("LabOrder has no result") the
+        moment ANY order on that visit was still sitting in the lab queue
+        without results yet -- exactly "some in the lab queue under the
+        same patient" while trying to view/release the rest."""
+        third_service = Service.objects.create(
+            hospital=self.hospital, name="Stool Exam", category=Service.CATEGORY_LAB, price=Decimal("5"),
+        )
+        third_test = LabTest.objects.create(
+            hospital=self.hospital, name="Stool Exam", category=self.test.category, result_type=ResultType.DEFINED_OPTION,
+        )
+        third_service.lab_tests_next.add(third_test)
+        third_vs = VisitService.objects.create(visit=self.visit, service=third_service, price_at_time=Decimal("5"))
+        LabOrder.objects.create(visit_service=third_vs, test=third_test, hospital=self.hospital)  # no result yet
+
+        self.lab_settings.combine_defined_option_reports = True
+        self.lab_settings.save(update_fields=["combine_defined_option_reports"])
+
+        response = self.client.get(reverse("visit_report", args=[self.visit.pk]))
+        self.assertEqual(response.status_code, 200)
+        body = response.content.decode()
+        self.assertIn("Malaria RDT", body)
+        self.assertIn("Typhoid Test", body)
+        self.assertIn("No result entered yet", body)
 
     def test_footnote_shown_by_default_and_hidden_when_disabled(self):
         body = self.client.get(reverse("visit_report", args=[self.visit.pk])).content.decode()

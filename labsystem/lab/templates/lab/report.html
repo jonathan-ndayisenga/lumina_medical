@@ -23,7 +23,10 @@
     /* The app shell's own centering/padding is for the on-screen view —
        on paper it just eats margin a real bench report doesn't have. */
     .max-w-7xl { max-width: none !important; margin: 0 !important; padding: 0 !important; }
-    body, html { font-size: 11px; }
+    /* Sized against a real reference bench report — a 20-row CBC panel
+       still fits one A4 page at this size, so there's no reason to run it
+       any smaller than this. */
+    body, html { font-size: 13px; }
     /* Every .report-block is one printed page — a standalone test, or (when
        combine_defined_option_reports is on) one shared block holding every
        simple Positive/Negative test together, one heading+table per test,
@@ -32,22 +35,22 @@
        margin-top:auto on the footer area) instead of trailing right after
        wherever the results happen to end. */
     .report-block {
-      page-break-after: always; padding: 8px; margin-bottom: 0; border-radius: 0;
+      page-break-after: always; padding: 10px; margin-bottom: 0; border-radius: 0;
       display: flex; flex-direction: column; min-height: 273mm;
     }
     .report-block:last-child { page-break-after: auto; }
     .report-footer-area { margin-top: auto; }
-    .report-head-grid { gap: 0.35rem 1rem; margin: 0.5rem 0 0.6rem; }
-    .report-field-label { font-size: 0.58rem; }
-    .report-field-value { font-size: 0.72rem; }
-    .report-note-box { padding: 0.4rem 0.6rem; font-size: 0.68rem; }
-    h3, h4 { font-size: 0.78rem !important; margin: 0.5rem 0 0.3rem !important; }
-    table { font-size: 0.68rem; border-collapse: collapse; width: 100%; }
-    table th, table td { padding: 3px 6px; }
-    table th { border-bottom: 1.5px solid #1d3557; text-transform: uppercase; font-size: 0.6rem; letter-spacing: 0.03em; }
+    .report-head-grid { gap: 0.4rem 1.25rem; margin: 0.6rem 0 0.8rem; }
+    .report-field-label { font-size: 0.72rem; }
+    .report-field-value { font-size: 0.95rem; }
+    .report-note-box { padding: 0.5rem 0.75rem; font-size: 0.88rem; }
+    h3, h4 { font-size: 1.05rem !important; margin: 0.6rem 0 0.4rem !important; }
+    table { font-size: 0.95rem; border-collapse: collapse; width: 100%; }
+    table th, table td { padding: 5px 8px; }
+    table th { border-bottom: 1.5px solid #1d3557; text-transform: uppercase; font-size: 0.8rem; letter-spacing: 0.03em; }
     table td { border-bottom: 1px solid #e6ecf3; }
-    .sig-block { margin-top: 0.9rem; padding-top: 0.5rem; gap: 1rem; }
-    .sig-line { margin-top: 1rem; font-size: 0.6rem; }
+    .sig-block { margin-top: 1.1rem; padding-top: 0.6rem; gap: 1.25rem; }
+    .sig-line { margin-top: 1.2rem; font-size: 0.78rem; }
   }
 </style>
 {% endblock %}

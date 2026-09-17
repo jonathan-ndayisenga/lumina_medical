@@ -968,12 +968,20 @@ def enter_result(request, order_id):
         payload = _payload_from_post(order.test, request.POST)
         save_results(order, request.user, payload)
 
-        order.visit_service.performed = True
+        # A bundled service (e.g. "Malaria Test" -> MRDT + B/S) shares one
+        # VisitService across several LabOrders -- only mark it performed
+        # once every linked order has actually moved past sample collection,
+        # not the moment any single one of them gets entered.
+        order.visit_service.performed = not (
+            order.visit_service.lab_orders_next.exclude(pk=order.pk)
+            .filter(stage__in=[OrderStage.PENDING, OrderStage.SAMPLE_COLLECTED])
+            .exists()
+        )
         order.visit_service.save(update_fields=["performed"])
 
         messages.success(request, f"{order.test.name} saved.")
 
-        if not _pending_lab_visit_services(visit).exclude(pk=order.visit_service_id).exists():
+        if not _pending_lab_visit_services(visit).exists():
             # Entered, not yet routed anywhere — routing happens at release
             # (see visit_report's "release" action), so reception/doctor
             # never act on a report still awaiting review or payment. But if
@@ -1232,7 +1240,15 @@ def visit_report(request, visit_id):
     combine_defined_option_reports = settings_row.combine_defined_option_reports if settings_row else False
     orders_list = list(orders)
     if combine_defined_option_reports:
-        combined_orders = [o for o in orders_list if o.result and o.result.result_type == ResultType.DEFINED_OPTION]
+        # order.result is a reverse OneToOne accessor -- it raises
+        # RelatedObjectDoesNotExist (not None) when no LabResult exists yet,
+        # e.g. an order still sitting unentered in the lab queue. getattr
+        # with a default sidesteps that; a plain `order.result` crashed this
+        # whole page the moment a visit had any order still awaiting entry.
+        combined_orders = [
+            o for o in orders_list
+            if getattr(o, "result", None) and o.result.result_type == ResultType.DEFINED_OPTION
+        ]
         standalone_orders = [o for o in orders_list if o not in combined_orders]
     else:
         combined_orders = []
