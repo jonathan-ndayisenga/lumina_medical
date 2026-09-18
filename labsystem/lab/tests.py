@@ -663,13 +663,22 @@ class LabTestHospitalBackfillMigrationTests(TransactionTestCase):
         ])
 
         # Reload so project_state reflects the rollback just performed. Also
-        # pull in reception's migration that adds Service.lab_test_next —
-        # it's not a dependency of lab.0029, just applied before it in a
-        # normal full migrate, so it has to be named explicitly here to be
-        # part of the frozen historical model state.
+        # pull in reception's migration that adds Service.lab_test_next, and
+        # accounts' latest migration for Hospital — neither is a dependency
+        # of lab.0029, just applied before/alongside it in a normal full
+        # migrate, so each has to be named explicitly here to be part of the
+        # frozen historical model state. accounts isn't touched by the
+        # rollback above (nothing here depends on it), so the real table
+        # already matches this target; naming it just keeps OldHospital's
+        # field set in sync so inserts below don't omit a real NOT NULL
+        # column the live schema already has (e.g. report_code).
         executor = MigrationExecutor(connection)
         old_apps = executor.loader.project_state(
-            [("lab", "0029_labtest_hospital"), ("reception", "0022_service_lab_test_next")]
+            [
+                ("lab", "0029_labtest_hospital"),
+                ("reception", "0022_service_lab_test_next"),
+                ("accounts", "0022_hospital_report_code"),
+            ]
         ).apps
 
         OldHospital = old_apps.get_model("accounts", "Hospital")
@@ -1099,6 +1108,34 @@ class ReportSettingsTests(LabEngineTestBase):
         self.assertEqual(body_combined.count("Powered by Ternah Health"), 1)
 
 
+class ReportIdentifierTests(LabEngineTestBase):
+    """Patient/Visit/Accession numbers print a short hospital code, not the
+    raw subdomain (which can be a long deploy-generated slug like
+    "shark-app-7ssb2") -- and Accession Number must be a real value, not the
+    hardcoded "N/A" placeholder it used to be."""
+
+    def test_report_numbers_use_the_abbreviated_hospital_code_not_the_subdomain(self):
+        visit = self._make_visit("M", "30YRS")
+        order = self._order_for(visit)
+        self._collect_sample(order)
+        self._enter_results(order, hgb="14", abx="S", growth="No Significant Growth", protein="Negative", appearance="Clear")
+        order.refresh_from_db()
+        order.stage = OrderStage.RELEASED
+        order.save(update_fields=["stage"])
+        order.result.released_by = self.lab_user
+        order.result.released_at = timezone.now()
+        order.result.save(update_fields=["released_by", "released_at"])
+
+        body = self.client.get(reverse("visit_report", args=[visit.pk])).content.decode()
+
+        # self.hospital.name == "Lumina Engine" -> auto-abbreviated "LE".
+        self.assertIn(f"LE-PAT-{visit.patient.pk:04d}", body)
+        self.assertIn(f"LE-VIS-{visit.pk:06d}", body)
+        self.assertIn(f"LE-ACC-{order.pk:06d}", body)
+        self.assertNotIn("N/A</div>", body)
+        self.assertNotIn("LUMINA-ENGINE", body)
+
+
 class ReportSettingsPermissionTests(LabEngineTestBase):
     """Lab Management is admin-editable, view-only for lab attendants --
     Report Settings has to follow the same rule as every other screen
@@ -1249,3 +1286,52 @@ class ReportListFilterTests(LabEngineTestBase):
 
         filtered = self.client.get(reverse("report_list"), {"technician": technician_name}).content.decode()
         self.assertIn("Charlie Patient", filtered)
+
+
+class CatalogListPaginationTests(LabEngineTestBase):
+    """Lab Management's list screens (Service Categories, Specimen Types,
+    Laboratory Services) paginate instead of dumping every row on one page.
+    Result Types isn't included -- it's a fixed, code-defined list of four
+    entries, not something that grows."""
+
+    def test_lab_test_list_paginates_at_twenty_per_page(self):
+        for i in range(25):
+            LabTest.objects.create(
+                hospital=self.hospital, name=f"Pagination Test {i:02d}",
+                category=self.test.category, result_type=ResultType.FREE_ENTRY,
+            )
+        # self.test itself (from base setUp) makes 26 total.
+
+        page1 = self.client.get(reverse("lab_test_list"))
+        self.assertEqual(page1.status_code, 200)
+        self.assertEqual(len(page1.context["rows"]), 20)
+        self.assertContains(page1, "Next")
+        self.assertNotContains(page1, "Previous")
+
+        page2 = self.client.get(reverse("lab_test_list"), {"page": 2})
+        self.assertEqual(len(page2.context["rows"]), 6)
+        self.assertContains(page2, "Previous")
+
+    def test_service_category_list_paginates(self):
+        for i in range(25):
+            ServiceCategory.objects.create(name=f"Pagination Category {i:02d}")
+
+        page1 = self.client.get(reverse("lab_category_list"))
+        self.assertEqual(page1.status_code, 200)
+        self.assertEqual(len(page1.context["categories"]), 20)
+        self.assertContains(page1, "Next")
+
+    def test_specimen_type_list_paginates(self):
+        for i in range(25):
+            SpecimenType.objects.create(name=f"Pagination Specimen {i:02d}")
+
+        page1 = self.client.get(reverse("lab_specimen_list"))
+        self.assertEqual(page1.status_code, 200)
+        self.assertEqual(len(page1.context["specimens"]), 20)
+        self.assertContains(page1, "Next")
+
+    def test_short_lists_show_no_pagination_controls(self):
+        response = self.client.get(reverse("lab_category_list"))
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "Next")
+        self.assertNotContains(response, "Previous")

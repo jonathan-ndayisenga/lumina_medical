@@ -7,6 +7,22 @@ from django.utils import timezone
 from accounts.models import Hospital, SubscriptionPlan, User
 
 
+class HospitalReportCodeTests(TestCase):
+    """report_code_display drives the short code printed on patient/visit
+    numbers -- must never fall back to the raw subdomain, which can be a
+    long deploy-generated slug."""
+
+    def test_falls_back_to_initials_when_report_code_blank(self):
+        hospital = Hospital.objects.create(name="Lumina Medical Services", subdomain="shark-app-7ssb2")
+        self.assertEqual(hospital.report_code_display, "LMS")
+
+    def test_explicit_report_code_wins_and_is_uppercased(self):
+        hospital = Hospital.objects.create(
+            name="Lumina Medical Services", subdomain="shark-app-7ssb2", report_code="lms",
+        )
+        self.assertEqual(hospital.report_code_display, "LMS")
+
+
 class LoginCsrfTests(TestCase):
     def test_login_page_sets_csrf_cookie(self):
         client = Client(enforce_csrf_checks=True)

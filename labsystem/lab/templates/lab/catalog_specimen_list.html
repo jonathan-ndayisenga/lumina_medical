@@ -54,5 +54,23 @@
       </tbody>
     </table>
   </div>
+
+  {% if specimens.has_other_pages %}
+  <div class="flex flex-wrap gap-2 justify-center">
+    {% if specimens.has_previous %}
+      <a href="?page={{ specimens.previous_page_number }}" class="btn btn-secondary btn-sm">Previous</a>
+    {% endif %}
+    {% for i in specimens.paginator.page_range %}
+      {% if specimens.number == i %}
+        <span class="btn btn-sm bg-gray-100 text-gray-600 cursor-default">{{ i }}</span>
+      {% else %}
+        <a href="?page={{ i }}" class="btn btn-secondary btn-sm">{{ i }}</a>
+      {% endif %}
+    {% endfor %}
+    {% if specimens.has_next %}
+      <a href="?page={{ specimens.next_page_number }}" class="btn btn-secondary btn-sm">Next</a>
+    {% endif %}
+  </div>
+  {% endif %}
 </div>
 {% endblock %}

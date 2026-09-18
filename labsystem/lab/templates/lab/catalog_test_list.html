@@ -58,5 +58,23 @@
       </tbody>
     </table>
   </div>
+
+  {% if rows.has_other_pages %}
+  <div class="flex flex-wrap gap-2 justify-center">
+    {% if rows.has_previous %}
+      <a href="?page={{ rows.previous_page_number }}" class="btn btn-secondary btn-sm">Previous</a>
+    {% endif %}
+    {% for i in rows.paginator.page_range %}
+      {% if rows.number == i %}
+        <span class="btn btn-sm bg-gray-100 text-gray-600 cursor-default">{{ i }}</span>
+      {% else %}
+        <a href="?page={{ i }}" class="btn btn-secondary btn-sm">{{ i }}</a>
+      {% endif %}
+    {% endfor %}
+    {% if rows.has_next %}
+      <a href="?page={{ rows.next_page_number }}" class="btn btn-secondary btn-sm">Next</a>
+    {% endif %}
+  </div>
+  {% endif %}
 </div>
 {% endblock %}

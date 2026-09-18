@@ -22,9 +22,12 @@ from decimal import Decimal, InvalidOperation
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.core.exceptions import PermissionDenied
+from django.core.paginator import Paginator
 from django.db import transaction
 from django.db.models import Count
 from django.shortcuts import get_object_or_404, redirect, render
+
+CATALOG_PAGE_SIZE = 20
 
 from reception.models import Service
 
@@ -191,8 +194,9 @@ catalog_admin_required = user_passes_test(_catalog_admin_ok)
 @login_required
 @staff_required
 def category_list(request):
+    paginator = Paginator(ServiceCategory.objects.all(), CATALOG_PAGE_SIZE)
     return render(request, "lab/catalog_category_list.html", {
-        "categories": ServiceCategory.objects.all(),
+        "categories": paginator.get_page(request.GET.get("page")),
         "is_admin": _catalog_admin_ok(request.user),
         "active_nav": "lab_categories",
     })
@@ -238,8 +242,9 @@ def category_edit(request, pk):
 @login_required
 @staff_required
 def specimen_list(request):
+    paginator = Paginator(SpecimenType.objects.all(), CATALOG_PAGE_SIZE)
     return render(request, "lab/catalog_specimen_list.html", {
-        "specimens": SpecimenType.objects.all(),
+        "specimens": paginator.get_page(request.GET.get("page")),
         "is_admin": _catalog_admin_ok(request.user),
         "active_nav": "lab_specimens",
     })
@@ -391,9 +396,11 @@ def test_list(request):
     if hospital and getattr(request.user, "role", "") != "superadmin":
         tests = tests.filter(hospital=hospital)
     rows = [{"test": t, "service": services_by_test.get(t.pk)} for t in tests]
+    paginator = Paginator(rows, CATALOG_PAGE_SIZE)
 
     return render(request, "lab/catalog_test_list.html", {
-        "rows": rows, "is_admin": _catalog_admin_ok(request.user), "active_nav": "lab_tests",
+        "rows": paginator.get_page(request.GET.get("page")),
+        "is_admin": _catalog_admin_ok(request.user), "active_nav": "lab_tests",
     })
 
 

@@ -1521,3 +1521,92 @@ class AdminOverridePolicyTests(TestCase):
                 object_id=str(self.visit.pk),
             ).exists()
         )
+
+
+class VisitReportPrintLayoutTests(TestCase):
+    """The printable Visit Report must only show sections that actually
+    apply to this visit -- no placeholder card for Nursing Notes or
+    Laboratory Reports when the patient never saw a nurse or had no lab
+    work -- and must carry the real hospital's branding, not the generic
+    fallback the shared print partials show when hospital= isn't passed."""
+
+    def setUp(self):
+        plan = SubscriptionPlan.objects.create(
+            name="Print Layout", price_monthly=Decimal("0.00"), price_yearly=Decimal("0.00"),
+        )
+        self.hospital = Hospital.objects.create(
+            name="Lumina Print Hospital", subdomain="lumina-print-layout", subscription_plan=plan,
+        )
+        _enable_modules(self.hospital, "reception")
+        self.receptionist = User.objects.create_user(
+            username="printdesk", password="pass12345",
+            role=User.ROLE_RECEPTIONIST, hospital=self.hospital, is_active=True,
+        )
+        self.patient = Patient.objects.create(
+            hospital=self.hospital, name="Print Patient",
+            registration_date=timezone.localdate(), age="40YRS", sex="M",
+        )
+        self.visit = Visit.objects.create(
+            patient=self.patient, hospital=self.hospital, total_amount=Decimal("0.00"),
+            status=Visit.STATUS_IN_PROGRESS, created_by=self.receptionist,
+        )
+        self.client.force_login(self.receptionist)
+
+    def test_bare_visit_omits_doctor_nurse_and_lab_sections_entirely(self):
+        """A visit with no consultation, no nurse notes, and no lab work --
+        none of those three sections, or their headings, should appear."""
+        response = self.client.get(reverse("view_visit_report", args=[self.visit.pk]))
+        self.assertEqual(response.status_code, 200)
+        body = response.content.decode()
+        # Check for the rendered heading tags specifically -- an HTML dev
+        # comment naming each section (e.g. "<!-- Doctor Consultation -->")
+        # legitimately sits above each conditional block regardless of
+        # whether it renders, so a bare substring check would false-positive.
+        self.assertNotIn(">Doctor Consultation<", body)
+        self.assertNotIn(">Nursing Notes<", body)
+        self.assertNotIn(">Laboratory Reports<", body)
+        self.assertNotIn("No nursing notes recorded", body)
+        self.assertNotIn("No laboratory reports recorded", body)
+
+    def test_nurse_note_makes_the_nursing_section_appear(self):
+        from nurse.models import NurseNote
+
+        NurseNote.objects.create(visit=self.visit, created_by=self.receptionist, notes="Dressing changed.")
+        body = self.client.get(reverse("view_visit_report", args=[self.visit.pk])).content.decode()
+        self.assertIn(">Nursing Notes<", body)
+        self.assertIn("Dressing changed.", body)
+        self.assertNotIn(">Doctor Consultation<", body)
+        self.assertNotIn(">Laboratory Reports<", body)
+
+    def test_lab_report_makes_the_lab_section_appear(self):
+        LabReport.objects.create(
+            hospital=self.hospital, visit=self.visit, patient_name=self.patient.name,
+            patient_age=self.patient.age, patient_sex=self.patient.sex,
+            sample_date=timezone.now(), specimen_type="BLOOD",
+        )
+        body = self.client.get(reverse("view_visit_report", args=[self.visit.pk])).content.decode()
+        self.assertIn(">Laboratory Reports<", body)
+        self.assertNotIn(">Doctor Consultation<", body)
+        self.assertNotIn(">Nursing Notes<", body)
+
+    def test_consultation_makes_the_doctor_section_appear(self):
+        Consultation.objects.create(
+            visit=self.visit, created_by=self.receptionist,
+            signs_symptoms="Cough", diagnosis="URTI", treatment="Rest and fluids",
+        )
+        body = self.client.get(reverse("view_visit_report", args=[self.visit.pk])).content.decode()
+        self.assertIn(">Doctor Consultation<", body)
+        self.assertNotIn(">Nursing Notes<", body)
+        self.assertNotIn(">Laboratory Reports<", body)
+
+    def test_header_and_footer_carry_the_real_hospital_not_the_generic_fallback(self):
+        body = self.client.get(reverse("view_visit_report", args=[self.visit.pk])).content.decode()
+        self.assertIn("LUMINA PRINT HOSPITAL", body)
+        self.assertNotIn("TERNAH EMR", body)
+        self.assertNotIn("Hospital EMR", body)
+
+    def test_patient_and_visit_numbers_use_the_abbreviated_hospital_code(self):
+        body = self.client.get(reverse("view_visit_report", args=[self.visit.pk])).content.decode()
+        # "Lumina Print Hospital" -> auto-abbreviated "LPH".
+        self.assertIn(f"LPH-PAT-{self.patient.pk:04d}", body)
+        self.assertIn(f"LPH-VIS-{self.visit.pk:06d}", body)

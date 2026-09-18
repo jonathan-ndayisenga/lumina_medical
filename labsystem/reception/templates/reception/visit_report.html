@@ -7,16 +7,13 @@
 {% block page_subtitle %}Complete visit documentation with all clinical sections. Print this for patient records.{% endblock %}
 
 {% block extra_css %}
+{% include "partials/print_report_base.html" %}
 <style>
 @media print {
-    @page { size: A4; margin: 15mm; }
-
     .print-hidden { display: none !important; }
     .vr-screen-header { display: none !important; }
     .vr-print-header { display: block !important; margin-bottom: 6mm; }
-    .vr-print-footer { display: block !important; margin-top: 6mm; border-top: 1px solid #e5e7eb; padding-top: 3mm; }
 
-    body { font-size: 11px; color: #111; }
     .card {
         break-inside: avoid;
         page-break-inside: avoid;
@@ -27,6 +24,23 @@
     }
     .space-y-6 > * + * { margin-top: 4mm; }
     .vr-lab-report { break-inside: avoid; page-break-inside: avoid; }
+
+    /* Section cards keep their thin colored left-border accent but lose the
+       full tinted fill on paper — matches the Lab Report's clean
+       monochrome-with-accent print look instead of printing colored
+       backgrounds that just burn toner on a real clinic printer. */
+    .bg-blue-50, .bg-indigo-50, .bg-purple-50, .bg-emerald-50,
+    .bg-green-50, .bg-amber-50, .bg-gray-50 {
+        background: #f7f9fc !important;
+    }
+
+    /* The whole printable document is one flex column so the footer can be
+       pinned to the true bottom of the page (via .report-footer-area, see
+       the shared partial) when the visit summary is short enough to fit
+       one page — a longer multi-section visit just flows onto further
+       pages normally, with the footer landing after the last section on
+       the final page. */
+    .vr-print-page { display: flex; flex-direction: column; min-height: 273mm; }
 }
 
 .vr-print-header { display: none; }
@@ -35,7 +49,7 @@
 {% endblock %}
 
 {% block content %}
-<div class="space-y-6">
+<div class="space-y-6 vr-print-page">
 
     <!-- ── Screen nav buttons ────────────────────────────────────── -->
     <div class="flex justify-between items-center print-hidden">
@@ -43,55 +57,63 @@
         <button onclick="window.print()" class="btn btn-primary">Print Visit Report</button>
     </div>
 
-    <!-- ── Print-only fixed header (repeats every page) ─────────── -->
+    <!-- ── Print-only fixed header ─────────────────────────────── -->
     <div class="vr-print-header">
-        {% include "partials/print_header.html" with print_title="VISIT REPORT" print_subtitle=visit.id %}
+        {% include "partials/print_header.html" with hospital=visit.hospital print_title="VISIT REPORT" print_subtitle=visit.id %}
     </div>
 
     <!-- ── Screen header (once, on screen only) ──────────────────── -->
     <div class="vr-screen-header">
-        {% include "partials/print_header.html" with print_title="VISIT REPORT" print_subtitle=visit.id %}
+        {% include "partials/print_header.html" with hospital=visit.hospital print_title="VISIT REPORT" print_subtitle=visit.id %}
     </div>
 
     <!-- Visit Header / Patient Bio -->
-    <div class="card bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200">
-        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+    <div class="card">
+        <div class="report-head-grid" style="grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));">
             <div>
-                <div class="text-xs font-semibold text-text-muted uppercase tracking-widest">Patient</div>
-                <div class="font-semibold text-text-main mt-1">{{ visit.patient.name }}</div>
+                <div class="report-field-label">Patient</div>
+                <div class="report-field-value">{{ visit.patient.name }}</div>
             </div>
             <div>
-                <div class="text-xs font-semibold text-text-muted uppercase tracking-widest">Age at Visit / Sex</div>
-                <div class="font-semibold text-text-main mt-1">{{ age_at_visit }} / {{ visit.patient.get_sex_display }}</div>
+                <div class="report-field-label">Patient Number</div>
+                <div class="report-field-value">{{ visit.hospital.report_code_display }}-PAT-{{ visit.patient.pk|stringformat:"04d" }}</div>
+            </div>
+            <div>
+                <div class="report-field-label">Visit Number</div>
+                <div class="report-field-value">{{ visit.hospital.report_code_display }}-VIS-{{ visit.pk|stringformat:"06d" }}</div>
+            </div>
+            <div>
+                <div class="report-field-label">Age at Visit / Sex</div>
+                <div class="report-field-value">{{ age_at_visit }} / {{ visit.patient.get_sex_display }}</div>
                 {% if visit.patient.date_of_birth %}
                 <div class="text-xs text-text-muted mt-0.5">Registered: {{ visit.patient.age }}</div>
                 {% endif %}
             </div>
             <div>
-                <div class="text-xs font-semibold text-text-muted uppercase tracking-widest">Weight</div>
+                <div class="report-field-label">Weight</div>
                 {% with w=visit.weight_kg|default:visit.patient.weight_kg %}
-                <div class="font-semibold text-text-main mt-1">{{ w|default:"-" }}{% if w %} kg{% endif %}</div>
+                <div class="report-field-value">{{ w|default:"-" }}{% if w %} kg{% endif %}</div>
                 {% endwith %}
             </div>
             <div>
-                <div class="text-xs font-semibold text-text-muted uppercase tracking-widest">Visit Date</div>
-                <div class="font-semibold text-text-main mt-1">{{ visit.visit_date|date:"M d, Y H:i" }}</div>
+                <div class="report-field-label">Visit Date</div>
+                <div class="report-field-value">{{ visit.visit_date|date:"M d, Y H:i" }}</div>
             </div>
             <div>
-                <div class="text-xs font-semibold text-text-muted uppercase tracking-widest">Status</div>
+                <div class="report-field-label">Status</div>
                 <div class="mt-1">
                     {% if visit.status == "completed" %}
-                        <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">Completed</span>
+                        <span class="report-status-badge" style="background:#d7f5e3;color:#146c3f;">Completed</span>
                     {% elif visit.status == "ready_for_billing" %}
-                        <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-800">Ready for Billing</span>
+                        <span class="report-status-badge" style="background:#fff3cd;color:#8a6100;">Ready for Billing</span>
                     {% else %}
-                        <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-800">In Progress</span>
+                        <span class="report-status-badge" style="background:#dbeafe;color:#1d4ed8;">In Progress</span>
                     {% endif %}
                 </div>
             </div>
             <div>
-                <div class="text-xs font-semibold text-text-muted uppercase tracking-widest">Total Bill</div>
-                <div class="font-semibold text-text-main mt-1">{{ visit.total_amount }}</div>
+                <div class="report-field-label">Total Bill</div>
+                <div class="report-field-value">{{ visit.total_amount }}</div>
             </div>
         </div>
     </div>
@@ -99,7 +121,7 @@
     <!-- Triage & Vitals -->
     {% if triage %}
     <div class="card border-l-4 border-emerald-500">
-        <h2 class="text-lg font-bold text-text-main mb-3">Triage &amp; Vitals</h2>
+        <h2 class="report-section-heading">Triage &amp; Vitals</h2>
         <div class="grid grid-cols-2 md:grid-cols-4 gap-3 bg-gray-50 p-3 rounded">
             {% if triage.weight_kg %}<div><div class="text-xs text-text-muted">Weight</div><div class="font-semibold text-text-main">{{ triage.weight_kg }} kg</div></div>{% endif %}
             {% if triage.bp_systolic and triage.bp_diastolic %}<div><div class="text-xs text-text-muted">Blood Pressure</div><div class="font-semibold text-text-main">{{ triage.bp_systolic }}/{{ triage.bp_diastolic }} mmHg</div></div>{% endif %}
@@ -116,7 +138,7 @@
     <!-- Doctor Consultation -->
     {% if consultation %}
     <div class="card border-l-4 border-blue-500">
-        <h2 class="text-lg font-bold text-text-main mb-4">Doctor Consultation</h2>
+        <h2 class="report-section-heading">Doctor Consultation</h2>
         <div class="space-y-4">
             {% if consultation.vitals %}
             <div>
@@ -164,34 +186,27 @@
     </div>
     {% endif %}
 
-    <!-- Nursing Notes -->
-    <div>
-        {% if nurse_notes %}
-        <div class="card border-l-4 border-purple-500">
-            <h2 class="text-lg font-bold text-text-main mb-4">Nursing Notes</h2>
-            <div class="space-y-3">
-                {% for note in nurse_notes %}
-                <div class="bg-purple-50 p-3 rounded border border-purple-200">
-                    <p class="text-sm text-text-main">{{ note.notes }}</p>
-                    <div class="text-xs text-text-muted mt-2">
-                        By: {{ note.created_by.get_full_name|default:note.created_by.username }} on {{ note.created_at|date:"M d, Y H:i" }}
-                    </div>
+    <!-- Nursing Notes -- omitted entirely when the patient was never seen by nursing, not padded with an empty placeholder. -->
+    {% if nurse_notes %}
+    <div class="card border-l-4 border-purple-500">
+        <h2 class="report-section-heading">Nursing Notes</h2>
+        <div class="space-y-3">
+            {% for note in nurse_notes %}
+            <div class="bg-purple-50 p-3 rounded border border-purple-200">
+                <p class="text-sm text-text-main">{{ note.notes }}</p>
+                <div class="text-xs text-text-muted mt-2">
+                    By: {{ note.created_by.get_full_name|default:note.created_by.username }} on {{ note.created_at|date:"M d, Y H:i" }}
                 </div>
-                {% endfor %}
             </div>
+            {% endfor %}
         </div>
-        {% else %}
-        <div class="card bg-gray-50 border border-gray-200">
-            <p class="text-sm text-text-muted">No nursing notes recorded for this visit.</p>
-        </div>
-        {% endif %}
     </div>
+    {% endif %}
 
-    <!-- Laboratory Reports -->
-    <div>
-        {% if lab_reports or lab_orders %}
-        <div class="card border-l-4 border-emerald-500">
-            <h2 class="text-lg font-bold text-text-main mb-4">Laboratory Reports</h2>
+    <!-- Laboratory Reports -- same rule: omitted entirely when there's no lab work for this visit. -->
+    {% if lab_reports or lab_orders %}
+    <div class="card border-l-4 border-emerald-500">
+        <h2 class="report-section-heading">Laboratory Reports</h2>
             <div class="space-y-4">
                 {% for order in lab_orders %}
                 <div class="vr-lab-report bg-emerald-50 p-4 rounded border border-emerald-200">
@@ -347,19 +362,14 @@
                 {% endfor %}
             </div>
         </div>
-        {% else %}
-        <div class="card bg-gray-50 border border-gray-200">
-            <p class="text-sm text-text-muted">No laboratory reports recorded for this visit.</p>
-        </div>
-        {% endif %}
-    </div>
+    {% endif %}
 
     <!-- Bill & Payments -->
     <div>
 
         <!-- Services (pharmacy lines excluded — those appear under Drugs Prescribed) -->
         <div class="card border border-amber-200 bg-amber-50">
-            <h2 class="text-lg font-bold text-text-main mb-3">Services</h2>
+            <h2 class="report-section-heading">Services</h2>
             <div class="overflow-x-auto">
                 <table class="w-full text-sm" style="border-collapse:collapse;">
                     <thead>
@@ -388,7 +398,7 @@
         {% with rx_list=visit.prescriptions.all %}
         {% if rx_list %}
         <div class="card border border-blue-200 bg-blue-50 mt-4">
-            <h2 class="text-lg font-bold text-text-main mb-3">Drugs Prescribed</h2>
+            <h2 class="report-section-heading">Drugs Prescribed</h2>
             <div class="overflow-x-auto">
                 <table class="w-full text-sm" style="border-collapse:collapse;">
                     <thead>
@@ -445,7 +455,7 @@
 
         <!-- Payment Receipts -->
         <div class="card border border-gray-200 bg-white mt-4">
-            <h2 class="text-lg font-bold text-text-main mb-3">Payment Receipts</h2>
+            <h2 class="report-section-heading">Payment Receipts</h2>
             <div class="overflow-x-auto">
                 <table class="w-full text-sm" style="border-collapse:collapse;">
                     <thead>
@@ -480,14 +490,15 @@
 
     </div>
 
-    <!-- ── Print-only fixed footer (repeats every page) ─────────── -->
-    <div class="vr-print-footer">
-        {% include "partials/print_footer.html" %}
+    <!-- ── Print-only footer, pinned to the bottom of the page when the
+         document fits one page (report-footer-area, shared partial) ── -->
+    <div class="vr-print-footer report-footer-area">
+        {% include "partials/print_footer.html" with hospital=visit.hospital %}
     </div>
 
     <!-- ── Screen footer (once, on screen only) ──────────────────── -->
     <div class="print-hidden">
-        {% include "partials/print_footer.html" %}
+        {% include "partials/print_footer.html" with hospital=visit.hospital %}
     </div>
 
     <!-- Screen nav buttons (bottom) -->

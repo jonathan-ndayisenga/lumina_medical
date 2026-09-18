@@ -66,6 +66,13 @@ class Hospital(models.Model):
     email = models.EmailField(blank=True)
     logo = models.ImageField(upload_to="hospital_logos/", blank=True, null=True)
     tagline = models.CharField(max_length=120, blank=True)
+    report_code = models.CharField(
+        max_length=12,
+        blank=True,
+        default="",
+        help_text="Short code used on printed reports and patient/visit numbers instead of the full "
+                   "subdomain (e.g. 'LMS'). Leave blank to auto-abbreviate the hospital name.",
+    )
     subscription_plan = models.ForeignKey(
         SubscriptionPlan,
         on_delete=models.SET_NULL,
@@ -86,6 +93,17 @@ class Hospital(models.Model):
 
     def __str__(self):
         return self.name
+
+    @property
+    def report_code_display(self):
+        """Short, printable hospital code -- the admin-set report_code if
+        present, otherwise initials auto-abbreviated from the hospital name
+        (e.g. "Lumina Medical Services" -> "LMS"). Never the raw subdomain,
+        which can be long/ugly (e.g. a deploy-generated slug)."""
+        if self.report_code:
+            return self.report_code.strip().upper()
+        initials = "".join(word[0] for word in self.name.split() if word)[:5]
+        return initials.upper() or (self.subdomain or "").upper()
 
     @property
     def logo_url(self):

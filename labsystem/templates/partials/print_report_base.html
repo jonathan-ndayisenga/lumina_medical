@@ -1,0 +1,67 @@
+<style>
+  {# Shared print/screen system for every "one visit's clinical record" style
+     document (Lab Report, Visit Report). Keeping this in one place means a
+     tuning pass (font sizes, footer-pinning, table padding) applies to every
+     document that includes it instead of drifting apart per-template. #}
+
+  /* Screen sizing stays roomy (these templates double as the in-app review
+     screen); print is what actually needs to be compact. */
+  .report-block { border: 1px solid #cfd8e3; border-radius: 0.9rem; padding: 1.5rem; margin-bottom: 1.5rem; background: #fff; }
+  .report-head-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem 1.5rem; margin: 1rem 0 1.25rem; }
+  @media screen and (max-width: 480px) {
+    .report-block { padding: 1rem; }
+    .report-head-grid { grid-template-columns: 1fr; }
+    .sig-block { grid-template-columns: 1fr; gap: 1.25rem; }
+  }
+  .report-field-label { font-size: 0.65rem; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: #5f6b7a; }
+  .report-field-value { font-size: 0.85rem; font-weight: 700; color: #1f2a37; }
+  .report-status-badge { font-size: 0.75rem; font-weight: 700; padding: 0.2rem 0.6rem; border-radius: 999px; }
+  .report-note-box { background: #f7f9fc; border-radius: 0.6rem; padding: 0.7rem 0.9rem; font-size: 0.82rem; }
+  .report-section-heading { font-size: 0.95rem; font-weight: 700; color: #1d3557; margin: 1.1rem 0 0.5rem; padding-bottom: 0.3rem; border-bottom: 1px solid #e6ecf3; }
+  .report-section-heading:first-child { margin-top: 0; }
+  .sig-block { margin-top: 1.5rem; padding-top: 0.75rem; border-top: 1px solid #cfd8e3; display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; }
+  .sig-line { border-top: 1px solid #1f2a37; margin-top: 1.75rem; padding-top: 0.4rem; font-size: 0.78rem; color: #5f6b7a; }
+
+  @media print {
+    @page { size: A4 portrait; margin: 10mm; }
+    .no-print { display: none !important; }
+    /* The app shell's own centering/padding is for the on-screen view — on
+       paper it just eats margin a real bench report doesn't have. */
+    .max-w-7xl { max-width: none !important; margin: 0 !important; padding: 0 !important; }
+    /* Sized against a real reference bench report, then pulled back a notch
+       — a 20-row CBC panel spilled onto a second page at the first pass.
+       Padding is the real lever across many rows (each px of row padding
+       costs a lot total), so that's trimmed hardest; font sizes stay well
+       above the original cramped version. */
+    body, html { font-size: 12px; }
+    /* Every .report-block is one printable document — a standalone test
+       page, a shared multi-test page, or (for the Visit Report) the whole
+       visit summary. Either way the footer is pinned to the true bottom of
+       the page (flex + margin-top:auto on the footer area) instead of
+       trailing right after wherever the content happens to end — this only
+       holds for content that actually fits within one page's min-height;
+       a document that overflows onto further pages just flows normally,
+       with the footer landing after the last section on the final page. */
+    .report-block {
+      page-break-after: always; padding: 8px; margin-bottom: 0; border-radius: 0;
+      display: flex; flex-direction: column; min-height: 273mm;
+    }
+    .report-block:last-child { page-break-after: auto; }
+    /* !important guards this against a consuming template's own spacing
+       rules (e.g. Tailwind's space-y-* > * + * margin utility) winning the
+       cascade purely on source order — this must always win. */
+    .report-footer-area { margin-top: auto !important; }
+    .report-head-grid { gap: 0.35rem 1.1rem; margin: 0.4rem 0 0.5rem; }
+    .report-field-label { font-size: 0.65rem; }
+    .report-field-value { font-size: 0.82rem; }
+    .report-note-box { padding: 0.4rem 0.6rem; font-size: 0.78rem; }
+    .report-section-heading { font-size: 0.82rem; margin: 0.7rem 0 0.35rem; }
+    h3, h4 { font-size: 0.88rem !important; margin: 0.4rem 0 0.3rem !important; }
+    table { font-size: 0.87rem; border-collapse: collapse; width: 100%; }
+    table th, table td { padding: 4px 7px; }
+    table th { border-bottom: 1.5px solid #1d3557; text-transform: uppercase; font-size: 0.72rem; letter-spacing: 0.03em; }
+    table td { border-bottom: 1px solid #e6ecf3; }
+    .sig-block { margin-top: 0.8rem; padding-top: 0.5rem; gap: 1rem; }
+    .sig-line { margin-top: 1rem; font-size: 0.7rem; }
+  }
+</style>

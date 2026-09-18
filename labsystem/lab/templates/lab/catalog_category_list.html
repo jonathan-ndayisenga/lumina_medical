@@ -34,5 +34,23 @@
       </tbody>
     </table>
   </div>
+
+  {% if categories.has_other_pages %}
+  <div class="flex flex-wrap gap-2 justify-center">
+    {% if categories.has_previous %}
+      <a href="?page={{ categories.previous_page_number }}" class="btn btn-secondary btn-sm">Previous</a>
+    {% endif %}
+    {% for i in categories.paginator.page_range %}
+      {% if categories.number == i %}
+        <span class="btn btn-sm bg-gray-100 text-gray-600 cursor-default">{{ i }}</span>
+      {% else %}
+        <a href="?page={{ i }}" class="btn btn-secondary btn-sm">{{ i }}</a>
+      {% endif %}
+    {% endfor %}
+    {% if categories.has_next %}
+      <a href="?page={{ categories.next_page_number }}" class="btn btn-secondary btn-sm">Next</a>
+    {% endif %}
+  </div>
+  {% endif %}
 </div>
 {% endblock %}
