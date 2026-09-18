@@ -54,15 +54,15 @@
                     {% endfor %}
                 </select>
             </div>
-            <div>
+            <div class="w-full sm:w-auto">
                 <label class="block text-xs font-semibold text-text-muted uppercase tracking-widest mb-1">From</label>
                 <input type="date" id="dateFromFilter" value="{{ date_from }}"
-                       class="px-3 py-2 border border-gray-300 rounded-lg bg-white text-text-main focus:outline-none focus:ring-2 focus:ring-brand-dark focus:border-transparent">
+                       class="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-text-main focus:outline-none focus:ring-2 focus:ring-brand-dark focus:border-transparent">
             </div>
-            <div>
+            <div class="w-full sm:w-auto">
                 <label class="block text-xs font-semibold text-text-muted uppercase tracking-widest mb-1">To</label>
                 <input type="date" id="dateToFilter" value="{{ date_to }}"
-                       class="px-3 py-2 border border-gray-300 rounded-lg bg-white text-text-main focus:outline-none focus:ring-2 focus:ring-brand-dark focus:border-transparent">
+                       class="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-text-main focus:outline-none focus:ring-2 focus:ring-brand-dark focus:border-transparent">
             </div>
             {% if test_filter or technician_filter or date_from or date_to or search %}
             <a href="{% url 'report_list' %}" class="btn btn-secondary whitespace-nowrap">Clear Filters</a>

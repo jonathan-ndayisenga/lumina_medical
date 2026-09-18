@@ -10,6 +10,11 @@
      printed page, matching a real bench report, not a padded web card. */
   .report-block { border: 1px solid #cfd8e3; border-radius: 0.9rem; padding: 1.5rem; margin-bottom: 1.5rem; background: #fff; }
   .report-head-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem 1.5rem; margin: 1rem 0 1.25rem; }
+  @media screen and (max-width: 480px) {
+    .report-block { padding: 1rem; }
+    .report-head-grid { grid-template-columns: 1fr; }
+    .sig-block { grid-template-columns: 1fr; gap: 1.25rem; }
+  }
   .report-field-label { font-size: 0.65rem; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: #5f6b7a; }
   .report-field-value { font-size: 0.85rem; font-weight: 700; color: #1f2a37; }
   .report-status-badge { font-size: 0.75rem; font-weight: 700; padding: 0.2rem 0.6rem; border-radius: 999px; }

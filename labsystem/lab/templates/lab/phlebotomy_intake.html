@@ -27,10 +27,10 @@
     </tbody>
   </table>
 
-  <form method="post" class="flex items-end gap-2">
+  <form method="post" class="flex flex-col sm:flex-row sm:items-end gap-2">
     {% csrf_token %}
     <input type="hidden" name="action" value="add_service">
-    <div class="flex-1">
+    <div class="flex-1 min-w-0">
       <label class="block text-sm font-semibold mb-1">Add a service from the catalog</label>
       <select name="service_id" class="form-control">
         {% for s in available_services %}
