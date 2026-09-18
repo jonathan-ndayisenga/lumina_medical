@@ -442,9 +442,9 @@ class LabEngineOrderToReleaseTests(LabEngineTestBase):
 
         # Numeric, sex-specific range resolution + flagging.
         self.assertEqual(male_values["Hemoglobin"].flag, "L")
-        self.assertEqual(male_values["Hemoglobin"].ref_display, "13 - 17")
+        self.assertEqual(male_values["Hemoglobin"].ref_display, "13.00 - 17.00")
         self.assertEqual(female_values["Hemoglobin"].flag, "N")
-        self.assertEqual(female_values["Hemoglobin"].ref_display, "12 - 15")
+        self.assertEqual(female_values["Hemoglobin"].ref_display, "12.00 - 15.00")
 
         # CODED: only Resistant is abnormal.
         self.assertEqual(male_values["Ampicillin"].flag, "A")

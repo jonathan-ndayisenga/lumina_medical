@@ -47,9 +47,9 @@
     .report-field-value { font-size: 0.82rem; }
     .report-note-box { padding: 0.4rem 0.6rem; font-size: 0.78rem; }
     h3, h4 { font-size: 0.88rem !important; margin: 0.4rem 0 0.3rem !important; }
-    table { font-size: 0.82rem; border-collapse: collapse; width: 100%; }
-    table th, table td { padding: 3px 7px; }
-    table th { border-bottom: 1.5px solid #1d3557; text-transform: uppercase; font-size: 0.68rem; letter-spacing: 0.03em; }
+    table { font-size: 0.87rem; border-collapse: collapse; width: 100%; }
+    table th, table td { padding: 4px 7px; }
+    table th { border-bottom: 1.5px solid #1d3557; text-transform: uppercase; font-size: 0.72rem; letter-spacing: 0.03em; }
     table td { border-bottom: 1px solid #e6ecf3; }
     .sig-block { margin-top: 0.8rem; padding-top: 0.5rem; gap: 1rem; }
     .sig-line { margin-top: 1rem; font-size: 0.7rem; }
@@ -289,10 +289,10 @@
             <td>{{ v.unit }}</td>
             <td>{{ v.ref_display }}</td>
             <td>
-              {% if v.flag == 'H' %}<span class="text-red-600 font-semibold">High</span>
-              {% elif v.flag == 'L' %}<span class="text-red-600 font-semibold">Low</span>
-              {% elif v.flag == 'A' %}<span class="text-red-600 font-semibold">Abnormal</span>
-              {% elif v.flag == 'N' %}<span class="text-emerald-700">Normal</span>
+              {% if v.flag == 'H' %}<span class="text-red-600 font-bold">High</span>
+              {% elif v.flag == 'L' %}<span class="text-red-600 font-bold">Low</span>
+              {% elif v.flag == 'A' %}<span class="text-red-600 font-bold">Abnormal</span>
+              {% elif v.flag == 'N' %}<span class="text-emerald-700 font-bold">Normal</span>
               {% endif %}
             </td>
           </tr>

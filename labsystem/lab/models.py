@@ -480,10 +480,10 @@ class ParameterRange(models.Model):
     def display(self):
         if self.ref_text:
             return self.ref_text
-        # Decimal's :g format keeps stored trailing zeros (12.000 stays
-        # "12.000"), unlike float's — go through float purely for display.
-        lo = "" if self.ref_low is None else f"{float(self.ref_low):g}"
-        hi = "" if self.ref_high is None else f"{float(self.ref_high):g}"
+        # Always two decimal places for a consistent printed look, whatever
+        # precision the range was actually entered at (e.g. "100" -> "100.00").
+        lo = "" if self.ref_low is None else f"{float(self.ref_low):.2f}"
+        hi = "" if self.ref_high is None else f"{float(self.ref_high):.2f}"
         return f"{lo} - {hi}".strip(" -")
 
     def __str__(self):
