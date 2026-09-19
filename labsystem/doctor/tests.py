@@ -200,6 +200,66 @@ class DoctorWorkflowTests(TestCase):
         self.assertEqual(payload["service"]["service_name"], "CBC")
         self.assertEqual(payload["pending_services"][0]["service_name"], "CBC")
 
+    def test_doctor_can_remove_a_mistaken_lab_request_immediately(self):
+        self.client.post(
+            reverse("send_lab_request_api", args=[self.visit.pk]),
+            {"service_id": self.lab_service.pk},
+        )
+        visit_service = VisitService.objects.get(visit=self.visit, service=self.lab_service)
+
+        response = self.client.post(
+            reverse("remove_lab_service_api", args=[self.visit.pk, visit_service.pk]),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.visit.refresh_from_db()
+        self.assertEqual(self.visit.total_amount, Decimal("25.00"))
+        self.assertFalse(VisitService.objects.filter(pk=visit_service.pk).exists())
+
+    def test_doctor_is_blocked_once_reception_has_approved_it_admin_still_can(self):
+        """Same mistaken-request scenario, but discovered later -- reception
+        has already approved it (acted on it, routed it toward the lab
+        queue). A plain doctor can no longer self-remove it at that point --
+        they get told to contact an admin instead. An admin/superadmin can
+        still remove it through the same endpoint."""
+        self.client.post(
+            reverse("send_lab_request_api", args=[self.visit.pk]),
+            {"service_id": self.lab_service.pk},
+        )
+        visit_service = VisitService.objects.get(visit=self.visit, service=self.lab_service)
+        reception_entry = QueueEntry.objects.get(
+            visit=self.visit, queue_type=QueueEntry.TYPE_RECEPTION, processed=False,
+        )
+
+        receptionist = self.User.objects.create_user(
+            username="approving_reception", password="StrongPass123!",
+            role=self.User.ROLE_RECEPTIONIST, hospital=self.hospital,
+        )
+        self.client.force_login(receptionist)
+        approve_response = self.client.post(reverse("reception_queue_approve_lab", args=[reception_entry.pk]))
+        self.assertEqual(approve_response.status_code, 302)
+        visit_service.refresh_from_db()
+        self.assertTrue(visit_service.is_approved)
+
+        self.client.force_login(self.doctor)
+        blocked_response = self.client.post(
+            reverse("remove_lab_service_api", args=[self.visit.pk, visit_service.pk]),
+        )
+        self.assertEqual(blocked_response.status_code, 403)
+        self.assertIn("contact an admin", blocked_response.json()["error"])
+        self.assertTrue(VisitService.objects.filter(pk=visit_service.pk).exists())
+
+        admin_user = self.User.objects.create_user(
+            username="lab_removal_admin", password="StrongPass123!",
+            role=self.User.ROLE_HOSPITAL_ADMIN, hospital=self.hospital,
+        )
+        self.client.force_login(admin_user)
+        admin_response = self.client.post(
+            reverse("remove_lab_service_api", args=[self.visit.pk, visit_service.pk]),
+        )
+        self.assertEqual(admin_response.status_code, 200)
+        self.assertFalse(VisitService.objects.filter(pk=visit_service.pk).exists())
+
     def test_doctor_can_send_multiple_lab_requests_in_one_call(self):
         response = self.client.post(
             reverse("send_lab_request_api", args=[self.visit.pk]),

@@ -683,6 +683,23 @@ def remove_lab_service_api(request, visit_id, visit_service_id):
             status=400,
         )
 
+    # Once reception has approved it, a plain doctor can no longer self-
+    # remove it -- reception has already acted on it (routed it to the lab
+    # queue, possibly adjusted billing around it), so undoing it from here
+    # needs an admin's call, not a unilateral doctor click. Admins/
+    # superadmins still go through unchanged below.
+    is_admin_actor = getattr(request.user, "role", "") in (User.ROLE_SUPERADMIN, User.ROLE_HOSPITAL_ADMIN) or getattr(
+        request.user, "can_access_hospital_admin", False
+    )
+    if visit_service.is_approved and not is_admin_actor:
+        return JsonResponse(
+            {
+                "error": f"Receptionist already approved {visit_service.service.name} — "
+                         "contact an admin to remove it.",
+            },
+            status=403,
+        )
+
     from lab.guards import release_visit_service_for_lab
     try:
         release_visit_service_for_lab(visit_service)
