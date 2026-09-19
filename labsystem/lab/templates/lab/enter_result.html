@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block page_title %}Enter Results{% endblock %}
-{% block page_subtitle %}{{ order.test.name }} &mdash; {{ visit.patient.name }}, {{ visit.patient.age }} {{ visit.patient.get_sex_display }}{% endblock %}
+{% block page_subtitle %}{{ order.test.name }} &mdash; {{ visit.patient.name }}, {{ visit.patient.current_age }} {{ visit.patient.get_sex_display }}{% endblock %}
 {% block extra_css %}
 <style>
   .option-card { display:flex; align-items:center; justify-content:space-between; padding:0.75rem 1rem; border:1px solid #cfd8e3; border-radius:0.6rem; margin-bottom:0.5rem; cursor:pointer; }

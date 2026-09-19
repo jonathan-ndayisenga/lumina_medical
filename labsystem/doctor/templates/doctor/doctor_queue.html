@@ -16,7 +16,7 @@
                     <div class="flex items-start justify-between gap-3">
                         <div>
                             <h5 class="text-sm font-semibold text-text-main">{{ entry.visit.patient.name }}</h5>
-                            <p class="text-xs text-text-muted">{{ entry.visit.patient.age }} / {{ entry.visit.patient.get_sex_display }}</p>
+                            <p class="text-xs text-text-muted">{{ entry.visit.patient.current_age }} / {{ entry.visit.patient.get_sex_display }}</p>
                             {% if item.payment_status == 'paid' %}
                             <span class="inline-flex items-center px-2 py-0.5 mt-1 rounded-full text-[11px] font-semibold bg-green-100 text-green-800">Paid</span>
                             {% elif item.payment_status == 'partial' %}
@@ -100,7 +100,7 @@
                                 <span class="inline-flex items-center px-2 py-0.5 mt-1 rounded-full text-[11px] font-semibold bg-gray-100 text-gray-600">Unpaid · UGX {{ item.balance_due|floatformat:2 }} for {{ item.billed_service_names }}</span>
                                 {% endif %}
                             </td>
-                            <td class="px-4 py-3 text-sm text-text-muted">{{ entry.visit.patient.age }} / {{ entry.visit.patient.get_sex_display }}</td>
+                            <td class="px-4 py-3 text-sm text-text-muted">{{ entry.visit.patient.current_age }} / {{ entry.visit.patient.get_sex_display }}</td>
                             <td class="px-4 py-3 text-sm text-text-muted">{{ entry.visit.visit_date|date:"M d, Y H:i" }}</td>
                             <td class="px-4 py-3 text-sm text-text-muted">{{ entry.hospital.name }}</td>
                             <td class="px-4 py-3 text-sm text-text-muted">

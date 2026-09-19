@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load reception_extras %}
 
 {% block title %}Consultation Detail - Lumina{% endblock %}
 {% block page_title %}Consultation Detail{% endblock %}
@@ -10,7 +11,7 @@
         <div class="flex justify-between items-start gap-4 flex-wrap">
             <div>
                 <h3 class="text-lg font-bold text-text-main mb-2">{{ visit.patient.name }}</h3>
-                <p class="text-sm text-text-muted">{{ visit.patient.age }} / {{ visit.patient.get_sex_display }} - {{ visit.hospital.name }}</p>
+                <p class="text-sm text-text-muted">{{ visit.patient|age_at:consultation_instance.created_at }} / {{ visit.patient.get_sex_display }} - {{ visit.hospital.name }}</p>
                 <p class="text-sm text-text-muted">Consultation saved {{ consultation_instance.created_at|date:"Y-m-d H:i" }}
                     {% if consultation_instance.created_by %}
                         by {% if consultation_instance.created_by.get_full_name %}{{ consultation_instance.created_by.get_full_name }}{% else %}{{ consultation_instance.created_by.username }}{% endif %}

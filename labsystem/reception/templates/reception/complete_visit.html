@@ -28,7 +28,7 @@
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
                 <div class="space-y-2">
                     <p><strong class="text-text-main">Patient:</strong> <span class="text-text-muted">{{ visit.patient.name }}</span></p>
-                    <p><strong class="text-text-main">Age / Sex:</strong> <span class="text-text-muted">{{ visit.patient.age }} / {{ visit.patient.get_sex_display }}</span></p>
+                    <p><strong class="text-text-main">Age / Sex:</strong> <span class="text-text-muted">{{ visit.patient.current_age }} / {{ visit.patient.get_sex_display }}</span></p>
                     <p><strong class="text-text-main">Visit Date:</strong> <span class="text-text-muted">{{ visit.visit_date|date:"Y-m-d H:i" }}</span></p>
                 </div>
                 <div class="space-y-2">

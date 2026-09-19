@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-{% load static %}
+{% load static reception_extras %}
 
 {% block title %}Scan Report — {{ patient.name }}{% endblock %}
 {% block print_header %}{% endblock %}
@@ -53,7 +53,7 @@
         </div>
         <div class="flex items-baseline gap-1 flex-wrap min-w-0">
             <span class="font-semibold uppercase text-text-muted" style="font-size: 0.66rem;">Age:</span>
-            <span class="font-semibold text-text-main" style="font-size: 0.79rem;">{{ patient.age }}</span>
+            <span class="font-semibold text-text-main" style="font-size: 0.79rem;">{{ patient|age_at:visit.visit_date }}</span>
         </div>
         <div class="flex items-baseline gap-1 flex-wrap min-w-0">
             <span class="font-semibold uppercase text-text-muted" style="font-size: 0.66rem;">Sex:</span>

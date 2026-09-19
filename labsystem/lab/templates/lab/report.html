@@ -1,7 +1,8 @@
 {% extends "base.html" %}
+{% load reception_extras %}
 {% block title %}{{ visit.hospital.name }} - Laboratory Report{% endblock %}
 {% block page_title %}Lab Report{% endblock %}
-{% block page_subtitle %}{{ visit.patient.name }} &mdash; {{ visit.patient.age }} {{ visit.patient.get_sex_display }}{% endblock %}
+{% block page_subtitle %}{{ visit.patient.name }} &mdash; {{ visit.patient|age_at:visit.visit_date }} {{ visit.patient.get_sex_display }}{% endblock %}
 {% block print_header %}{% endblock %}
 {% block extra_css %}
 {% include "partials/print_report_base.html" %}

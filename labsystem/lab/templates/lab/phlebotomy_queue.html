@@ -8,7 +8,7 @@
     <tbody>
       {% for entry in queue_entries %}
       <tr>
-        <td>{{ entry.visit.patient.name }} <span class="text-text-muted">({{ entry.visit.patient.age }}, {{ entry.visit.patient.get_sex_display }})</span></td>
+        <td>{{ entry.visit.patient.name }} <span class="text-text-muted">({{ entry.visit.patient.current_age }}, {{ entry.visit.patient.get_sex_display }})</span></td>
         <td>{{ entry.created_at|timesince }} ago</td>
         <td><a class="btn btn-secondary btn-sm" href="{% url 'phlebotomy_intake' entry.pk %}">Open</a></td>
       </tr>

@@ -1610,3 +1610,72 @@ class VisitReportPrintLayoutTests(TestCase):
         # "Lumina Print Hospital" -> auto-abbreviated "LPH".
         self.assertIn(f"LPH-PAT-{self.patient.pk:04d}", body)
         self.assertIn(f"LPH-VIS-{self.visit.pk:06d}", body)
+
+
+class PatientAgeDisplayTests(TestCase):
+    """`Patient.age` is a one-time snapshot frozen at registration (see
+    PatientForm.clean's "ground truth from first contact" comment) -- it was
+    never meant to be shown as someone's current age on a returning visit.
+    `current_age` (today, from DOB) and `age_at(date)` (as of a specific
+    date, for anything printed/reviewed after the fact) are what live/
+    historical screens should use instead. This covers both the model-level
+    computation and that the screens that mattered were actually fixed to
+    use it."""
+
+    def setUp(self):
+        plan = SubscriptionPlan.objects.create(
+            name="Age Display", price_monthly=Decimal("0.00"), price_yearly=Decimal("0.00"),
+        )
+        self.hospital = Hospital.objects.create(
+            name="Lumina Age Hospital", subdomain="lumina-age-display", subscription_plan=plan,
+        )
+        _enable_modules(self.hospital, "reception")
+        self.receptionist = User.objects.create_user(
+            username="agedesk", password="pass12345",
+            role=User.ROLE_RECEPTIONIST, hospital=self.hospital, is_active=True,
+        )
+        self.client.force_login(self.receptionist)
+
+        today = timezone.localdate()
+        self.dob = today.replace(year=today.year - 10)
+        self.five_years_ago = today.replace(year=today.year - 5)
+        # Deliberately stale/wrong -- exactly the kind of leftover registration
+        # snapshot a returning patient would otherwise still show.
+        self.patient = Patient.objects.create(
+            hospital=self.hospital, name="Aging Patient", age="1YRS",
+            date_of_birth=self.dob, registration_date=self.five_years_ago, sex="M",
+        )
+
+    def test_current_age_is_computed_from_dob_not_the_stale_snapshot(self):
+        self.assertEqual(self.patient.current_age, "10 yrs")
+        self.assertNotEqual(self.patient.current_age, self.patient.age)
+
+    def test_age_at_computes_age_as_of_a_past_date_not_today(self):
+        self.assertEqual(self.patient.age_at(self.five_years_ago), "5 yrs")
+        self.assertNotEqual(self.patient.age_at(self.five_years_ago), self.patient.current_age)
+
+    def test_age_at_template_filter_matches_the_model_method(self):
+        from reception.templatetags.reception_extras import age_at
+
+        self.assertEqual(age_at(self.patient, self.five_years_ago), self.patient.age_at(self.five_years_ago))
+        self.assertEqual(age_at(None, self.five_years_ago), "")
+        self.assertEqual(age_at(self.patient, None), "")
+
+    def test_patient_list_shows_current_age_not_the_registration_snapshot(self):
+        body = self.client.get(reverse("patient_list")).content.decode()
+        self.assertIn("10 yrs", body)
+        self.assertNotIn("1YRS", body)
+
+    def test_receipt_shows_age_at_visit_date_not_todays_age(self):
+        visit = Visit.objects.create(
+            patient=self.patient, hospital=self.hospital, total_amount=Decimal("0.00"),
+            status=Visit.STATUS_COMPLETED, created_by=self.receptionist,
+        )
+        # visit_date is auto_now_add -- only settable after the initial insert.
+        visit.visit_date = timezone.now().replace(year=timezone.now().year - 5)
+        visit.save(update_fields=["visit_date"])
+
+        body = self.client.get(reverse("print_receipt", args=[visit.pk])).content.decode()
+        self.assertIn("5 yrs", body)
+        self.assertNotIn("10 yrs", body)
+        self.assertNotIn("1YRS", body)

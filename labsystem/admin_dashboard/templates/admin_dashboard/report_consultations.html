@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load reception_extras %}
 {% block title %}Patients Seen - Lumina{% endblock %}
 {% block page_title %}Patients Seen Report{% endblock %}
 {% block page_subtitle %}Patients seen by doctors within the selected period.{% endblock %}
@@ -85,7 +86,7 @@
                         </td>
                         <td class="px-4 py-3 text-text-muted whitespace-nowrap">{{ c.created_at|date:"d M Y H:i" }}</td>
                         <td class="px-4 py-3 font-semibold text-text-main">{{ c.visit.patient.name }}</td>
-                        <td class="px-4 py-3 text-text-muted">{{ c.visit.patient.age }} / {{ c.visit.patient.get_sex_display|slice:":1" }}</td>
+                        <td class="px-4 py-3 text-text-muted">{{ c.visit.patient|age_at:c.created_at }} / {{ c.visit.patient.get_sex_display|slice:":1" }}</td>
                         <td class="px-4 py-3 text-text-muted">{{ c.created_by.get_full_name|default:"—" }}</td>
                         <td class="px-4 py-3 text-text-muted">
                             {% if c.follow_up_date %}

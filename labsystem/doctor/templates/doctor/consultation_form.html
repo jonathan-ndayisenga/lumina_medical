@@ -24,7 +24,7 @@
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 text-sm">
             <div class="space-y-2">
                 <p><strong class="text-text-main">Patient:</strong> <span class="text-text-muted">{{ visit.patient.name }}</span></p>
-                <p><strong class="text-text-main">Age / Sex:</strong> <span class="text-text-muted">{{ visit.patient.age }} / {{ visit.patient.get_sex_display }}</span></p>
+                <p><strong class="text-text-main">Age / Sex:</strong> <span class="text-text-muted">{{ visit.patient.current_age }} / {{ visit.patient.get_sex_display }}</span></p>
                 {% if visit.patient.weight_kg %}
                     <p><strong class="text-text-main">Weight:</strong> <span class="text-text-muted">{{ visit.patient.weight_kg }} kg</span></p>
                 {% endif %}

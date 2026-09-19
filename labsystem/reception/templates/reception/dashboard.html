@@ -65,7 +65,7 @@
                 {% for patient in recent_patients %}
                     <div class="text-sm border-b border-gray-100 pb-2 last:border-0">
                         <p class="font-medium text-text-main">{{ patient.name }}</p>
-                        <p class="text-xs text-text-muted">Age: {{ patient.age }} | {{ patient.get_sex_display }}</p>
+                        <p class="text-xs text-text-muted">Age: {{ patient.current_age }} | {{ patient.get_sex_display }}</p>
                         {% if patient.weight_kg %}<p class="text-xs text-text-muted">Weight: {{ patient.weight_kg }} kg</p>{% endif %}
                     </div>
                 {% empty %}

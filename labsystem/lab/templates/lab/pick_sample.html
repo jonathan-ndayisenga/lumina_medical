@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block page_title %}Pick Sample &mdash; {{ order.test.name }}{% endblock %}
-{% block page_subtitle %}{{ visit.patient.name }} &mdash; {{ visit.patient.age }} {{ visit.patient.get_sex_display }}{% endblock %}
+{% block page_subtitle %}{{ visit.patient.name }} &mdash; {{ visit.patient.current_age }} {{ visit.patient.get_sex_display }}{% endblock %}
 {% block content %}
 <div class="card" style="max-width:600px;">
   <form method="post">
