@@ -714,12 +714,16 @@ def route_lab_report(request, report_id):
 
     destination = (request.POST.get("destination") or "").strip()
     if destination == "doctor":
+        # No originating doctor here (direct/self-test lab work) -- leave
+        # requested_by unset so it lands in every doctor's shared pool
+        # instead of being addressed to whichever lab attendant clicked this
+        # button, which no doctor would ever match (see doctor_queue()).
         ensure_pending_queue_entry(
             visit=report.visit,
             hospital=report.visit.hospital,
             queue_type=QueueEntry.TYPE_DOCTOR,
             reason=f"Lab results ready for review: {report_test_summary(report)}",
-            requested_by=request.user,
+            requested_by=None,
             notes="Lab routed this patient to doctor review after completing direct lab work.",
         )
         if not report.sent_to_doctor:

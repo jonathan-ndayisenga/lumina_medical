@@ -784,13 +784,15 @@ def doctor_queue(request):
 
     # A "lab results ready" entry is addressed to the one doctor who
     # actually ordered that test — another doctor at the same hospital
-    # shouldn't see it on their own queue. A plain new-consultation request
-    # has no single addressee, so it stays a shared pickup pool for every
+    # shouldn't see it on their own queue. One with no requested_by at all
+    # (e.g. direct/self-test lab work with no originating doctor to address
+    # it to) has no single addressee either, same as a plain new-
+    # consultation request, so it also stays a shared pickup pool for every
     # doctor. Admins/superadmins keep full oversight of everything.
     is_admin_viewer = getattr(request.user, "role", "") in (User.ROLE_SUPERADMIN, User.ROLE_HOSPITAL_ADMIN)
     if not is_admin_viewer:
         queue_entries = queue_entries.filter(
-            Q(requested_by=request.user) | ~Q(reason__icontains="lab results ready")
+            Q(requested_by=request.user) | Q(requested_by__isnull=True) | ~Q(reason__icontains="lab results ready")
         )
 
     queue_entries = queue_entries.order_by("created_at")

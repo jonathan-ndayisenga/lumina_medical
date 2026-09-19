@@ -209,6 +209,35 @@ class LabWorkflowPolishTests(TestCase):
             ).exists()
         )
 
+    def test_routing_a_self_test_report_to_doctor_is_visible_to_every_doctor(self):
+        """Regression: routing direct/self-test lab work (no originating
+        doctor) to "doctor" used to stamp requested_by with the LAB
+        ATTENDANT who clicked the button -- since no real doctor could ever
+        match that, and the reason text still tripped doctor_queue()'s
+        "addressed to one doctor" exclusion, the entry was invisible to
+        every regular doctor account (an admin, who bypasses the filter
+        entirely, saw it fine -- that mismatch was the reported bug)."""
+        _enable_modules(self.hospital, "doctor")
+        response = self.client.post(
+            reverse("route_lab_report", args=[self.report.pk]),
+            {"destination": "doctor"},
+        )
+        self.assertRedirects(response, reverse("report_detail", args=[self.report.pk]))
+
+        entry = QueueEntry.objects.get(visit=self.visit, queue_type=QueueEntry.TYPE_DOCTOR, processed=False)
+        self.assertIsNone(entry.requested_by)
+        self.assertIn("Lab results ready for review", entry.reason)
+
+        doctor = self.User.objects.create_user(
+            username="unaddressed_doctor", password="StrongPass123!",
+            role=self.User.ROLE_DOCTOR, hospital=self.hospital,
+        )
+        self.client.force_login(doctor)
+        response = self.client.get(reverse("doctor_queue"))
+        entry_ids = [item["entry"].pk for item in response.context["queue_entries"]]
+        self.assertIn(entry.pk, entry_ids)
+
+
 class LabRangeFlagTests(TestCase):
     def test_range_flag_marks_high_low_and_normal(self):
         self.assertEqual(range_flag("16.2", "11.0-15.0"), "HIGH")
