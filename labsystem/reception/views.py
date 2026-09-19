@@ -413,6 +413,14 @@ def receptionist_queue(request):
             }
         )
 
+    # A patient still being worked on elsewhere right now (with the doctor,
+    # lab, or nurse — "Awaiting Linked Work") needs reception's attention
+    # sooner than one just quietly waiting its turn, so it surfaces first
+    # instead of sinking to wherever plain arrival order (created_at) would
+    # put it. list.sort() is stable, so relative arrival order is preserved
+    # within each of the two groups.
+    queue_rows.sort(key=lambda row: 0 if row["open_work_count"] > 0 else 1)
+
     return render(
         request,
         "reception/reception_queue.html",

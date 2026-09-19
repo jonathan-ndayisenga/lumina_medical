@@ -58,6 +58,16 @@
       <div class="report-field-value">{{ visit.patient.name }}</div>
     </div>
     <div>
+      <div class="report-field-label">Age / Sex</div>
+      <div class="report-field-value">{{ visit.patient|age_at:visit.visit_date }} / {{ visit.patient.get_sex_display }}</div>
+    </div>
+    <div>
+      <div class="report-field-label">Weight</div>
+      {% with w=visit.weight_kg|default:visit.patient.weight_kg %}
+      <div class="report-field-value">{{ w|default:"—" }}{% if w %} kg{% endif %}</div>
+      {% endwith %}
+    </div>
+    <div>
       <div class="report-field-label">Patient Number</div>
       <div class="report-field-value">{{ visit.hospital.report_code_display }}-PAT-{{ visit.patient.pk|stringformat:"04d" }}</div>
     </div>
@@ -154,6 +164,16 @@
     <div>
       <div class="report-field-label">Patient</div>
       <div class="report-field-value">{{ visit.patient.name }}</div>
+    </div>
+    <div>
+      <div class="report-field-label">Age / Sex</div>
+      <div class="report-field-value">{{ visit.patient|age_at:visit.visit_date }} / {{ visit.patient.get_sex_display }}</div>
+    </div>
+    <div>
+      <div class="report-field-label">Weight</div>
+      {% with w=visit.weight_kg|default:visit.patient.weight_kg %}
+      <div class="report-field-value">{{ w|default:"—" }}{% if w %} kg{% endif %}</div>
+      {% endwith %}
     </div>
     <div>
       <div class="report-field-label">Patient Number</div>

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import date
 from decimal import Decimal
 
 from django.test import TestCase
@@ -1149,6 +1150,45 @@ class ReceptionQueueWorkflowTests(TestCase):
         self.assertContains(response, "Send to Doctor")
         self.assertContains(response, "Finish Visit")
 
+    def test_reception_queue_surfaces_patients_still_in_progress_elsewhere_first(self):
+        """A patient reception can act on right now, but who's also still
+        being worked on elsewhere (e.g. with the doctor -- "Awaiting Linked
+        Work"), needs attention sooner than one just quietly waiting. Plain
+        arrival order (created_at) used to be the only sort, so a newer but
+        actively-in-progress patient could sit buried below an older but
+        fully-idle one. self.queue_entry (from setUp) has no linked work and
+        was created first -- the new one below has an open doctor queue
+        entry too and is created after it, so under the old plain-FIFO sort
+        it would have landed second; it must now land first instead."""
+        other_patient = Patient.objects.create(
+            hospital=self.hospital, name="In Progress Patient",
+            registration_date=timezone.localdate(), age="30YRS", sex="M",
+        )
+        other_visit = Visit.objects.create(
+            patient=other_patient, hospital=self.hospital, total_amount=Decimal("25.00"),
+            status=Visit.STATUS_IN_PROGRESS, created_by=self.receptionist,
+        )
+        VisitService.objects.create(
+            visit=other_visit, service=self.consult_service, price_at_time=self.consult_service.price,
+        )
+        # Still open on the doctor's queue -- this is the "in progress
+        # elsewhere" signal that should push this row to the top.
+        ensure_pending_queue_entry(
+            visit=other_visit, hospital=self.hospital, queue_type=QueueEntry.TYPE_DOCTOR,
+            reason="New consultation request", requested_by=self.receptionist,
+        )
+        ensure_pending_queue_entry(
+            visit=other_visit, hospital=self.hospital, queue_type=QueueEntry.TYPE_RECEPTION,
+            reason="Needs billing decision", requested_by=self.receptionist,
+        )
+
+        response = self.client.get(reverse("reception_queue"))
+
+        rows = response.context["queue_rows"]
+        self.assertEqual(rows[0]["visit"].pk, other_visit.pk)
+        self.assertEqual(rows[0]["status"], "Awaiting Linked Work")
+        self.assertEqual(rows[1]["visit"].pk, self.visit.pk)
+
     def test_reception_queue_finish_marks_visit_ready_for_billing(self):
         response = self.client.post(reverse("reception_queue_finish", args=[self.queue_entry.pk]))
 
@@ -1653,6 +1693,26 @@ class PatientAgeDisplayTests(TestCase):
     def test_age_at_computes_age_as_of_a_past_date_not_today(self):
         self.assertEqual(self.patient.age_at(self.five_years_ago), "5 yrs")
         self.assertNotEqual(self.patient.age_at(self.five_years_ago), self.patient.current_age)
+
+    def test_infant_age_ticks_forward_in_months_not_just_years(self):
+        """For under-2s, _age_string counts in months, not years -- and
+        since current_age/age_at recompute fresh from date_of_birth every
+        call (nothing is cached), an infant shown as "4 mo" today is shown
+        as "5 mo" a month later with zero backend job needed."""
+        def _add_months(d, months):
+            month_index = d.month - 1 + months
+            year = d.year + month_index // 12
+            month = month_index % 12 + 1
+            return date(year, month, d.day)
+
+        today = timezone.localdate()
+        infant_dob = _add_months(today, -4)
+        infant = Patient.objects.create(
+            hospital=self.hospital, name="Infant Patient", age="4MTH",
+            date_of_birth=infant_dob, registration_date=today, sex="F",
+        )
+        self.assertEqual(infant.current_age, "4 mo")
+        self.assertEqual(infant.age_at(_add_months(infant_dob, 5)), "5 mo")
 
     def test_age_at_template_filter_matches_the_model_method(self):
         from reception.templatetags.reception_extras import age_at

@@ -1135,6 +1135,29 @@ class ReportIdentifierTests(LabEngineTestBase):
         self.assertNotIn("N/A</div>", body)
         self.assertNotIn("LUMINA-ENGINE", body)
 
+    def test_report_shows_age_sex_and_weight_in_the_bio_data(self):
+        visit = self._make_visit("F", "27YRS")
+        visit.weight_kg = Decimal("61.50")
+        visit.save(update_fields=["weight_kg"])
+        order = self._order_for(visit)
+        self._collect_sample(order)
+        self._enter_results(order, hgb="12", abx="S", growth="No Significant Growth", protein="Negative", appearance="Clear")
+        order.refresh_from_db()
+        order.stage = OrderStage.RELEASED
+        order.save(update_fields=["stage"])
+        order.result.released_by = self.lab_user
+        order.result.released_at = timezone.now()
+        order.result.save(update_fields=["released_by", "released_at"])
+
+        body = self.client.get(reverse("visit_report", args=[visit.pk])).content.decode()
+
+        self.assertIn("Age / Sex", body)
+        # No DOB on file -- age_at() falls back to the raw stored age string.
+        self.assertIn("27YRS", body)
+        self.assertIn("Female", body)
+        self.assertIn("Weight", body)
+        self.assertIn("61.50", body)
+
 
 class ReportSettingsPermissionTests(LabEngineTestBase):
     """Lab Management is admin-editable, view-only for lab attendants --
