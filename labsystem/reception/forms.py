@@ -390,7 +390,23 @@ class VisitCreateForm(forms.ModelForm):
         services = self.cleaned_data.get("services")
         if not services:
             return Decimal("0")
-        return sum((service.price for service in services), Decimal("0"))
+        # A Package selected alongside other services in the same batch
+        # covers whichever of those services it specifically includes --
+        # same rule visit_create applies when it actually creates the
+        # VisitService rows (see covered_by_package there), just evaluated
+        # here against the in-memory selection since no VisitService rows
+        # exist yet at total-calculation time.
+        covered_service_ids = set()
+        for service in services:
+            if service.category == Service.CATEGORY_PACKAGE:
+                covered_service_ids.update(service.package_services.values_list("pk", flat=True))
+        return sum(
+            (
+                service.price for service in services
+                if service.category == Service.CATEGORY_PACKAGE or service.pk not in covered_service_ids
+            ),
+            Decimal("0"),
+        )
 
 
 class QuickDispenseStartForm(forms.Form):

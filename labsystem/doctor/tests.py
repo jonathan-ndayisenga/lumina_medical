@@ -260,6 +260,59 @@ class DoctorWorkflowTests(TestCase):
         self.assertEqual(admin_response.status_code, 200)
         self.assertFalse(VisitService.objects.filter(pk=visit_service.pk).exists())
 
+    def test_lab_request_is_free_when_an_active_package_specifically_includes_it(self):
+        """A Package service (e.g. Antenatal) already billed on this visit,
+        specifically including this exact lab test, makes a doctor's
+        request for it free -- price is still recorded on the line (for
+        the receipt), but the visit total doesn't move and the line is
+        marked covered_by_package. A different lab test not on the
+        package's included list still bills normally, even in the same
+        batch (see test_doctor_can_send_multiple_lab_requests_in_one_call
+        counterpart below for the mixed case)."""
+        package_service = Service.objects.create(
+            hospital=self.hospital, name="Antenatal", category=Service.CATEGORY_PACKAGE, price=Decimal("150000"),
+        )
+        package_service.package_services.add(self.lab_service)
+        VisitService.objects.create(visit=self.visit, service=package_service, price_at_time=package_service.price)
+        self.visit.refresh_from_db()
+        total_before = self.visit.total_amount
+
+        response = self.client.post(
+            reverse("send_lab_request_api", args=[self.visit.pk]),
+            {"service_id": self.lab_service.pk},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.visit.refresh_from_db()
+        self.assertEqual(self.visit.total_amount, total_before)
+        lab_line = VisitService.objects.get(visit=self.visit, service=self.lab_service)
+        self.assertTrue(lab_line.covered_by_package)
+        self.assertEqual(lab_line.price_at_time, Decimal(self.lab_service.price))
+
+    def test_a_lab_test_not_on_the_packages_included_list_still_bills_even_alongside_a_covered_one(self):
+        package_service = Service.objects.create(
+            hospital=self.hospital, name="Antenatal", category=Service.CATEGORY_PACKAGE, price=Decimal("150000"),
+        )
+        package_service.package_services.add(self.lab_service)
+        VisitService.objects.create(visit=self.visit, service=package_service, price_at_time=package_service.price)
+        self.visit.refresh_from_db()
+        total_before = self.visit.total_amount
+
+        response = self.client.post(
+            reverse("send_lab_request_api", args=[self.visit.pk]),
+            {"service_ids": [self.lab_service.pk, self.second_lab_service.pk]},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.visit.refresh_from_db()
+        self.assertEqual(self.visit.total_amount, total_before + Decimal(self.second_lab_service.price))
+        self.assertTrue(
+            VisitService.objects.get(visit=self.visit, service=self.lab_service).covered_by_package
+        )
+        self.assertFalse(
+            VisitService.objects.get(visit=self.visit, service=self.second_lab_service).covered_by_package
+        )
+
     def test_doctor_can_send_multiple_lab_requests_in_one_call(self):
         response = self.client.post(
             reverse("send_lab_request_api", args=[self.visit.pk]),
@@ -294,6 +347,27 @@ class DoctorWorkflowTests(TestCase):
         self.assertTrue(VisitService.objects.filter(visit=self.visit, service=self.billable_service).exists())
         payload = response.json()
         self.assertEqual(payload["service"]["service_name"], "Injection")
+
+    def test_billable_service_is_free_when_an_active_package_specifically_includes_it(self):
+        package_service = Service.objects.create(
+            hospital=self.hospital, name="Antenatal", category=Service.CATEGORY_PACKAGE, price=Decimal("150000"),
+        )
+        package_service.package_services.add(self.billable_service)
+        VisitService.objects.create(visit=self.visit, service=package_service, price_at_time=package_service.price)
+        self.visit.refresh_from_db()
+        total_before = self.visit.total_amount
+
+        response = self.client.post(
+            reverse("add_billable_service_api", args=[self.visit.pk]),
+            {"service_id": self.billable_service.pk},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.visit.refresh_from_db()
+        self.assertEqual(self.visit.total_amount, total_before)
+        line = VisitService.objects.get(visit=self.visit, service=self.billable_service)
+        self.assertTrue(line.covered_by_package)
+        self.assertIn("covered by Antenatal", response.json()["message"])
 
     def test_doctor_can_add_tablet_prescription_without_reload(self):
         response = self.client.post(

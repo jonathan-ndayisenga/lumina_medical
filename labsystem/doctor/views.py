@@ -18,6 +18,7 @@ from lab.models import LabOrder, LabReport
 from nurse.models import NurseNote
 from reception.models import QueueEntry, Service, Triage, Visit, VisitService
 from reception.workflow import (
+    active_package_visit_service,
     close_competing_queue_entries,
     ensure_pending_queue_entry,
     mark_queue_entries_processed,
@@ -437,7 +438,7 @@ def send_lab_request_api(request, visit_id):
                 skipped_pending.append(service.name)
             continue
 
-        visit_service = VisitService.objects.create(
+        visit_service_kwargs = dict(
             visit=visit,
             service=service,
             price_at_time=service.price,
@@ -445,8 +446,17 @@ def send_lab_request_api(request, visit_id):
             requested_by_type=VisitService.REQUESTED_BY_INTERNAL_DOCTOR,
             requested_by_user=request.user,
         )
+        # A Package on this visit that specifically includes this exact
+        # test makes it free -- same rule visit_create applies when the
+        # package is bought alongside services in one go (reception/views.py).
+        covering_package = active_package_visit_service(visit, service)
+        if covering_package:
+            visit_service_kwargs["covered_by_package"] = True
+            visit_service_kwargs["covering_package"] = covering_package
+        visit_service = VisitService.objects.create(**visit_service_kwargs)
         created_visit_services.append(visit_service)
-        added_total += service.price
+        if not covering_package:
+            added_total += service.price
         if consultation and service.pk not in consultation_request_ids:
             consultation_request_ids.append(service.pk)
 
@@ -553,24 +563,33 @@ def add_billable_service_api(request, visit_id):
     if service.is_per_day:
         notes = f"{service.name} × {days} day(s) — {notes}"
 
+    covering_package = active_package_visit_service(visit, service)
+    visit_service_defaults = {"price_at_time": total_price, "notes": notes}
+    if covering_package:
+        visit_service_defaults["covered_by_package"] = True
+        visit_service_defaults["covering_package"] = covering_package
+
     visit_service, created = VisitService.objects.get_or_create(
         visit=visit,
         service=service,
-        defaults={
-            "price_at_time": total_price,
-            "notes": notes,
-        },
+        defaults=visit_service_defaults,
     )
     if not created:
         return JsonResponse({"error": f"{service.name} is already on this visit."}, status=400)
 
-    visit.total_amount += total_price
-    visit.save(update_fields=["total_amount"])
+    if not covering_package:
+        visit.total_amount += total_price
+        visit.save(update_fields=["total_amount"])
 
     display_name = f"{service.name} ({days} day{'s' if days != 1 else ''})" if service.is_per_day else service.name
+    message = (
+        f"{display_name} added — covered by {covering_package.service.name}."
+        if covering_package
+        else f"{display_name} added to the visit bill."
+    )
     return JsonResponse(
         {
-            "message": f"{display_name} added to the visit bill.",
+            "message": message,
             "service": {
                 "visit_service_id": visit_service.pk,
                 "service_id": service.pk,

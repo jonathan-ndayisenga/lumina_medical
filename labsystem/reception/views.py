@@ -21,8 +21,10 @@ from lab.models import LabOrder, LabReport, LabSettings
 from .forms import CompleteVisitForm, PatientForm, QuickDispenseStartForm, VisitCreateForm
 from .models import Patient, Payment, QueueEntry, Service, Triage, Visit, VisitService
 from .workflow import (
+    active_package_visit_service,
     ensure_pending_queue_entry,
     mark_queue_entries_processed,
+    package_services_available_on_visit,
     record_admin_override,
     reception_source_from_entry,
     require_admin_override,
@@ -1192,7 +1194,13 @@ def visit_create(request, patient_id):
                 lab_requested_by_type = request.POST.get("lab_requested_by_type", "").strip()
                 lab_external_name = request.POST.get("lab_external_requester_name", "").strip()
                 lab_external_facility = request.POST.get("lab_external_requester_facility", "").strip()
-                for service in services:
+
+                # Packages go first so their VisitService rows exist before
+                # anything else in this same batch checks whether it's
+                # covered by one (see covering_package below).
+                covering_package_by_service_id = {}
+                ordered_services = sorted(services, key=lambda s: s.category != Service.CATEGORY_PACKAGE)
+                for service in ordered_services:
                     visit_service_kwargs = {
                         "visit": visit,
                         "service": service,
@@ -1210,7 +1218,14 @@ def visit_create(request, patient_id):
                             visit_service_kwargs["requested_by_type"] = VisitService.REQUESTED_BY_EXTERNAL_DOCTOR
                             visit_service_kwargs["external_requester_name"] = lab_external_name
                             visit_service_kwargs["external_requester_facility"] = lab_external_facility
-                    VisitService.objects.create(**visit_service_kwargs)
+                    covering_package = covering_package_by_service_id.get(service.pk)
+                    if covering_package:
+                        visit_service_kwargs["covered_by_package"] = True
+                        visit_service_kwargs["covering_package"] = covering_package
+                    visit_service = VisitService.objects.create(**visit_service_kwargs)
+                    if service.category == Service.CATEGORY_PACKAGE:
+                        for included_service in service.package_services.all():
+                            covering_package_by_service_id.setdefault(included_service.pk, visit_service)
                     for queue_type in queue_types_for_service(service):
                         ensure_pending_queue_entry(
                             visit=visit,
@@ -1320,13 +1335,26 @@ def visit_edit(request, visit_id):
                     notes=f"Follow-up visit linked to completed visit #{visit.parent_visit_id}. No new billing.",
                 )
             else:
+                # Packages go first so their VisitService rows exist before
+                # anything else in this same batch checks whether it's
+                # covered by one — same rule visit_create applies.
+                covering_package_by_service_id = {}
                 services = list(form.cleaned_data["services"])
-                for service in services:
-                    VisitService.objects.create(
-                        visit=visit,
-                        service=service,
-                        price_at_time=service.price,
-                    )
+                ordered_services = sorted(services, key=lambda s: s.category != Service.CATEGORY_PACKAGE)
+                for service in ordered_services:
+                    visit_service_kwargs = {
+                        "visit": visit,
+                        "service": service,
+                        "price_at_time": service.price,
+                    }
+                    covering_package = covering_package_by_service_id.get(service.pk)
+                    if covering_package:
+                        visit_service_kwargs["covered_by_package"] = True
+                        visit_service_kwargs["covering_package"] = covering_package
+                    visit_service = VisitService.objects.create(**visit_service_kwargs)
+                    if service.category == Service.CATEGORY_PACKAGE:
+                        for included_service in service.package_services.all():
+                            covering_package_by_service_id.setdefault(included_service.pk, visit_service)
                     for queue_type in queue_types_for_service(service):
                         QueueEntry.objects.create(
                             hospital=hospital,
@@ -2108,6 +2136,14 @@ def patient_visits(request, patient_id):
             vs for vs in selected_row["visit"].visit_services.all()
             if vs.service.category != Service.CATEGORY_PHARMACY
         ]
+        selected_row["package_lines"] = [
+            vs for vs in selected_row["visit"].visit_services.all()
+            if vs.service.category == Service.CATEGORY_PACKAGE
+        ]
+        selected_row["package_available_services"] = [
+            {"service": service, "package_name": package_line.service.name}
+            for service, package_line in package_services_available_on_visit(selected_row["visit"])
+        ]
 
     return render(
         request,
@@ -2339,3 +2375,73 @@ def patient_quick_send(request, patient_id):
     else:
         messages.success(request, f"{patient.name} sent to {config['label']} queue.")
     return redirect("reception_queue")
+
+
+@reception_role_required
+@transaction.atomic
+def visit_send_to_module(request, visit_id):
+    """Repeat-routing for a patient on an active Package (e.g. Antenatal):
+    reception can send them for any of the package's specific included
+    services (not yet added on this visit), against an existing open visit,
+    with nothing added to the bill. Scan services still go through
+    reception approval first, same as everywhere else scan work is routed."""
+    if request.method != "POST":
+        raise PermissionDenied("Send requires a POST request.")
+
+    hospital = get_active_hospital(request)
+    visit = get_object_or_404(Visit.objects.select_related("patient"), pk=visit_id, hospital=hospital)
+    if visit.status == Visit.STATUS_CANCELLED:
+        raise PermissionDenied("This visit was terminated by an administrator.")
+
+    service_id = request.POST.get("service_id", "").strip()
+    service = Service.objects.filter(pk=service_id, hospital=hospital, is_active=True).first() if service_id else None
+    if service is None:
+        messages.error(request, "Select a service to send for.")
+        return redirect("patient_visits", patient_id=visit.patient_id)
+
+    covering_package = active_package_visit_service(visit, service)
+    if not covering_package:
+        messages.error(
+            request,
+            f"This visit has no active package covering {service.name} — "
+            "nothing to send for free. Bill the service normally instead.",
+        )
+        return redirect("patient_visits", patient_id=visit.patient_id)
+    if VisitService.objects.filter(visit=visit, service=service).exists():
+        messages.error(request, f"{service.name} is already on this visit.")
+        return redirect("patient_visits", patient_id=visit.patient_id)
+
+    VisitService.objects.create(
+        visit=visit,
+        service=service,
+        price_at_time=service.price,
+        covered_by_package=True,
+        covering_package=covering_package,
+    )
+
+    if is_scan_service_category(service.category):
+        queue_type = QueueEntry.TYPE_RECEPTION
+        reason = f"Pending sonographer approval — waiting for reception review (covered by {covering_package.service.name})."
+    else:
+        matched_queue_types = queue_types_for_service(service)
+        queue_type = matched_queue_types[0] if matched_queue_types else QueueEntry.TYPE_RECEPTION
+        reason = f"{queue_reason_for_service(service)} (covered by {covering_package.service.name})"
+
+    ensure_pending_queue_entry(
+        visit=visit,
+        hospital=hospital,
+        queue_type=queue_type,
+        reason=reason,
+        requested_by=request.user,
+        notes=(
+            f"Sent for {service.name} under the {covering_package.service.name} package by "
+            f"{request.user.get_full_name() or request.user.username}."
+        ),
+    )
+
+    sync_visit_status(visit)
+    messages.success(
+        request,
+        f"{visit.patient.name} sent for {service.name} — covered by {covering_package.service.name}.",
+    )
+    return redirect("patient_visits", patient_id=visit.patient_id)

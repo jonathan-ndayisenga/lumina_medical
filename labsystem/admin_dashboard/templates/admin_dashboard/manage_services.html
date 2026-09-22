@@ -33,7 +33,7 @@
 
             {% for field in form %}
                 {% if field.field.widget.input_type == "checkbox" and field.field.widget.allow_multiple_selected %}
-                <div class="mt-2" id="lab-tests-next-wrap" style="display:none;">
+                <div class="mt-2" id="{{ field.html_name }}-wrap" style="display:none;">
                     <p class="block text-sm font-semibold text-text-main mb-2">{{ field.label }}</p>
                     {% if field.help_text %}<p class="text-xs text-text-muted mb-3">{{ field.help_text }}</p>{% endif %}
                     <div class="flex flex-wrap gap-2">
@@ -156,13 +156,15 @@
 (function () {
     const categorySelect = document.querySelector('#add-service-form select[name="category"]');
     const profileWrap = document.getElementById('test-profile-wrap');
-    const labTestWrap = document.getElementById('lab-tests-next-wrap');
+    const labTestWrap = document.getElementById('lab_tests_next-wrap');
+    const packageServicesWrap = document.getElementById('package_services-wrap');
     if (!categorySelect || !profileWrap) return;
 
     function toggle() {
-        const show = categorySelect.value === 'lab' ? '' : 'none';
-        profileWrap.style.display = show;
-        if (labTestWrap) labTestWrap.style.display = show;
+        const isLab = categorySelect.value === 'lab' ? '' : 'none';
+        profileWrap.style.display = isLab;
+        if (labTestWrap) labTestWrap.style.display = isLab;
+        if (packageServicesWrap) packageServicesWrap.style.display = categorySelect.value === 'package' ? '' : 'none';
     }
     categorySelect.addEventListener('change', toggle);
     toggle();

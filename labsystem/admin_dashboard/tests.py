@@ -583,3 +583,84 @@ class ManageServicesLabTestLinkTests(TestCase):
         self.assertEqual(
             set(self.service.lab_tests_next.values_list("pk", flat=True)), {self.lab_test.pk, second_test.pk},
         )
+
+
+class PackageServiceCatalogTests(TestCase):
+    """A Package-category service (e.g. Antenatal) records the exact other
+    services it includes (Service.package_services), set from the normal
+    Manage Services screen -- not just Django admin. Scoped to a defined
+    list of specific services, not "any service in this category"."""
+
+    def setUp(self):
+        from reception.models import Service
+
+        self.User = get_user_model()
+        self.hospital = Hospital.objects.create(name="Package Catalog Hospital", subdomain="package-catalog")
+        self.admin_user = self.User.objects.create_user(
+            username="packagecatalogadmin", password="StrongPass123!",
+            role=self.User.ROLE_HOSPITAL_ADMIN, hospital=self.hospital,
+        )
+        self.client.force_login(self.admin_user)
+        self.consultation = Service.objects.create(
+            hospital=self.hospital, name="Consultation", category=Service.CATEGORY_CONSULTATION, price=Decimal("20000"),
+        )
+        self.cbc = Service.objects.create(
+            hospital=self.hospital, name="CBC", category=Service.CATEGORY_LAB, price=Decimal("30000"),
+        )
+        self.scan = Service.objects.create(
+            hospital=self.hospital, name="Obstetric Ultrasound", category=Service.CATEGORY_SCAN, price=Decimal("40000"),
+        )
+
+    def test_creating_a_package_service_records_which_services_it_includes(self):
+        from reception.models import Service
+
+        response = self.client.post(
+            reverse("manage_services"),
+            {
+                "name": "Antenatal", "category": Service.CATEGORY_PACKAGE, "price": "150000",
+                "package_services": [self.consultation.pk, self.cbc.pk],
+                "is_active": "on",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        service = Service.objects.get(hospital=self.hospital, name="Antenatal")
+        self.assertEqual(
+            set(service.package_services.values_list("pk", flat=True)), {self.consultation.pk, self.cbc.pk},
+        )
+
+    def test_editing_a_package_service_can_change_which_services_it_includes(self):
+        from reception.models import Service
+
+        service = Service.objects.create(
+            hospital=self.hospital, name="Antenatal", category=Service.CATEGORY_PACKAGE, price=Decimal("150000"),
+        )
+        service.package_services.add(self.consultation)
+
+        response = self.client.post(
+            reverse("edit_service", args=[service.pk]),
+            {
+                "name": service.name, "category": service.category, "price": "150000",
+                "package_services": [self.consultation.pk, self.cbc.pk, self.scan.pk],
+                "is_active": "on",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        service.refresh_from_db()
+        self.assertEqual(
+            set(service.package_services.values_list("pk", flat=True)),
+            {self.consultation.pk, self.cbc.pk, self.scan.pk},
+        )
+
+    def test_another_package_is_never_offered_as_an_included_service(self):
+        """Packages stay flat -- a package can't bundle another package."""
+        from reception.models import Service
+
+        other_package = Service.objects.create(
+            hospital=self.hospital, name="Maternity", category=Service.CATEGORY_PACKAGE, price=Decimal("500000"),
+        )
+        response = self.client.get(reverse("manage_services"))
+        queryset = response.context["form"].fields["package_services"].queryset
+        self.assertNotIn(other_package, queryset)
+        self.assertIn(self.consultation, queryset)

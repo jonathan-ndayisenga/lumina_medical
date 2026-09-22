@@ -1812,3 +1812,204 @@ class NewbornAgeUnitTests(TestCase):
         self.assertEqual(patient.age_at(today + timedelta(days=7)), "1 wk")
         self.assertEqual(patient.age_at(today + timedelta(days=20)), "2 wks")
         self.assertEqual(patient.age_at(today + timedelta(days=31)), "1 mo")
+
+
+class PackageServiceBillingTests(TestCase):
+    """A Package service (e.g. Antenatal) bills once and covers the exact
+    services it lists in package_services for the rest of that same visit --
+    nothing added to the bill for those specific services, and reception
+    can send the patient for any of them, one at a time. A similarly-
+    categorized service not on that list still bills normally."""
+
+    def setUp(self):
+        plan = SubscriptionPlan.objects.create(
+            name="Package", price_monthly=Decimal("0.00"), price_yearly=Decimal("0.00"),
+        )
+        self.hospital = Hospital.objects.create(
+            name="Lumina Package Hospital", subdomain="lumina-package", subscription_plan=plan,
+        )
+        _enable_modules(self.hospital, "doctor", "lab", "sonographer")
+        self.receptionist = User.objects.create_user(
+            username="package-reception", password="pass12345",
+            role=User.ROLE_RECEPTIONIST, hospital=self.hospital, is_active=True,
+        )
+        self.patient = Patient.objects.create(
+            hospital=self.hospital, name="Package Patient",
+            registration_date=timezone.localdate(), age="26YRS", sex="F",
+        )
+        self.consultation = Service.objects.create(
+            hospital=self.hospital, name="Consultation", category=Service.CATEGORY_CONSULTATION,
+            price=Decimal("20000"),
+        )
+        self.lab_service = Service.objects.create(
+            hospital=self.hospital, name="CBC", category=Service.CATEGORY_LAB, price=Decimal("30000"),
+        )
+        self.uncovered_lab_service = Service.objects.create(
+            hospital=self.hospital, name="Urinalysis", category=Service.CATEGORY_LAB, price=Decimal("15000"),
+        )
+        self.scan_service = Service.objects.create(
+            hospital=self.hospital, name="Ultrasound", category=Service.CATEGORY_SCAN, price=Decimal("40000"),
+        )
+        self.antenatal = Service.objects.create(
+            hospital=self.hospital, name="Antenatal", category=Service.CATEGORY_PACKAGE, price=Decimal("150000"),
+        )
+        self.antenatal.package_services.set([self.consultation, self.lab_service])
+        self.client.force_login(self.receptionist)
+
+    def test_buying_package_and_a_covered_service_together_excludes_the_covered_price(self):
+        response = self.client.post(
+            reverse("visit_create", args=[self.patient.pk]),
+            {
+                "visit_type": Visit.TYPE_NORMAL,
+                "services": [str(self.antenatal.pk), str(self.consultation.pk)],
+                "notes": "",
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+
+        visit = Visit.objects.get(patient=self.patient)
+        self.assertEqual(visit.total_amount, Decimal("150000"))
+
+        consult_line = VisitService.objects.get(visit=visit, service=self.consultation)
+        self.assertTrue(consult_line.covered_by_package)
+        self.assertEqual(consult_line.price_at_time, Decimal("20000"))
+        self.assertEqual(consult_line.billing_label, "Covered by Antenatal")
+
+        package_line = VisitService.objects.get(visit=visit, service=self.antenatal)
+        self.assertFalse(package_line.covered_by_package)
+        self.assertEqual(package_line.billing_label, "150000.00")
+
+    def test_a_similarly_categorized_service_not_on_the_included_list_still_bills_normally(self):
+        """Urinalysis is Lab, same category as the included CBC -- but it's
+        not one of the package's specific included services, so it must
+        still bill. This is the whole point of naming exact services
+        instead of just covering a category."""
+        response = self.client.post(
+            reverse("visit_create", args=[self.patient.pk]),
+            {
+                "visit_type": Visit.TYPE_NORMAL,
+                "services": [str(self.antenatal.pk), str(self.uncovered_lab_service.pk)],
+                "notes": "",
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+
+        visit = Visit.objects.get(patient=self.patient)
+        self.assertEqual(visit.total_amount, Decimal("165000"))
+        line = VisitService.objects.get(visit=visit, service=self.uncovered_lab_service)
+        self.assertFalse(line.covered_by_package)
+
+    def test_visit_send_to_module_creates_a_covered_line_and_routes_to_lab(self):
+        visit = Visit.objects.create(
+            patient=self.patient, hospital=self.hospital, total_amount=Decimal("150000"),
+            status=Visit.STATUS_IN_PROGRESS, created_by=self.receptionist,
+        )
+        package_line = VisitService.objects.create(visit=visit, service=self.antenatal, price_at_time=Decimal("150000"))
+
+        response = self.client.post(
+            reverse("visit_send_to_module", args=[visit.pk]), {"service_id": self.lab_service.pk},
+        )
+
+        self.assertRedirects(response, reverse("patient_visits", args=[self.patient.pk]))
+        visit.refresh_from_db()
+        self.assertEqual(visit.total_amount, Decimal("150000"))
+        lab_line = VisitService.objects.get(visit=visit, service=self.lab_service)
+        self.assertTrue(lab_line.covered_by_package)
+        self.assertEqual(lab_line.covering_package_id, package_line.pk)
+        # Same as any other lab service getting billed -- reception approval
+        # first (queue_types_for_service), not straight to the lab queue.
+        self.assertTrue(
+            QueueEntry.objects.filter(
+                visit=visit, queue_type=QueueEntry.TYPE_RECEPTION, processed=False,
+            ).exists()
+        )
+
+    def test_a_service_already_sent_for_is_not_offered_again(self):
+        """A package includes a fixed, specific list -- once "CBC" has been
+        added to the visit, sending for it again isn't a free repeat (it's
+        just already on the bill, once)."""
+        visit = Visit.objects.create(
+            patient=self.patient, hospital=self.hospital, total_amount=Decimal("150000"),
+            status=Visit.STATUS_IN_PROGRESS, created_by=self.receptionist,
+        )
+        VisitService.objects.create(visit=visit, service=self.antenatal, price_at_time=Decimal("150000"))
+
+        first = self.client.post(reverse("visit_send_to_module", args=[visit.pk]), {"service_id": self.lab_service.pk})
+        self.assertRedirects(first, reverse("patient_visits", args=[self.patient.pk]))
+        second = self.client.post(
+            reverse("visit_send_to_module", args=[visit.pk]), {"service_id": self.lab_service.pk}, follow=True,
+        )
+
+        self.assertEqual(second.status_code, 200)
+        visit.refresh_from_db()
+        self.assertEqual(visit.total_amount, Decimal("150000"))
+        self.assertEqual(VisitService.objects.filter(visit=visit, service=self.lab_service).count(), 1)
+
+    def test_visit_send_to_module_rejects_a_service_the_package_does_not_include(self):
+        visit = Visit.objects.create(
+            patient=self.patient, hospital=self.hospital, total_amount=Decimal("150000"),
+            status=Visit.STATUS_IN_PROGRESS, created_by=self.receptionist,
+        )
+        VisitService.objects.create(visit=visit, service=self.antenatal, price_at_time=Decimal("150000"))
+
+        response = self.client.post(
+            reverse("visit_send_to_module", args=[visit.pk]), {"service_id": self.scan_service.pk}, follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(VisitService.objects.filter(visit=visit, service=self.scan_service).exists())
+
+    def test_visit_without_a_package_cannot_use_send_to_module(self):
+        visit = Visit.objects.create(
+            patient=self.patient, hospital=self.hospital, total_amount=Decimal("0"),
+            status=Visit.STATUS_IN_PROGRESS, created_by=self.receptionist,
+        )
+
+        response = self.client.post(
+            reverse("visit_send_to_module", args=[visit.pk]), {"service_id": self.lab_service.pk}, follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(VisitService.objects.filter(visit=visit).exists())
+
+    def test_receipt_shows_covered_by_label_for_a_covered_line(self):
+        visit = Visit.objects.create(
+            patient=self.patient, hospital=self.hospital, total_amount=Decimal("150000"),
+            status=Visit.STATUS_COMPLETED, created_by=self.receptionist,
+        )
+        package_line = VisitService.objects.create(visit=visit, service=self.antenatal, price_at_time=Decimal("150000"))
+        VisitService.objects.create(
+            visit=visit, service=self.consultation, price_at_time=Decimal("20000"),
+            covered_by_package=True, covering_package=package_line,
+        )
+
+        body = self.client.get(reverse("print_receipt", args=[visit.pk])).content.decode()
+
+        self.assertIn("Covered by Antenatal", body)
+
+    def test_editing_a_visit_to_add_a_covered_service_marks_it_covered_too(self):
+        """visit_edit rebuilds every VisitService line from scratch -- the
+        rebuild has to apply the same covered_by_package marking
+        visit_create does, or the line-item prices would silently stop
+        adding up to visit.total_amount."""
+        response = self.client.post(
+            reverse("visit_create", args=[self.patient.pk]),
+            {"visit_type": Visit.TYPE_NORMAL, "services": [str(self.antenatal.pk)], "notes": ""},
+        )
+        visit = Visit.objects.get(patient=self.patient)
+
+        response = self.client.post(
+            reverse("visit_edit", args=[visit.pk]),
+            {
+                "visit_type": Visit.TYPE_NORMAL,
+                "services": [str(self.antenatal.pk), str(self.consultation.pk)],
+                "notes": "",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        visit.refresh_from_db()
+        self.assertEqual(visit.total_amount, Decimal("150000"))
+        consult_line = VisitService.objects.get(visit=visit, service=self.consultation)
+        self.assertTrue(consult_line.covered_by_package)
+        self.assertEqual(consult_line.billing_label, "Covered by Antenatal")

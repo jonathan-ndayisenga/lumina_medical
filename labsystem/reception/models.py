@@ -318,6 +318,7 @@ class Service(models.Model):
     CATEGORY_PROCEDURE = "procedure"
     CATEGORY_PHARMACY = "pharmacy"
     CATEGORY_SCAN = "scan"
+    CATEGORY_PACKAGE = "package"
     CATEGORY_OTHER = "other"
 
     CATEGORY_CHOICES = [
@@ -327,6 +328,7 @@ class Service(models.Model):
         (CATEGORY_PROCEDURE, "Procedure"),
         (CATEGORY_PHARMACY, "Pharmacy"),
         (CATEGORY_SCAN, "Scan / Ultrasound"),
+        (CATEGORY_PACKAGE, "Package"),
         (CATEGORY_OTHER, "Other"),
     ]
 
@@ -356,6 +358,17 @@ class Service(models.Model):
                    "linking both MRDT and B/S, each entered independently. Required for the service "
                    "to be picked up by the lab queue; unrelated to `test_profile` above, which only "
                    "the historical report archive still reads.",
+    )
+    package_services = models.ManyToManyField(
+        "self",
+        symmetrical=False,
+        related_name="included_in_packages",
+        blank=True,
+        help_text="Only meaningful for category=Package -- the exact service(s) this package "
+                   "includes (e.g. Antenatal -> Consultation, CBC, Urinalysis, Obstetric "
+                   "Ultrasound). A visit with this package billed can be sent for any of these "
+                   "specific services, without billing anything extra for them -- services not "
+                   "on this list still bill normally even if their category matches.",
     )
 
     class Meta:
@@ -406,11 +419,32 @@ class VisitService(models.Model):
         help_text="Set when requested_by_type is external_doctor — the referring doctor's facility.",
     )
 
+    # Package coverage — same "still record the real price, just don't bill
+    # it" shape as Prescription.covered_by_previous (doctor/models.py), just
+    # for a service line covered by an active Package on this same visit
+    # instead of a prior payment.
+    covered_by_package = models.BooleanField(default=False)
+    covering_package = models.ForeignKey(
+        "self", on_delete=models.SET_NULL, null=True, blank=True, related_name="covered_services",
+        help_text="The package's own VisitService line on this visit that covers this one, when "
+                   "covered_by_package is set.",
+    )
+
     class Meta:
         ordering = ["created_at", "id"]
 
     def __str__(self):
         return f"{self.visit} - {self.service.name}"
+
+    @property
+    def billing_label(self):
+        # No currency-code prefix -- receipts already show bare numbers
+        # everywhere else (visit.total_amount, payments, ...), so this
+        # matches that instead of Prescription.billing_label's own
+        # convention, which is used in a different, "UGX "-prefixed context.
+        if self.covered_by_package and self.covering_package_id:
+            return f"Covered by {self.covering_package.service.name}"
+        return str(self.price_at_time)
 
     @property
     def requested_by_display(self):

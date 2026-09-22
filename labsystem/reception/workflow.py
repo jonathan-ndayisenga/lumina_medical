@@ -4,7 +4,7 @@ from django.utils import timezone
 
 from accounts.models import AuditLog
 
-from reception.models import QueueEntry, Visit
+from reception.models import QueueEntry, Service, Visit
 
 
 def queue_counts_for_hospital(hospital) -> dict:
@@ -54,6 +54,37 @@ def require_module_for_queue_type(*, hospital, queue_type: str) -> None:
             f"This hospital does not have the '{module_code}' module enabled, "
             "so this patient cannot be routed there."
         )
+
+
+def active_package_visit_service(visit, service):
+    """The visit's own active Package-category VisitService, if any, whose
+    package_services includes `service` -- or None. Callers use this to
+    decide whether a new service line being added should be billed
+    normally or marked covered_by_package (see VisitService.billing_label).
+    Checked against the exact service, not its category -- a package only
+    ever covers the specific services it was built with (e.g. Antenatal ->
+    Consultation, CBC, Urinalysis), not "any lab test the patient wants"."""
+    for package_line in visit.visit_services.filter(service__category=Service.CATEGORY_PACKAGE).select_related("service"):
+        if package_line.service.package_services.filter(pk=service.pk).exists():
+            return package_line
+    return None
+
+
+def package_services_available_on_visit(visit):
+    """Every specific service included in any active package on this visit
+    that hasn't already been added as a line on it -- grouped by nothing in
+    particular, callers group by category/queue as needed. Used to build
+    the "send to..." action list on the visit detail page."""
+    already_added_ids = set(visit.visit_services.values_list("service_id", flat=True))
+    available = []
+    seen_ids = set()
+    for package_line in visit.visit_services.filter(service__category=Service.CATEGORY_PACKAGE).select_related("service"):
+        for included_service in package_line.service.package_services.all():
+            if included_service.pk in already_added_ids or included_service.pk in seen_ids:
+                continue
+            seen_ids.add(included_service.pk)
+            available.append((included_service, package_line))
+    return available
 
 
 def user_can_admin_override(user) -> bool:
