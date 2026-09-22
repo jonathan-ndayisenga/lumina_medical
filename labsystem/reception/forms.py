@@ -1,3 +1,4 @@
+from datetime import timedelta
 from decimal import Decimal, InvalidOperation
 import re
 
@@ -12,6 +13,8 @@ from .models import Patient, Payment, Service, Visit
 AGE_UNIT_CHOICES = [
     ("YRS", "Years"),
     ("MTH", "Months"),
+    ("WKS", "Weeks"),
+    ("DAYS", "Days"),
 ]
 
 
@@ -123,9 +126,22 @@ class PatientForm(forms.ModelForm):
                     if today.day < dob.day:
                         months -= 1
                     months = max(months, 0)
-                    cleaned["age"] = f"{months}MTH"
-                    cleaned["age_value"] = Decimal(str(months))
-                    cleaned["age_unit"] = "MTH"
+                    if months >= 1:
+                        cleaned["age"] = f"{months}MTH"
+                        cleaned["age_value"] = Decimal(str(months))
+                        cleaned["age_unit"] = "MTH"
+                    else:
+                        # Under one month old -- weeks/days, for newborns.
+                        total_days = max((today - dob).days, 0)
+                        if total_days >= 7:
+                            weeks = total_days // 7
+                            cleaned["age"] = f"{weeks}WKS"
+                            cleaned["age_value"] = Decimal(str(weeks))
+                            cleaned["age_unit"] = "WKS"
+                        else:
+                            cleaned["age"] = f"{total_days}DAYS"
+                            cleaned["age_value"] = Decimal(str(total_days))
+                            cleaned["age_unit"] = "DAYS"
         else:
             # Age -> approximate DOB
             try:
@@ -134,7 +150,11 @@ class PatientForm(forms.ModelForm):
                 age_val_decimal = None
                 
             if age_val_decimal is not None:
-                if age_unit == "MTH":
+                if age_unit == "DAYS":
+                    cleaned["date_of_birth"] = today - timedelta(days=int(age_val_decimal))
+                elif age_unit == "WKS":
+                    cleaned["date_of_birth"] = today - timedelta(days=int(age_val_decimal * 7))
+                elif age_unit == "MTH":
                     total_months = int(age_val_decimal)
                     year = today.year
                     month = today.month - total_months
@@ -151,8 +171,8 @@ class PatientForm(forms.ModelForm):
                         month += 12
                         year -= 1
                     cleaned["date_of_birth"] = timezone.datetime(year, month, 1).date()
-                
-                # Store the exact string as entered (e.g. 1.5YRS or 18MTH)
+
+                # Store the exact string as entered (e.g. 1.5YRS, 18MTH, 3WKS, 5DAYS)
                 # Remove trailing zeros for clean display if it's a whole number
                 age_str = format(age_val_decimal.normalize(), 'f')
                 cleaned["age"] = f"{age_str}{age_unit}"

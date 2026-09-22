@@ -226,7 +226,15 @@
         if (Number.isNaN(val)) return;
         const unit = (ageUnit && ageUnit.value) ? ageUnit.value : "YRS";
         const today = new Date();
-        if (unit === "MTH") {
+        if (unit === "DAYS") {
+            const d = new Date(today);
+            d.setDate(d.getDate() - Math.floor(val));
+            dob.value = fmtDate(d);
+        } else if (unit === "WKS") {
+            const d = new Date(today);
+            d.setDate(d.getDate() - Math.floor(val * 7));
+            dob.value = fmtDate(d);
+        } else if (unit === "MTH") {
             const d = new Date(today.getFullYear(), today.getMonth() - Math.floor(val), 1);
             dob.value = fmtDate(d);
         } else {
@@ -254,17 +262,30 @@
                 ageValue.value = String(years);
                 ageUnit.value = "YRS";
             } else {
-                let months = (today.getFullYear() - d.getFullYear()) * 12 + (today.month - d.getMonth());
+                let months = (today.getFullYear() - d.getFullYear()) * 12 + (today.getMonth() - d.getMonth());
                 if (today.getDate() < d.getDate()) months--;
                 months = Math.max(months, 0);
                 ageValue.value = String(months);
             }
-        } else {
-            let months = (today.getFullYear() - d.getFullYear()) * 12 + (today.getMonth() - d.getMonth());
-            if (today.getDate() < d.getDate()) months--;
-            months = Math.max(months, 0);
+            return;
+        }
+        let months = (today.getFullYear() - d.getFullYear()) * 12 + (today.getMonth() - d.getMonth());
+        if (today.getDate() < d.getDate()) months--;
+        months = Math.max(months, 0);
+        if (months >= 1) {
             ageValue.value = String(months);
             ageUnit.value = "MTH";
+            return;
+        }
+        // Under one month old -- weeks/days, for newborns.
+        const msPerDay = 24 * 60 * 60 * 1000;
+        const totalDays = Math.max(Math.round((today - d) / msPerDay), 0);
+        if (totalDays >= 7) {
+            ageValue.value = String(Math.floor(totalDays / 7));
+            ageUnit.value = "WKS";
+        } else {
+            ageValue.value = String(totalDays);
+            ageUnit.value = "DAYS";
         }
     }
 

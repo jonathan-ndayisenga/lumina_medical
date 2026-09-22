@@ -36,7 +36,7 @@ class Patient(models.Model):
     name = models.CharField(max_length=200)
     registration_date = models.DateField(null=True, blank=True)
     date_of_birth = models.DateField(null=True, blank=True)
-    age = models.CharField(max_length=20, help_text="Examples: 22YRS, 6MTH")
+    age = models.CharField(max_length=20, help_text="Examples: 22YRS, 6MTH, 3WKS, 5DAYS")
     weight_kg = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
     sex = models.CharField(max_length=10, choices=SEX_CHOICES)
     contact = models.CharField(max_length=50, blank=True)
@@ -76,7 +76,14 @@ class Patient(models.Model):
         if total_months >= 12:
             y, m = divmod(total_months, 12)
             return f"{y} yr{'s' if y != 1 else ''} {m} mo" if m else f"{y} yr{'s' if y != 1 else ''}"
-        return f"{total_months} mo"
+        if total_months >= 1:
+            return f"{total_months} mo"
+        # Under one month old -- weeks/days, for newborns.
+        total_days = max((reference_date - dob).days, 0)
+        if total_days >= 7:
+            weeks = total_days // 7
+            return f"{weeks} wk{'s' if weeks != 1 else ''}"
+        return f"{total_days} day{'s' if total_days != 1 else ''}"
 
     @property
     def current_age(self):

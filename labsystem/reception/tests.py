@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 
 from django.test import TestCase
@@ -1739,3 +1739,76 @@ class PatientAgeDisplayTests(TestCase):
         self.assertIn("5 yrs", body)
         self.assertNotIn("10 yrs", body)
         self.assertNotIn("1YRS", body)
+
+
+class NewbornAgeUnitTests(TestCase):
+    """Registration needs to capture weeks/days, not just years/months, for
+    a baby under one month old -- covers both directions: age (in the new
+    WKS/DAYS units) -> approximated DOB at registration, and DOB -> a live
+    weeks/days age string on every later screen (current_age/age_at, same
+    mechanism as PatientAgeDisplayTests, no extra plumbing needed)."""
+
+    def setUp(self):
+        plan = SubscriptionPlan.objects.create(
+            name="Newborn Age", price_monthly=Decimal("0.00"), price_yearly=Decimal("0.00"),
+        )
+        self.hospital = Hospital.objects.create(
+            name="Lumina Newborn Hospital", subdomain="lumina-newborn-age", subscription_plan=plan,
+        )
+        _enable_modules(self.hospital, "reception")
+        self.receptionist = User.objects.create_user(
+            username="newborndesk", password="pass12345",
+            role=User.ROLE_RECEPTIONIST, hospital=self.hospital, is_active=True,
+        )
+        self.client.force_login(self.receptionist)
+
+    def _register(self, **age_fields):
+        today = timezone.localdate()
+        payload = {
+            "name": "Newborn Patient",
+            "registration_date": today.isoformat(),
+            "sex": "M",
+        }
+        payload.update(age_fields)
+        return self.client.post(reverse("patient_create"), payload, follow=True)
+
+    def test_registering_in_days_approximates_dob_and_stores_the_unit(self):
+        response = self._register(age_value="5", age_unit="DAYS")
+        self.assertEqual(response.status_code, 200)
+        patient = Patient.objects.get(name="Newborn Patient")
+        self.assertEqual(patient.age, "5DAYS")
+        self.assertEqual(patient.date_of_birth, timezone.localdate() - timedelta(days=5))
+
+    def test_registering_in_weeks_approximates_dob_and_stores_the_unit(self):
+        response = self._register(age_value="3", age_unit="WKS")
+        self.assertEqual(response.status_code, 200)
+        patient = Patient.objects.get(name="Newborn Patient")
+        self.assertEqual(patient.age, "3WKS")
+        self.assertEqual(patient.date_of_birth, timezone.localdate() - timedelta(days=21))
+
+    def test_registering_with_dob_only_for_a_days_old_baby_derives_days_not_zero_months(self):
+        dob = (timezone.localdate() - timedelta(days=4)).isoformat()
+        response = self._register(date_of_birth=dob)
+        self.assertEqual(response.status_code, 200)
+        patient = Patient.objects.get(name="Newborn Patient")
+        self.assertEqual(patient.age, "4DAYS")
+
+    def test_registering_with_dob_only_for_a_weeks_old_baby_derives_weeks(self):
+        dob = (timezone.localdate() - timedelta(days=16)).isoformat()
+        response = self._register(date_of_birth=dob)
+        self.assertEqual(response.status_code, 200)
+        patient = Patient.objects.get(name="Newborn Patient")
+        self.assertEqual(patient.age, "2WKS")
+
+    def test_current_age_reports_days_then_weeks_then_months_as_time_passes(self):
+        today = timezone.localdate()
+        patient = Patient.objects.create(
+            hospital=self.hospital, name="Growing Newborn", age="0DAYS",
+            date_of_birth=today, registration_date=today, sex="F",
+        )
+        self.assertEqual(patient.age_at(today), "0 days")
+        self.assertEqual(patient.age_at(today + timedelta(days=1)), "1 day")
+        self.assertEqual(patient.age_at(today + timedelta(days=6)), "6 days")
+        self.assertEqual(patient.age_at(today + timedelta(days=7)), "1 wk")
+        self.assertEqual(patient.age_at(today + timedelta(days=20)), "2 wks")
+        self.assertEqual(patient.age_at(today + timedelta(days=31)), "1 mo")
