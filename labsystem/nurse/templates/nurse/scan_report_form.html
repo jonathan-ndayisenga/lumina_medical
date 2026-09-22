@@ -141,6 +141,10 @@
         {% else %}
             <div class="flex flex-wrap gap-3 pt-2">
                 <a href="{% url 'scan_report_print' report.id %}" target="_blank" class="btn btn-primary">Print Report</a>
+                <form method="post" action="{% url 'scan_report_send_to_billing' report.id %}" class="inline">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-primary">Send to Reception for Billing</button>
+                </form>
                 <a href="{% url 'scan_queue' %}" class="btn btn-secondary">Back to Queue</a>
             </div>
         {% endif %}

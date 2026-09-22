@@ -722,6 +722,36 @@ def scan_report_edit(request, report_id):
 
 
 @sonographer_role_required
+def scan_report_send_to_billing(request, report_id):
+    """A finalized report's handoff choice was a one-shot decision at
+    finalize time -- nothing routed the patient anywhere afterward. If a
+    scan came from reception (or the sonographer just needs to send the
+    patient back for payment after the fact) there was no way to do that
+    once the report was already final. This is that missing action,
+    reachable from the "report already final" screen."""
+    if request.method != "POST":
+        return redirect("scan_queue")
+
+    hospital = get_active_hospital(request)
+    qs = ScanReport.objects.select_related("visit__hospital", "visit__patient")
+    if hospital and getattr(request.user, "role", "") != User.ROLE_SUPERADMIN:
+        qs = qs.filter(visit__hospital=hospital)
+    report = get_object_or_404(qs, pk=report_id)
+    visit = report.visit
+
+    send_to_reception_queue(
+        visit=visit,
+        hospital=visit.hospital,
+        source="Sonographer",
+        detail="Scan report finalized.",
+        requested_by=request.user,
+    )
+    sync_visit_status(visit)
+    messages.success(request, f"{visit.patient.name} sent to reception for billing.")
+    return redirect("scan_queue")
+
+
+@sonographer_role_required
 def scan_report_print(request, report_id):
     hospital = get_active_hospital(request)
     qs = ScanReport.objects.select_related("visit__patient", "visit__hospital", "sonographer")

@@ -608,6 +608,13 @@ class InventoryTransaction(models.Model):
         related_name="inventory_transactions",
     )
     notes = models.TextField(blank=True)
+    batch_breakdown = models.JSONField(
+        default=list, blank=True,
+        help_text="Which batch(es) this CONSUME transaction actually drew from and how much from "
+                   "each -- [{'batch_id', 'batch_number', 'quantity'}, ...]. Lets a later reversal "
+                   "(e.g. undoing a dispensed prescription) credit stock back to the exact original "
+                   "batch/lot instead of a generic new one, preserving that batch's real expiry date.",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

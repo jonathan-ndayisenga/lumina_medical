@@ -13,7 +13,7 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_http_methods
 
 from accounts.models import User
-from admin_dashboard.models import InventoryItem, InventoryTransaction
+from admin_dashboard.models import InventoryBatch, InventoryItem, InventoryTransaction
 from lab.models import LabOrder, LabReport
 from nurse.models import NurseNote
 from reception.models import QueueEntry, Service, Triage, Visit, VisitService
@@ -178,12 +178,37 @@ def reverse_dispensed_stock(prescription, *, actor):
         return
 
     if drug.has_batch_tracking:
-        reversal_batch_number = f"REVERSAL-RX-{prescription.pk}"
-        drug.add_or_update_batch(
-            reversal_batch_number,
-            stock_quantity_to_restore,
-            unit_cost=drug.unit_cost,
+        # Prefer crediting back to the exact batch(es) the original dispense
+        # actually drew from (batch_breakdown, recorded at dispense time) --
+        # keeps the real lot identity and expiry date intact instead of
+        # dumping the quantity into a generic, expiry-less reversal batch.
+        # Falls back to that generic batch only when there's nothing to
+        # restore from (e.g. a transaction recorded before this tracking
+        # existed, or the item had no batches at dispense time).
+        original_consume = (
+            InventoryTransaction.objects.filter(
+                prescription=prescription, transaction_type=InventoryTransaction.TYPE_CONSUME,
+            )
+            .order_by("-created_at", "-id")
+            .first()
         )
+        breakdown = list(original_consume.batch_breakdown) if original_consume else []
+        if breakdown:
+            for line in breakdown:
+                quantity = Decimal(str(line.get("quantity") or 0))
+                if quantity <= 0:
+                    continue
+                batch = InventoryBatch.objects.filter(pk=line.get("batch_id"), item=drug).first()
+                batch_number = batch.batch_number if batch else (line.get("batch_number") or "UNSPECIFIED")
+                expiry_date = batch.expiry_date if batch else None
+                drug.add_or_update_batch(batch_number, quantity, expiry_date=expiry_date, unit_cost=drug.unit_cost)
+        else:
+            reversal_batch_number = f"REVERSAL-RX-{prescription.pk}"
+            drug.add_or_update_batch(
+                reversal_batch_number,
+                stock_quantity_to_restore,
+                unit_cost=drug.unit_cost,
+            )
     else:
         drug.current_quantity = Decimal(drug.current_quantity or 0) + stock_quantity_to_restore
         drug.quantity = int(Decimal(drug.current_quantity or 0))

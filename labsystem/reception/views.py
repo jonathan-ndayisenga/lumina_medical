@@ -1891,6 +1891,17 @@ def dispense_prescription(request, visit_id, prescription_id):
         prescription=prescription,
         performed_by=request.user,
         notes=f"Dispensed for prescription {prescription.pk}. Batches: {batch_notes}",
+        # Exact batch(es) drawn from, so an undo later can credit stock back
+        # to the same lot(s) instead of a generic new batch -- see
+        # doctor.views.reverse_dispensed_stock.
+        batch_breakdown=[
+            {
+                "batch_id": log["batch"].pk,
+                "batch_number": log["batch"].batch_number,
+                "quantity": str(log["quantity"]),
+            }
+            for log in consumption_log
+        ],
     )
 
     prescription.dispensed = True

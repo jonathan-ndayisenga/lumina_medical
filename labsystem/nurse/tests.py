@@ -7,7 +7,7 @@ from django.urls import reverse
 from accounts.models import Hospital, HospitalModuleSubscription, Module
 from admin_dashboard.models import InventoryBatch, InventoryItem, InventoryTransaction
 from doctor.models import Prescription
-from nurse.models import NurseNote
+from nurse.models import NurseNote, ScanReport
 from reception.models import Patient, QueueEntry, Service, Visit, VisitService
 
 
@@ -271,3 +271,62 @@ class NurseWorkflowTests(TestCase):
         # Prescription should not be dispensed
         self.prescription.refresh_from_db()
         self.assertFalse(self.prescription.dispensed)
+
+
+class SonographerScanReportBillingTests(TestCase):
+    """Once a scan report is finalized, the handoff choice (nurse / doctor /
+    reception) was a one-shot decision made at finalize time -- nothing on
+    the "report already final" screen could route the patient anywhere
+    afterward. Reported gap: a scan that came from reception, or one the
+    sonographer forgot to route, had no way to be sent back for billing
+    once finalized."""
+
+    def setUp(self):
+        self.User = get_user_model()
+        self.hospital = Hospital.objects.create(name="Lumina Scan Hospital", subdomain="lumina-scan-billing")
+        _enable_modules(self.hospital, "sonographer", "reception")
+        self.sonographer = self.User.objects.create_user(
+            username="sono1", password="StrongPass123!",
+            role=self.User.ROLE_SONOGRAPHER, hospital=self.hospital,
+        )
+        self.patient = Patient.objects.create(hospital=self.hospital, name="Scan Patient", age="30YRS", sex="F")
+        self.visit = Visit.objects.create(
+            patient=self.patient, hospital=self.hospital, created_by=self.sonographer, total_amount="0.00",
+        )
+        self.queue_entry = QueueEntry.objects.create(
+            hospital=self.hospital, visit=self.visit,
+            queue_type=QueueEntry.TYPE_SONOGRAPHER, reason="Reception sent patient for scan",
+        )
+        self.report = ScanReport.objects.create(
+            visit=self.visit, sonographer=self.sonographer, scan_type=ScanReport.SCAN_ABDOMINAL,
+            findings="Normal", impression="No abnormality detected", status=ScanReport.STATUS_FINAL,
+        )
+        self.client.force_login(self.sonographer)
+
+    def test_finalized_report_screen_offers_a_send_to_billing_action(self):
+        response = self.client.get(reverse("scan_report", args=[self.queue_entry.pk]))
+        self.assertContains(response, "Send to Reception for Billing")
+
+    def test_send_to_billing_routes_the_visit_to_reception(self):
+        self.assertFalse(
+            QueueEntry.objects.filter(visit=self.visit, queue_type=QueueEntry.TYPE_RECEPTION, processed=False).exists()
+        )
+
+        response = self.client.post(reverse("scan_report_send_to_billing", args=[self.report.pk]))
+
+        self.assertRedirects(response, reverse("scan_queue"))
+        self.assertTrue(
+            QueueEntry.objects.filter(
+                visit=self.visit, queue_type=QueueEntry.TYPE_RECEPTION, processed=False,
+                reason__icontains="Scan report finalized",
+            ).exists()
+        )
+
+    def test_send_to_billing_is_safe_to_click_twice(self):
+        self.client.post(reverse("scan_report_send_to_billing", args=[self.report.pk]))
+        self.client.post(reverse("scan_report_send_to_billing", args=[self.report.pk]))
+
+        self.assertEqual(
+            QueueEntry.objects.filter(visit=self.visit, queue_type=QueueEntry.TYPE_RECEPTION, processed=False).count(),
+            1,
+        )
