@@ -100,11 +100,13 @@ class Visit(models.Model):
     TYPE_NORMAL = "normal"
     TYPE_FOLLOW_UP = "follow_up"
     TYPE_ADJUSTMENT = "adjustment"
+    TYPE_PACKAGE = "package_visit"
 
     VISIT_TYPE_CHOICES = [
         (TYPE_NORMAL, "Normal Visit"),
         (TYPE_FOLLOW_UP, "Follow-up"),
         (TYPE_ADJUSTMENT, "Adjustment Visit (Medication Swap)"),
+        (TYPE_PACKAGE, "Package Visit"),
     ]
 
     STATUS_IN_PROGRESS = "in_progress"
@@ -131,6 +133,15 @@ class Visit(models.Model):
         null=True,
         blank=True,
         related_name="follow_up_visits",
+    )
+    package_source = models.ForeignKey(
+        "VisitService",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="reused_by_visits",
+        help_text="The specific package purchase VisitService line (on an earlier, completed and "
+                  "fully paid visit) being reused on this visit, without re-billing it.",
     )
     adjustment_origin_prescription = models.ForeignKey(
         "doctor.Prescription",
@@ -186,6 +197,10 @@ class Visit(models.Model):
     @property
     def is_adjustment_visit(self):
         return self.visit_type == self.TYPE_ADJUSTMENT
+
+    @property
+    def is_package_visit(self):
+        return self.visit_type == self.TYPE_PACKAGE
 
     def validate_billing_structure(self):
         """
@@ -259,6 +274,44 @@ class Visit(models.Model):
             if not origin_visit.is_fully_paid:
                 raise ValidationError(
                     "The original prescription must come from a fully paid visit."
+                )
+
+        elif self.visit_type == self.TYPE_PACKAGE:
+            # Package visits reuse an earlier, completed, fully paid package
+            # purchase without re-billing it. They're created with zero queue
+            # entries (there's no single destination), so they're also
+            # required to have been sent for at least one covered service
+            # before they can be billed -- otherwise a fresh, never-used
+            # package visit (zero services, zero queue entries, UGX 0
+            # balance) could be one-click completed immediately, which
+            # permanently blocks it from ever being routed anywhere.
+            if not self.package_source_id:
+                raise ValidationError(
+                    "Package visits must be linked to the package purchase being reused."
+                )
+            if self.package_source.service.category != Service.CATEGORY_PACKAGE:
+                raise ValidationError(
+                    "The linked purchase must be a Package-category service."
+                )
+            source_visit = self.package_source.visit
+            if source_visit.status != self.STATUS_COMPLETED:
+                raise ValidationError(
+                    "The reused package must come from a completed visit."
+                )
+            if not source_visit.is_fully_paid:
+                raise ValidationError(
+                    "The reused package must come from a fully paid visit."
+                )
+            if (
+                self.package_source.package_expires_on
+                and self.package_source.package_expires_on < timezone.localdate()
+            ):
+                raise ValidationError(
+                    "This package has expired and can no longer be reused."
+                )
+            if not self.visit_services.filter(covered_by_package=True).exists():
+                raise ValidationError(
+                    "Send this visit for at least one package-covered service before it can be billed."
                 )
 
 
@@ -421,13 +474,21 @@ class VisitService(models.Model):
 
     # Package coverage — same "still record the real price, just don't bill
     # it" shape as Prescription.covered_by_previous (doctor/models.py), just
-    # for a service line covered by an active Package on this same visit
-    # instead of a prior payment.
+    # for a service line covered by an active Package instead of a prior
+    # payment. covering_package is usually a line on this same visit, but for
+    # a Visit.TYPE_PACKAGE reuse visit it points at the original purchase's
+    # line on an earlier visit instead (see Visit.package_source).
     covered_by_package = models.BooleanField(default=False)
     covering_package = models.ForeignKey(
         "self", on_delete=models.SET_NULL, null=True, blank=True, related_name="covered_services",
-        help_text="The package's own VisitService line on this visit that covers this one, when "
-                   "covered_by_package is set.",
+        help_text="The package's own VisitService line (this visit or an earlier one) that covers "
+                   "this one, when covered_by_package is set.",
+    )
+    package_expires_on = models.DateField(
+        null=True, blank=True,
+        help_text="Only meaningful when this line's service is category=Package -- optional expiry "
+                   "captured at purchase time. Once set and past, this package can no longer be "
+                   "reused on a new visit.",
     )
 
     class Meta:

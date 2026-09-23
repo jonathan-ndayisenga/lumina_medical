@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import date, timedelta
 from decimal import Decimal
 
+from django.core.exceptions import ValidationError
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
@@ -21,6 +22,7 @@ from admin_dashboard.models import (
 from doctor.models import Consultation, Prescription
 from lab.models import LabReport
 from lab.views import send_report_results_to_doctor
+from reception.forms import VisitCreateForm
 from reception.models import Patient, Payment, QueueEntry, Service, Visit, VisitService
 from reception.workflow import ensure_pending_queue_entry
 
@@ -2013,3 +2015,189 @@ class PackageServiceBillingTests(TestCase):
         consult_line = VisitService.objects.get(visit=visit, service=self.consultation)
         self.assertTrue(consult_line.covered_by_package)
         self.assertEqual(consult_line.billing_label, "Covered by Antenatal")
+
+
+class PackageVisitReuseTests(TestCase):
+    """A package purchased on one visit can be reused, without re-billing
+    it, on a later visit -- as long as the purchase visit is completed,
+    fully paid, and (if an expiry was set) not yet expired."""
+
+    def setUp(self):
+        plan = SubscriptionPlan.objects.create(
+            name="PackageReuse", price_monthly=Decimal("0.00"), price_yearly=Decimal("0.00"),
+        )
+        self.hospital = Hospital.objects.create(
+            name="Lumina Package Reuse Hospital", subdomain="lumina-package-reuse", subscription_plan=plan,
+        )
+        _enable_modules(self.hospital, "doctor", "lab", "sonographer")
+        self.receptionist = User.objects.create_user(
+            username="package-reuse-reception", password="pass12345",
+            role=User.ROLE_RECEPTIONIST, hospital=self.hospital, is_active=True,
+        )
+        self.patient = Patient.objects.create(
+            hospital=self.hospital, name="Antenatal Patient",
+            registration_date=timezone.localdate(), age="26YRS", sex="F",
+        )
+        self.other_patient = Patient.objects.create(
+            hospital=self.hospital, name="Other Patient",
+            registration_date=timezone.localdate(), age="30YRS", sex="F",
+        )
+        self.consultation = Service.objects.create(
+            hospital=self.hospital, name="Consultation", category=Service.CATEGORY_CONSULTATION,
+            price=Decimal("20000"),
+        )
+        self.lab_service = Service.objects.create(
+            hospital=self.hospital, name="CBC", category=Service.CATEGORY_LAB, price=Decimal("30000"),
+        )
+        self.antenatal = Service.objects.create(
+            hospital=self.hospital, name="Antenatal", category=Service.CATEGORY_PACKAGE, price=Decimal("150000"),
+        )
+        self.antenatal.package_services.set([self.consultation, self.lab_service])
+        self.client.force_login(self.receptionist)
+
+    def _buy_package(self, patient, *, package_expires_on=None, pay=True, complete=True):
+        """Creates a TYPE_NORMAL visit that purchases the Antenatal package,
+        optionally paying it off and marking it completed, so it can be used
+        as a package_source for reuse tests."""
+        visit = Visit.objects.create(
+            patient=patient, hospital=self.hospital, total_amount=Decimal("150000"),
+            status=Visit.STATUS_COMPLETED if complete else Visit.STATUS_IN_PROGRESS,
+            created_by=self.receptionist,
+        )
+        package_line = VisitService.objects.create(
+            visit=visit, service=self.antenatal, price_at_time=Decimal("150000"),
+            package_expires_on=package_expires_on,
+        )
+        if pay:
+            Payment.objects.create(
+                visit=visit, amount=Decimal("150000"), amount_paid=Decimal("150000"),
+                mode=Payment.MODE_CASH, status=Payment.STATUS_PAID, paid_at=timezone.now(),
+            )
+        return visit, package_line
+
+    def test_creating_package_reuse_visit_and_sending_to_included_service(self):
+        source_visit, package_line = self._buy_package(self.patient)
+
+        response = self.client.post(
+            reverse("visit_create", args=[self.patient.pk]),
+            {"visit_type": Visit.TYPE_PACKAGE, "package_source_visit_service": str(package_line.pk), "notes": ""},
+        )
+        self.assertEqual(response.status_code, 302)
+
+        reuse_visit = Visit.objects.exclude(pk=source_visit.pk).get(patient=self.patient)
+        self.assertEqual(reuse_visit.package_source_id, package_line.pk)
+        self.assertEqual(reuse_visit.parent_visit_id, source_visit.pk)
+        self.assertEqual(reuse_visit.total_amount, Decimal("0"))
+        self.assertEqual(reuse_visit.visit_services.count(), 0)
+        self.assertEqual(reuse_visit.queue_entries.count(), 0)
+
+        send_response = self.client.post(
+            reverse("visit_send_to_module", args=[reuse_visit.pk]), {"service_id": self.consultation.pk},
+        )
+        self.assertRedirects(send_response, reverse("patient_visits", args=[self.patient.pk]))
+        consult_line = VisitService.objects.get(visit=reuse_visit, service=self.consultation)
+        self.assertTrue(consult_line.covered_by_package)
+        self.assertEqual(consult_line.covering_package_id, package_line.pk)
+        self.assertEqual(consult_line.billing_label, "Covered by Antenatal")
+        reuse_visit.refresh_from_db()
+        self.assertEqual(reuse_visit.total_amount, Decimal("0"))
+
+    def test_package_reuse_rejects_unpaid_source_visit(self):
+        source_visit, package_line = self._buy_package(self.patient, pay=False)
+
+        response = self.client.post(
+            reverse("visit_create", args=[self.patient.pk]),
+            {"visit_type": Visit.TYPE_PACKAGE, "package_source_visit_service": str(package_line.pk), "notes": ""},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "fully paid")
+        self.assertFalse(Visit.objects.exclude(pk=source_visit.pk).filter(patient=self.patient).exists())
+
+    def test_package_reuse_rejects_incomplete_source_visit(self):
+        source_visit, package_line = self._buy_package(self.patient, complete=False)
+
+        form = VisitCreateForm(hospital=self.hospital, patient=self.patient)
+        self.assertNotIn(package_line, form.fields["package_source_visit_service"].queryset)
+
+        response = self.client.post(
+            reverse("visit_create", args=[self.patient.pk]),
+            {"visit_type": Visit.TYPE_PACKAGE, "package_source_visit_service": str(package_line.pk), "notes": ""},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(Visit.objects.exclude(pk=source_visit.pk).filter(patient=self.patient).exists())
+
+    def test_package_reuse_rejects_expired_package(self):
+        yesterday = timezone.localdate() - timedelta(days=1)
+        source_visit, package_line = self._buy_package(self.patient, package_expires_on=yesterday)
+
+        response = self.client.post(
+            reverse("visit_create", args=[self.patient.pk]),
+            {"visit_type": Visit.TYPE_PACKAGE, "package_source_visit_service": str(package_line.pk), "notes": ""},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "expired")
+        self.assertFalse(Visit.objects.exclude(pk=source_visit.pk).filter(patient=self.patient).exists())
+
+    def test_package_source_queryset_scoped_to_correct_patient(self):
+        _, package_line = self._buy_package(self.patient)
+
+        form = VisitCreateForm(hospital=self.hospital, patient=self.other_patient)
+        self.assertNotIn(package_line, form.fields["package_source_visit_service"].queryset)
+
+    def test_completing_package_reuse_visit_before_use_is_blocked(self):
+        _, package_line = self._buy_package(self.patient)
+        reuse_visit = Visit.objects.create(
+            patient=self.patient, hospital=self.hospital, total_amount=Decimal("0"),
+            status=Visit.STATUS_READY_FOR_BILLING, visit_type=Visit.TYPE_PACKAGE,
+            package_source=package_line, parent_visit=package_line.visit, created_by=self.receptionist,
+        )
+
+        with self.assertRaises(ValidationError):
+            reuse_visit.validate_billing_structure()
+
+        VisitService.objects.create(
+            visit=reuse_visit, service=self.consultation, price_at_time=Decimal("20000"),
+            covered_by_package=True, covering_package=package_line,
+        )
+        reuse_visit.validate_billing_structure()
+
+    def test_visit_edit_blocks_package_reuse_visits(self):
+        _, package_line = self._buy_package(self.patient)
+        reuse_visit = Visit.objects.create(
+            patient=self.patient, hospital=self.hospital, total_amount=Decimal("0"),
+            status=Visit.STATUS_IN_PROGRESS, visit_type=Visit.TYPE_PACKAGE,
+            package_source=package_line, parent_visit=package_line.visit, created_by=self.receptionist,
+        )
+        self.client.post(reverse("visit_send_to_module", args=[reuse_visit.pk]), {"service_id": self.consultation.pk})
+        self.assertEqual(reuse_visit.visit_services.count(), 1)
+        pending_queue_count = reuse_visit.queue_entries.filter(processed=False).count()
+        self.assertGreater(pending_queue_count, 0)
+
+        response = self.client.post(
+            reverse("visit_edit", args=[reuse_visit.pk]),
+            {"visit_type": Visit.TYPE_NORMAL, "services": [str(self.lab_service.pk)], "notes": ""},
+        )
+
+        self.assertRedirects(response, reverse("patient_visits", args=[self.patient.pk]))
+        self.assertEqual(reuse_visit.visit_services.count(), 1)
+        self.assertEqual(reuse_visit.queue_entries.filter(processed=False).count(), pending_queue_count)
+
+    def test_package_expires_on_captured_at_purchase(self):
+        future_date = timezone.localdate() + timedelta(days=90)
+
+        response = self.client.post(
+            reverse("visit_create", args=[self.patient.pk]),
+            {
+                "visit_type": Visit.TYPE_NORMAL,
+                "services": [str(self.antenatal.pk)],
+                "package_expires_on": future_date.isoformat(),
+                "notes": "",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        visit = Visit.objects.get(patient=self.patient)
+        package_line = VisitService.objects.get(visit=visit, service=self.antenatal)
+        self.assertEqual(package_line.package_expires_on, future_date)

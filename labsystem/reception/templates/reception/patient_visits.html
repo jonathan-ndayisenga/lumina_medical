@@ -116,6 +116,9 @@
                     {% endif %}
                 </div>
                 <p class="text-sm text-text-muted mt-1">{{ visit.get_visit_type_display }}</p>
+                {% if visit.is_package_visit and visit.package_source %}
+                <p class="text-xs text-emerald-700 mt-0.5">Reusing package: {{ visit.package_source.service.name }} — purchased on visit from {{ visit.package_source.visit.visit_date|date:"M d, Y" }}</p>
+                {% endif %}
                 {% if visit.weight_kg %}<p class="text-xs text-text-muted mt-0.5">Weight at visit: {{ visit.weight_kg }} kg</p>{% endif %}
             </div>
         </div>
@@ -141,7 +144,7 @@
         {% if selected_row.package_available_services %}
         <div class="mb-5 rounded-lg border border-emerald-200 bg-emerald-50 p-4">
             <h4 class="text-xs font-semibold text-emerald-800 uppercase tracking-widest mb-2">
-                Covered by {{ selected_row.package_lines.0.service.name }}
+                Covered by {{ selected_row.package_available_services.0.package_name }}
             </h4>
             <p class="text-xs text-text-muted mb-3">
                 Send this patient for any of these included services — nothing extra gets billed.

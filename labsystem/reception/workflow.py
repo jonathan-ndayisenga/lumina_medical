@@ -58,27 +58,38 @@ def require_module_for_queue_type(*, hospital, queue_type: str) -> None:
 
 def active_package_visit_service(visit, service):
     """The visit's own active Package-category VisitService, if any, whose
-    package_services includes `service` -- or None. Callers use this to
-    decide whether a new service line being added should be billed
-    normally or marked covered_by_package (see VisitService.billing_label).
-    Checked against the exact service, not its category -- a package only
-    ever covers the specific services it was built with (e.g. Antenatal ->
-    Consultation, CBC, Urinalysis), not "any lab test the patient wants"."""
+    package_services includes `service` -- or None. Falls back to
+    visit.package_source (the reused purchase line on an earlier visit, for
+    a Visit.TYPE_PACKAGE visit) when nothing on this visit itself covers it.
+    Callers use this to decide whether a new service line being added should
+    be billed normally or marked covered_by_package (see
+    VisitService.billing_label). Checked against the exact service, not its
+    category -- a package only ever covers the specific services it was
+    built with (e.g. Antenatal -> Consultation, CBC, Urinalysis), not "any
+    lab test the patient wants"."""
     for package_line in visit.visit_services.filter(service__category=Service.CATEGORY_PACKAGE).select_related("service"):
         if package_line.service.package_services.filter(pk=service.pk).exists():
             return package_line
+    source = visit.package_source
+    if source and source.service.package_services.filter(pk=service.pk).exists():
+        return source
     return None
 
 
 def package_services_available_on_visit(visit):
     """Every specific service included in any active package on this visit
     that hasn't already been added as a line on it -- grouped by nothing in
-    particular, callers group by category/queue as needed. Used to build
-    the "send to..." action list on the visit detail page."""
+    particular, callers group by category/queue as needed. Also includes the
+    reused purchase's services (visit.package_source) for a Visit.TYPE_PACKAGE
+    visit. Used to build the "send to..." action list on the visit detail
+    page."""
     already_added_ids = set(visit.visit_services.values_list("service_id", flat=True))
     available = []
     seen_ids = set()
-    for package_line in visit.visit_services.filter(service__category=Service.CATEGORY_PACKAGE).select_related("service"):
+    package_lines = list(visit.visit_services.filter(service__category=Service.CATEGORY_PACKAGE).select_related("service"))
+    if visit.package_source_id and visit.package_source not in package_lines:
+        package_lines.append(visit.package_source)
+    for package_line in package_lines:
         for included_service in package_line.service.package_services.all():
             if included_service.pk in already_added_ids or included_service.pk in seen_ids:
                 continue

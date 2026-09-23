@@ -7,7 +7,7 @@ from django.utils import timezone
 
 from doctor.models import Prescription
 
-from .models import Patient, Payment, Service, Visit
+from .models import Patient, Payment, Service, Visit, VisitService
 
 
 AGE_UNIT_CHOICES = [
@@ -197,6 +197,18 @@ class VisitCreateForm(forms.ModelForm):
         empty_label="Select the completed visit being followed up",
         label="Previous Visit",
     )
+    package_source_visit_service = forms.ModelChoiceField(
+        queryset=VisitService.objects.none(),
+        required=False,
+        empty_label="Select the package purchase being reused",
+        label="Which package purchase?",
+    )
+    package_expires_on = forms.DateField(
+        required=False,
+        label="Package expiry date (optional)",
+        widget=forms.DateInput(attrs={"type": "date", "class": "form-control"}),
+        help_text="Only used when a Package-category service is billed on this visit. Leave blank if it doesn't expire.",
+    )
     adjustment_reason = forms.CharField(
         required=False,
         label="Reason for Adjustment",
@@ -246,10 +258,12 @@ class VisitCreateForm(forms.ModelForm):
         self.fields["services"].label_from_instance = lambda service: f"{service.name} - {service.price:.2f}"
         self.fields["visit_type"].help_text = "Use Adjustment Visit when the doctor is swapping medication already paid for on a previous visit."
         self.fields["follow_up_parent_visit"].widget.attrs.update({"class": "form-control"})
+        self.fields["package_source_visit_service"].widget.attrs.update({"class": "form-control"})
         self.fields["adjustment_origin_prescription"].widget.attrs.update({"class": "form-control"})
         self.fields["adjustment_days_used"].widget.attrs.update({"class": "form-control", "placeholder": "3"})
         follow_up_queryset = Visit.objects.none()
         origin_queryset = Prescription.objects.none()
+        package_source_queryset = VisitService.objects.none()
         if hospital is not None and self.patient is not None:
             follow_up_queryset = (
                 Visit.objects.filter(
@@ -272,9 +286,23 @@ class VisitCreateForm(forms.ModelForm):
                 .select_related("drug", "visit")
                 .order_by("-prescribed_at", "-id")
             )
+            package_source_queryset = (
+                VisitService.objects.filter(
+                    visit__hospital=hospital,
+                    visit__patient=self.patient,
+                    service__category=Service.CATEGORY_PACKAGE,
+                    visit__status=Visit.STATUS_COMPLETED,
+                )
+                .select_related("service", "visit")
+                .order_by("-visit__visit_date")
+            )
         self.fields["follow_up_parent_visit"].queryset = follow_up_queryset
         self.fields["follow_up_parent_visit"].label_from_instance = (
             lambda visit: f"{visit.visit_date:%Y-%m-%d} - {visit.get_status_display()} - {visit.total_amount}"
+        )
+        self.fields["package_source_visit_service"].queryset = package_source_queryset
+        self.fields["package_source_visit_service"].label_from_instance = (
+            lambda vs: f"{vs.service.name} — purchased {vs.visit.visit_date:%Y-%m-%d}"
         )
         self.fields["adjustment_origin_prescription"].queryset = origin_queryset
         self.fields["adjustment_origin_prescription"].label_from_instance = (
@@ -286,6 +314,7 @@ class VisitCreateForm(forms.ModelForm):
         if self.instance.pk and not self.is_bound:
             self.initial["services"] = self.instance.visit_services.values_list("service_id", flat=True)
             self.initial["follow_up_parent_visit"] = self.instance.parent_visit_id
+            self.initial["package_source_visit_service"] = self.instance.package_source_id
             self.initial["adjustment_origin_prescription"] = self.instance.adjustment_origin_prescription_id
             self.initial["adjustment_days_used"] = self.instance.adjustment_days_used
             self.initial["adjustment_reason"] = self.instance.adjustment_reason
@@ -305,6 +334,32 @@ class VisitCreateForm(forms.ModelForm):
 
         # No service/consultation requirement: the referenced prior visit is
         # what earns this one a free trip straight to the doctor queue.
+        return cleaned_data
+
+    def _clean_package_visit(self, cleaned_data):
+        source = cleaned_data.get("package_source_visit_service")
+
+        if source is None:
+            self.add_error("package_source_visit_service", "Choose the package purchase being reused.")
+            return cleaned_data
+        if self.patient is not None and source.visit.patient_id != self.patient.pk:
+            self.add_error("package_source_visit_service", "The selected package does not belong to this patient.")
+        if source.service.category != Service.CATEGORY_PACKAGE:
+            self.add_error("package_source_visit_service", "The selected line is not a package purchase.")
+        if source.visit.status != Visit.STATUS_COMPLETED:
+            self.add_error("package_source_visit_service", "The package must come from a completed visit.")
+        if not source.visit.is_fully_paid:
+            self.add_error("package_source_visit_service", "The package must come from a fully paid visit.")
+        if source.package_expires_on and source.package_expires_on < timezone.localdate():
+            self.add_error(
+                "package_source_visit_service",
+                f"This package expired on {source.package_expires_on:%d %b %Y}.",
+            )
+
+        # No service selection here: services are added afterward via
+        # "Send for..." on the visit detail page, free, the same way an
+        # active package's included services are offered on the purchase
+        # visit itself.
         return cleaned_data
 
     def _clean_adjustment_visit(self, cleaned_data):
@@ -361,7 +416,11 @@ class VisitCreateForm(forms.ModelForm):
             raise forms.ValidationError(
                 "Follow-up visits don't take new billable services — the referenced prior visit routes this straight to the doctor, free."
             )
-        
+        if visit_type == Visit.TYPE_PACKAGE and services:
+            raise forms.ValidationError(
+                "Package visits don't take new billable services here — use \"Send for...\" on the visit afterward to route into the package's included services, free."
+            )
+
         return services
 
     def clean(self):
@@ -370,14 +429,24 @@ class VisitCreateForm(forms.ModelForm):
         if visit_type == Visit.TYPE_ADJUSTMENT:
             cleaned_data = self._clean_adjustment_visit(cleaned_data)
             cleaned_data["follow_up_parent_visit"] = None
+            cleaned_data["package_source_visit_service"] = None
         elif visit_type == Visit.TYPE_FOLLOW_UP:
             cleaned_data = self._clean_follow_up_visit(cleaned_data)
+            cleaned_data["package_source_visit_service"] = None
+            cleaned_data["adjustment_origin_prescription"] = None
+            cleaned_data["adjustment_days_used"] = 0
+            cleaned_data["adjustment_remaining_days"] = 0
+            cleaned_data["adjustment_reason"] = ""
+        elif visit_type == Visit.TYPE_PACKAGE:
+            cleaned_data = self._clean_package_visit(cleaned_data)
+            cleaned_data["follow_up_parent_visit"] = None
             cleaned_data["adjustment_origin_prescription"] = None
             cleaned_data["adjustment_days_used"] = 0
             cleaned_data["adjustment_remaining_days"] = 0
             cleaned_data["adjustment_reason"] = ""
         else:
             cleaned_data["follow_up_parent_visit"] = None
+            cleaned_data["package_source_visit_service"] = None
             cleaned_data["adjustment_origin_prescription"] = None
             cleaned_data["adjustment_days_used"] = 0
             cleaned_data["adjustment_remaining_days"] = 0
@@ -385,7 +454,7 @@ class VisitCreateForm(forms.ModelForm):
         return cleaned_data
 
     def calculate_total(self):
-        if self.cleaned_data.get("visit_type") == Visit.TYPE_ADJUSTMENT:
+        if self.cleaned_data.get("visit_type") in (Visit.TYPE_ADJUSTMENT, Visit.TYPE_PACKAGE):
             return Decimal("0")
         services = self.cleaned_data.get("services")
         if not services:

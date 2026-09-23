@@ -139,6 +139,17 @@
             </div>
         </div>
 
+        <div id="package-visit-panel" class="card hidden border-2 border-emerald-200 bg-emerald-50">
+            <h3 class="text-sm font-semibold text-text-main mb-3">Package Reuse Details</h3>
+            <p class="text-sm text-text-muted mb-4">Only allowed for a package already bought on a completed, fully paid, unexpired previous visit. No new billing here — after creating this visit, use "Send for..." on the visit page to route the patient into any of the package's included services, free.</p>
+            <div>
+                <label for="{{ form.package_source_visit_service.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">Package Purchase</label>
+                {{ form.package_source_visit_service }}
+                <p class="mt-1 text-xs text-text-muted">Choose which earlier package purchase this visit reuses.</p>
+                {% for error in form.package_source_visit_service.errors %}<div class="text-xs text-red-600 mt-1">{{ error }}</div>{% endfor %}
+            </div>
+        </div>
+
         <fieldset id="services-fieldset" class="card border-2 border-gray-200">
             <legend class="text-sm font-semibold text-text-main mb-3 px-2">Select Services</legend>
             <p class="text-sm text-text-muted mb-4">Each selected service is added to the visit bill now. Payment will be collected later when the visit is completed.</p>
@@ -170,6 +181,13 @@
                     </div>
 
                     <div id="routing-preview" class="hidden rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm text-indigo-900"></div>
+
+                    <div>
+                        <label for="{{ form.package_expires_on.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">Package expiry date (optional)</label>
+                        {{ form.package_expires_on }}
+                        <p class="mt-1 text-xs text-text-muted">Only applies if you're billing a Package service in this batch. Leave blank if it doesn't expire.</p>
+                        {% for error in form.package_expires_on.errors %}<div class="text-xs text-red-600 mt-1">{{ error }}</div>{% endfor %}
+                    </div>
                 {% else %}
                     <p class="text-sm text-text-muted">No active services are available yet.</p>
                 {% endif %}
@@ -439,6 +457,7 @@
     const visitTypeSelect = document.getElementById('{{ form.visit_type.id_for_label }}');
     const followUpPanel = document.getElementById('follow-up-visit-panel');
     const adjustmentPanel = document.getElementById('adjustment-visit-panel');
+    const packagePanel = document.getElementById('package-visit-panel');
     const servicesFieldset = document.getElementById('services-fieldset');
     const submitButton = document.getElementById('visit-submit-button');
     const originSelect = document.getElementById('{{ form.adjustment_origin_prescription.id_for_label }}');
@@ -456,7 +475,7 @@
         {% endfor %}
     };
 
-    if (!visitTypeSelect || !adjustmentPanel || !servicesFieldset || !summaryBox || !followUpPanel) {
+    if (!visitTypeSelect || !adjustmentPanel || !servicesFieldset || !summaryBox || !followUpPanel || !packagePanel) {
         return;
     }
 
@@ -482,11 +501,13 @@
     function toggleVisitTypePanels() {
         const isAdjustment = visitTypeSelect.value === adjustmentVisitType;
         const isFollowUp = visitTypeSelect.value === 'follow_up';
+        const isPackage = visitTypeSelect.value === 'package_visit';
         followUpPanel.classList.toggle('hidden', !isFollowUp);
         adjustmentPanel.classList.toggle('hidden', !isAdjustment);
-        servicesFieldset.classList.toggle('hidden', isAdjustment || isFollowUp);
+        packagePanel.classList.toggle('hidden', !isPackage);
+        servicesFieldset.classList.toggle('hidden', isAdjustment || isFollowUp || isPackage);
         if (submitButton && !{{ edit_mode|yesno:"true,false" }}) {
-            submitButton.textContent = isAdjustment ? 'Create Adjustment Visit' : (isFollowUp ? 'Create Follow-Up Visit' : 'Create Visit and Queue');
+            submitButton.textContent = isAdjustment ? 'Create Adjustment Visit' : (isFollowUp ? 'Create Follow-Up Visit' : (isPackage ? 'Create Package Visit' : 'Create Visit and Queue'));
         }
         updateAdjustmentSummary();
     }

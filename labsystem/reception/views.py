@@ -1152,6 +1152,13 @@ def visit_create(request, patient_id):
                 visit.adjustment_days_used = form.cleaned_data.get("adjustment_days_used") or 0
                 visit.adjustment_remaining_days = form.cleaned_data.get("adjustment_remaining_days") or 0
                 visit.adjustment_reason = form.cleaned_data.get("adjustment_reason") or ""
+            elif visit.visit_type == Visit.TYPE_PACKAGE:
+                visit.package_source = form.cleaned_data["package_source_visit_service"]
+                visit.parent_visit = visit.package_source.visit
+                visit.adjustment_origin_prescription = None
+                visit.adjustment_days_used = 0
+                visit.adjustment_remaining_days = 0
+                visit.adjustment_reason = ""
             else:
                 visit.parent_visit = None
                 visit.adjustment_origin_prescription = None
@@ -1190,6 +1197,13 @@ def visit_create(request, patient_id):
                     requested_by=request.user,
                     notes=f"Follow-up visit linked to completed visit #{visit.parent_visit_id}. No new billing.",
                 )
+            elif visit.visit_type == Visit.TYPE_PACKAGE:
+                # No single obvious destination — the patient might need
+                # any of the reused package's included services (lab,
+                # doctor, scan...). Created with zero queue entries;
+                # reception routes it via "Send for..." on the visit page
+                # afterward, same mechanism as same-visit package coverage.
+                pass
             else:
                 lab_requested_by_type = request.POST.get("lab_requested_by_type", "").strip()
                 lab_external_name = request.POST.get("lab_external_requester_name", "").strip()
@@ -1222,6 +1236,8 @@ def visit_create(request, patient_id):
                     if covering_package:
                         visit_service_kwargs["covered_by_package"] = True
                         visit_service_kwargs["covering_package"] = covering_package
+                    if service.category == Service.CATEGORY_PACKAGE:
+                        visit_service_kwargs["package_expires_on"] = form.cleaned_data.get("package_expires_on")
                     visit_service = VisitService.objects.create(**visit_service_kwargs)
                     if service.category == Service.CATEGORY_PACKAGE:
                         for included_service in service.package_services.all():
@@ -1300,6 +1316,9 @@ def visit_edit(request, visit_id):
     if visit.is_adjustment_visit:
         messages.error(request, "Adjustment visits are doctor-led and cannot be edited from reception.")
         return redirect("patient_visits", patient_id=visit.patient_id)
+    if visit.is_package_visit:
+        messages.error(request, "Package-reuse visits are managed from the visit detail page's \"Send for...\" actions and cannot be edited from reception.")
+        return redirect("patient_visits", patient_id=visit.patient_id)
     if visit.queue_entries.filter(processed=True).exists():
         messages.error(request, "This visit already has processed workflow activity and can no longer be edited safely.")
         return redirect("patient_list")
@@ -1351,6 +1370,8 @@ def visit_edit(request, visit_id):
                     if covering_package:
                         visit_service_kwargs["covered_by_package"] = True
                         visit_service_kwargs["covering_package"] = covering_package
+                    if service.category == Service.CATEGORY_PACKAGE:
+                        visit_service_kwargs["package_expires_on"] = form.cleaned_data.get("package_expires_on")
                     visit_service = VisitService.objects.create(**visit_service_kwargs)
                     if service.category == Service.CATEGORY_PACKAGE:
                         for included_service in service.package_services.all():
@@ -2091,6 +2112,7 @@ def patient_visits(request, patient_id):
             visit.status != Visit.STATUS_COMPLETED
             and visit.status != Visit.STATUS_CANCELLED
             and not visit.is_adjustment_visit
+            and not visit.is_package_visit
             and not visit.queue_entries.filter(processed=True).exists()
         )
         can_delete = can_edit
