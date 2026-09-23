@@ -40,7 +40,7 @@
             {% csrf_token %}
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {% for field in form %}
-                    {% if field.field.widget.input_type != "checkbox" and field.html_name != "package_services" %}
+                    {% if field.field.widget.input_type != "checkbox" and field.html_name != "package_services" and field.html_name != "max_visits" and field.html_name != "validity_months" %}
                         <div {% if field.html_name == "test_profile" %}id="test-profile-wrap" style="display:none;"{% endif %}>
                             <label for="{{ field.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">{{ field.label }}</label>
                             {{ field }}
@@ -83,6 +83,20 @@
             {% endfor %}
 
             <div class="mt-2" id="package_services-wrap" style="display:none;">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <div>
+                        <label for="{{ form.max_visits.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">{{ form.max_visits.label }}</label>
+                        {{ form.max_visits }}
+                        {% if form.max_visits.help_text %}<p class="text-xs text-text-muted mt-1">{{ form.max_visits.help_text }}</p>{% endif %}
+                        {% for error in form.max_visits.errors %}<div class="text-xs text-red-600 mt-1">{{ error }}</div>{% endfor %}
+                    </div>
+                    <div>
+                        <label for="{{ form.validity_months.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">{{ form.validity_months.label }}</label>
+                        {{ form.validity_months }}
+                        {% if form.validity_months.help_text %}<p class="text-xs text-text-muted mt-1">{{ form.validity_months.help_text }}</p>{% endif %}
+                        {% for error in form.validity_months.errors %}<div class="text-xs text-red-600 mt-1">{{ error }}</div>{% endfor %}
+                    </div>
+                </div>
                 <label class="block text-sm font-semibold text-text-main mb-2">{{ form.package_services.label }}</label>
                 {% if form.package_services.help_text %}<p class="text-xs text-text-muted mb-3">{{ form.package_services.help_text }}</p>{% endif %}
                 {{ form.package_services }}

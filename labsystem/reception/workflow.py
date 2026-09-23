@@ -9,15 +9,22 @@ from accounts.models import AuditLog
 from reception.models import QueueEntry, Service, Visit
 
 
-def default_package_expiry(purchase_date):
-    """purchase_date + 12 calendar months, clamped to the shorter target
-    month's last day (e.g. 31 Jan -> 28/29 Feb) -- fixed system rule, not
-    reception-configurable (see VisitService.package_expires_on)."""
-    month_index = purchase_date.month - 1 + 12
-    year = purchase_date.year + month_index // 12
+def add_months(base_date, months):
+    """base_date + N calendar months, clamped to the shorter target month's
+    last day (e.g. 31 Jan + 1 -> 28/29 Feb)."""
+    month_index = base_date.month - 1 + months
+    year = base_date.year + month_index // 12
     month = month_index % 12 + 1
-    day = min(purchase_date.day, calendar.monthrange(year, month)[1])
-    return purchase_date.replace(year=year, month=month, day=day)
+    day = min(base_date.day, calendar.monthrange(year, month)[1])
+    return base_date.replace(year=year, month=month, day=day)
+
+
+def package_expiry_for(service, purchase_date):
+    """purchase_date + service.validity_months, or None if the package (set
+    by the admin on its catalog entry) has no configured expiry."""
+    if not service.validity_months:
+        return None
+    return add_months(purchase_date, service.validity_months)
 
 
 def queue_counts_for_hospital(hospital) -> dict:

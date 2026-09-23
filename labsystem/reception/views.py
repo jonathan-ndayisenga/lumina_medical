@@ -22,7 +22,7 @@ from .forms import CompleteVisitForm, PatientForm, QuickDispenseStartForm, Visit
 from .models import Patient, Payment, QueueEntry, Service, Triage, Visit, VisitService
 from .workflow import (
     active_package_visit_service,
-    default_package_expiry,
+    package_expiry_for,
     ensure_pending_queue_entry,
     mark_queue_entries_processed,
     package_services_available_on_visit,
@@ -1238,7 +1238,7 @@ def visit_create(request, patient_id):
                         visit_service_kwargs["covered_by_package"] = True
                         visit_service_kwargs["covering_package"] = covering_package
                     if service.category == Service.CATEGORY_PACKAGE:
-                        visit_service_kwargs["package_expires_on"] = default_package_expiry(timezone.localdate())
+                        visit_service_kwargs["package_expires_on"] = package_expiry_for(service, timezone.localdate())
                     visit_service = VisitService.objects.create(**visit_service_kwargs)
                     if service.category == Service.CATEGORY_PACKAGE:
                         for included_service in service.package_services.all():
@@ -1372,7 +1372,7 @@ def visit_edit(request, visit_id):
                         visit_service_kwargs["covered_by_package"] = True
                         visit_service_kwargs["covering_package"] = covering_package
                     if service.category == Service.CATEGORY_PACKAGE:
-                        visit_service_kwargs["package_expires_on"] = default_package_expiry(timezone.localdate())
+                        visit_service_kwargs["package_expires_on"] = package_expiry_for(service, timezone.localdate())
                     visit_service = VisitService.objects.create(**visit_service_kwargs)
                     if service.category == Service.CATEGORY_PACKAGE:
                         for included_service in service.package_services.all():

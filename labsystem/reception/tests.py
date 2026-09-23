@@ -24,7 +24,7 @@ from lab.models import LabReport
 from lab.views import send_report_results_to_doctor
 from reception.forms import VisitCreateForm
 from reception.models import Patient, Payment, QueueEntry, Service, Visit, VisitService
-from reception.workflow import default_package_expiry, ensure_pending_queue_entry
+from reception.workflow import ensure_pending_queue_entry, package_expiry_for
 
 
 def _enable_modules(hospital, *codes):
@@ -2051,6 +2051,7 @@ class PackageVisitReuseTests(TestCase):
         )
         self.antenatal = Service.objects.create(
             hospital=self.hospital, name="Antenatal", category=Service.CATEGORY_PACKAGE, price=Decimal("150000"),
+            max_visits=9, validity_months=12,
         )
         self.antenatal.package_services.set([self.consultation, self.lab_service])
         self.client.force_login(self.receptionist)
@@ -2184,7 +2185,7 @@ class PackageVisitReuseTests(TestCase):
         self.assertEqual(reuse_visit.visit_services.count(), 1)
         self.assertEqual(reuse_visit.queue_entries.filter(processed=False).count(), pending_queue_count)
 
-    def test_package_expires_on_is_auto_set_to_twelve_months_from_purchase(self):
+    def test_package_expires_on_is_set_from_the_packages_own_validity_months(self):
         response = self.client.post(
             reverse("visit_create", args=[self.patient.pk]),
             {"visit_type": Visit.TYPE_NORMAL, "services": [str(self.antenatal.pk)], "notes": ""},
@@ -2193,7 +2194,42 @@ class PackageVisitReuseTests(TestCase):
         self.assertEqual(response.status_code, 302)
         visit = Visit.objects.get(patient=self.patient)
         package_line = VisitService.objects.get(visit=visit, service=self.antenatal)
-        self.assertEqual(package_line.package_expires_on, default_package_expiry(timezone.localdate()))
+        self.assertEqual(
+            package_line.package_expires_on,
+            package_expiry_for(self.antenatal, timezone.localdate()),
+        )
+
+    def test_package_with_no_validity_months_never_expires(self):
+        self.antenatal.validity_months = None
+        self.antenatal.save(update_fields=["validity_months"])
+
+        response = self.client.post(
+            reverse("visit_create", args=[self.patient.pk]),
+            {"visit_type": Visit.TYPE_NORMAL, "services": [str(self.antenatal.pk)], "notes": ""},
+        )
+
+        self.assertEqual(response.status_code, 302)
+        visit = Visit.objects.get(patient=self.patient)
+        package_line = VisitService.objects.get(visit=visit, service=self.antenatal)
+        self.assertIsNone(package_line.package_expires_on)
+
+    def test_package_with_no_max_visits_has_no_cap(self):
+        self.antenatal.max_visits = None
+        self.antenatal.save(update_fields=["max_visits"])
+        source_visit, package_line = self._buy_package(self.patient)
+        for _ in range(15):
+            Visit.objects.create(
+                patient=self.patient, hospital=self.hospital, total_amount=Decimal("0"),
+                status=Visit.STATUS_COMPLETED, visit_type=Visit.TYPE_PACKAGE,
+                package_source=package_line, parent_visit=source_visit, created_by=self.receptionist,
+            )
+
+        response = self.client.post(
+            reverse("visit_create", args=[self.patient.pk]),
+            {"visit_type": Visit.TYPE_PACKAGE, "package_source_visit_service": str(package_line.pk), "notes": ""},
+        )
+
+        self.assertEqual(response.status_code, 302)
 
     def test_package_visit_cap_allows_the_ninth_visit_including_purchase(self):
         source_visit, package_line = self._buy_package(self.patient)
@@ -2213,7 +2249,7 @@ class PackageVisitReuseTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertEqual(
             Visit.objects.filter(package_source=package_line).count() + 1,
-            VisitService.MAX_REUSE_VISITS,
+            self.antenatal.max_visits,
         )
 
     def test_package_visit_cap_rejects_the_tenth_visit(self):

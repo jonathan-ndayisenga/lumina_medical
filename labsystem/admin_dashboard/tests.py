@@ -619,6 +619,7 @@ class PackageServiceCatalogTests(TestCase):
             {
                 "name": "Antenatal", "category": Service.CATEGORY_PACKAGE, "price": "150000",
                 "package_services": [self.consultation.pk, self.cbc.pk],
+                "max_visits": "9", "validity_months": "12",
                 "is_active": "on",
             },
         )
@@ -628,6 +629,26 @@ class PackageServiceCatalogTests(TestCase):
         self.assertEqual(
             set(service.package_services.values_list("pk", flat=True)), {self.consultation.pk, self.cbc.pk},
         )
+        self.assertEqual(service.max_visits, 9)
+        self.assertEqual(service.validity_months, 12)
+
+    def test_creating_a_package_service_without_visit_cap_or_expiry_leaves_them_unlimited(self):
+        """Both fields are optional -- admin can leave a package open-ended."""
+        from reception.models import Service
+
+        response = self.client.post(
+            reverse("manage_services"),
+            {
+                "name": "Wellness Club", "category": Service.CATEGORY_PACKAGE, "price": "50000",
+                "package_services": [self.consultation.pk],
+                "is_active": "on",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        service = Service.objects.get(hospital=self.hospital, name="Wellness Club")
+        self.assertIsNone(service.max_visits)
+        self.assertIsNone(service.validity_months)
 
     def test_editing_a_package_service_can_change_which_services_it_includes(self):
         from reception.models import Service

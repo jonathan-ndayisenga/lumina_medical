@@ -141,7 +141,7 @@
 
         <div id="package-visit-panel" class="card hidden border-2 border-emerald-200 bg-emerald-50">
             <h3 class="text-sm font-semibold text-text-main mb-3">Package Reuse Details</h3>
-            <p class="text-sm text-text-muted mb-4">Only allowed for a package already bought on a completed, fully paid, unexpired previous visit. Every package is valid for 12 months from purchase and for a maximum of 9 visits total (including the purchase visit). No new billing here — after creating this visit, use "Send for..." on the visit page to route the patient into any of the package's included services, free.</p>
+            <p class="text-sm text-text-muted mb-4">Only allowed for a package already bought on a completed, fully paid, unexpired previous visit — and only while it's still within its visit limit and validity period (set per-package under Services). No new billing here — after creating this visit, use "Send for..." on the visit page to route the patient into any of the package's included services, free.</p>
             <div>
                 <label for="{{ form.package_source_visit_service.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">Package Purchase</label>
                 {{ form.package_source_visit_service }}

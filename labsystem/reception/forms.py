@@ -349,14 +349,15 @@ class VisitCreateForm(forms.ModelForm):
                 "package_source_visit_service",
                 f"This package expired on {source.package_expires_on:%d %b %Y}.",
             )
-        else:
+        elif source.service.max_visits:
             # Purchase visit counts as visit 1 -- exclude a cancelled reuse
             # visit from the count so a mistaken/undone one doesn't burn a slot.
+            # No cap at all when the package's own max_visits is left blank.
             used_visits = 1 + source.reused_by_visits.exclude(status=Visit.STATUS_CANCELLED).count()
-            if used_visits >= VisitService.MAX_REUSE_VISITS:
+            if used_visits >= source.service.max_visits:
                 self.add_error(
                     "package_source_visit_service",
-                    f"This package has already reached its maximum of {VisitService.MAX_REUSE_VISITS} visits.",
+                    f"This package has already reached its maximum of {source.service.max_visits} visits.",
                 )
 
         # No service selection here: services are added afterward via

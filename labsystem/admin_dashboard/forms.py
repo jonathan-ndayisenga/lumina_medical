@@ -417,7 +417,10 @@ class HospitalStaffUserUpdateForm(forms.ModelForm):
 class HospitalServiceForm(forms.ModelForm):
     class Meta:
         model = Service
-        fields = ("name", "category", "price", "lab_tests_next", "package_services", "test_profile", "is_active", "is_per_day")
+        fields = (
+            "name", "category", "price", "lab_tests_next", "package_services",
+            "max_visits", "validity_months", "test_profile", "is_active", "is_per_day",
+        )
         widgets = {
             "lab_tests_next": forms.CheckboxSelectMultiple,
             "package_services": forms.SelectMultiple(attrs={"class": "hidden", "id": "package-services-select-hidden"}),
@@ -459,9 +462,20 @@ class HospitalServiceForm(forms.ModelForm):
             "Only meaningful for category=Package. The exact service(s) this package includes "
             "(e.g. Antenatal → Consultation, CBC, Urinalysis, Obstetric Ultrasound). A visit with "
             "this package billed can be sent for any of these — nothing billed extra for them — "
-            "services not on this list still bill normally even if a similar one is covered. Every "
-            "purchase is valid for 12 months and for a maximum of 9 visits total (including the "
-            "purchase visit) — fixed system rules, not configurable per package."
+            "services not on this list still bill normally even if a similar one is covered."
+        )
+        self.fields["max_visits"].required = False
+        self.fields["max_visits"].label = "Maximum Visits"
+        self.fields["max_visits"].help_text = (
+            "Only meaningful for category=Package. Total visits this package covers, counting the "
+            "purchase visit itself as visit 1 (e.g. 9 = the purchase plus 8 more free visits). "
+            "Leave blank for no limit."
+        )
+        self.fields["validity_months"].required = False
+        self.fields["validity_months"].label = "Valid For (months)"
+        self.fields["validity_months"].help_text = (
+            "Only meaningful for category=Package. How many months after purchase this package "
+            "stays valid for reuse (e.g. 12). Leave blank for no expiry."
         )
         for field in self.fields.values():
             field.widget.attrs.setdefault("class", "form-control")
