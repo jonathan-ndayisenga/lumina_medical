@@ -203,12 +203,6 @@ class VisitCreateForm(forms.ModelForm):
         empty_label="Select the package purchase being reused",
         label="Which package purchase?",
     )
-    package_expires_on = forms.DateField(
-        required=False,
-        label="Package expiry date (optional)",
-        widget=forms.DateInput(attrs={"type": "date", "class": "form-control"}),
-        help_text="Only used when a Package-category service is billed on this visit. Leave blank if it doesn't expire.",
-    )
     adjustment_reason = forms.CharField(
         required=False,
         label="Reason for Adjustment",
@@ -355,6 +349,15 @@ class VisitCreateForm(forms.ModelForm):
                 "package_source_visit_service",
                 f"This package expired on {source.package_expires_on:%d %b %Y}.",
             )
+        else:
+            # Purchase visit counts as visit 1 -- exclude a cancelled reuse
+            # visit from the count so a mistaken/undone one doesn't burn a slot.
+            used_visits = 1 + source.reused_by_visits.exclude(status=Visit.STATUS_CANCELLED).count()
+            if used_visits >= VisitService.MAX_REUSE_VISITS:
+                self.add_error(
+                    "package_source_visit_service",
+                    f"This package has already reached its maximum of {VisitService.MAX_REUSE_VISITS} visits.",
+                )
 
         # No service selection here: services are added afterward via
         # "Send for..." on the visit detail page, free, the same way an

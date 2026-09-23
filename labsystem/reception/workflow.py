@@ -1,3 +1,5 @@
+import calendar
+
 from django.core.exceptions import PermissionDenied
 from django.db.models import Count
 from django.utils import timezone
@@ -5,6 +7,17 @@ from django.utils import timezone
 from accounts.models import AuditLog
 
 from reception.models import QueueEntry, Service, Visit
+
+
+def default_package_expiry(purchase_date):
+    """purchase_date + 12 calendar months, clamped to the shorter target
+    month's last day (e.g. 31 Jan -> 28/29 Feb) -- fixed system rule, not
+    reception-configurable (see VisitService.package_expires_on)."""
+    month_index = purchase_date.month - 1 + 12
+    year = purchase_date.year + month_index // 12
+    month = month_index % 12 + 1
+    day = min(purchase_date.day, calendar.monthrange(year, month)[1])
+    return purchase_date.replace(year=year, month=month, day=day)
 
 
 def queue_counts_for_hospital(hospital) -> dict:

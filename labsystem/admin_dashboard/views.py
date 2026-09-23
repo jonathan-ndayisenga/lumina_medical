@@ -1430,6 +1430,22 @@ def delete_user(request, user_id):
     return render(request, "admin_dashboard/confirm_delete.html", context)
 
 
+def package_services_picker_payload(services_queryset):
+    """Serializable service list for the package builder's search-and-add
+    picker (Included Service(s)) -- id/name/category/price, same shape as
+    reception's services_picker_payload, just without routing destinations
+    (not relevant here)."""
+    return [
+        {
+            "id": service.pk,
+            "name": service.name,
+            "category_display": service.get_category_display(),
+            "price": str(service.price),
+        }
+        for service in services_queryset
+    ]
+
+
 @role_required(User.ROLE_HOSPITAL_ADMIN)
 def manage_services(request):
     hospital = active_hospital(request)
@@ -1461,7 +1477,12 @@ def manage_services(request):
         "Services and Prices",
         "Configure the services this hospital offers and what each one costs.",
     )
-    context.update({"services": page_obj, "page_obj": page_obj, "form": form})
+    context.update({
+        "services": page_obj,
+        "page_obj": page_obj,
+        "form": form,
+        "package_services_json": package_services_picker_payload(form.fields["package_services"].queryset),
+    })
     return render(request, "admin_dashboard/manage_services.html", context)
 
 
@@ -1482,7 +1503,12 @@ def edit_service(request, service_id):
         "Edit Service",
         "Adjust pricing, category, or activation state without losing the service history already linked to visits.",
     )
-    context.update({"form": form, "object_label": service.name, "cancel_url": "manage_services"})
+    context.update({
+        "form": form,
+        "object_label": service.name,
+        "cancel_url": "manage_services",
+        "package_services_json": package_services_picker_payload(form.fields["package_services"].queryset),
+    })
     return render(request, "admin_dashboard/object_form.html", context)
 
 

@@ -433,6 +433,13 @@ class Service(models.Model):
 
 
 class VisitService(models.Model):
+    # A package purchase (this line, when service.category == CATEGORY_PACKAGE)
+    # is only good for a fixed number of visits total, counting the purchase
+    # visit itself as visit 1 -- so 8 further reuse visits are allowed after
+    # that. Enforced at Package Visit creation time (see
+    # VisitCreateForm._clean_package_visit).
+    MAX_REUSE_VISITS = 9
+
     REQUESTED_BY_SELF = "self"
     REQUESTED_BY_INTERNAL_DOCTOR = "internal_doctor"
     REQUESTED_BY_EXTERNAL_DOCTOR = "external_doctor"

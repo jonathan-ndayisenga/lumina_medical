@@ -420,7 +420,7 @@ class HospitalServiceForm(forms.ModelForm):
         fields = ("name", "category", "price", "lab_tests_next", "package_services", "test_profile", "is_active", "is_per_day")
         widgets = {
             "lab_tests_next": forms.CheckboxSelectMultiple,
-            "package_services": forms.CheckboxSelectMultiple,
+            "package_services": forms.SelectMultiple(attrs={"class": "hidden", "id": "package-services-select-hidden"}),
         }
 
     def __init__(self, *args, hospital=None, **kwargs):
@@ -459,7 +459,9 @@ class HospitalServiceForm(forms.ModelForm):
             "Only meaningful for category=Package. The exact service(s) this package includes "
             "(e.g. Antenatal → Consultation, CBC, Urinalysis, Obstetric Ultrasound). A visit with "
             "this package billed can be sent for any of these — nothing billed extra for them — "
-            "services not on this list still bill normally even if a similar one is covered."
+            "services not on this list still bill normally even if a similar one is covered. Every "
+            "purchase is valid for 12 months and for a maximum of 9 visits total (including the "
+            "purchase visit) — fixed system rules, not configurable per package."
         )
         for field in self.fields.values():
             field.widget.attrs.setdefault("class", "form-control")
