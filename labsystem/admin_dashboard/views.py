@@ -1468,9 +1468,6 @@ def manage_services(request):
     else:
         form = HospitalServiceForm(hospital=hospital)
 
-    paginator = Paginator(services_qs, 20)
-    page_obj = paginator.get_page(request.GET.get("page"))
-
     context = hospital_admin_context(
         request,
         "hospital_services",
@@ -1478,8 +1475,9 @@ def manage_services(request):
         "Configure the services this hospital offers and what each one costs.",
     )
     context.update({
-        "services": page_obj,
-        "page_obj": page_obj,
+        # Rendered in full (not paginated) so the search box below can
+        # filter live across the whole catalog, not just one page of it.
+        "services": services_qs,
         "form": form,
         "package_services_json": package_services_picker_payload(form.fields["package_services"].queryset),
     })

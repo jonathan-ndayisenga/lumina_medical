@@ -125,7 +125,19 @@
     </div>
 
     <div class="card">
-        <h3 class="text-lg font-bold text-text-main mb-4">Configured Services</h3>
+        <div class="flex items-center justify-between gap-3 flex-wrap mb-4">
+            <h3 class="text-lg font-bold text-text-main">Configured Services</h3>
+            <div class="max-w-xs w-full">
+                <input
+                    id="configured-service-search"
+                    type="text"
+                    class="form-control"
+                    placeholder="Search by name or category&hellip;"
+                    autocomplete="off"
+                >
+            </div>
+        </div>
+        <p id="configured-services-count" class="text-xs text-text-muted mb-2"></p>
         <div class="overflow-x-auto">
             <table class="w-full">
                 <thead class="bg-gray-50 border-b">
@@ -138,9 +150,9 @@
                         <th class="text-left px-4 py-3 text-xs font-semibold uppercase">Actions</th>
                     </tr>
                 </thead>
-                <tbody class="divide-y">
+                <tbody class="divide-y" id="configured-services-body">
                     {% for service in services %}
-                        <tr class="hover:bg-gray-50">
+                        <tr class="hover:bg-gray-50" data-search="{{ service.name|lower }} {{ service.get_category_display|lower }}">
                             <td class="px-4 py-3 text-sm text-text-main">{{ service.name }}</td>
                             <td class="px-4 py-3 text-sm text-text-muted">{{ service.get_category_display }}</td>
                             <td class="px-4 py-3 text-sm font-semibold text-text-main">{{ service.price }}</td>
@@ -172,25 +184,8 @@
                     {% endfor %}
                 </tbody>
             </table>
+            <p id="configured-services-empty" class="hidden px-4 py-6 text-center text-sm text-text-muted">No services match your search.</p>
         </div>
-
-        {% if page_obj.paginator.num_pages > 1 %}
-        <div class="mt-4 flex items-center justify-between gap-3 flex-wrap">
-            <p class="text-xs text-text-muted">
-                Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }} &mdash; {{ page_obj.paginator.count }} service{{ page_obj.paginator.count|pluralize }}
-            </p>
-            <div class="flex gap-2 flex-wrap">
-                {% if page_obj.has_previous %}
-                    <a href="?page=1" class="btn btn-secondary btn-sm">First</a>
-                    <a href="?page={{ page_obj.previous_page_number }}" class="btn btn-secondary btn-sm">Previous</a>
-                {% endif %}
-                {% if page_obj.has_next %}
-                    <a href="?page={{ page_obj.next_page_number }}" class="btn btn-secondary btn-sm">Next</a>
-                    <a href="?page={{ page_obj.paginator.num_pages }}" class="btn btn-secondary btn-sm">Last</a>
-                {% endif %}
-            </div>
-        </div>
-        {% endif %}
     </div>
 </div>
 {{ package_services_json|json_script:"package-services-data" }}
@@ -357,6 +352,42 @@
     });
 
     renderSelected();
+})();
+
+// Live search over the Configured Services table -- filters as you type,
+// no page reload, since the whole catalog is rendered up front.
+(function () {
+    const searchInput = document.getElementById('configured-service-search');
+    const body = document.getElementById('configured-services-body');
+    const emptyState = document.getElementById('configured-services-empty');
+    const countLabel = document.getElementById('configured-services-count');
+    if (!searchInput || !body) return;
+
+    const rows = Array.from(body.querySelectorAll('tr[data-search]'));
+    const totalCount = rows.length;
+
+    function updateCount(visibleCount) {
+        if (!countLabel) return;
+        const query = searchInput.value.trim();
+        countLabel.textContent = query
+            ? `Showing ${visibleCount} of ${totalCount} service${totalCount === 1 ? '' : 's'}`
+            : `${totalCount} service${totalCount === 1 ? '' : 's'}`;
+    }
+
+    function applyFilter() {
+        const query = searchInput.value.trim().toLowerCase();
+        let visibleCount = 0;
+        rows.forEach(row => {
+            const matches = !query || row.dataset.search.includes(query);
+            row.classList.toggle('hidden', !matches);
+            if (matches) visibleCount += 1;
+        });
+        emptyState?.classList.toggle('hidden', !(query && visibleCount === 0));
+        updateCount(visibleCount);
+    }
+
+    searchInput.addEventListener('input', applyFilter);
+    applyFilter();
 })();
 </script>
 {% endblock %}
