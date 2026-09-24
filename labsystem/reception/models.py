@@ -423,6 +423,14 @@ class Service(models.Model):
                    "specific services, without billing anything extra for them -- services not "
                    "on this list still bill normally even if their category matches.",
     )
+    package_drugs = models.ManyToManyField(
+        "admin_dashboard.InventoryItem",
+        related_name="included_in_packages",
+        blank=True,
+        help_text="Only meaningful for category=Package -- specific pharmacy drug(s) this "
+                   "package includes, free for whatever quantity/duration the doctor "
+                   "prescribes. Drugs not on this list still bill normally.",
+    )
     max_visits = models.PositiveIntegerField(
         null=True, blank=True,
         help_text="Only meaningful for category=Package -- maximum total visits this package "

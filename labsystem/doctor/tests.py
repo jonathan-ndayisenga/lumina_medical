@@ -414,6 +414,120 @@ class DoctorWorkflowTests(TestCase):
         self.assertFalse(Prescription.objects.filter(pk=prescription.pk).exists())
         self.assertFalse(VisitService.objects.filter(pk=billing_line_id).exists())
 
+    def test_prescribing_a_package_included_drug_is_free(self):
+        """A Package service (e.g. Antenatal) already billed on this visit,
+        specifically including this exact drug, makes prescribing it free --
+        no billing_visit_service, visit total unchanged, billing_label reads
+        "Covered by Antenatal" -- same shape as covered_by_previous."""
+        package_service = Service.objects.create(
+            hospital=self.hospital, name="Antenatal", category=Service.CATEGORY_PACKAGE, price=Decimal("150000"),
+        )
+        package_service.package_drugs.add(self.tablet_drug)
+        package_line = VisitService.objects.create(
+            visit=self.visit, service=package_service, price_at_time=package_service.price,
+        )
+        self.visit.refresh_from_db()
+        total_before = self.visit.total_amount
+
+        response = self.client.post(
+            reverse("add_prescription_api", args=[self.visit.pk]),
+            {"drug_id": self.tablet_drug.pk, "dosage_mg": "500", "frequency_per_day": "3", "duration_days": "5"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.visit.refresh_from_db()
+        self.assertEqual(self.visit.total_amount, total_before)
+        prescription = Prescription.objects.get(visit=self.visit, drug=self.tablet_drug)
+        self.assertTrue(prescription.covered_by_package)
+        self.assertEqual(prescription.covering_package_id, package_line.pk)
+        self.assertIsNone(prescription.billing_visit_service_id)
+        self.assertEqual(prescription.billing_label, "Covered by Antenatal")
+        self.assertIn("covered by Antenatal", response.json()["message"])
+
+    def test_a_drug_not_on_the_packages_included_list_still_bills_normally(self):
+        """An active package on the visit that covers a DIFFERENT drug must
+        not accidentally cover this one too."""
+        package_service = Service.objects.create(
+            hospital=self.hospital, name="Antenatal", category=Service.CATEGORY_PACKAGE, price=Decimal("150000"),
+        )
+        package_service.package_drugs.add(self.syrup_drug)
+        VisitService.objects.create(visit=self.visit, service=package_service, price_at_time=package_service.price)
+        self.visit.refresh_from_db()
+        total_before = self.visit.total_amount
+
+        response = self.client.post(
+            reverse("add_prescription_api", args=[self.visit.pk]),
+            {"drug_id": self.tablet_drug.pk, "dosage_mg": "500", "frequency_per_day": "3", "duration_days": "5"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.visit.refresh_from_db()
+        self.assertEqual(self.visit.total_amount, total_before + Decimal("30.00"))
+        prescription = Prescription.objects.get(visit=self.visit, drug=self.tablet_drug)
+        self.assertFalse(prescription.covered_by_package)
+        self.assertIsNotNone(prescription.billing_visit_service_id)
+
+    def test_removing_a_package_covered_prescription_does_not_touch_visit_total(self):
+        package_service = Service.objects.create(
+            hospital=self.hospital, name="Antenatal", category=Service.CATEGORY_PACKAGE, price=Decimal("150000"),
+        )
+        package_service.package_drugs.add(self.tablet_drug)
+        VisitService.objects.create(visit=self.visit, service=package_service, price_at_time=package_service.price)
+        self.visit.refresh_from_db()
+        self.client.post(
+            reverse("add_prescription_api", args=[self.visit.pk]),
+            {"drug_id": self.tablet_drug.pk, "dosage_mg": "500", "frequency_per_day": "3", "duration_days": "5"},
+        )
+        prescription = Prescription.objects.get(visit=self.visit, drug=self.tablet_drug)
+        total_before = self.visit.total_amount
+
+        response = self.client.post(
+            reverse("remove_prescription_api", args=[self.visit.pk, prescription.pk]),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.visit.refresh_from_db()
+        self.assertEqual(self.visit.total_amount, total_before)
+        self.assertFalse(Prescription.objects.filter(pk=prescription.pk).exists())
+
+    def test_prescribing_a_covered_drug_on_a_reused_package_visit(self):
+        """A Visit.TYPE_PACKAGE visit reusing an earlier purchase (no local
+        package VisitService line of its own) still resolves drug coverage
+        via active_package_drug's visit.package_source fallback."""
+        source_visit = Visit.objects.create(
+            patient=self.patient, hospital=self.hospital, total_amount=Decimal("150000"),
+            status=Visit.STATUS_COMPLETED, created_by=self.doctor,
+        )
+        package_service = Service.objects.create(
+            hospital=self.hospital, name="Antenatal", category=Service.CATEGORY_PACKAGE, price=Decimal("150000"),
+        )
+        package_service.package_drugs.add(self.tablet_drug)
+        package_line = VisitService.objects.create(
+            visit=source_visit, service=package_service, price_at_time=package_service.price,
+        )
+        from reception.models import Payment
+        Payment.objects.create(
+            visit=source_visit, amount=Decimal("150000"), amount_paid=Decimal("150000"),
+            mode=Payment.MODE_CASH, status=Payment.STATUS_PAID,
+        )
+        reuse_visit = Visit.objects.create(
+            patient=self.patient, hospital=self.hospital, total_amount=Decimal("0"),
+            status=Visit.STATUS_IN_PROGRESS, visit_type=Visit.TYPE_PACKAGE,
+            package_source=package_line, parent_visit=source_visit, created_by=self.doctor,
+        )
+
+        response = self.client.post(
+            reverse("add_prescription_api", args=[reuse_visit.pk]),
+            {"drug_id": self.tablet_drug.pk, "dosage_mg": "500", "frequency_per_day": "3", "duration_days": "5"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        reuse_visit.refresh_from_db()
+        self.assertEqual(reuse_visit.total_amount, Decimal("0"))
+        prescription = Prescription.objects.get(visit=reuse_visit, drug=self.tablet_drug)
+        self.assertTrue(prescription.covered_by_package)
+        self.assertEqual(prescription.covering_package_id, package_line.pk)
+
     def test_undoing_a_dispensed_prescription_restores_stock_to_the_exact_original_batch(self):
         """Regression: undoing a dispensed prescription used to dump the
         restored quantity into a brand-new "REVERSAL-RX-<id>" batch with no

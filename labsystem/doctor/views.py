@@ -18,6 +18,7 @@ from lab.models import LabOrder, LabReport
 from nurse.models import NurseNote
 from reception.models import QueueEntry, Service, Triage, Visit, VisitService
 from reception.workflow import (
+    active_package_drug,
     active_package_visit_service,
     close_competing_queue_entries,
     ensure_pending_queue_entry,
@@ -144,6 +145,8 @@ def prescription_payload(prescription):
         "billing_label": prescription.billing_label,
         "dispensed": prescription.dispensed,
         "covered_by_previous": prescription.covered_by_previous,
+        "covered_by_package": prescription.covered_by_package,
+        "covering_package_name": prescription.covering_package.service.name if prescription.covering_package_id else None,
         "is_adjustment": prescription.is_adjustment,
         "parent_drug_name": prescription.parent_prescription.drug.name if prescription.parent_prescription_id else "",
         "remaining_days_covered": prescription.remaining_days_covered,
@@ -234,6 +237,7 @@ def remove_prescription_workflow(*, prescription, actor):
     removed_drug_name = prescription.drug.name
     dispensed = prescription.dispensed
     covered_by_previous = prescription.covered_by_previous
+    covered_by_package = prescription.covered_by_package
     parent_prescription = prescription.parent_prescription
 
     if dispensed:
@@ -245,7 +249,7 @@ def remove_prescription_workflow(*, prescription, actor):
     if billing_line:
         billing_line.delete()
 
-    if not covered_by_previous:
+    if not (covered_by_previous or covered_by_package):
         visit.total_amount = max(Decimal(visit.total_amount or 0) - total_price, Decimal("0"))
     update_fields = ["total_amount"]
     if visit.status == Visit.STATUS_COMPLETED and not visit.is_fully_paid:
@@ -647,6 +651,10 @@ def add_prescription_api(request, visit_id):
         is_active=True,
     )
 
+    # Adjustment visits have their own coverage path (covered_by_previous)
+    # -- no need to also check for an active package there.
+    covering_package = None if visit.is_adjustment_visit else active_package_drug(visit, drug)
+
     prescription = Prescription.objects.create(
         visit=visit,
         drug=drug,
@@ -658,6 +666,8 @@ def add_prescription_api(request, visit_id):
         is_adjustment=visit.is_adjustment_visit,
         parent_prescription=visit.adjustment_origin_prescription if visit.is_adjustment_visit else None,
         covered_by_previous=visit.is_adjustment_visit,
+        covered_by_package=bool(covering_package),
+        covering_package=covering_package,
         adjustment_reason=visit.adjustment_reason if visit.is_adjustment_visit else "",
         days_used_before_adjustment=visit.adjustment_days_used if visit.is_adjustment_visit else 0,
         remaining_days_covered=duration if visit.is_adjustment_visit else 0,
@@ -665,6 +675,10 @@ def add_prescription_api(request, visit_id):
 
     if visit.is_adjustment_visit:
         refresh_parent_adjustment_state(visit.adjustment_origin_prescription)
+    elif covering_package:
+        # Covered by the package -- no billing line, no total_amount change,
+        # same shape as the adjustment branch above.
+        pass
     else:
         service, _ = Service.objects.get_or_create(
             hospital=visit.hospital,
@@ -693,6 +707,8 @@ def add_prescription_api(request, visit_id):
             f"{drug.name} added as the replacement drug for the remaining "
             f"{duration} day(s). No new billing was added."
         )
+    elif covering_package:
+        message = f"{drug.name} added — covered by {covering_package.service.name}. No new billing was added."
 
     return JsonResponse(
         {

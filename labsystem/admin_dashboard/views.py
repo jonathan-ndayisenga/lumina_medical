@@ -1446,6 +1446,22 @@ def package_services_picker_payload(services_queryset):
     ]
 
 
+def package_drugs_picker_payload(items_queryset):
+    """Serializable drug list for the package builder's search-and-add
+    picker (Included Drug(s)) -- same {id, name, category_display, price}
+    shape package_services_picker_payload uses, so the front-end JS picker
+    can be reused as-is for either data source."""
+    return [
+        {
+            "id": item.pk,
+            "name": item.name,
+            "category_display": item.get_category_display(),
+            "price": str(item.selling_price or 0),
+        }
+        for item in items_queryset
+    ]
+
+
 @role_required(User.ROLE_HOSPITAL_ADMIN)
 def manage_services(request):
     hospital = active_hospital(request)
@@ -1480,6 +1496,7 @@ def manage_services(request):
         "services": services_qs,
         "form": form,
         "package_services_json": package_services_picker_payload(form.fields["package_services"].queryset),
+        "package_drugs_json": package_drugs_picker_payload(form.fields["package_drugs"].queryset),
     })
     return render(request, "admin_dashboard/manage_services.html", context)
 
@@ -1506,6 +1523,7 @@ def edit_service(request, service_id):
         "object_label": service.name,
         "cancel_url": "manage_services",
         "package_services_json": package_services_picker_payload(form.fields["package_services"].queryset),
+        "package_drugs_json": package_drugs_picker_payload(form.fields["package_drugs"].queryset),
     })
     return render(request, "admin_dashboard/object_form.html", context)
 

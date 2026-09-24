@@ -142,6 +142,16 @@ class Prescription(models.Model):
         related_name="replacement_prescriptions",
     )
     covered_by_previous = models.BooleanField(default=False)
+    covered_by_package = models.BooleanField(default=False)
+    covering_package = models.ForeignKey(
+        "reception.VisitService",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="covered_prescriptions",
+        help_text="The package's own VisitService line (this visit or an earlier reused one) "
+                   "that covers this prescription, when covered_by_package is set.",
+    )
     adjustment_reason = models.CharField(max_length=255, blank=True)
     days_used_before_adjustment = models.PositiveIntegerField(default=0)
     remaining_days_covered = models.PositiveIntegerField(default=0)
@@ -222,6 +232,8 @@ class Prescription(models.Model):
 
     @property
     def billing_label(self):
+        if self.covered_by_package and self.covering_package_id:
+            return f"Covered by {self.covering_package.service.name}"
         if self.covered_by_previous:
             return "Covered by previous payment"
         return f"UGX {self.total_price}"

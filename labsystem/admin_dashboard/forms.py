@@ -418,12 +418,13 @@ class HospitalServiceForm(forms.ModelForm):
     class Meta:
         model = Service
         fields = (
-            "name", "category", "price", "lab_tests_next", "package_services",
+            "name", "category", "price", "lab_tests_next", "package_services", "package_drugs",
             "max_visits", "validity_months", "test_profile", "is_active", "is_per_day",
         )
         widgets = {
             "lab_tests_next": forms.CheckboxSelectMultiple,
             "package_services": forms.SelectMultiple(attrs={"class": "hidden", "id": "package-services-select-hidden"}),
+            "package_drugs": forms.SelectMultiple(attrs={"class": "hidden", "id": "package-drugs-select-hidden"}),
         }
 
     def __init__(self, *args, hospital=None, **kwargs):
@@ -463,6 +464,24 @@ class HospitalServiceForm(forms.ModelForm):
             "(e.g. Antenatal → Consultation, CBC, Urinalysis, Obstetric Ultrasound). A visit with "
             "this package billed can be sent for any of these — nothing billed extra for them — "
             "services not on this list still bill normally even if a similar one is covered."
+        )
+        package_drugs_qs = (
+            InventoryItem.objects.filter(
+                hospital=hospital, is_active=True,
+                category__in=[
+                    InventoryItem.CATEGORY_DRUG, InventoryItem.CATEGORY_SYRUP, InventoryItem.CATEGORY_IV_FLUID,
+                    InventoryItem.CATEGORY_IV_MED, InventoryItem.CATEGORY_IM, InventoryItem.CATEGORY_TUBE,
+                ],
+            ).order_by("category", "name")
+            if hospital else InventoryItem.objects.none()
+        )
+        self.fields["package_drugs"].queryset = package_drugs_qs
+        self.fields["package_drugs"].required = False
+        self.fields["package_drugs"].label = "Included Drug(s)"
+        self.fields["package_drugs"].help_text = (
+            "Only meaningful for category=Package. Specific pharmacy drug(s) this package "
+            "includes, free for whatever quantity/duration the doctor prescribes (e.g. Antenatal "
+            "→ Folic Acid, Ferrous Sulphate). Drugs not on this list still bill normally."
         )
         self.fields["max_visits"].required = False
         self.fields["max_visits"].label = "Maximum Visits"

@@ -96,6 +96,20 @@ def active_package_visit_service(visit, service):
     return None
 
 
+def active_package_drug(visit, drug):
+    """Same as active_package_visit_service, but for a specific pharmacy
+    drug (admin_dashboard.InventoryItem) via Service.package_drugs instead
+    of package_services. Used when a doctor prescribes a drug, to decide
+    whether it's free under an active package rather than billed."""
+    for package_line in visit.visit_services.filter(service__category=Service.CATEGORY_PACKAGE).select_related("service"):
+        if package_line.service.package_drugs.filter(pk=drug.pk).exists():
+            return package_line
+    source = visit.package_source
+    if source and source.service.package_drugs.filter(pk=drug.pk).exists():
+        return source
+    return None
+
+
 def package_services_available_on_visit(visit):
     """Every specific service included in any active package on this visit
     that hasn't already been added as a line on it -- grouped by nothing in

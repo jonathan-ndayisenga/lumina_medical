@@ -610,6 +610,16 @@ class PackageServiceCatalogTests(TestCase):
         self.scan = Service.objects.create(
             hospital=self.hospital, name="Obstetric Ultrasound", category=Service.CATEGORY_SCAN, price=Decimal("40000"),
         )
+        self.folic_acid = InventoryItem.objects.create(
+            hospital=self.hospital, name="Folic Acid", category=InventoryItem.CATEGORY_DRUG,
+            unit="strip", base_unit="tablet", units_per_pack=Decimal("10"),
+            current_quantity=Decimal("0"), unit_cost=Decimal("50"), selling_price=Decimal("200"),
+        )
+        self.reagent = InventoryItem.objects.create(
+            hospital=self.hospital, name="Test Reagent", category=InventoryItem.CATEGORY_REAGENT,
+            unit="bottle", base_unit="ml", units_per_pack=Decimal("1"),
+            current_quantity=Decimal("0"), unit_cost=Decimal("1000"), selling_price=Decimal("2000"),
+        )
 
     def test_creating_a_package_service_records_which_services_it_includes(self):
         from reception.models import Service
@@ -619,6 +629,7 @@ class PackageServiceCatalogTests(TestCase):
             {
                 "name": "Antenatal", "category": Service.CATEGORY_PACKAGE, "price": "150000",
                 "package_services": [self.consultation.pk, self.cbc.pk],
+                "package_drugs": [self.folic_acid.pk],
                 "max_visits": "9", "validity_months": "12",
                 "is_active": "on",
             },
@@ -629,8 +640,20 @@ class PackageServiceCatalogTests(TestCase):
         self.assertEqual(
             set(service.package_services.values_list("pk", flat=True)), {self.consultation.pk, self.cbc.pk},
         )
+        self.assertEqual(
+            set(service.package_drugs.values_list("pk", flat=True)), {self.folic_acid.pk},
+        )
         self.assertEqual(service.max_visits, 9)
         self.assertEqual(service.validity_months, 12)
+
+    def test_reagents_are_not_offered_as_includable_package_drugs(self):
+        """Only prescribable categories (tablet, syrup, IV, IM, tube) are
+        offered -- reagents/sundries aren't drugs a doctor prescribes."""
+        response = self.client.get(reverse("manage_services"))
+
+        queryset = response.context["form"].fields["package_drugs"].queryset
+        self.assertIn(self.folic_acid, queryset)
+        self.assertNotIn(self.reagent, queryset)
 
     def test_creating_a_package_service_without_visit_cap_or_expiry_leaves_them_unlimited(self):
         """Both fields are optional -- admin can leave a package open-ended."""

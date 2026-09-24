@@ -40,7 +40,7 @@
             {% csrf_token %}
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {% for field in form %}
-                    {% if field.field.widget.input_type != "checkbox" and field.html_name != "package_services" and field.html_name != "max_visits" and field.html_name != "validity_months" %}
+                    {% if field.field.widget.input_type != "checkbox" and field.html_name != "package_services" and field.html_name != "package_drugs" and field.html_name != "max_visits" and field.html_name != "validity_months" %}
                         <div {% if field.html_name == "test_profile" %}id="test-profile-wrap" style="display:none;"{% endif %}>
                             <label for="{{ field.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">{{ field.label }}</label>
                             {{ field }}
@@ -118,6 +118,28 @@
                     <p id="package-selected-services-empty" class="text-sm text-text-muted italic">No services selected yet.</p>
                 </div>
                 {% for error in form.package_services.errors %}<div class="text-xs text-red-600 mt-1">{{ error }}</div>{% endfor %}
+
+                <label class="block text-sm font-semibold text-text-main mb-2 mt-5">{{ form.package_drugs.label }}</label>
+                {% if form.package_drugs.help_text %}<p class="text-xs text-text-muted mb-3">{{ form.package_drugs.help_text }}</p>{% endif %}
+                {{ form.package_drugs }}
+                <div class="service-picker">
+                    <label for="package-drug-search" class="block text-sm font-semibold text-text-main mb-1">Search and Add Drugs</label>
+                    <input
+                        id="package-drug-search"
+                        type="text"
+                        class="form-control"
+                        placeholder="Type a drug name or category&hellip;"
+                        autocomplete="off"
+                    >
+                    <div id="package-drug-dropdown" class="service-dropdown hidden"></div>
+                    <p class="mt-1 text-xs text-text-muted">Start typing, then click a result (or press Enter) to add it.</p>
+                </div>
+                <div class="mt-3">
+                    <h4 class="text-sm font-semibold text-text-main mb-2">Included Drugs</h4>
+                    <div id="package-selected-drugs" class="space-y-2"></div>
+                    <p id="package-selected-drugs-empty" class="text-sm text-text-muted italic">No drugs selected yet.</p>
+                </div>
+                {% for error in form.package_drugs.errors %}<div class="text-xs text-red-600 mt-1">{{ error }}</div>{% endfor %}
             </div>
 
             <div class="toggle-field-group">
@@ -203,6 +225,7 @@
     </div>
 </div>
 {{ package_services_json|json_script:"package-services-data" }}
+{{ package_drugs_json|json_script:"package-drugs-data" }}
 {% endblock %}
 
 {% block extra_js %}
@@ -224,25 +247,27 @@
     toggle();
 })();
 
-// Package builder: search-and-add picker for "Included Service(s)", same
-// pattern as the visit-creation service picker (reception/visit_form.html).
-(function () {
-    const hiddenSelect = document.getElementById('package-services-select-hidden');
-    const searchInput = document.getElementById('package-service-search');
-    const dropdown = document.getElementById('package-service-dropdown');
-    const selectedWrap = document.getElementById('package-selected-services');
-    const emptyState = document.getElementById('package-selected-services-empty');
-    const dataNode = document.getElementById('package-services-data');
+// Package builder: search-and-add picker, shared by "Included Service(s)"
+// and "Included Drug(s)" -- same pattern as the visit-creation service
+// picker (reception/visit_form.html), just parameterized so it can drive
+// either data source without duplicating the logic twice per template.
+function initSearchPicker({ hiddenSelectId, searchInputId, dropdownId, selectedWrapId, emptyStateId, dataNodeId, removeAttr, optionClass, noMatchLabel }) {
+    const hiddenSelect = document.getElementById(hiddenSelectId);
+    const searchInput = document.getElementById(searchInputId);
+    const dropdown = document.getElementById(dropdownId);
+    const selectedWrap = document.getElementById(selectedWrapId);
+    const emptyState = document.getElementById(emptyStateId);
+    const dataNode = document.getElementById(dataNodeId);
 
     if (!hiddenSelect || !searchInput || !dropdown || !selectedWrap || !dataNode) {
         return;
     }
 
-    const services = JSON.parse(dataNode.textContent);
+    const items = JSON.parse(dataNode.textContent);
     const initiallySelected = new Set(
         Array.from(hiddenSelect.options).filter(o => o.selected).map(o => o.value)
     );
-    services.forEach(item => { item.selected = initiallySelected.has(String(item.id)); });
+    items.forEach(item => { item.selected = initiallySelected.has(String(item.id)); });
 
     let activeIndex = -1;
     let currentResults = [];
@@ -253,14 +278,14 @@
     }
 
     function syncHiddenSelect() {
-        const selectedIds = new Set(services.filter(s => s.selected).map(s => String(s.id)));
+        const selectedIds = new Set(items.filter(s => s.selected).map(s => String(s.id)));
         Array.from(hiddenSelect.options).forEach(option => {
             option.selected = selectedIds.has(option.value);
         });
     }
 
     function renderSelected() {
-        const chosen = services.filter(s => s.selected);
+        const chosen = items.filter(s => s.selected);
         selectedWrap.innerHTML = '';
         emptyState?.classList.toggle('hidden', chosen.length > 0);
 
@@ -269,14 +294,14 @@
             chip.className = 'service-chip';
             chip.innerHTML = `
                 <p class="name">${item.name} <span class="text-text-muted font-normal">&middot; ${item.category_display} &middot; ${fmtPrice(item.price)}</span></p>
-                <button type="button" class="btn btn-secondary btn-sm" data-remove-package-service="${item.id}">Remove</button>
+                <button type="button" class="btn btn-secondary btn-sm" data-${removeAttr}="${item.id}">Remove</button>
             `;
             selectedWrap.appendChild(chip);
         });
 
-        selectedWrap.querySelectorAll('[data-remove-package-service]').forEach(button => {
+        selectedWrap.querySelectorAll(`[data-${removeAttr}]`).forEach(button => {
             button.addEventListener('click', () => {
-                const match = services.find(s => String(s.id) === button.dataset.removePackageService);
+                const match = items.find(s => String(s.id) === button.getAttribute(`data-${removeAttr}`));
                 if (match) match.selected = false;
                 syncHiddenSelect();
                 renderSelected();
@@ -292,28 +317,28 @@
     }
 
     function highlight(index) {
-        const rows = dropdown.querySelectorAll('.service-option');
+        const rows = dropdown.querySelectorAll(`.${optionClass}`);
         rows.forEach((row, i) => row.classList.toggle('is-active', i === index));
         activeIndex = index;
     }
 
     function renderResults(term) {
         const query = String(term || '').trim().toLowerCase();
-        currentResults = services.filter(item => {
+        currentResults = items.filter(item => {
             if (item.selected) return false;
             if (!query) return true;
             return item.name.toLowerCase().includes(query) || item.category_display.toLowerCase().includes(query);
         }).slice(0, 8);
 
         if (!currentResults.length) {
-            dropdown.innerHTML = '<div class="service-option text-text-muted">No matching services found.</div>';
+            dropdown.innerHTML = `<div class="${optionClass} text-text-muted">${noMatchLabel}</div>`;
             dropdown.classList.remove('hidden');
             activeIndex = -1;
             return;
         }
 
         dropdown.innerHTML = currentResults.map((item, i) => `
-            <div class="service-option" data-index="${i}" data-id="${item.id}">
+            <div class="${optionClass}" data-index="${i}" data-id="${item.id}">
                 <div class="min-w-0">
                     <p class="name">${item.name}</p>
                     <p class="meta">${item.category_display}</p>
@@ -323,16 +348,16 @@
         `).join('');
         dropdown.classList.remove('hidden');
 
-        dropdown.querySelectorAll('.service-option[data-id]').forEach(row => {
+        dropdown.querySelectorAll(`.${optionClass}[data-id]`).forEach(row => {
             row.addEventListener('mousedown', evt => {
                 evt.preventDefault();
-                addService(row.dataset.id);
+                addItem(row.dataset.id);
             });
         });
     }
 
-    function addService(id) {
-        const match = services.find(s => String(s.id) === String(id));
+    function addItem(id) {
+        const match = items.find(s => String(s.id) === String(id));
         if (!match) return;
         match.selected = true;
         syncHiddenSelect();
@@ -356,7 +381,7 @@
         } else if (event.key === 'Enter') {
             event.preventDefault();
             const target = currentResults[activeIndex] || currentResults[0];
-            if (target) addService(target.id);
+            if (target) addItem(target.id);
         } else if (event.key === 'Escape') {
             closeDropdown();
         }
@@ -366,7 +391,30 @@
     });
 
     renderSelected();
-})();
+}
+
+initSearchPicker({
+    hiddenSelectId: 'package-services-select-hidden',
+    searchInputId: 'package-service-search',
+    dropdownId: 'package-service-dropdown',
+    selectedWrapId: 'package-selected-services',
+    emptyStateId: 'package-selected-services-empty',
+    dataNodeId: 'package-services-data',
+    removeAttr: 'remove-package-service',
+    optionClass: 'service-option',
+    noMatchLabel: 'No matching services found.',
+});
+initSearchPicker({
+    hiddenSelectId: 'package-drugs-select-hidden',
+    searchInputId: 'package-drug-search',
+    dropdownId: 'package-drug-dropdown',
+    selectedWrapId: 'package-selected-drugs',
+    emptyStateId: 'package-selected-drugs-empty',
+    dataNodeId: 'package-drugs-data',
+    removeAttr: 'remove-package-drug',
+    optionClass: 'service-option',
+    noMatchLabel: 'No matching drugs found.',
+});
 
 // Live search over the Configured Services table -- filters as you type,
 // no page reload, since the whole catalog is rendered up front.
