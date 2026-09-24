@@ -739,6 +739,8 @@ def scan_report_send_to_billing(request, report_id):
     report = get_object_or_404(qs, pk=report_id)
     visit = report.visit
 
+    from reception.workflow import mark_queue_entries_processed
+    mark_queue_entries_processed(visit=visit, queue_type=QueueEntry.TYPE_SONOGRAPHER)
     send_to_reception_queue(
         visit=visit,
         hospital=visit.hospital,

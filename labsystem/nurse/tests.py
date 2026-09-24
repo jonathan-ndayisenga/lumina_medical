@@ -322,6 +322,27 @@ class SonographerScanReportBillingTests(TestCase):
             ).exists()
         )
 
+    def test_send_to_billing_closes_the_sonographer_queue_entry(self):
+        """Regression: sending an already-finalized report to reception
+        never marked the original sonographer queue entry processed, so
+        the patient kept showing up in the sonographer's own pending queue
+        even after being routed on to reception for billing."""
+        self.assertFalse(self.queue_entry.processed)
+
+        response = self.client.post(reverse("scan_report_send_to_billing", args=[self.report.pk]))
+
+        self.assertRedirects(response, reverse("scan_queue"))
+        self.queue_entry.refresh_from_db()
+        self.assertTrue(self.queue_entry.processed)
+        self.assertFalse(
+            QueueEntry.objects.filter(
+                visit=self.visit, queue_type=QueueEntry.TYPE_SONOGRAPHER, processed=False,
+            ).exists()
+        )
+
+        scan_queue_response = self.client.get(reverse("scan_queue"))
+        self.assertNotIn(self.queue_entry, list(scan_queue_response.context["queue_entries"]))
+
     def test_send_to_billing_is_safe_to_click_twice(self):
         self.client.post(reverse("scan_report_send_to_billing", args=[self.report.pk]))
         self.client.post(reverse("scan_report_send_to_billing", args=[self.report.pk]))
