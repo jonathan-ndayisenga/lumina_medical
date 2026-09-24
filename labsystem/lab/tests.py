@@ -1387,3 +1387,66 @@ class CatalogListPaginationTests(LabEngineTestBase):
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, "Next")
         self.assertNotContains(response, "Previous")
+
+
+class SyncHospitalServiceTests(TestCase):
+    """_sync_hospital_service (lab/views_catalog.py) keeps a hospital's
+    billable Service in step with its LabTest catalog entry whenever the
+    test is saved -- regardless of which field was actually edited (name,
+    sample type, anything). Renaming the linked Service to the test's
+    current name must never raise a raw IntegrityError on a name clash
+    with an unrelated Service -- it should return a friendly error string,
+    the same way the "create a new Service" branch already does."""
+
+    def setUp(self):
+        self.hospital = Hospital.objects.create(name="Sync Service Hospital", subdomain="sync-service")
+        category = ServiceCategory.objects.create(name="Sync Service Chemistry")
+        self.test = LabTest.objects.create(
+            hospital=self.hospital, name="Old Test Name", category=category, result_type=ResultType.DEFINED_OPTION,
+        )
+        self.linked_service = Service.objects.create(
+            hospital=self.hospital, name="Old Test Name", category=Service.CATEGORY_LAB, price=Decimal("10.00"),
+        )
+        self.linked_service.lab_tests_next.add(self.test)
+        # An unrelated Service that happens to already hold the name the
+        # test is about to be renamed to -- reproduces the reported bug.
+        Service.objects.create(
+            hospital=self.hospital, name="Blood Sugars (RBS)", category=Service.CATEGORY_LAB, price=Decimal("15.00"),
+        )
+
+    def test_renaming_linked_service_into_a_name_clash_returns_an_error_instead_of_crashing(self):
+        from lab.views_catalog import _sync_hospital_service
+
+        self.test.name = "Blood Sugars (RBS)"
+        self.test.save(update_fields=["name"])
+
+        error = _sync_hospital_service(self.test, self.hospital, Decimal("10.00"))
+
+        self.assertIsNotNone(error)
+        self.assertIn("already exists for your hospital", error)
+        self.linked_service.refresh_from_db()
+        self.assertEqual(self.linked_service.name, "Old Test Name")
+
+    def test_renaming_linked_service_to_a_free_name_still_works(self):
+        from lab.views_catalog import _sync_hospital_service
+
+        self.test.name = "Renamed Test"
+        self.test.save(update_fields=["name"])
+
+        error = _sync_hospital_service(self.test, self.hospital, Decimal("12.00"))
+
+        self.assertIsNone(error)
+        self.linked_service.refresh_from_db()
+        self.assertEqual(self.linked_service.name, "Renamed Test")
+        self.assertEqual(self.linked_service.price, Decimal("12.00"))
+
+    def test_editing_a_test_without_renaming_still_syncs_price(self):
+        """The everyday case (e.g. only sample type changed, name untouched)
+        must keep working exactly as before."""
+        from lab.views_catalog import _sync_hospital_service
+
+        error = _sync_hospital_service(self.test, self.hospital, Decimal("20.00"))
+
+        self.assertIsNone(error)
+        self.linked_service.refresh_from_db()
+        self.assertEqual(self.linked_service.price, Decimal("20.00"))

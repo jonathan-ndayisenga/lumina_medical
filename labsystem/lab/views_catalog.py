@@ -361,6 +361,12 @@ def _sync_hospital_service(test, hospital, price):
         return None
 
     if existing_link:
+        name_clash = Service.objects.filter(hospital=hospital, name=test.name).exclude(pk=existing_link.pk).first()
+        if name_clash:
+            return (
+                f'A service named "{test.name}" already exists for your hospital and isn\'t linked to this '
+                "test. Rename or relink it under Manage Services before setting a price here."
+            )
         existing_link.name = test.name
         existing_link.price = price
         existing_link.is_active = test.active_for_ordering
