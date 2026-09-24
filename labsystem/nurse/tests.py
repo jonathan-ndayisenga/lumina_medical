@@ -330,3 +330,21 @@ class SonographerScanReportBillingTests(TestCase):
             QueueEntry.objects.filter(visit=self.visit, queue_type=QueueEntry.TYPE_RECEPTION, processed=False).count(),
             1,
         )
+
+    def test_finalized_report_screen_has_no_nested_form_around_findings(self):
+        """Regression: the findings/impression fields used to sit inside the
+        same <form> as "Send to Reception for Billing", which was itself a
+        SECOND, illegally nested <form>. Browsers drop an invalidly nested
+        <form> tag, so clicking the button actually submitted the OUTER
+        form instead -- with findings/impression disabled and therefore
+        never sent -- tripping "Findings and impression are required" even
+        though they'd already been filled in and saved at finalize time.
+        The finalized-report screen must render exactly one <form>: the
+        billing handoff, not wrapping the read-only fields at all."""
+        response = self.client.get(reverse("scan_report", args=[self.queue_entry.pk]))
+        content = response.content.decode()
+
+        findings_index = content.index("Findings")
+        billing_button_index = content.index("Send to Reception for Billing")
+        between = content[findings_index:billing_button_index]
+        self.assertEqual(between.count("<form"), 1)

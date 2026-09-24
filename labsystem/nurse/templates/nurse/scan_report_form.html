@@ -30,22 +30,72 @@
         </dl>
     </div>
 
+    {% if report and report.status == 'final' and not edit_mode %}
+    <!-- Already-final, read-only view. Deliberately NOT wrapped in a
+         <form> -- the only submittable action here is "Send to Reception
+         for Billing", which is its own standalone form below. Nesting it
+         inside a bigger <form> (as this used to do) is invalid HTML: the
+         browser drops the inner <form> tag entirely and its button ends up
+         submitting the OUTER form instead, POSTing this page's own
+         findings/impression fields -- which are disabled right here, so
+         they never got submitted, and the outer view's "Findings and
+         impression are required" check would trip even though they'd
+         already been filled in and saved at finalize time. -->
+    <div class="card space-y-5">
+        <h4 class="text-sm font-semibold text-text-main">
+            Edit Scan Report
+            <span class="ml-2 text-xs font-normal text-green-600 bg-green-50 border border-green-200 rounded-full px-2 py-0.5">Finalized</span>
+        </h4>
+
+        <div>
+            <label class="block text-xs font-semibold text-text-muted uppercase tracking-wide mb-1" for="scan_type">Scan Type</label>
+            <select id="scan_type" class="input w-full" disabled>
+                {% for value, label in scan_type_choices %}
+                    <option value="{{ value }}" {% if report.scan_type == value %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div>
+            <label class="block text-xs font-semibold text-text-muted uppercase tracking-wide mb-1" for="clinical_indication">Clinical Indication <span class="font-normal normal-case text-text-muted">(optional)</span></label>
+            <input type="text" id="clinical_indication" class="input w-full" value="{{ report.clinical_indication|default:'' }}" disabled>
+        </div>
+
+        <div>
+            <label class="block text-xs font-semibold text-text-muted uppercase tracking-wide mb-1" for="findings">Findings <span class="text-red-500">*</span></label>
+            <textarea id="findings" rows="8" class="input w-full font-mono text-sm" disabled>{{ report.findings|default:'' }}</textarea>
+        </div>
+
+        <div>
+            <label class="block text-xs font-semibold text-text-muted uppercase tracking-wide mb-1" for="impression">Impression / Conclusion <span class="text-red-500">*</span></label>
+            <textarea id="impression" rows="4" class="input w-full" disabled>{{ report.impression|default:'' }}</textarea>
+        </div>
+
+        <div class="flex flex-wrap gap-3 pt-2">
+            <a href="{% url 'scan_report_print' report.id %}" target="_blank" class="btn btn-primary">Print Report</a>
+            <form method="post" action="{% url 'scan_report_send_to_billing' report.id %}" class="contents">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-primary">Send to Reception for Billing</button>
+            </form>
+            <a href="{% url 'scan_queue' %}" class="btn btn-secondary">Back to Queue</a>
+        </div>
+    </div>
+
+    {% else %}
     <!-- Report form -->
     <form method="post" class="card space-y-5">
         {% csrf_token %}
 
         <h4 class="text-sm font-semibold text-text-main">
             {% if report %}Edit Scan Report{% else %}New Scan Report{% endif %}
-            {% if report and report.status == 'final' %}
-                <span class="ml-2 text-xs font-normal text-green-600 bg-green-50 border border-green-200 rounded-full px-2 py-0.5">Finalized</span>
-            {% elif report %}
+            {% if report %}
                 <span class="ml-2 text-xs font-normal text-yellow-700 bg-yellow-50 border border-yellow-200 rounded-full px-2 py-0.5">Draft</span>
             {% endif %}
         </h4>
 
         <div>
             <label class="block text-xs font-semibold text-text-muted uppercase tracking-wide mb-1" for="scan_type">Scan Type</label>
-            <select name="scan_type" id="scan_type" class="input w-full" {% if report and report.status == 'final' and not edit_mode %}disabled{% endif %}>
+            <select name="scan_type" id="scan_type" class="input w-full">
                 {% for value, label in scan_type_choices %}
                     <option value="{{ value }}" {% if report and report.scan_type == value %}selected{% elif not report and value == 'other' %}selected{% endif %}>{{ label }}</option>
                 {% endfor %}
@@ -56,22 +106,19 @@
             <label class="block text-xs font-semibold text-text-muted uppercase tracking-wide mb-1" for="clinical_indication">Clinical Indication <span class="font-normal normal-case text-text-muted">(optional)</span></label>
             <input type="text" name="clinical_indication" id="clinical_indication" class="input w-full"
                 placeholder="e.g. Abdominal pain, check for gallstones"
-                value="{{ report.clinical_indication|default:'' }}"
-                {% if report and report.status == 'final' and not edit_mode %}disabled{% endif %}>
+                value="{{ report.clinical_indication|default:'' }}">
         </div>
 
         <div>
             <label class="block text-xs font-semibold text-text-muted uppercase tracking-wide mb-1" for="findings">Findings <span class="text-red-500">*</span></label>
             <textarea name="findings" id="findings" rows="8" class="input w-full font-mono text-sm"
-                placeholder="Describe detailed scan findings here..."
-                {% if report and report.status == 'final' and not edit_mode %}disabled{% endif %}>{{ report.findings|default:'' }}</textarea>
+                placeholder="Describe detailed scan findings here...">{{ report.findings|default:'' }}</textarea>
         </div>
 
         <div>
             <label class="block text-xs font-semibold text-text-muted uppercase tracking-wide mb-1" for="impression">Impression / Conclusion <span class="text-red-500">*</span></label>
             <textarea name="impression" id="impression" rows="4" class="input w-full"
-                placeholder="Summary and clinical impression..."
-                {% if report and report.status == 'final' and not edit_mode %}disabled{% endif %}>{{ report.impression|default:'' }}</textarea>
+                placeholder="Summary and clinical impression...">{{ report.impression|default:'' }}</textarea>
         </div>
 
         {% if edit_mode %}
@@ -84,7 +131,7 @@
                 <p class="text-xs text-text-muted">The patient has already been handed off — saving only updates the report content.</p>
             </div>
 
-        {% elif not report or report.status != 'final' %}
+        {% else %}
 
             <!-- Hidden handoff value driven by the buttons below -->
             <input type="hidden" name="handoff" id="handoff-value" value="">
@@ -138,22 +185,8 @@
                 <button type="button" id="finalize-btn" class="btn btn-primary">Finalize &amp; Hand Off</button>
             </div>
 
-        {% else %}
-            <div class="flex flex-wrap gap-3 pt-2">
-                <a href="{% url 'scan_report_print' report.id %}" target="_blank" class="btn btn-primary">Print Report</a>
-                <form method="post" action="{% url 'scan_report_send_to_billing' report.id %}" class="contents">
-                    {% csrf_token %}
-                    <button type="submit" class="btn btn-primary">Send to Reception for Billing</button>
-                </form>
-                <a href="{% url 'scan_queue' %}" class="btn btn-secondary">Back to Queue</a>
-            </div>
         {% endif %}
     </form>
-
-    {% if report and report.status == 'final' and not edit_mode %}
-        <div class="text-center">
-            <a href="{% url 'scan_report_print' report.id %}" target="_blank" class="btn btn-primary">Print Scan Report</a>
-        </div>
     {% endif %}
 
 <script>
