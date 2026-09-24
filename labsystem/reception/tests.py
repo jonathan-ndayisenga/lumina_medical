@@ -1091,7 +1091,7 @@ class ReceptionQueueWorkflowTests(TestCase):
             subdomain="lumina-queue",
             subscription_plan=plan,
         )
-        _enable_modules(self.hospital, "doctor", "lab", "nurse")
+        _enable_modules(self.hospital, "doctor", "lab", "nurse", "sonographer")
         self.receptionist = User.objects.create_user(
             username="queue-reception",
             password="pass12345",
@@ -1118,6 +1118,27 @@ class ReceptionQueueWorkflowTests(TestCase):
             name="CBC",
             category=Service.CATEGORY_LAB,
             price=Decimal("15.00"),
+            is_active=True,
+        )
+        self.second_lab_service = Service.objects.create(
+            hospital=self.hospital,
+            name="Urinalysis",
+            category=Service.CATEGORY_LAB,
+            price=Decimal("12.00"),
+            is_active=True,
+        )
+        self.triage_service = Service.objects.create(
+            hospital=self.hospital,
+            name="Nursing Assessment",
+            category=Service.CATEGORY_TRIAGE,
+            price=Decimal("8.00"),
+            is_active=True,
+        )
+        self.scan_service = Service.objects.create(
+            hospital=self.hospital,
+            name="Abdominal Ultrasound",
+            category=Service.CATEGORY_SCAN,
+            price=Decimal("40.00"),
             is_active=True,
         )
         self.visit = Visit.objects.create(
@@ -1149,7 +1170,7 @@ class ReceptionQueueWorkflowTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Queue Patient")
         self.assertContains(response, "Returned from Lab")
-        self.assertContains(response, "Send to Doctor")
+        self.assertContains(response, "Send for Service")
         self.assertContains(response, "Finish Visit")
 
     def test_reception_queue_surfaces_patients_still_in_progress_elsewhere_first(self):
@@ -1234,6 +1255,101 @@ class ReceptionQueueWorkflowTests(TestCase):
                 processed=False,
             ).exists()
         )
+
+    def test_send_to_module_routes_doctor_service_to_doctor_queue(self):
+        response = self.client.post(
+            reverse("reception_queue_send_to_module", args=[self.queue_entry.pk]),
+            {"service_id": str(self.consult_service.pk)},
+        )
+
+        self.assertRedirects(response, reverse("reception_queue"))
+        self.visit.refresh_from_db()
+        self.queue_entry.refresh_from_db()
+        self.assertEqual(self.visit.total_amount, Decimal("40.00"))
+        self.assertTrue(self.queue_entry.processed)
+        self.assertTrue(VisitService.objects.filter(visit=self.visit, service=self.consult_service).exists())
+        self.assertTrue(
+            QueueEntry.objects.filter(visit=self.visit, queue_type=QueueEntry.TYPE_DOCTOR, processed=False).exists()
+        )
+
+    def test_send_to_module_routes_lab_service_through_reception_approval(self):
+        """Lab always goes through reception's own approval gate first
+        (queue_types_for_service's LAB -> TYPE_RECEPTION), same as every
+        other billing entry point in the app -- not straight to the lab
+        queue."""
+        response = self.client.post(
+            reverse("reception_queue_send_to_module", args=[self.queue_entry.pk]),
+            {"service_id": str(self.second_lab_service.pk)},
+        )
+
+        self.assertRedirects(response, reverse("reception_queue"))
+        self.visit.refresh_from_db()
+        self.assertEqual(self.visit.total_amount, Decimal("27.00"))
+        self.assertTrue(VisitService.objects.filter(visit=self.visit, service=self.second_lab_service).exists())
+        self.assertTrue(
+            QueueEntry.objects.filter(visit=self.visit, queue_type=QueueEntry.TYPE_RECEPTION, processed=False).exists()
+        )
+
+    def test_send_to_module_routes_triage_service_to_nurse_queue(self):
+        response = self.client.post(
+            reverse("reception_queue_send_to_module", args=[self.queue_entry.pk]),
+            {"service_id": str(self.triage_service.pk)},
+        )
+
+        self.assertRedirects(response, reverse("reception_queue"))
+        self.visit.refresh_from_db()
+        self.assertEqual(self.visit.total_amount, Decimal("23.00"))
+        self.assertTrue(VisitService.objects.filter(visit=self.visit, service=self.triage_service).exists())
+        self.assertTrue(
+            QueueEntry.objects.filter(visit=self.visit, queue_type=QueueEntry.TYPE_NURSE, processed=False).exists()
+        )
+
+    def test_send_to_module_routes_scan_service_to_sonographer_queue(self):
+        response = self.client.post(
+            reverse("reception_queue_send_to_module", args=[self.queue_entry.pk]),
+            {"service_id": str(self.scan_service.pk)},
+        )
+
+        self.assertRedirects(response, reverse("reception_queue"))
+        self.visit.refresh_from_db()
+        self.assertEqual(self.visit.total_amount, Decimal("55.00"))
+        self.assertTrue(VisitService.objects.filter(visit=self.visit, service=self.scan_service).exists())
+        self.assertTrue(
+            QueueEntry.objects.filter(visit=self.visit, queue_type=QueueEntry.TYPE_SONOGRAPHER, processed=False).exists()
+        )
+
+    def test_send_to_module_is_free_when_an_active_package_covers_the_service(self):
+        package_service = Service.objects.create(
+            hospital=self.hospital, name="Antenatal", category=Service.CATEGORY_PACKAGE, price=Decimal("150000"),
+        )
+        package_service.package_services.add(self.triage_service)
+        VisitService.objects.create(visit=self.visit, service=package_service, price_at_time=package_service.price)
+        self.visit.refresh_from_db()
+        total_before = self.visit.total_amount
+
+        response = self.client.post(
+            reverse("reception_queue_send_to_module", args=[self.queue_entry.pk]),
+            {"service_id": str(self.triage_service.pk)},
+        )
+
+        self.assertRedirects(response, reverse("reception_queue"))
+        self.visit.refresh_from_db()
+        self.assertEqual(self.visit.total_amount, total_before)
+        line = VisitService.objects.get(visit=self.visit, service=self.triage_service)
+        self.assertTrue(line.covered_by_package)
+
+    def test_send_to_module_rejects_a_service_outside_the_routable_categories(self):
+        procedure_service = Service.objects.create(
+            hospital=self.hospital, name="Wound Dressing", category=Service.CATEGORY_PROCEDURE, price=Decimal("5.00"),
+        )
+
+        response = self.client.post(
+            reverse("reception_queue_send_to_module", args=[self.queue_entry.pk]),
+            {"service_id": str(procedure_service.pk)}, follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(VisitService.objects.filter(visit=self.visit, service=procedure_service).exists())
 
 
 class LabPaymentGateWorkflowTests(TestCase):

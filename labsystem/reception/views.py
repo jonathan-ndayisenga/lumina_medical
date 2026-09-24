@@ -424,6 +424,23 @@ def receptionist_queue(request):
     # within each of the two groups.
     queue_rows.sort(key=lambda row: 0 if row["open_work_count"] > 0 else 1)
 
+    # Grouped by category (in display order) for the general "Send to
+    # Module" picker below -- one <optgroup> per routable category, in
+    # whatever order Service.category naturally sorts (consultation, lab,
+    # scan, triage), rather than a separate dropdown hardcoded per category.
+    routable_service_groups = []
+    if hospital:
+        groups_by_label = {}
+        for service in (
+            Service.objects.filter(hospital=hospital, is_active=True, category__in=ROUTABLE_QUEUE_CATEGORIES)
+            .order_by("category", "name")
+        ):
+            label = service.get_category_display()
+            if label not in groups_by_label:
+                groups_by_label[label] = []
+                routable_service_groups.append((label, groups_by_label[label]))
+            groups_by_label[label].append(service)
+
     return render(
         request,
         "reception/reception_queue.html",
@@ -437,6 +454,7 @@ def receptionist_queue(request):
             "pending_dispense_count": sum(row["pending_dispense_count"] for row in queue_rows),
             "consultation_services": consultation_services,
             "scan_services": scan_services,
+            "routable_service_groups": routable_service_groups,
             "phlebotomy_enabled": _phlebotomy_enabled_for(hospital),
         },
     )
@@ -759,6 +777,94 @@ def receptionist_queue_send_to_sonographer(request, queue_entry_id):
     )
     sync_visit_status(visit)
     messages.success(request, f"{visit.patient.name} sent to sonographer. {scan_service.name} added to bill.")
+    return redirect("reception_queue")
+
+
+# Any active service in one of these categories routes somewhere
+# (queue_types_for_service returns a non-empty list for exactly these) —
+# the general "send to module" picker below is scoped to just these, since
+# picking a procedure/other/pharmacy service here wouldn't have anywhere
+# to route it.
+ROUTABLE_QUEUE_CATEGORIES = [
+    Service.CATEGORY_CONSULTATION,
+    Service.CATEGORY_LAB,
+    Service.CATEGORY_SCAN,
+    Service.CATEGORY_TRIAGE,
+]
+
+
+@reception_role_required
+@transaction.atomic
+def receptionist_queue_send_to_module(request, queue_entry_id):
+    """General-purpose sibling of send_to_doctor/send_to_sonographer above —
+    picks any active service across every routable category (doctor, lab,
+    sonographer, nurse) instead of being pinned to one category each, bills
+    it (or marks it covered_by_package if an active package on the visit
+    covers it, same rule every other billing entry point already follows),
+    and routes it via the same queue_types_for_service mapping visit
+    creation and doctor ordering already use."""
+    if request.method != "POST":
+        raise PermissionDenied("Sending a patient to a module requires a POST request.")
+
+    hospital = get_active_hospital(request)
+    queue_entry, stale_response = resolve_open_reception_entry(request, hospital, queue_entry_id)
+    if stale_response is not None:
+        return stale_response
+    visit = queue_entry.visit
+
+    if reception_queue_other_open_work(visit).exists():
+        messages.error(request, "This visit still has other open queue work and cannot be routed yet.")
+        return redirect("reception_queue")
+
+    service_id = request.POST.get("service_id", "").strip()
+    service = (
+        Service.objects.filter(
+            pk=service_id, hospital=hospital, is_active=True, category__in=ROUTABLE_QUEUE_CATEGORIES,
+        ).first()
+        if service_id else None
+    )
+    if service is None:
+        messages.error(request, "Select a service to send for.")
+        return redirect("reception_queue")
+
+    queue_types = queue_types_for_service(service)
+    if not queue_types:
+        messages.error(request, f"{service.name} doesn't route to any module — bill it normally instead.")
+        return redirect("reception_queue")
+
+    already_pending = visit.visit_services.filter(service=service, performed=False).exists()
+    covering_package = None
+    if not already_pending:
+        covering_package = active_package_visit_service(visit, service)
+        visit_service_kwargs = {
+            "visit": visit,
+            "service": service,
+            "price_at_time": service.price,
+            "notes": f"Added from receptionist queue after {reception_source_from_entry(queue_entry).lower()} handoff.",
+        }
+        if covering_package:
+            visit_service_kwargs["covered_by_package"] = True
+            visit_service_kwargs["covering_package"] = covering_package
+        VisitService.objects.create(**visit_service_kwargs)
+        if not covering_package:
+            visit.total_amount = (visit.total_amount or Decimal("0.00")) + service.price
+            visit.save(update_fields=["total_amount"])
+
+    close_reception_queue_for_visit(visit)
+    for queue_type in queue_types:
+        ensure_pending_queue_entry(
+            visit=visit,
+            hospital=hospital,
+            queue_type=queue_type,
+            reason=queue_reason_for_service(service),
+            requested_by=request.user,
+            notes=f"Sent from receptionist queue after {reception_source_from_entry(queue_entry).lower()} handoff.",
+        )
+    sync_visit_status(visit)
+    if covering_package:
+        messages.success(request, f"{visit.patient.name} sent for {service.name} — covered by {covering_package.service.name}.")
+    else:
+        messages.success(request, f"{visit.patient.name} sent for {service.name}.")
     return redirect("reception_queue")
 
 
