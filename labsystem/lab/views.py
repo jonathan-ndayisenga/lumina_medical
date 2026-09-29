@@ -1,3 +1,6 @@
+import csv
+import json
+from datetime import date
 from decimal import Decimal
 
 from django.contrib import messages
@@ -5,7 +8,8 @@ from django.contrib.auth.decorators import login_required, user_passes_test
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.core.paginator import Paginator
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Count, Q
+from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -26,7 +30,7 @@ from doctor.models import LabRequest, Notification
 from .forms import LabConsumableForm
 from .models import LabConsumable, LabReport
 # Merged in from the former `lab_next` app — the reworked engine's models.
-from .models import LabOrder, OrderStage, ResultType, Sex
+from .models import DefinedOption, LabOrder, LabTest, OrderStage, ResultType, Sex
 from .guards import release_visit_service_for_lab
 from .services_next import hydrate_entry_form, save_results
 
@@ -493,6 +497,103 @@ def report_list(request):
         'extra_query_string': extra_query_string,
     }
     return render(request, 'lab/report_list.html', context)
+
+
+@login_required
+@staff_required
+def test_volume_report(request):
+    """How many of each lab test were ordered in a period, plus a
+    Positive/Negative-style breakdown for DEFINED_OPTION tests -- reachable
+    both from this module's own Reports page and from Hospital Management
+    -> Reports."""
+    hospital = get_active_hospital(request)
+    today = timezone.localdate()
+    try:
+        date_start = date.fromisoformat((request.GET.get("start") or "").strip())
+    except ValueError:
+        date_start = today.replace(day=1)
+    try:
+        date_end = date.fromisoformat((request.GET.get("end") or "").strip())
+    except ValueError:
+        date_end = today
+
+    orders_qs = LabOrder.objects.filter(created_at__date__gte=date_start, created_at__date__lte=date_end)
+    if hospital and getattr(request.user, "role", "") != User.ROLE_SUPERADMIN:
+        orders_qs = orders_qs.filter(hospital=hospital)
+
+    total_ordered = orders_qs.count()
+    total_resulted = orders_qs.filter(result__isnull=False).count()
+
+    volume_rows = list(
+        orders_qs.values("test_id", "test__name", "test__category__name")
+        .annotate(count=Count("id"))
+        .order_by("-count")
+    )
+    top_test = volume_rows[0] if volume_rows else None
+
+    defined_option_test_ids = set(
+        LabTest.objects.filter(result_type=ResultType.DEFINED_OPTION).values_list("id", flat=True)
+    )
+    breakdown_qs = (
+        orders_qs.filter(test_id__in=defined_option_test_ids, result__chosen_option__gt="")
+        .values("test__name", "result__chosen_option")
+        .annotate(count=Count("id"))
+        .order_by("test__name", "result__chosen_option")
+    )
+    breakdown_by_test = {}
+    for row in breakdown_qs:
+        breakdown_by_test.setdefault(row["test__name"], {})[row["result__chosen_option"]] = row["count"]
+    for row in volume_rows:
+        row["breakdown"] = breakdown_by_test.get(row["test__name"])
+
+    if request.GET.get("export") == "csv":
+        response = HttpResponse(content_type="text/csv")
+        response["Content-Disposition"] = f'attachment; filename="lab-test-volume-{date_start}-{date_end}.csv"'
+        writer = csv.writer(response)
+        writer.writerow(["Test", "Category", "Total Ordered", "Result Breakdown"])
+        for row in volume_rows:
+            breakdown_text = (
+                "; ".join(f"{label}: {count}" for label, count in row["breakdown"].items())
+                if row["breakdown"] else ""
+            )
+            writer.writerow([row["test__name"], row["test__category__name"] or "", row["count"], breakdown_text])
+        return response
+
+    # Order the breakdown chart's option labels the same way the admin
+    # already orders them on a test's own catalog entry (DefinedOption.sort_order),
+    # instead of an arbitrary alphabetical shuffle -- e.g. Positive before Negative.
+    option_label_order = list(
+        DefinedOption.objects.filter(test_id__in=defined_option_test_ids)
+        .order_by("sort_order", "label")
+        .values_list("label", flat=True)
+        .distinct()
+    )
+    present_labels = {label for opts in breakdown_by_test.values() for label in opts.keys()}
+    all_option_labels = [label for label in option_label_order if label in present_labels]
+    all_option_labels += sorted(present_labels - set(all_option_labels))
+
+    breakdown_test_names = list(breakdown_by_test.keys())
+
+    context = {
+        "active_nav": "dashboard",
+        "date_start": date_start.isoformat(),
+        "date_end": date_end.isoformat(),
+        "total_ordered": total_ordered,
+        "total_resulted": total_resulted,
+        "distinct_test_count": len(volume_rows),
+        "top_test": top_test,
+        "volume_rows": volume_rows[:50],
+        "breakdown_test_names": breakdown_test_names,
+        "chart_labels_json": json.dumps([r["test__name"] for r in volume_rows[:15]]),
+        "chart_values_json": json.dumps([r["count"] for r in volume_rows[:15]]),
+        "breakdown_labels_json": json.dumps(breakdown_test_names),
+        "breakdown_datasets_json": json.dumps([
+            {"label": label, "data": [breakdown_by_test[name].get(label, 0) for name in breakdown_test_names]}
+            for label in all_option_labels
+        ]),
+        "filter_qs": f"start={date_start.isoformat()}&end={date_end.isoformat()}",
+    }
+    return render(request, "lab/test_volume_report.html", context)
 
 
 @login_required

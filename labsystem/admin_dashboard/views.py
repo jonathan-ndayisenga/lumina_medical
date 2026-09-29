@@ -2308,6 +2308,7 @@ def hospital_reports(request):
     finance_rows = []
     finance_total = _Decimal("0")
     finance_enabled = hospital and hospital.has_module("finance") if hospital else False
+    lab_enabled = bool(hospital and hospital.has_module("lab"))
 
     if finance_enabled:
         try:
@@ -2360,6 +2361,7 @@ def hospital_reports(request):
         "date_from": date_from if finance_enabled else "",
         "date_to": date_to if finance_enabled else "",
         "ledger_links": LEDGER_LINKS,
+        "lab_enabled": lab_enabled,
     })
     return render(request, "admin_dashboard/reports_index.html", context)
 

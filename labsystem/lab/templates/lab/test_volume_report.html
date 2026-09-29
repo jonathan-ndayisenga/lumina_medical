@@ -1,0 +1,219 @@
+{% extends 'base.html' %}
+
+{% block title %}Lab Test Volume Report{% endblock %}
+{% block page_title %}Lab Test Volume Report{% endblock %}
+{% block page_subtitle %}How many of each test were carried out in a period, with result breakdowns.{% endblock %}
+{% block content_container_classes %}max-w-[100rem] mx-auto px-4 lg:px-8 py-6{% endblock %}
+
+{% block content %}
+<div class="space-y-5">
+
+    {# ── Filters ── #}
+    <div class="card">
+        <form method="get" id="volumeReportFilters" class="flex flex-wrap items-end gap-3">
+            <div class="flex flex-col gap-1">
+                <label class="text-xs font-semibold uppercase text-text-muted">Month</label>
+                <input type="month" id="volumeReportMonth" class="form-control">
+            </div>
+            <div class="flex flex-col gap-1">
+                <label class="text-xs font-semibold uppercase text-text-muted">From</label>
+                <input type="date" name="start" id="volumeReportStart" value="{{ date_start }}" class="form-control">
+            </div>
+            <div class="flex flex-col gap-1">
+                <label class="text-xs font-semibold uppercase text-text-muted">To</label>
+                <input type="date" name="end" id="volumeReportEnd" value="{{ date_end }}" class="form-control">
+            </div>
+            <div class="flex items-end gap-2">
+                <button type="submit" class="btn btn-primary btn-sm">Generate Report</button>
+                <button type="button" onclick="volumeReportPreset('today')" class="btn btn-secondary btn-sm">Today</button>
+                <button type="button" onclick="volumeReportPreset('week')" class="btn btn-secondary btn-sm">This Week</button>
+                <button type="button" onclick="volumeReportPreset('month')" class="btn btn-secondary btn-sm">This Month</button>
+            </div>
+            <div class="flex items-end gap-2 ml-auto">
+                <a href="?{{ filter_qs }}&export=csv" class="btn btn-secondary btn-sm">Export CSV</a>
+                <a href="{% url 'report_list' %}" class="btn btn-secondary btn-sm">Back to Reports</a>
+            </div>
+        </form>
+    </div>
+
+    {# ── Stat tiles ── #}
+    <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+        <div class="card">
+            <p class="text-xs uppercase tracking-wide text-text-muted">Total Tests Ordered</p>
+            <p class="mt-2 text-3xl font-bold text-text-main">{{ total_ordered }}</p>
+            <p class="mt-1 text-xs text-text-muted">{{ date_start }} to {{ date_end }}</p>
+        </div>
+        <div class="card">
+            <p class="text-xs uppercase tracking-wide text-text-muted">Total Resulted</p>
+            <p class="mt-2 text-3xl font-bold text-blue-700">{{ total_resulted }}</p>
+            <p class="mt-1 text-xs text-text-muted">Orders with a result recorded.</p>
+        </div>
+        <div class="card">
+            <p class="text-xs uppercase tracking-wide text-text-muted">Distinct Test Types</p>
+            <p class="mt-2 text-3xl font-bold text-text-main">{{ distinct_test_count }}</p>
+            <p class="mt-1 text-xs text-text-muted">Different tests ordered this period.</p>
+        </div>
+        <div class="card">
+            <p class="text-xs uppercase tracking-wide text-text-muted">Most Ordered Test</p>
+            {% if top_test %}
+                <p class="mt-2 text-2xl font-bold text-emerald-700">{{ top_test.test__name }}</p>
+                <p class="mt-1 text-xs text-text-muted">{{ top_test.count }} order{{ top_test.count|pluralize }}</p>
+            {% else %}
+                <p class="mt-2 text-2xl font-bold text-text-muted">—</p>
+                <p class="mt-1 text-xs text-text-muted">No tests ordered in this period.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    {# ── Volume chart ── #}
+    <div class="card">
+        <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+            <div>
+                <h3 class="text-lg font-bold text-text-main">Test Volume</h3>
+                <p class="text-xs text-text-muted">Top {{ volume_rows|length }} test{{ volume_rows|length|pluralize }} ordered, most to least.</p>
+            </div>
+        </div>
+        <div class="h-72">
+            <canvas id="volumeChart" aria-label="Lab test volume chart" role="img"></canvas>
+        </div>
+    </div>
+
+    {# ── Result breakdown chart (only when at least one Defined-Option test had results this period) ── #}
+    {% if breakdown_test_names %}
+    <div class="card">
+        <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+            <div>
+                <h3 class="text-lg font-bold text-text-main">Result Breakdown</h3>
+                <p class="text-xs text-text-muted">Positive / Negative (or equivalent) counts for tests with categorical results.</p>
+            </div>
+        </div>
+        <div class="h-72">
+            <canvas id="breakdownChart" aria-label="Lab result breakdown chart" role="img"></canvas>
+        </div>
+    </div>
+    {% endif %}
+
+    {# ── Table ── #}
+    <div class="card overflow-hidden">
+        <div class="flex items-center justify-between gap-3 mb-4">
+            <h3 class="text-lg font-bold text-text-main">Tests This Period</h3>
+            <span class="text-xs text-text-muted">{{ date_start }} — {{ date_end }}</span>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full">
+                <thead class="bg-gray-50 border-b border-gray-200">
+                    <tr>
+                        <th class="text-left px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-widest">Test</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-widest">Category</th>
+                        <th class="text-right px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-widest">Total Ordered</th>
+                        <th class="text-left px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-widest">Result Breakdown</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200">
+                    {% for row in volume_rows %}
+                    <tr class="hover:bg-gray-50 transition-colors">
+                        <td class="px-4 py-3 text-sm font-semibold text-text-main">{{ row.test__name }}</td>
+                        <td class="px-4 py-3 text-sm text-text-muted">{{ row.test__category__name|default:"—" }}</td>
+                        <td class="px-4 py-3 text-sm text-right font-semibold text-text-main">{{ row.count }}</td>
+                        <td class="px-4 py-3 text-sm">
+                            {% if row.breakdown %}
+                                <div class="flex flex-wrap gap-1.5">
+                                    {% for label, count in row.breakdown.items %}
+                                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">{{ label }}: {{ count }}</span>
+                                    {% endfor %}
+                                </div>
+                            {% else %}
+                                <span class="text-text-muted">—</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="4" class="px-4 py-8 text-center text-sm text-text-muted">No tests ordered in this period.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+<script>
+function volumeReportPreset(preset) {
+    const fmt = d => d.toISOString().slice(0, 10);
+    const today = new Date();
+    let s = today, e = today;
+    if (preset === 'week') { s = new Date(today); s.setDate(today.getDate() - today.getDay()); }
+    else if (preset === 'month') { s = new Date(today.getFullYear(), today.getMonth(), 1); }
+    document.getElementById('volumeReportStart').value = fmt(s);
+    document.getElementById('volumeReportEnd').value = fmt(e);
+    document.getElementById('volumeReportFilters').submit();
+}
+
+document.getElementById('volumeReportMonth')?.addEventListener('change', function () {
+    if (!this.value) return;
+    const [year, month] = this.value.split('-').map(Number);
+    const firstDay = new Date(year, month - 1, 1);
+    const lastDay = new Date(year, month, 0);
+    const fmt = d => d.toISOString().slice(0, 10);
+    document.getElementById('volumeReportStart').value = fmt(firstDay);
+    document.getElementById('volumeReportEnd').value = fmt(lastDay);
+    document.getElementById('volumeReportFilters').submit();
+});
+
+(function () {
+    const ctx = document.getElementById('volumeChart');
+    if (!ctx) return;
+    new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: {{ chart_labels_json|safe }},
+            datasets: [{
+                label: 'Tests Ordered',
+                data: {{ chart_values_json|safe }},
+                backgroundColor: 'rgba(15, 59, 95, 0.75)',
+                borderColor: '#0f3b5f',
+                borderWidth: 1,
+                borderRadius: 4,
+            }],
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: { y: { beginAtZero: true, ticks: { precision: 0 } } },
+        },
+    });
+})();
+
+(function () {
+    const ctx = document.getElementById('breakdownChart');
+    if (!ctx) return;
+    const palette = ['#0f3b5f', '#dc2626', '#16a34a', '#d97706', '#7c3aed', '#0891b2'];
+    const rawDatasets = {{ breakdown_datasets_json|safe }};
+    new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: {{ breakdown_labels_json|safe }},
+            datasets: rawDatasets.map((ds, i) => ({
+                label: ds.label,
+                data: ds.data,
+                backgroundColor: palette[i % palette.length],
+            })),
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: true, position: 'top' } },
+            scales: {
+                x: { stacked: true },
+                y: { stacked: true, beginAtZero: true, ticks: { precision: 0 } },
+            },
+        },
+    });
+})();
+</script>
+{% endblock %}

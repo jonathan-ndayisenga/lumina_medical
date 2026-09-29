@@ -20,6 +20,7 @@ urlpatterns = [
     path('manage/tests/clone/<int:pk>/', views_catalog.test_clone, name='lab_test_clone'),
     path('manage/tests/<int:pk>/edit/', views_catalog.test_edit, name='lab_test_edit'),
     path('manage/report-settings/', views_catalog.report_settings, name='lab_report_settings'),
+    path('reports/test-volume/', views.test_volume_report, name='lab_test_volume_report'),
 
     path('queue/', views.queue, name='queue'),
     path('reviewing-results/', views.reviewing_results, name='reviewing_results'),

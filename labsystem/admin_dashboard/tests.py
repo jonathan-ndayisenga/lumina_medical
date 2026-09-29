@@ -708,3 +708,32 @@ class PackageServiceCatalogTests(TestCase):
         queryset = response.context["form"].fields["package_services"].queryset
         self.assertNotIn(other_package, queryset)
         self.assertIn(self.consultation, queryset)
+
+
+class HospitalReportsHubTests(TestCase):
+    """Hospital Management -> Reports links out to each module's own
+    report -- confirms the Lab Reports card only appears when the
+    hospital actually has the lab module enabled."""
+
+    def setUp(self):
+        self.User = get_user_model()
+        self.hospital = Hospital.objects.create(name="Reports Hub Hospital", subdomain="reports-hub")
+        self.admin_user = self.User.objects.create_user(
+            username="reportshubadmin", password="StrongPass123!",
+            role=self.User.ROLE_HOSPITAL_ADMIN, hospital=self.hospital,
+        )
+        self.client.force_login(self.admin_user)
+
+    def test_lab_report_card_shown_when_lab_module_enabled(self):
+        _enable_modules(self.hospital, "lab")
+
+        response = self.client.get(reverse("hospital_reports"))
+
+        self.assertTrue(response.context["lab_enabled"])
+        self.assertContains(response, "Lab Reports")
+
+    def test_lab_report_card_hidden_when_lab_module_not_enabled(self):
+        response = self.client.get(reverse("hospital_reports"))
+
+        self.assertFalse(response.context["lab_enabled"])
+        self.assertNotContains(response, "Lab Reports")

@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model
@@ -1450,3 +1450,106 @@ class SyncHospitalServiceTests(TestCase):
         self.assertIsNone(error)
         self.linked_service.refresh_from_db()
         self.assertEqual(self.linked_service.price, Decimal("20.00"))
+
+
+class LabTestVolumeReportTests(LabEngineTestBase):
+    """How many of each lab test were carried out in a period, plus a
+    Positive/Negative breakdown for DEFINED_OPTION tests (e.g. Malaria) --
+    reachable both from the lab module's own Reports page and from
+    Hospital Management -> Reports."""
+
+    def setUp(self):
+        super().setUp()
+        from lab.models import DefinedOption
+        from lab.services_next import save_results
+
+        self.malaria_test = LabTest.objects.create(
+            hospital=self.hospital, name="Malaria RDT", category=self.test.category, result_type=ResultType.DEFINED_OPTION,
+        )
+        DefinedOption.objects.create(test=self.malaria_test, label="Positive", sort_order=1, is_abnormal=True)
+        DefinedOption.objects.create(test=self.malaria_test, label="Negative", sort_order=2, is_abnormal=False)
+        self.malaria_service = Service.objects.create(
+            hospital=self.hospital, name="Malaria", category=Service.CATEGORY_LAB, price=Decimal("5"),
+        )
+        self.malaria_service.lab_tests_next.add(self.malaria_test)
+
+        self.today = timezone.localdate()
+        self.this_month_day = self.today.replace(day=1)
+        self.last_month_day = (self.this_month_day - timedelta(days=1)).replace(day=15)
+
+        def _order(test, service, chosen_option, when):
+            patient = Patient.objects.create(hospital=self.hospital, name=f"Patient {test.name} {when}", age="20YRS", sex="M")
+            visit = Visit.objects.create(patient=patient, hospital=self.hospital, created_by=self.lab_user, total_amount=Decimal("5"))
+            vs = VisitService.objects.create(visit=visit, service=service, price_at_time=service.price)
+            order = LabOrder.objects.create(visit_service=vs, test=test, hospital=self.hospital)
+            if chosen_option is not None:
+                save_results(order, self.lab_user, {"chosen_option": chosen_option})
+            order.created_at = timezone.make_aware(datetime.combine(when, datetime.min.time()))
+            order.save(update_fields=["created_at"])
+            return order
+
+        # This month: 2 Malaria (1 Positive, 1 Negative) + 1 Full Panel.
+        _order(self.malaria_test, self.malaria_service, "Positive", self.this_month_day)
+        _order(self.malaria_test, self.malaria_service, "Negative", self.this_month_day)
+        _order(self.test, self.service, None, self.this_month_day)
+        # Last month: 1 Malaria (Negative) -- must NOT count toward this month's report.
+        _order(self.malaria_test, self.malaria_service, "Negative", self.last_month_day)
+
+        self.client.force_login(self.lab_user)
+
+    def test_report_counts_total_orders_in_the_date_range(self):
+        response = self.client.get(
+            reverse("lab_test_volume_report"),
+            {"start": self.this_month_day.isoformat(), "end": self.today.isoformat()},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["total_ordered"], 3)
+
+    def test_report_breaks_down_defined_option_results_by_value(self):
+        response = self.client.get(
+            reverse("lab_test_volume_report"),
+            {"start": self.this_month_day.isoformat(), "end": self.today.isoformat()},
+        )
+
+        rows = {row["test__name"]: row for row in response.context["volume_rows"]}
+        self.assertEqual(rows["Malaria RDT"]["count"], 2)
+        self.assertEqual(rows["Malaria RDT"]["breakdown"], {"Positive": 1, "Negative": 1})
+        # A non-DEFINED_OPTION test (Full Panel) has no breakdown at all.
+        self.assertIsNone(rows["Full Panel"]["breakdown"])
+
+    def test_report_excludes_orders_outside_the_date_range(self):
+        response = self.client.get(
+            reverse("lab_test_volume_report"),
+            {"start": self.this_month_day.isoformat(), "end": self.today.isoformat()},
+        )
+
+        body = response.content.decode()
+        rows = {row["test__name"]: row for row in response.context["volume_rows"]}
+        # Only this month's 2 Malaria orders count -- last month's is excluded.
+        self.assertEqual(rows["Malaria RDT"]["count"], 2)
+
+    def test_report_defaults_to_this_month_when_no_dates_given(self):
+        response = self.client.get(reverse("lab_test_volume_report"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["date_start"], self.this_month_day.isoformat())
+        self.assertEqual(response.context["total_ordered"], 3)
+
+    def test_csv_export_returns_expected_rows(self):
+        response = self.client.get(
+            reverse("lab_test_volume_report"),
+            {"start": self.this_month_day.isoformat(), "end": self.today.isoformat(), "export": "csv"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "text/csv")
+        body = response.content.decode()
+        self.assertIn("Malaria RDT", body)
+        self.assertIn("Positive: 1", body)
+        self.assertIn("Negative: 1", body)
+
+    def test_report_list_page_links_to_the_volume_report(self):
+        response = self.client.get(reverse("report_list"))
+        self.assertContains(response, "Generate Report")
+        self.assertContains(response, reverse("lab_test_volume_report"))
