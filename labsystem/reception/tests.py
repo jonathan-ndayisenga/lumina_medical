@@ -1859,6 +1859,61 @@ class PatientAgeDisplayTests(TestCase):
         self.assertNotIn("1YRS", body)
 
 
+class PatientListOrderingTests(TestCase):
+    """A returning patient's newest visit, not their original registration
+    date, decides where they sit on the Patients list -- coming back for a
+    second visit brings them back to the top instead of leaving them
+    wherever they landed when first registered."""
+
+    def setUp(self):
+        self.hospital = Hospital.objects.create(name="Lumina Ordering Hospital", subdomain="lumina-ordering")
+        self.receptionist = User.objects.create_user(
+            username="ordering-reception", password="pass12345",
+            role=User.ROLE_RECEPTIONIST, hospital=self.hospital, is_active=True,
+        )
+        self.client.force_login(self.receptionist)
+
+        self.first_patient = Patient.objects.create(
+            hospital=self.hospital, name="Registered First", registration_date=timezone.localdate(), age="30YRS", sex="M",
+        )
+        self.second_patient = Patient.objects.create(
+            hospital=self.hospital, name="Registered Second", registration_date=timezone.localdate(), age="40YRS", sex="F",
+        )
+        self.never_visited_patient = Patient.objects.create(
+            hospital=self.hospital, name="Never Visited", registration_date=timezone.localdate(), age="50YRS", sex="M",
+        )
+
+    def _visit_at(self, patient, when):
+        # visit_date is auto_now_add -- only settable after the initial insert.
+        visit = Visit.objects.create(patient=patient, hospital=self.hospital, created_by=self.receptionist, total_amount=Decimal("0"))
+        visit.visit_date = when
+        visit.save(update_fields=["visit_date"])
+        return visit
+
+    def test_a_returning_patients_second_visit_moves_them_to_the_top(self):
+        now = timezone.now()
+        self._visit_at(self.first_patient, now - timedelta(days=2))
+        self._visit_at(self.second_patient, now - timedelta(days=1))
+        # first_patient comes back for a second visit -- their newest visit
+        # is now more recent than second_patient's only visit, even though
+        # they registered first.
+        self._visit_at(self.first_patient, now)
+
+        response = self.client.get(reverse("patient_list"))
+        rows = [row["patient"].pk for row in response.context["patient_rows"]]
+
+        self.assertEqual(rows.index(self.first_patient.pk), 0)
+        self.assertLess(rows.index(self.first_patient.pk), rows.index(self.second_patient.pk))
+
+    def test_patients_with_no_visits_sort_to_the_bottom_not_the_top(self):
+        Visit.objects.create(patient=self.second_patient, hospital=self.hospital, created_by=self.receptionist, total_amount=Decimal("0"))
+
+        response = self.client.get(reverse("patient_list"))
+        rows = [row["patient"].pk for row in response.context["patient_rows"]]
+
+        self.assertLess(rows.index(self.second_patient.pk), rows.index(self.never_visited_patient.pk))
+
+
 class NewbornAgeUnitTests(TestCase):
     """Registration needs to capture weeks/days, not just years/months, for
     a baby under one month old -- covers both directions: age (in the new

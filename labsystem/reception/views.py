@@ -5,7 +5,7 @@ from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.paginator import Paginator
 from django.db import transaction
-from django.db.models import Count, Max, Q, Sum
+from django.db.models import Count, F, Max, Q, Sum
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -960,7 +960,12 @@ def patient_list(request):
         Patient.objects.filter(hospital=hospital)
         .annotate(visit_count=Count("visits"), last_visit_date=Max("visits__visit_date"))
         .prefetch_related("visits__queue_entries", "visits__visit_services__service")
-        .order_by("-created_at")
+        # A returning patient's newest visit — not their original
+        # registration date — should decide where they sit in this list,
+        # so coming back for a second visit brings them back to the top.
+        # Patients with no visits at all (registered but never seen) sort
+        # to the bottom rather than swamping the top with nulls.
+        .order_by(F("last_visit_date").desc(nulls_last=True), "-created_at")
         if hospital
         else Patient.objects.none()
     )
