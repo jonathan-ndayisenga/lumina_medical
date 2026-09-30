@@ -61,6 +61,28 @@
         </tbody>
     </table>
 
+    <h2>Who requested the tests</h2>
+    <table>
+        <thead><tr><th>Requested by</th><th class="num">Tests</th></tr></thead>
+        <tbody>
+            {% for row in request_source_rows %}
+            <tr><td>{{ row.label }}</td><td class="num">{{ row.count }}</td></tr>
+            {% empty %}
+            <tr><td colspan="2" class="muted">No tests ordered in this period.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    <table style="margin-top:8px">
+        <thead><tr><th>Requesting doctor</th><th>Facility</th><th class="num">Tests</th><th>Top tests</th></tr></thead>
+        <tbody>
+            {% for row in requesting_doctor_rows %}
+            <tr><td>{{ row.name }}</td><td class="muted">{{ row.where }}</td><td class="num">{{ row.count }}</td><td class="muted">{{ row.top_tests }}</td></tr>
+            {% empty %}
+            <tr><td colspan="4" class="muted">No doctor-requested tests in this period.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
     <h2>By technician</h2>
     <table>
         <thead><tr><th>Technician</th><th class="num">Collected</th><th class="num">Entered</th><th class="num">Reviewed</th><th class="num">Released</th><th>Top tests entered</th></tr></thead>

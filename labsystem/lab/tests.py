@@ -1572,6 +1572,31 @@ class LabTestVolumeReportTests(LabEngineTestBase):
         self.assertEqual(response.context["filtered_report_count"], 3)
         self.assertContains(response, "Filtered · Malaria RDT")
 
+    def test_report_splits_self_and_doctor_requests(self):
+        doctor = get_user_model().objects.create_user(
+            username="reqdoc", password="x", first_name="Ivan", last_name="Mugisha",
+            role=get_user_model().ROLE_DOCTOR, hospital=self.hospital,
+        )
+        this_month = LabOrder.objects.filter(test=self.malaria_test, created_at__date__gte=self.this_month_day)
+        first, second = [order.visit_service for order in this_month]
+        first.requested_by_type = VisitService.REQUESTED_BY_SELF
+        first.save(update_fields=["requested_by_type"])
+        second.requested_by_type = VisitService.REQUESTED_BY_INTERNAL_DOCTOR
+        second.requested_by_user = doctor
+        second.save(update_fields=["requested_by_type", "requested_by_user"])
+
+        response = self.client.get(
+            reverse("lab_test_volume_report"),
+            {"start": self.this_month_day.isoformat(), "end": self.today.isoformat()},
+        )
+        sources = {row["label"]: row["count"] for row in response.context["request_source_rows"]}
+        self.assertEqual(sources["Self-Requested"], 1)
+        self.assertEqual(sources["Doctor (This Facility)"], 1)
+        self.assertEqual(sources["Not recorded"], 1)  # the Full Panel order has no source saved
+        doctor_row = response.context["requesting_doctor_rows"][0]
+        self.assertEqual((doctor_row["name"], doctor_row["count"]), ("Dr. Ivan Mugisha", 1))
+        self.assertContains(response, "Who requested the tests")
+
     def test_report_shows_what_each_technician_did(self):
         response = self.client.get(
             reverse("lab_test_volume_report"),

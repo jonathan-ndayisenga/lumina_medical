@@ -555,6 +555,40 @@ def technician_activity(orders, results, date_start, date_end):
     return sorted(rows, key=lambda r: (-r["total"], r["name"]))
 
 
+def requester_breakdown(orders):
+    """Who asked for the tests: self-requested walk-ins, doctors here, or
+    outside doctors, plus one row per requesting doctor."""
+    labels = dict(VisitService.REQUESTED_BY_CHOICES)
+    source_rows = [
+        {"label": labels.get(row["visit_service__requested_by_type"], "Not recorded"), "count": row["n"]}
+        for row in orders.values("visit_service__requested_by_type").annotate(n=Count("id")).order_by("-n")
+    ]
+
+    doctors = {}
+    internal = orders.filter(
+        visit_service__requested_by_type=VisitService.REQUESTED_BY_INTERNAL_DOCTOR,
+    ).values("visit_service__requested_by_user", "test__name").annotate(n=Count("id")).order_by("-n")
+    users = User.objects.in_bulk({row["visit_service__requested_by_user"] for row in internal} - {None})
+    for row in internal:
+        user = users.get(row["visit_service__requested_by_user"])
+        name = (user.get_full_name() or user.username) if user else "Unknown doctor"
+        doctors.setdefault((name, "This facility"), []).append((row["test__name"], row["n"]))
+    external = orders.filter(
+        visit_service__requested_by_type=VisitService.REQUESTED_BY_EXTERNAL_DOCTOR,
+    ).values("visit_service__external_requester_name", "visit_service__external_requester_facility", "test__name").annotate(n=Count("id")).order_by("-n")
+    for row in external:
+        name = row["visit_service__external_requester_name"] or "Unnamed doctor"
+        where = row["visit_service__external_requester_facility"] or "Outside facility"
+        doctors.setdefault((name, where), []).append((row["test__name"], row["n"]))
+
+    doctor_rows = [
+        {"name": name, "where": where, "count": sum(n for _, n in tests),
+         "top_tests": " · ".join(f"{test} {n}" for test, n in tests[:3])}
+        for (name, where), tests in doctors.items()
+    ]
+    return source_rows, sorted(doctor_rows, key=lambda r: (-r["count"], r["name"]))
+
+
 @login_required
 @staff_required
 def test_volume_report(request):
@@ -580,6 +614,7 @@ def test_volume_report(request):
         scoped_results = scoped_results.filter(order__hospital=hospital)
     orders_qs = scoped_orders.filter(created_at__date__gte=date_start, created_at__date__lte=date_end)
     technician_rows = technician_activity(scoped_orders, scoped_results, date_start, date_end)
+    request_source_rows, requesting_doctor_rows = requester_breakdown(orders_qs)
 
     total_ordered = orders_qs.count()
     total_resulted = orders_qs.filter(result__isnull=False).count()
@@ -617,6 +652,14 @@ def test_volume_report(request):
                 if row["breakdown"] else ""
             )
             writer.writerow([row["test__name"], row["test__category__name"] or "", row["count"], breakdown_text])
+        writer.writerow([])
+        writer.writerow(["Requested by", "Tests"])
+        for row in request_source_rows:
+            writer.writerow([row["label"], row["count"]])
+        writer.writerow([])
+        writer.writerow(["Requesting doctor", "Facility", "Tests", "Top Tests"])
+        for row in requesting_doctor_rows:
+            writer.writerow([row["name"], row["where"], row["count"], row["top_tests"]])
         writer.writerow([])
         writer.writerow(["Technician", "Samples Collected", "Results Entered", "Reviewed", "Released", "Top Tests Entered"])
         for row in technician_rows:
@@ -657,6 +700,8 @@ def test_volume_report(request):
         ]),
         "filter_qs": f"start={date_start.isoformat()}&end={date_end.isoformat()}",
         "technician_rows": technician_rows,
+        "request_source_rows": request_source_rows,
+        "requesting_doctor_rows": requesting_doctor_rows,
         "hospital": hospital,
         "period_start": date_start,
         "period_end": date_end,

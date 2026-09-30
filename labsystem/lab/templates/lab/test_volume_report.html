@@ -140,6 +140,42 @@
 
     <div class="card overflow-hidden">
         <div class="mb-4">
+            <h3 class="text-sm font-bold text-text-main">Who requested the tests</h3>
+            <p class="text-xs text-text-muted mt-0.5">Self-requested walk-ins versus tests ordered by doctors, for tests ordered in this period.</p>
+        </div>
+        <div class="flex flex-wrap gap-3 mb-5">
+            {% for row in request_source_rows %}
+            <div class="rounded-xl border border-gray-200 px-4 py-3 min-w-[10rem]">
+                <div class="text-2xl font-semibold text-text-main">{{ row.count }}</div>
+                <div class="text-xs text-text-muted">{{ row.label }}</div>
+            </div>
+            {% empty %}
+            <p class="text-sm text-text-muted">No tests ordered in this period.</p>
+            {% endfor %}
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full">
+                <thead>
+                    <tr><th>Requesting doctor</th><th>Facility</th><th class="text-right">Tests requested</th><th>Top tests</th></tr>
+                </thead>
+                <tbody>
+                    {% for row in requesting_doctor_rows %}
+                    <tr>
+                        <td class="text-sm font-semibold text-text-main">{{ row.name }}</td>
+                        <td class="text-sm text-text-muted">{{ row.where }}</td>
+                        <td class="text-sm text-right">{{ row.count }}</td>
+                        <td class="text-sm text-text-muted">{{ row.top_tests }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="4" class="py-8 text-center text-sm text-text-muted">No doctor-requested tests in this period.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="card overflow-hidden">
+        <div class="mb-4">
             <h3 class="text-sm font-bold text-text-main">By technician</h3>
             <p class="text-xs text-text-muted mt-0.5">What each lab staff member did in this period, counted on the date each step happened.</p>
         </div>
