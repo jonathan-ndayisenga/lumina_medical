@@ -10,6 +10,7 @@ from django.db.models import Q
 from urllib.parse import urlencode
 
 from django.http import Http404, JsonResponse
+from django.templatetags.static import static
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -385,6 +386,38 @@ def org_revenue_comparison(request):
         "date_from": date_from,
         "date_to": date_to,
     })
+
+
+def pwa_manifest(request):
+    """Lets Chrome/Edge offer 'Install Ternah' so the app opens from the
+    desktop in its own window."""
+    return JsonResponse({
+        "name": "Ternah Health",
+        "short_name": "Ternah",
+        "description": "Hospital EMR by Ternah Health",
+        "start_url": reverse("app_home"),
+        "scope": "/",
+        "display": "standalone",
+        "background_color": "#F4F3EF",
+        "theme_color": "#14233A",
+        "icons": [
+            {"src": static("pwa/icon-192.png"), "sizes": "192x192", "type": "image/png", "purpose": "any"},
+            {"src": static("pwa/icon-512.png"), "sizes": "512x512", "type": "image/png", "purpose": "any"},
+            {"src": static("pwa/icon-512.png"), "sizes": "512x512", "type": "image/png", "purpose": "maskable"},
+        ],
+    }, content_type="application/manifest+json")
+
+
+def service_worker(request):
+    # Served from the site root so it covers every page, and never cached so
+    # a new version takes over on the next visit.
+    response = render(request, "pwa/sw.js", content_type="application/javascript")
+    response["Cache-Control"] = "no-cache"
+    return response
+
+
+def pwa_offline(request):
+    return render(request, "pwa/offline.html")
 
 
 def landing(request):

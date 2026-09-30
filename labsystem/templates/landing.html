@@ -5,7 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Ternah Health · Hospital management that actually fits</title>
 <meta name="description" content="Ternah is a modular hospital EMR for Reception, Doctor, Lab, Nursing, Pharmacy, Home Care and Finance. Subscribe only to what your facility runs.">
-<link rel="icon" href="{% static 'images/ternah_icon_white.png' %}">
+<link rel="manifest" href="{% url 'pwa_manifest' %}">
+<meta name="theme-color" content="#14233A">
+<link rel="icon" type="image/png" href="{% static 'pwa/favicon-32.png' %}">
+<link rel="apple-touch-icon" href="{% static 'pwa/apple-touch-icon.png' %}">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600&display=swap" rel="stylesheet">
@@ -345,6 +348,11 @@ footer ul a:hover { color: var(--ink); }
   } else {
     document.querySelectorAll('.reveal').forEach(function (el) { el.classList.add('in'); });
   }
+</script>
+<script>
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', function () { navigator.serviceWorker.register('{% url "service_worker" %}'); });
+    }
 </script>
 </body>
 </html>

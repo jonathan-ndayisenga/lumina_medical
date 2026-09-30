@@ -76,6 +76,30 @@
             <input type="hidden" name="next" value="{{ next }}">
         </form>
 
+        <button type="button" id="installApp" class="w-full btn btn-secondary mt-3" style="display: none;">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M12 3v12m0 0-4-4m4 4 4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" /></svg>
+            Install Ternah on this computer
+        </button>
+        <script>
+            (function () {
+                const button = document.getElementById('installApp');
+                let installPrompt = null;
+                // Chrome/Edge fire this when the app can be installed; hide the
+                // button again once it is installed or already running as the app.
+                window.addEventListener('beforeinstallprompt', function (event) {
+                    event.preventDefault();
+                    installPrompt = event;
+                    button.style.display = '';
+                });
+                button.addEventListener('click', function () {
+                    if (!installPrompt) return;
+                    installPrompt.prompt();
+                    installPrompt.userChoice.finally(function () { installPrompt = null; button.style.display = 'none'; });
+                });
+                window.addEventListener('appinstalled', function () { button.style.display = 'none'; });
+            })();
+        </script>
+
         <div class="text-center mt-8 pt-6 border-t border-gray-200 space-y-2">
             <p class="text-xs text-text-muted">Hospital EMR &mdash; powered by Ternah Software</p>
             <p class="text-xs"><a href="{% url 'landing' %}" class="text-brand-blue hover:underline">About Ternah Health &rarr;</a></p>

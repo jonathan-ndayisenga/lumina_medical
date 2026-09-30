@@ -22,6 +22,9 @@ from .views import (
     org_dashboard,
     org_enter_branch,
     org_revenue_comparison,
+    pwa_manifest,
+    pwa_offline,
+    service_worker,
 )
 
 urlpatterns = [
@@ -30,6 +33,9 @@ urlpatterns = [
     path("home/section/<str:section_key>/", enter_nav_section, name="enter_nav_section"),
     path("home/tiles/<str:tile>/", home_tile, name="home_tile"),
     path("welcome/", landing, name="landing"),
+    path("manifest.webmanifest", pwa_manifest, name="pwa_manifest"),
+    path("sw.js", service_worker, name="service_worker"),
+    path("offline/", pwa_offline, name="pwa_offline"),
 
     # ── Organization / multi-branch Owner views ─────────────────────────────────
     path("org/", org_dashboard, name="org_dashboard"),

@@ -208,3 +208,33 @@ class HomeStatusBoardTests(TestCase):
         self.assertEqual(_compact_ugx(3_000_000), "UGX 3M")
         self.assertEqual(_compact_ugx(845_500), "UGX 846K")
         self.assertEqual(_compact_ugx(950), "UGX 950")
+
+
+class InstallableAppTests(TestCase):
+    """Chrome/Edge can install Ternah from the login page as a desktop app."""
+
+    def test_manifest_describes_the_app(self):
+        import json
+
+        response = self.client.get(reverse("pwa_manifest"))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "application/manifest+json")
+        manifest = json.loads(response.content)
+        self.assertEqual(manifest["name"], "Ternah Health")
+        self.assertEqual(manifest["display"], "standalone")
+        self.assertEqual(manifest["start_url"], reverse("app_home"))
+        self.assertEqual({icon["sizes"] for icon in manifest["icons"]}, {"192x192", "512x512"})
+
+    def test_service_worker_is_served_from_the_root_and_only_caches_the_offline_page(self):
+        response = self.client.get("/sw.js")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "application/javascript")
+        self.assertEqual(response["Cache-Control"], "no-cache")
+        self.assertContains(response, reverse("pwa_offline"))
+        self.assertEqual(self.client.get(reverse("pwa_offline")).status_code, 200)
+
+    def test_login_page_links_manifest_and_offers_install(self):
+        response = self.client.get(reverse("login"))
+        self.assertContains(response, f'rel="manifest" href="{reverse("pwa_manifest")}"')
+        self.assertContains(response, 'id="installApp"')
+        self.assertContains(response, "serviceWorker.register")
