@@ -23,7 +23,7 @@
                 <div id="hospital-dropdown"
                     style="display:none;position:absolute;z-index:50;width:100%;background:#fff;border:1px solid #d1d5db;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,0.10);max-height:220px;overflow-y:auto;margin-top:2px;">
                 </div>
-                <div id="hospital-selected" style="display:none;margin-top:6px;padding:8px 12px;background:#EEF0FB;border-radius:8px;font-size:13px;color:#2A2F66;font-weight:600;display:flex;align-items:center;justify-content:space-between;">
+                <div id="hospital-selected" style="display:none;margin-top:6px;padding:8px 12px;background:var(--icon-bg);border-radius:8px;font-size:13px;color:var(--nav);font-weight:600;display:flex;align-items:center;justify-content:space-between;">
                     <span id="hospital-selected-name"></span>
                     <button type="button" id="hospital-clear" style="background:none;border:none;cursor:pointer;color:#6b7280;font-size:16px;line-height:1;">&#x2715;</button>
                 </div>
@@ -61,8 +61,8 @@
 
             {# Step 5: Total + Notes + Submit #}
             <div id="total-section" style="display:none;" class="space-y-4">
-                <div style="background:#EEF0FB;border:1.5px solid #4F5BD5;border-radius:12px;padding:16px 20px;display:flex;align-items:center;justify-content:space-between;">
-                    <span class="text-sm font-semibold" style="color:#2A2F66;">Total Amount</span>
+                <div style="background:var(--icon-bg);border:1.5px solid #4F5BD5;border-radius:12px;padding:16px 20px;display:flex;align-items:center;justify-content:space-between;">
+                    <span class="text-sm font-semibold" style="color:var(--nav);">Total Amount</span>
                     <span id="total-display" style="font-size:1.25rem;font-weight:800;color:#4F5BD5;">UGX 0</span>
                     <input type="hidden" name="amount" id="id_amount" value="0">
                 </div>
@@ -165,7 +165,7 @@
                 highlight(h.name, q) + '</div>'
             ).join('');
             hospitalDrop.querySelectorAll('.hosp-opt').forEach(el => {
-                el.addEventListener('mouseenter', () => el.style.background = '#EEF0FB');
+                el.addEventListener('mouseenter', () => el.style.background = 'var(--icon-bg)');
                 el.addEventListener('mouseleave', () => el.style.background = '');
                 el.addEventListener('mousedown', (e) => {
                     e.preventDefault();

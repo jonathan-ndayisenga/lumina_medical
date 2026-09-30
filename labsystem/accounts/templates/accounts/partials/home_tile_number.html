@@ -1,0 +1,9 @@
+<div data-v="{{ n.value }}|{{ n.warn }}|{{ n.secondary.value }}|{{ n.secondary.warn }}">
+    <span class="sr-only">{{ n.aria }}</span>
+    <div class="tile-figures" aria-hidden="true">
+        <span><span class="tile-figure{% if n.warn %} is-warn{% endif %}">{{ n.value }}</span> <span class="tile-label">{{ n.label }}</span></span>
+        {% if n.secondary %}
+        <span><span class="tile-figure tile-figure-sm{% if n.secondary.warn %} is-warn{% endif %}">{{ n.secondary.value }}</span> <span class="tile-label">{{ n.secondary.label }}</span></span>
+        {% endif %}
+    </div>
+</div>

@@ -1,33 +1,117 @@
 {% extends 'base.html' %}
 
-{% block title %}Home - Lumina Medical Services{% endblock %}
+{% block title %}Home - {{ user.hospital.name|default:"Hospital EMR" }}{% endblock %}
+{% block print_header %}{% endblock %}
+{% block content_container_classes %}px-4 md:px-12 pt-10 pb-12{% endblock %}
+
+{% block header_main %}
+{% if user.can_access_reception %}
+<form action="{% url 'patient_list' %}" method="get" role="search" class="home-search">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16m10 2-4.35-4.35" /></svg>
+    <label for="patientSearch" class="sr-only">Search patients</label>
+    <input id="patientSearch" type="search" name="q" placeholder="Search patient by name or phone" autocomplete="off">
+    <kbd aria-hidden="true">/</kbd>
+</form>
+{% endif %}
+{% endblock %}
+
+{% block extra_css %}
+<style>
+    .home-search { position: relative; display: flex; align-items: center; width: 100%; max-width: 560px; height: 44px; padding: 0 12px; gap: 10px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; color: var(--muted); }
+    .home-search:focus-within { border-color: var(--ink); }
+    .home-search input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; font-size: 15px; color: var(--ink); }
+    .home-search input::placeholder { color: var(--muted); }
+    .home-search kbd { font: 500 12px/1 inherit; padding: 4px 7px; border: 1px solid var(--border); border-radius: 6px; color: var(--muted); }
+
+    .home-greeting { font-size: 36px; font-weight: 600; letter-spacing: -0.02em; color: var(--ink); line-height: 1.15; }
+    .home-subtitle { margin-top: 8px; font-size: 15px; color: var(--muted); }
+
+    .tile-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 20px; margin-top: 28px; }
+    .tile { position: relative; display: flex; flex-direction: column; min-height: 160px; padding: 24px; background: var(--surface); border: 1px solid var(--border); border-radius: 20px; }
+    .tile-wide { grid-column: span 2; min-height: 170px; }
+    .tile-head { display: inline-flex; align-items: center; gap: 12px; align-self: flex-start; color: var(--ink); text-decoration: none; font-size: 17px; font-weight: 600; border-radius: 12px; }
+    .tile-icon { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border-radius: 12px; background: var(--icon-bg); color: var(--ink); }
+    .tile:has(.is-warn) .tile-icon { background: var(--warn-bg); color: var(--warn); }
+    .tile-body { margin-top: 20px; min-height: 48px; }
+    .tile-figures { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 40px; }
+    .tile-figure { font-size: 36px; font-weight: 600; line-height: 1; color: var(--ink); }
+    .tile-wide .tile-figure { font-size: 44px; }
+    .tile-wide .tile-figure-sm { font-size: 36px; }
+    .tile-figure.is-warn { color: var(--warn); }
+    .tile-label, .tile-note { font-size: 15px; color: var(--muted); }
+    .tile-note { margin-top: 20px; }
+    .tile-skeleton { display: block; width: 120px; height: 36px; border-radius: 8px; background: var(--icon-bg); }
+    .tile-actions { margin-top: auto; padding-top: 20px; display: flex; flex-wrap: wrap; gap: 8px; opacity: 0; }
+    .pill { display: inline-flex; align-items: center; padding: 8px 16px; border-radius: 999px; background: var(--bg); color: var(--ink); font-size: 14px; font-weight: 500; text-decoration: none; }
+    .pill:hover { background: var(--border); }
+    .tile:hover, .tile:focus-within { border-color: var(--border-hover); box-shadow: 0 12px 32px rgba(21, 32, 46, .10); }
+    .tile:hover .tile-actions, .tile:focus-within .tile-actions { opacity: 1; }
+    .tile a:focus-visible, .home-search input:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+
+    @media (prefers-reduced-motion: no-preference) {
+        .tile { transition: transform .2s ease, box-shadow .2s ease, border-color .2s ease; }
+        .tile-actions { transform: translateY(8px); transition: opacity .2s ease, transform .2s ease; }
+        .tile:hover, .tile:focus-within { transform: translateY(-3px) scale(1.01); }
+        .tile:hover .tile-actions, .tile:focus-within .tile-actions { transform: none; }
+    }
+    @media (hover: none) {
+        .tile:hover { transform: none; box-shadow: none; }
+        .tile-actions { opacity: 1; transform: none; }
+        .tile-actions .pill { min-height: 44px; }
+        .tile-actions .pill:not(:first-child) { display: none; }
+    }
+    @media (max-width: 1099px) {
+        .tile-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .tile-wide { grid-column: span 1; }
+        .tile-reception, .tile-doctor { grid-column: span 2; }
+    }
+    @media (max-width: 699px) {
+        .tile-grid { grid-template-columns: minmax(0, 1fr); }
+        .tile-wide, .tile-reception, .tile-doctor { grid-column: span 1; }
+        .home-greeting { font-size: 28px; }
+        .home-search kbd { display: none; }
+    }
+</style>
+{% endblock %}
 
 {% block content %}
-<div class="mb-6">
-    <h1 class="text-2xl font-bold text-text-main">Welcome back, {{ user.get_full_name|default:user.username }}</h1>
-    <p class="mt-1 text-sm text-text-muted">Pick where you want to go.</p>
-</div>
+<h1 class="home-greeting">{{ greeting }}, {{ greeting_name }}</h1>
+<p class="home-subtitle">{% if user.hospital %}{{ user.hospital.name }} · {% endif %}{% if tiles %}here is where every department stands right now.{% else %}you don't have access to any modules yet. Contact your hospital administrator.{% endif %}</p>
 
 {% if tiles %}
-<div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+<div class="tile-grid">
     {% for tile in tiles %}
-    <a href="{{ tile.url }}" class="relative card block no-underline hover:-translate-y-0.5 hover:shadow-lg transition-transform duration-150">
-        {% if tile.queue_count %}
-        <span class="absolute top-3 right-3 inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 text-xs font-bold text-white bg-red-500 rounded-full">{{ tile.queue_count }}</span>
-        {% endif %}
-        <div class="w-11 h-11 rounded-xl flex items-center justify-center mb-4" style="background:#e8eef5;">
-            <svg viewBox="0 0 24 24" fill="none" stroke="#1d3557" stroke-width="2" class="w-5 h-5">
-                <path stroke-linecap="round" stroke-linejoin="round" d="{{ tile.icon }}" />
-            </svg>
+    <article class="tile tile-{{ tile.key }}{% if tile.wide %} tile-wide{% endif %}">
+        <a href="{{ tile.url }}" class="tile-head">
+            <span class="tile-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="20" height="20" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="{{ tile.icon }}" /></svg></span>
+            {{ tile.label }}
+        </a>
+        {% if tile.live_url %}
+        <div class="tile-body" aria-live="polite" hx-get="{{ tile.live_url }}" hx-trigger="load, every 30s [document.visibilityState === 'visible']" hx-swap="innerHTML">
+            <span class="tile-skeleton" aria-hidden="true"></span><span class="sr-only">Loading</span>
         </div>
-        <h2 class="text-base font-bold text-text-main">{{ tile.label }}</h2>
-        <p class="mt-1 text-sm text-text-muted">{{ tile.description }}</p>
-    </a>
+        {% elif tile.key == "hospital_admin" %}
+        <p class="tile-note">Nothing needs your attention</p>
+        {% endif %}
+        {% if tile.actions %}
+        <div class="tile-actions">
+            {% for action in tile.actions %}<a href="{{ action.url }}" class="pill">{{ action.label }}</a>{% endfor %}
+        </div>
+        {% endif %}
+    </article>
     {% endfor %}
 </div>
-{% else %}
-<div class="card">
-    <p class="text-sm text-text-muted">You don't have access to any modules yet. Contact your hospital administrator.</p>
-</div>
 {% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/htmx.org@2.0.4/dist/htmx.min.js"></script>
+<script>
+    // Skip the swap when nothing changed, so aria-live only announces real changes.
+    document.body.addEventListener('htmx:beforeSwap', function (e) {
+        const current = e.detail.target.querySelector('[data-v]');
+        const next = new DOMParser().parseFromString(e.detail.serverResponse, 'text/html').querySelector('[data-v]');
+        if (current && next && current.dataset.v === next.dataset.v) e.detail.shouldSwap = false;
+    });
+</script>
 {% endblock %}

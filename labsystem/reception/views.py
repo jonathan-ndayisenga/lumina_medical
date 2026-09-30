@@ -11,6 +11,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
+from django.views.decorators.clickjacking import xframe_options_sameorigin
 from django.views.decorators.http import require_http_methods
 
 from accounts.models import User
@@ -193,6 +194,16 @@ def reception_queue_queryset(hospital):
     )
 
 
+def redirect_to_receipt_overlay(visit, payment=None):
+    """
+    Send the receptionist to the patient's visit page with the payment
+    receipt popped up on top of it (patient_visits reads `receipt`). With no
+    payment there is nothing to print, so just land on the visit page.
+    """
+    target = reverse("patient_visits", args=[visit.patient_id])
+    return redirect(f"{target}?receipt={payment.pk}" if payment else target)
+
+
 def resolve_open_reception_entry(request, hospital, queue_entry_id):
     """
     Look up an OPEN receptionist-queue entry for one of the queue action
@@ -219,7 +230,7 @@ def resolve_open_reception_entry(request, hospital, queue_entry_id):
         latest_payment = visit.payments.order_by("-paid_at", "-id").first()
         if latest_payment:
             messages.info(request, f"{visit.patient.name} was already billed — here's the receipt.")
-            return None, redirect("print_payment_receipt", payment_id=latest_payment.pk)
+            return None, redirect_to_receipt_overlay(visit, latest_payment)
 
     messages.info(request, f"{visit.patient.name} has already moved on from the receptionist queue.")
     return None, redirect("reception_queue")
@@ -1651,9 +1662,7 @@ def complete_visit(request, visit_id):
     if visit.status == Visit.STATUS_COMPLETED and visit.is_fully_paid:
         messages.error(request, "This visit has already been fully paid and completed.")
         latest_payment = visit.payments.order_by("-paid_at", "-id").first()
-        if latest_payment:
-            return redirect("print_payment_receipt", payment_id=latest_payment.pk)
-        return redirect("print_receipt", visit_id=visit.pk)
+        return redirect_to_receipt_overlay(visit, latest_payment)
 
     if request.method == "POST" and request.POST.get("finish_adjustment_visit"):
         if not visit.is_adjustment_visit:
@@ -1805,7 +1814,7 @@ def complete_visit(request, visit_id):
                 else:
                     messages.success(request, f"Partial payment recorded. Balance due: {visit.balance_due}.")
 
-            return redirect("print_payment_receipt", payment_id=payment.pk)
+            return redirect_to_receipt_overlay(visit, payment)
         messages.error(request, "Please correct the billing details below.")
     else:
         remaining = visit.balance_due
@@ -2079,6 +2088,7 @@ def dispense_prescription(request, visit_id, prescription_id):
     return redirect("complete_visit", visit_id=visit.pk)
 
 
+@xframe_options_sameorigin
 @reception_role_required
 def print_receipt(request, visit_id):
     hospital = get_active_hospital(request)
@@ -2108,6 +2118,7 @@ def print_receipt(request, visit_id):
     )
 
 
+@xframe_options_sameorigin
 @reception_role_required
 def print_payment_receipt(request, payment_id):
     """Print a receipt for a specific payment (supports partial payments)."""
@@ -2279,6 +2290,11 @@ def patient_visits(request, patient_id):
             for service, package_line in package_services_available_on_visit(selected_row["visit"])
         ]
 
+    # A just-completed payment lands here with ?receipt=<payment id> so the
+    # receipt pops up over this page (see redirect_to_receipt_overlay).
+    raw_receipt = request.GET.get("receipt", "")
+    receipt_overlay_src = reverse("print_payment_receipt", args=[int(raw_receipt)]) if raw_receipt.isdigit() else ""
+
     return render(
         request,
         "reception/patient_visits.html",
@@ -2291,6 +2307,7 @@ def patient_visits(request, patient_id):
             "visit_rows": visit_rows,
             "selected_row": selected_row,
             "selected_visit_id": selected_row["visit"].pk if selected_row else None,
+            "receipt_overlay_src": receipt_overlay_src,
         },
     )
 

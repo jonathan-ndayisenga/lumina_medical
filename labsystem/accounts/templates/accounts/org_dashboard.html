@@ -11,7 +11,7 @@
 <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
     {% for tile in tiles %}
     <a href="{% url 'org_enter_branch' tile.hospital.pk %}" class="card block no-underline hover:-translate-y-0.5 hover:shadow-lg transition-transform duration-150">
-        <div class="w-11 h-11 rounded-xl flex items-center justify-center mb-4" style="background:#e8eef5;">
+        <div class="w-11 h-11 rounded-xl flex items-center justify-center mb-4" style="background:var(--icon-bg);">
             <img src="{{ tile.hospital.logo_url }}" alt="" class="w-6 h-6 object-contain">
         </div>
         <h2 class="text-base font-bold text-text-main">{{ tile.hospital.name }}</h2>

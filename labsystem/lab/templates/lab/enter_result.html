@@ -3,9 +3,9 @@
 {% block page_subtitle %}{{ order.test.name }} &mdash; {{ visit.patient.name }}, {{ visit.patient.current_age }} {{ visit.patient.get_sex_display }}{% endblock %}
 {% block extra_css %}
 <style>
-  .option-card { display:flex; align-items:center; justify-content:space-between; padding:0.75rem 1rem; border:1px solid #cfd8e3; border-radius:0.6rem; margin-bottom:0.5rem; cursor:pointer; }
+  .option-card { display:flex; align-items:center; justify-content:space-between; padding:0.75rem 1rem; border:1px solid var(--border); border-radius:0.6rem; margin-bottom:0.5rem; cursor:pointer; }
   .option-card input { margin-right:0.6rem; }
-  .option-card:has(input:checked) { border-color:#1d3557; box-shadow:0 0 0 2px rgba(29,53,87,0.15); }
+  .option-card:has(input:checked) { border-color:var(--nav); box-shadow:0 0 0 2px rgba(29,53,87,0.15); }
   .badge-abnormal { background:#fdecec; color:#a12b2b; font-size:0.7rem; font-weight:700; padding:0.15rem 0.55rem; border-radius:999px; }
   .flag-badge { font-size:0.7rem; font-weight:700; padding:0.15rem 0.55rem; border-radius:999px; white-space:nowrap; }
   .flag-normal { background:#d7f5e3; color:#146c3f; }
@@ -13,9 +13,9 @@
   .sir-group { display:flex; gap:0.35rem; }
   .sir-btn { position:relative; display:inline-block; cursor:pointer; }
   .sir-btn input { position:absolute; opacity:0; }
-  .sir-btn span { display:flex; align-items:center; justify-content:center; width:2.1rem; height:2.1rem; border:1px solid #cfd8e3; border-radius:0.4rem; font-size:0.8rem; font-weight:700; color:#5f6b7a; }
-  .sir-btn:has(input:checked) span { background:#1d3557; color:#fff; border-color:#1d3557; }
-  .param-row { display:grid; grid-template-columns:1fr auto; gap:0.25rem 1rem; padding:0.9rem 0; border-bottom:1px solid #eef1f5; align-items:start; }
+  .sir-btn span { display:flex; align-items:center; justify-content:center; width:2.1rem; height:2.1rem; border:1px solid var(--border); border-radius:0.4rem; font-size:0.8rem; font-weight:700; color:var(--muted); }
+  .sir-btn:has(input:checked) span { background:var(--nav); color:#fff; border-color:var(--nav); }
+  .param-row { display:grid; grid-template-columns:1fr auto; gap:0.25rem 1rem; padding:0.9rem 0; border-bottom:1px solid var(--icon-bg); align-items:start; }
   .param-row:last-of-type { border-bottom:none; }
 </style>
 {% endblock %}
@@ -102,7 +102,7 @@
       {% for group in hydrated.antibiotic_groups %}
       <div class="text-xs uppercase tracking-widest text-text-muted mt-3 mb-1">{{ group.class_name }}</div>
       {% for a in group.antibiotics %}
-      <div class="flex items-center justify-between py-2 border-b" style="border-color:#eef1f5;">
+      <div class="flex items-center justify-between py-2 border-b" style="border-color:var(--icon-bg);">
         <span class="font-semibold text-sm">{{ a.name }}</span>
         <div class="sir-group">
           {% for code in "SIR" %}

@@ -7,13 +7,18 @@ from django.contrib.auth.views import LoginView
 from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
 from django.db.models import Q
-from django.http import JsonResponse
+from urllib.parse import urlencode
+
+from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
+from django.utils import timezone
 from django.utils.decorators import method_decorator
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_POST
 
+from .home_tiles import TILES, tile_numbers
 from .models import (
     DirectMessage,
     Hospital,
@@ -179,29 +184,50 @@ def app_home(request):
         return render(request, "accounts/home.html", {"tiles": [], "hide_sidebar_nav": True})
 
     request.session.pop("nav_section", None)
-    from reception.workflow import queue_counts_for_hospital
-    queue_counts = queue_counts_for_hospital(hospital)
-    tiles = [
-        {
-            "key": s["key"],
-            "label": s["label"],
-            "description": s["description"],
-            "icon": s["icon"],
-            "url": reverse("enter_nav_section", args=[s["key"]]),
-            # The Lab tile is one door into Phlebotomy + Lab Queue both — its
-            # badge needs to reflect work waiting in either, not just the lab
-            # queue proper, or a patient sent to Phlebotomy never shows up as
-            # "something to do" from Home. The sidebar's own separate
-            # Phlebotomy Queue / Lab Queue links keep their individual counts
-            # unchanged — this combination is Home-tile-only.
-            "queue_count": (
-                queue_counts.get(s["key"], 0) + queue_counts.get("phlebotomy", 0)
-                if s["key"] == "lab" else queue_counts.get(s["key"], 0)
-            ),
-        }
-        for s in sections
-    ]
-    return render(request, "accounts/home.html", {"tiles": tiles, "hide_sidebar_nav": True})
+    today = timezone.localdate().isoformat()
+    tiles = []
+    for key, spec in TILES.items():
+        if not getattr(user, spec["check"], False):
+            continue
+        enter_url = reverse("enter_nav_section", args=[key])
+        actions = []
+        for label, url_name, *extra_check in spec["actions"]:
+            if extra_check and not getattr(user, extra_check[0], False):
+                continue
+            target = reverse(url_name)
+            if url_name == "report_consultations":
+                target += f"?start={today}&end={today}"
+            actions.append({"label": label, "url": f"{enter_url}?{urlencode({'next': target})}"})
+        tiles.append({
+            "key": key,
+            "label": spec["label"],
+            "icon": spec["icon"],
+            "wide": spec.get("wide", False),
+            "live_url": reverse("home_tile", args=[key]) if spec["live"] else "",
+            "url": enter_url,
+            "actions": actions,
+        })
+
+    hour = timezone.localtime().hour
+    greeting = "Good morning" if hour < 12 else "Good afternoon" if hour < 17 else "Good evening"
+    return render(request, "accounts/home.html", {
+        "tiles": tiles,
+        "hide_sidebar_nav": True,
+        "home_nav": [{"label": t["label"], "url": t["url"]} for t in tiles],
+        "greeting": greeting,
+        "greeting_name": user.first_name.strip() or user.get_role_display(),
+    })
+
+
+@login_required
+def home_tile(request, tile):
+    spec = TILES.get(tile)
+    hospital = getattr(request.user, "hospital", None)
+    if spec is None or not spec["live"] or hospital is None:
+        raise Http404
+    if not getattr(request.user, spec["check"], False):
+        raise PermissionDenied("You do not have access to that module.")
+    return render(request, "accounts/partials/home_tile_number.html", {"n": tile_numbers(tile, hospital)})
 
 
 @login_required
@@ -211,6 +237,11 @@ def enter_nav_section(request, section_key):
     if not section or not getattr(user, section["check"], False):
         raise PermissionDenied("You do not have access to that section.")
     request.session["nav_section"] = section_key
+    next_url = request.GET.get("next", "")
+    if next_url and url_has_allowed_host_and_scheme(
+        next_url, allowed_hosts={request.get_host()}, require_https=request.is_secure(),
+    ):
+        return redirect(next_url)
     return redirect(_section_url(section, user))
 
 

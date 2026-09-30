@@ -3,7 +3,7 @@
 {% block page_subtitle %}How a test's results get entered and printed. Fixed by the system.{% endblock %}
 {% block content %}
 <div class="space-y-4">
-  <div class="rounded-xl border border-dashed px-4 py-3 text-sm text-text-muted" style="border-color:#cfd8e3;">
+  <div class="rounded-xl border border-dashed px-4 py-3 text-sm text-text-muted" style="border-color:var(--border);">
     These result types are built into the system and can't be added, edited, or removed here —
     each one drives its own entry screen and printed report layout. Pick one per test on the
     Laboratory Services screen.
@@ -21,7 +21,7 @@
           <th class="py-2"></th>
         </tr>
       </thead>
-      <tbody class="divide-y" style="border-color:#eef1f5;">
+      <tbody class="divide-y" style="border-color:var(--icon-bg);">
         {% for row in rows %}
         <tr>
           <td class="py-2 font-semibold">{{ row.name }}</td>

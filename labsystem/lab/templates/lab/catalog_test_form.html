@@ -3,7 +3,7 @@
 {% block page_subtitle %}Configure the orderable test, valid specimen types, and the result structure the laboratory team will use.{% endblock %}
 {% block extra_css %}
 <style>
-  .row-card { border: 1px solid #cfd8e3; border-radius: 0.7rem; padding: 1rem; margin-bottom: 0.75rem; }
+  .row-card { border: 1px solid var(--border); border-radius: 0.7rem; padding: 1rem; margin-bottom: 0.75rem; }
   .row-card .grid { display: grid; gap: 0.75rem; }
 </style>
 {% endblock %}
@@ -42,26 +42,26 @@
       Active for ordering
     </label>
 
-    <hr class="my-5" style="border-color:#eef1f5;">
+    <hr class="my-5" style="border-color:var(--icon-bg);">
 
     <h3 class="font-bold mb-1">Accepted Specimen Types</h3>
     <p class="text-sm text-text-muted mb-2">Choose every specimen type this test can be run on.</p>
     <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
       {% for checkbox in form.accepted_specimens %}
-      <label class="flex items-center gap-2 rounded-lg border px-3 py-2 text-sm" style="border-color:#cfd8e3;">
+      <label class="flex items-center gap-2 rounded-lg border px-3 py-2 text-sm" style="border-color:var(--border);">
         {{ checkbox.tag }}
         {{ checkbox.choice_label }}
       </label>
       {% endfor %}
     </div>
 
-    <hr class="my-5" style="border-color:#eef1f5;">
+    <hr class="my-5" style="border-color:var(--icon-bg);">
 
     <h3 class="font-bold mb-1">Result Configuration</h3>
     <p class="text-sm text-text-muted mb-2">Define how results should be entered for this test.</p>
 
     {% if not is_edit %}
-    <div class="mb-3 rounded-xl border px-4 py-3 text-sm flex items-center justify-between gap-3 flex-wrap" style="border-color:#fde68a; background:#fffbeb;">
+    <div class="mb-3 rounded-xl border px-4 py-3 text-sm flex items-center justify-between gap-3 flex-wrap" style="border-color:#F3DDC0; background:var(--warn-bg);">
       <span>Building something standard — CBC, Malaria, Typhoid, Urinalysis, or <strong>Culture &amp; Sensitivity</strong> (grouped antibiotics, pre-filled and fully editable)? Don't retype it.</span>
       <a href="{% url 'lab_test_clone_picker' %}" class="btn btn-secondary btn-sm whitespace-nowrap">Clone a Starter Template</a>
     </div>
@@ -70,7 +70,7 @@
     <label class="block text-sm font-semibold mb-1">Result Type</label>
     {{ form.result_type }}
 
-    <div class="mt-3 rounded-xl border px-4 py-3 text-sm" style="border-color:#cfd8e3; background:#f7f9fc;" id="result-type-note"></div>
+    <div class="mt-3 rounded-xl border px-4 py-3 text-sm" style="border-color:var(--border); background:var(--bg);" id="result-type-note"></div>
 
     <!-- Defined Option rows -->
     <div id="options-section" class="mt-4" hidden>

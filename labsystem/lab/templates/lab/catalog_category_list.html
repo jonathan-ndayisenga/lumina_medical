@@ -17,7 +17,7 @@
           {% if is_admin %}<th class="py-2"></th>{% endif %}
         </tr>
       </thead>
-      <tbody class="divide-y" style="border-color:#eef1f5;">
+      <tbody class="divide-y" style="border-color:var(--icon-bg);">
         {% for category in categories %}
         <tr>
           <td class="py-2 font-semibold">{{ category.name }}</td>

@@ -86,6 +86,8 @@ class HospitalForm(forms.ModelForm):
             "organization",
             "subscription_plan",
             "reactivation_alert_days",
+            "doctor_wait_warn_minutes",
+            "lab_pending_warn_minutes",
         )
         widgets = {
             "name": forms.TextInput(attrs={"placeholder": "Hospital name", "class": "form-control"}),
@@ -101,6 +103,8 @@ class HospitalForm(forms.ModelForm):
             "organization": forms.Select(attrs={"class": "form-control"}),
             "subscription_plan": forms.Select(attrs={"class": "form-control"}),
             "reactivation_alert_days": forms.NumberInput(attrs={"class": "form-control", "min": "0", "max": "90", "placeholder": "e.g. 7"}),
+            "doctor_wait_warn_minutes": forms.NumberInput(attrs={"class": "form-control", "min": "1"}),
+            "lab_pending_warn_minutes": forms.NumberInput(attrs={"class": "form-control", "min": "1"}),
         }
 
     def __init__(self, *args, require_admin_credentials=True, **kwargs):
@@ -109,6 +113,8 @@ class HospitalForm(forms.ModelForm):
         for field_name in ("location", "box_number", "phone_number"):
             self.fields[field_name].required = True
         self.fields["reactivation_alert_days"].required = False
+        for field_name in ("doctor_wait_warn_minutes", "lab_pending_warn_minutes"):
+            self.fields[field_name].required = False
         self.fields["reactivation_alert_days"].initial = 7
 
         core_module_ids = list(Module.objects.filter(is_core=True).values_list("pk", flat=True))
@@ -261,6 +267,9 @@ class HospitalForm(forms.ModelForm):
             if not confirm and not self.errors.get("admin_password_confirm"):
                 self.add_error("admin_password_confirm", "Please confirm the password.")
 
+        for field_name in ("doctor_wait_warn_minutes", "lab_pending_warn_minutes"):
+            if cleaned_data.get(field_name) is None:
+                cleaned_data[field_name] = Hospital._meta.get_field(field_name).default
         return cleaned_data
 
 

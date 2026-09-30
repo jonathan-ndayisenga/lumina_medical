@@ -24,7 +24,7 @@
           {% if is_admin %}<th class="py-2"></th>{% endif %}
         </tr>
       </thead>
-      <tbody class="divide-y" style="border-color:#eef1f5;">
+      <tbody class="divide-y" style="border-color:var(--icon-bg);">
         {% for row in rows %}
         <tr>
           <td class="py-2 font-semibold whitespace-nowrap">{{ row.test.name }}</td>

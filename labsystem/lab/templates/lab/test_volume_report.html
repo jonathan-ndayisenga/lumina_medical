@@ -175,7 +175,7 @@ document.getElementById('volumeReportMonth')?.addEventListener('change', functio
                 label: 'Tests Ordered',
                 data: {{ chart_values_json|safe }},
                 backgroundColor: 'rgba(15, 59, 95, 0.75)',
-                borderColor: '#0f3b5f',
+                borderColor: '#14233A',
                 borderWidth: 1,
                 borderRadius: 4,
             }],
@@ -192,7 +192,7 @@ document.getElementById('volumeReportMonth')?.addEventListener('change', functio
 (function () {
     const ctx = document.getElementById('breakdownChart');
     if (!ctx) return;
-    const palette = ['#0f3b5f', '#dc2626', '#16a34a', '#d97706', '#7c3aed', '#0891b2'];
+    const palette = ['#14233A', '#dc2626', '#16a34a', '#8A4A0E', '#56677F', '#A7B4C6'];
     const rawDatasets = {{ breakdown_datasets_json|safe }};
     new Chart(ctx, {
         type: 'bar',

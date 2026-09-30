@@ -88,3 +88,123 @@ class SessionIdleTimeoutTests(TestCase):
         # LOGIN_URL = "/" so the redirect goes to /?next=... (the root custom login page)
         self.assertIn("/?next=", response.headers["Location"])
         self.assertNotIn("_auth_user_id", client.session)
+
+
+class HomeStatusBoardTests(TestCase):
+    """Home screen redesign: live per-department tiles for the hospital admin."""
+
+    def setUp(self):
+        from django.core.cache import cache
+        from accounts.models import HospitalModuleSubscription, Module
+
+        cache.clear()
+        self.hospital = Hospital.objects.create(name="Lumina Medical", subdomain="lumina-home")
+        self.other_hospital = Hospital.objects.create(name="Other Clinic", subdomain="other-home")
+        for hospital in (self.hospital, self.other_hospital):
+            for code in ("hospital_mgmt", "reception", "doctor", "inventory", "finance"):
+                module, _ = Module.objects.get_or_create(code=code, defaults={"name": code.title()})
+                HospitalModuleSubscription.objects.get_or_create(hospital=hospital, module=module, defaults={"is_active": True})
+        self.admin = User.objects.create_user(
+            username="lumina_admin", password="StrongPass123!", first_name="Jonathan",
+            role=User.ROLE_HOSPITAL_ADMIN, hospital=self.hospital,
+        )
+        self.client.force_login(self.admin)
+
+    def _queue_patient(self, hospital, queue_type, minutes_ago=0):
+        from reception.models import Patient, QueueEntry, Visit
+
+        patient = Patient.objects.create(hospital=hospital, name="Test Patient", age="30YRS", sex="M")
+        visit = Visit.objects.create(patient=patient, hospital=hospital, created_by=self.admin)
+        entry = QueueEntry.objects.create(hospital=hospital, visit=visit, queue_type=queue_type)
+        if minutes_ago:
+            QueueEntry.objects.filter(pk=entry.pk).update(created_at=timezone.now() - timedelta(minutes=minutes_ago))
+        return entry
+
+    def test_greeting_uses_first_name_and_falls_back_to_role(self):
+        response = self.client.get(reverse("app_home"))
+        self.assertContains(response, "Jonathan")
+        self.assertNotContains(response, "lumina_admin</h1>")
+
+        self.admin.first_name = ""
+        self.admin.save()
+        response = self.client.get(reverse("app_home"))
+        self.assertEqual(response.context["greeting_name"], "Hospital Admin")
+
+    def test_sidebar_and_tiles_list_only_accessible_modules(self):
+        response = self.client.get(reverse("app_home"))
+        keys = [tile["key"] for tile in response.context["tiles"]]
+        self.assertEqual(keys, ["reception", "doctor", "inventory", "finance", "hospital_admin"])
+        self.assertEqual([item["label"] for item in response.context["home_nav"]],
+                         ["Reception", "Doctor", "Inventory", "Finance", "Hospital admin"])
+        self.assertContains(response, reverse("enter_nav_section", args=["doctor"]))
+        self.assertNotContains(response, "Laboratory")
+
+    def test_tiles_start_in_loading_state_and_poll_their_endpoint(self):
+        response = self.client.get(reverse("app_home"))
+        self.assertContains(response, "tile-skeleton")
+        self.assertContains(response, f'hx-get="{reverse("home_tile", args=["doctor"])}"')
+        self.assertContains(response, "every 30s")
+        self.assertContains(response, 'id="patientSearch"')
+
+    def test_doctor_tile_warns_past_hospital_threshold(self):
+        from reception.models import QueueEntry
+
+        self._queue_patient(self.hospital, QueueEntry.TYPE_DOCTOR, minutes_ago=42)
+        self._queue_patient(self.hospital, QueueEntry.TYPE_DOCTOR)
+        response = self.client.get(reverse("home_tile", args=["doctor"]))
+        self.assertContains(response, "patients waiting")
+        self.assertContains(response, "42 min")
+        self.assertContains(response, "needs attention")
+
+        from django.core.cache import cache
+        cache.clear()
+        self.hospital.doctor_wait_warn_minutes = 60
+        self.hospital.save()
+        response = self.client.get(reverse("home_tile", args=["doctor"]))
+        self.assertContains(response, "42 min")
+        self.assertNotContains(response, "needs attention")
+
+    def test_counts_are_per_hospital(self):
+        from reception.models import QueueEntry
+
+        self._queue_patient(self.other_hospital, QueueEntry.TYPE_RECEPTION)
+        self._queue_patient(self.other_hospital, QueueEntry.TYPE_RECEPTION)
+        self._queue_patient(self.hospital, QueueEntry.TYPE_RECEPTION)
+        response = self.client.get(reverse("home_tile", args=["reception"]))
+        self.assertEqual(response.context["n"]["value"], 1)
+
+    def test_inventory_tile_warns_on_low_stock(self):
+        from decimal import Decimal
+        from admin_dashboard.models import InventoryItem
+
+        InventoryItem.objects.create(
+            hospital=self.hospital, name="Paracetamol 500mg", category=InventoryItem.CATEGORY_DRUG,
+            unit="strip", base_unit="tablet", units_per_pack=Decimal("10"),
+            current_quantity=Decimal("2"), reorder_level=Decimal("5"),
+        )
+        response = self.client.get(reverse("home_tile", args=["inventory"]))
+        self.assertEqual(response.context["n"]["value"], 1)
+        self.assertTrue(response.context["n"]["warn"])
+        self.assertContains(response, "is-warn")
+
+    def test_tile_endpoint_forbidden_without_module_access(self):
+        response = self.client.get(reverse("home_tile", args=["lab"]))
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(self.client.get(reverse("home_tile", args=["hospital_admin"])).status_code, 404)
+
+    def test_quick_action_enters_section_then_goes_to_target(self):
+        url = reverse("enter_nav_section", args=["reception"])
+        response = self.client.get(url, {"next": reverse("reception_queue")})
+        self.assertRedirects(response, reverse("reception_queue"), fetch_redirect_response=False)
+        self.assertEqual(self.client.session["nav_section"], "reception")
+
+        response = self.client.get(url, {"next": "https://evil.example.com/"})
+        self.assertNotEqual(response["Location"], "https://evil.example.com/")
+
+    def test_compact_ugx_formatting(self):
+        from accounts.home_tiles import _compact_ugx
+
+        self.assertEqual(_compact_ugx(2_400_000), "UGX 2.4M")
+        self.assertEqual(_compact_ugx(3_000_000), "UGX 3M")
+        self.assertEqual(_compact_ugx(845_500), "UGX 846K")
+        self.assertEqual(_compact_ugx(950), "UGX 950")

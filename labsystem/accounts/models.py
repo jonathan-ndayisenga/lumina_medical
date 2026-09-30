@@ -86,6 +86,16 @@ class Hospital(models.Model):
         default=7,
         help_text="Days before expiry to start showing the reactivation alert. Set to 0 to disable.",
     )
+    doctor_wait_warn_minutes = models.PositiveSmallIntegerField(
+        default=30,
+        db_default=30,
+        help_text="Home screen: flag the Doctor tile once the longest-waiting patient passes this many minutes.",
+    )
+    lab_pending_warn_minutes = models.PositiveSmallIntegerField(
+        default=120,
+        db_default=120,
+        help_text="Home screen: flag the Laboratory tile once the oldest pending result passes this many minutes.",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

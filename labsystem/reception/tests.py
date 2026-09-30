@@ -199,10 +199,6 @@ class ReceiptRenderingTests(TestCase):
             follow=True,
         )
         self.assertEqual(resp.status_code, 200)
-        # Regression guard: this used to hardcode "LUMINA MEDICAL SERVICES"
-        # regardless of which hospital the receipt was actually for --
-        # every tenant's receipt showed the same wrong name.
-        self.assertContains(resp, self.hospital.name.upper())
 
         payment = Payment.objects.filter(visit=self.visit).order_by("-id").first()
         self.assertIsNotNone(payment)
@@ -214,13 +210,30 @@ class ReceiptRenderingTests(TestCase):
         self.assertEqual(cash_txn.cash_drawer_id, self.cash_drawer.id)
         self.assertEqual(cash_txn.amount, Decimal("50.00"))
 
-        # Paper size picker (58mm / 80mm / A4) -- shown as a popup over
-        # the app, defaulting to 80mm (Standard).
-        self.assertContains(resp, "Paper Size")
-        self.assertContains(resp, "58mm (Small)")
-        self.assertContains(resp, "80mm (Standard)")
-        self.assertContains(resp, "A4 (Full Page)")
-        self.assertContains(resp, 'data-paper-size="80mm"')
+        # After paying, the receptionist lands back on the patient's visit
+        # page with the receipt popped up on top of it in an overlay
+        # iframe, instead of navigating away to a bare receipt page.
+        receipt_url = reverse("print_payment_receipt", args=[payment.pk])
+        self.assertContains(resp, f'src="{receipt_url}"')
+        self.assertContains(resp, "receipt-overlay-backdrop")
+
+        receipt_resp = self.client.get(receipt_url)
+        self.assertEqual(receipt_resp.status_code, 200)
+        # The popup is an iframe: Django's default X-Frame-Options DENY would
+        # leave it blank, so the receipt must allow same-origin framing.
+        self.assertEqual(receipt_resp["X-Frame-Options"], "SAMEORIGIN")
+        self.assertContains(receipt_resp, "Print Receipt")
+        # Regression guard: this used to hardcode "LUMINA MEDICAL SERVICES"
+        # regardless of which hospital the receipt was actually for --
+        # every tenant's receipt showed the same wrong name.
+        self.assertContains(receipt_resp, self.hospital.name.upper())
+
+        # Paper size picker (58mm / 80mm / A4), defaulting to 80mm (Standard).
+        self.assertContains(receipt_resp, "Paper Size")
+        self.assertContains(receipt_resp, "58mm (Small)")
+        self.assertContains(receipt_resp, "80mm (Standard)")
+        self.assertContains(receipt_resp, "A4 (Full Page)")
+        self.assertContains(receipt_resp, 'data-paper-size="80mm"')
 
     def test_visit_billing_summary_receipt_has_paper_size_picker(self):
         self.client.force_login(self.receptionist)
@@ -233,6 +246,25 @@ class ReceiptRenderingTests(TestCase):
         self.assertContains(response, "80mm (Standard)")
         self.assertContains(response, "A4 (Full Page)")
         self.assertContains(response, reverse("patient_visits", args=[self.patient.pk]))
+
+    def test_patient_visits_page_pops_up_receipt_overlay_after_payment(self):
+        self.client.force_login(self.receptionist)
+        payment = Payment.objects.create(
+            visit=self.visit, amount=self.visit.total_amount, amount_paid=Decimal("50.00"),
+            mode=Payment.MODE_CASH, recorded_by=self.receptionist,
+        )
+        response = self.client.get(
+            f"{reverse('patient_visits', args=[self.patient.pk])}?receipt={payment.pk}"
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, reverse("print_payment_receipt", args=[payment.pk]))
+        self.assertContains(response, "receipt-overlay-backdrop")
+
+    def test_patient_visits_page_has_no_receipt_overlay_without_marker(self):
+        self.client.force_login(self.receptionist)
+        response = self.client.get(reverse("patient_visits", args=[self.patient.pk]))
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "receipt-overlay-backdrop")
 
 
 class FinancialChannelSyncTests(TestCase):

@@ -8,6 +8,7 @@ from .views import (
     direct_message_detail,
     dismiss_expiry_banner,
     enter_nav_section,
+    home_tile,
     landing,
     message_mark_all_read,
     message_mark_read,
@@ -27,6 +28,7 @@ urlpatterns = [
     path("", RoleAwareLoginView.as_view(), name="login"),
     path("home/", app_home, name="app_home"),
     path("home/section/<str:section_key>/", enter_nav_section, name="enter_nav_section"),
+    path("home/tiles/<str:tile>/", home_tile, name="home_tile"),
     path("welcome/", landing, name="landing"),
 
     # ── Organization / multi-branch Owner views ─────────────────────────────────

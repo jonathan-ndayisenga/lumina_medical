@@ -4,7 +4,35 @@
 {% block page_title %}{{ patient.name }} - Visit History{% endblock %}
 {% block page_subtitle %}Select a visit from the dropdown to review its details, then view, edit, complete, or delete where appropriate.{% endblock %}
 
+{% block extra_css %}
+{% if receipt_overlay_src %}
+<style>
+    /* Receipt popped up over this page after billing. The framed receipt
+       page supplies the heading, paper size, receipt and Print button; its
+       Close link uses target="_top" to land back here plainly. */
+    .receipt-overlay-backdrop { position: fixed; inset: 0; z-index: 60; display: flex; justify-content: center; padding: 16px; background: rgba(21, 32, 46, 0.55); }
+    .receipt-overlay-frame { width: 100%; max-width: 400px; height: 100%; border: 0; border-radius: 12px; background: #fff; box-shadow: 0 24px 60px rgba(0, 0, 0, 0.3); }
+</style>
+{% endif %}
+{% endblock %}
+
 {% block content %}
+{% if receipt_overlay_src %}
+<div class="receipt-overlay-backdrop no-print" id="receiptOverlay">
+    <iframe src="{{ receipt_overlay_src }}" class="receipt-overlay-frame" title="Receipt"></iframe>
+</div>
+<script>
+    (function () {
+        const overlay = document.getElementById('receiptOverlay');
+        function close() {
+            overlay.remove();
+            history.replaceState(null, '', location.pathname);
+        }
+        overlay.addEventListener('click', function (e) { if (e.target === overlay) close(); });
+        document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && document.body.contains(overlay)) close(); });
+    })();
+</script>
+{% endif %}
 <div class="space-y-6">
 
     <!-- Patient Bio Header -->

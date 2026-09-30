@@ -48,7 +48,7 @@
     {% if first_order.stage == 'released' %}
     <span class="report-status-badge" style="background:#d7f5e3;color:#146c3f;">RELEASED</span>
     {% else %}
-    <span class="report-status-badge" style="background:#fff3cd;color:#8a6100;">{{ first_order.get_stage_display|upper }}</span>
+    <span class="report-status-badge" style="background:var(--warn-bg);color:var(--warn);">{{ first_order.get_stage_display|upper }}</span>
     {% endif %}
   </div>
 
@@ -103,7 +103,7 @@
     <div class="flex justify-between items-center mb-1">
       <h3 class="font-bold text-sm">{{ order.test.name }}{% if order.test.code %} ({{ order.test.code }}){% endif %}</h3>
       {% if order.stage != 'released' %}
-      <span class="report-status-badge" style="background:#fff3cd;color:#8a6100;">{{ order.get_stage_display|upper }}</span>
+      <span class="report-status-badge" style="background:var(--warn-bg);color:var(--warn);">{{ order.get_stage_display|upper }}</span>
       {% endif %}
     </div>
     {% if order.visit_service.requested_by_display %}
@@ -156,7 +156,7 @@
     {% if order.stage == 'released' %}
     <span class="report-status-badge" style="background:#d7f5e3;color:#146c3f;">RELEASED</span>
     {% else %}
-    <span class="report-status-badge" style="background:#fff3cd;color:#8a6100;">{{ order.get_stage_display|upper }}</span>
+    <span class="report-status-badge" style="background:var(--warn-bg);color:var(--warn);">{{ order.get_stage_display|upper }}</span>
     {% endif %}
   </div>
 

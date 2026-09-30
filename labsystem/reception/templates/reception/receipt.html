@@ -8,29 +8,12 @@
 
 {% block extra_css %}
 <style>
-    /* Modal chrome -- fixed overlay over the app, same look as the
-       reference receipt popup: dimmed backdrop, centered card, close
-       button and a Paper Size picker. Screen only, never printed. */
-    .receipt-modal-backdrop {
-        position: fixed;
-        inset: 0;
-        background: rgba(15, 23, 42, 0.55);
-        z-index: 50;
-        display: flex;
-        align-items: flex-start;
-        justify-content: center;
-        padding: 4vh 16px;
-        overflow-y: auto;
-    }
+    /* This page is normally shown inside the receipt overlay iframe on
+       patient_visits, which already supplies the dimmed backdrop and
+       card frame -- so this is just plain, full-bleed content. It still
+       reads fine reached directly too (e.g. from a finance report link). */
     .receipt-modal-card {
-        background: #fff;
-        border-radius: 14px;
-        box-shadow: 0 20px 50px rgba(0, 0, 0, 0.25);
-        width: 100%;
-        max-width: 720px;
-        max-height: 92vh;
-        overflow-y: auto;
-        padding: 24px;
+        padding: 16px;
         position: relative;
     }
     .receipt-modal-close {
@@ -86,20 +69,10 @@
     .no-print {
         display: none !important;
     }
-    .receipt-modal-backdrop {
-        position: static !important;
-        background: none !important;
-        padding: 0 !important;
-        display: block !important;
-    }
     .receipt-modal-card {
-        box-shadow: none !important;
-        max-width: none !important;
-        max-height: none !important;
-        overflow: visible !important;
         padding: 0 !important;
     }
-    .receipt-modal-close, .receipt-modal-title, .receipt-modal-subtitle, .paper-size-field {
+    .receipt-modal-close, .receipt-modal-title, .receipt-modal-subtitle, .paper-size-field, .print-settings-note {
         display: none !important;
     }
 
@@ -336,9 +309,8 @@
 {% endblock %}
 
 {% block content %}
-<div class="receipt-modal-backdrop no-print">
 <div class="receipt-modal-card">
-    <a href="{% url 'patient_visits' visit.patient_id %}" class="receipt-modal-close" aria-label="Close">&times;</a>
+    <a href="{% url 'patient_visits' visit.patient_id %}" target="_top" class="receipt-modal-close" aria-label="Close">&times;</a>
     <div class="receipt-modal-title">Receipt</div>
     <div class="receipt-modal-subtitle">Print this receipt</div>
 
@@ -363,8 +335,8 @@
         </p>
     </div>
 
-    <div class="flex justify-end gap-3">
-        <a href="{% url 'patient_visits' visit.patient_id %}" class="btn btn-secondary">Close</a>
+    <div class="flex justify-end gap-3 no-print">
+        <a href="{% url 'patient_visits' visit.patient_id %}" target="_top" class="btn btn-secondary">Close</a>
         <button type="button" class="btn btn-primary" onclick="window.print()">Print Receipt</button>
     </div>
 
@@ -492,7 +464,6 @@
         <div class="receipt-thank-you">THANK YOU!</div>
         <div style="text-align: center; font-size: 7pt; margin-top: 0.3mm;">Please keep this receipt</div>
     </div>
-</div>
 </div>
 {% endblock %}
 
