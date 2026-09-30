@@ -1,8 +1,8 @@
 {% extends 'base.html' %}
 
-{% block title %}Lab Test Volume Report{% endblock %}
-{% block page_title %}Lab Test Volume Report{% endblock %}
-{% block page_subtitle %}How many of each test were carried out in a period, with result breakdowns.{% endblock %}
+{% block title %}Lab Reports{% endblock %}
+{% block page_title %}Lab Reports{% endblock %}
+{% block page_subtitle %}Tests carried out in a period, result breakdowns, and what each technician did.{% endblock %}
 {% block content_container_classes %}max-w-[100rem] mx-auto px-4 lg:px-8 py-6{% endblock %}
 
 {% block content %}
@@ -31,6 +31,7 @@
             </div>
             <div class="flex items-end gap-2 ml-auto">
                 <a href="?{{ filter_qs }}&export=csv" class="btn btn-secondary btn-sm">Export CSV</a>
+                <a href="?{{ filter_qs }}&export=pdf" target="_blank" rel="noopener" class="btn btn-secondary btn-sm">Export PDF</a>
                 <a href="{% url 'report_list' %}" class="btn btn-secondary btn-sm">Back to Reports</a>
             </div>
         </form>
@@ -131,6 +132,41 @@
                     <tr>
                         <td colspan="4" class="px-4 py-8 text-center text-sm text-text-muted">No tests ordered in this period.</td>
                     </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="card overflow-hidden">
+        <div class="mb-4">
+            <h3 class="text-sm font-bold text-text-main">By technician</h3>
+            <p class="text-xs text-text-muted mt-0.5">What each lab staff member did in this period, counted on the date each step happened.</p>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full">
+                <thead>
+                    <tr>
+                        <th>Technician</th>
+                        <th class="text-right">Samples collected</th>
+                        <th class="text-right">Results entered</th>
+                        <th class="text-right">Reviewed</th>
+                        <th class="text-right">Released</th>
+                        <th>Top tests entered</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in technician_rows %}
+                    <tr>
+                        <td class="text-sm font-semibold text-text-main">{{ row.name }}</td>
+                        <td class="text-sm text-right">{{ row.collected }}</td>
+                        <td class="text-sm text-right">{{ row.entered }}</td>
+                        <td class="text-sm text-right">{{ row.reviewed }}</td>
+                        <td class="text-sm text-right">{{ row.released }}</td>
+                        <td class="text-sm text-text-muted">{{ row.top_tests|default:"—" }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="6" class="py-8 text-center text-sm text-text-muted">No lab activity recorded in this period.</td></tr>
                     {% endfor %}
                 </tbody>
             </table>

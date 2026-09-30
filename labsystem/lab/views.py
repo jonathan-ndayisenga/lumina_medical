@@ -30,7 +30,7 @@ from doctor.models import LabRequest, Notification
 from .forms import LabConsumableForm
 from .models import LabConsumable, LabReport
 # Merged in from the former `lab_next` app — the reworked engine's models.
-from .models import DefinedOption, LabOrder, LabTest, OrderStage, ResultType, Sex
+from .models import DefinedOption, LabOrder, LabResult, LabTest, OrderStage, ResultType, Sex
 from .guards import release_visit_service_for_lab
 from .services_next import hydrate_entry_form, save_results
 
@@ -339,12 +339,6 @@ def report_list(request):
         )
         base_qs = base_qs.filter(filters)
 
-    base_stats = base_qs.aggregate(
-        total=Count("id"),
-        printed_total=Count("id", filter=Q(printed=True)),
-        draft_total=Count("id", filter=Q(printed=False)),
-    )
-
     patient_details = defaultdict(lambda: {'tests': [], 'technician': None, 'age': '', 'sex': '', 'engines': set()})
 
     # ---- Legacy (old lab app) side, grouped by patient name ----
@@ -482,10 +476,6 @@ def report_list(request):
     context = {
         'patients': patients,
         'patient_details': dict(patient_details),
-        'total_reports': base_stats['total'],
-        'printed_count': base_stats['printed_total'],
-        'draft_count': base_stats['draft_total'],
-        'next_engine_count': sum(g['report_count'] for g in next_groups.values()),
         'active_nav': 'dashboard',
         'search': search,
         'test_filter': test_filter,
@@ -497,6 +487,42 @@ def report_list(request):
         'extra_query_string': extra_query_string,
     }
     return render(request, 'lab/report_list.html', context)
+
+
+def technician_activity(orders, results, date_start, date_end):
+    """Per lab staff member, what they did in the period: samples collected,
+    results entered/reviewed/released (each counted on its own timestamp),
+    plus the tests they entered most."""
+    steps = [
+        ("collected", orders, "collected_by", "collected_at"),
+        ("entered", results, "entered_by", "entered_at"),
+        ("reviewed", results, "reviewed_by", "reviewed_at"),
+        ("released", results, "released_by", "released_at"),
+    ]
+    people = {}
+    for key, qs, user_field, date_field in steps:
+        rows = (
+            qs.filter(**{f"{date_field}__date__gte": date_start, f"{date_field}__date__lte": date_end,
+                         f"{user_field}__isnull": False})
+            .values(user_field).annotate(n=Count("id"))
+        )
+        for row in rows:
+            people.setdefault(row[user_field], dict.fromkeys(("collected", "entered", "reviewed", "released"), 0))[key] = row["n"]
+
+    top_tests = {}
+    for row in (
+        results.filter(entered_at__date__gte=date_start, entered_at__date__lte=date_end, entered_by__in=people)
+        .values("entered_by", "order__test__name").annotate(n=Count("id")).order_by("entered_by", "-n")
+    ):
+        top_tests.setdefault(row["entered_by"], []).append(f"{row['order__test__name']} {row['n']}")
+
+    users = User.objects.in_bulk(people.keys())
+    rows = [
+        {"name": users[uid].get_full_name() if uid in users else "Unknown", **counts,
+         "total": sum(counts.values()), "top_tests": " · ".join(top_tests.get(uid, [])[:3])}
+        for uid, counts in people.items()
+    ]
+    return sorted(rows, key=lambda r: (-r["total"], r["name"]))
 
 
 @login_required
@@ -517,9 +543,13 @@ def test_volume_report(request):
     except ValueError:
         date_end = today
 
-    orders_qs = LabOrder.objects.filter(created_at__date__gte=date_start, created_at__date__lte=date_end)
+    scoped_orders = LabOrder.objects.all()
+    scoped_results = LabResult.objects.all()
     if hospital and getattr(request.user, "role", "") != User.ROLE_SUPERADMIN:
-        orders_qs = orders_qs.filter(hospital=hospital)
+        scoped_orders = scoped_orders.filter(hospital=hospital)
+        scoped_results = scoped_results.filter(order__hospital=hospital)
+    orders_qs = scoped_orders.filter(created_at__date__gte=date_start, created_at__date__lte=date_end)
+    technician_rows = technician_activity(scoped_orders, scoped_results, date_start, date_end)
 
     total_ordered = orders_qs.count()
     total_resulted = orders_qs.filter(result__isnull=False).count()
@@ -557,6 +587,10 @@ def test_volume_report(request):
                 if row["breakdown"] else ""
             )
             writer.writerow([row["test__name"], row["test__category__name"] or "", row["count"], breakdown_text])
+        writer.writerow([])
+        writer.writerow(["Technician", "Samples Collected", "Results Entered", "Reviewed", "Released", "Top Tests Entered"])
+        for row in technician_rows:
+            writer.writerow([row["name"], row["collected"], row["entered"], row["reviewed"], row["released"], row["top_tests"]])
         return response
 
     # Order the breakdown chart's option labels the same way the admin
@@ -592,7 +626,14 @@ def test_volume_report(request):
             for label in all_option_labels
         ]),
         "filter_qs": f"start={date_start.isoformat()}&end={date_end.isoformat()}",
+        "technician_rows": technician_rows,
+        "hospital": hospital,
+        "period_start": date_start,
+        "period_end": date_end,
     }
+    if request.GET.get("export") == "pdf":
+        context["volume_rows"] = volume_rows
+        return render(request, "lab/test_volume_report_print.html", context)
     return render(request, "lab/test_volume_report.html", context)
 
 

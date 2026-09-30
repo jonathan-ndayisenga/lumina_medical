@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lab Report {{ date_start }} to {{ date_end }} - {{ hospital.name|default:"Hospital" }}</title>
+<style>
+    @page { size: A4 portrait; margin: 14mm; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: Inter, system-ui, sans-serif; color: #15202E; font-size: 12px; background: #F4F3EF; }
+    .page { max-width: 210mm; margin: 24px auto; padding: 14mm; background: #fff; }
+    .toolbar { max-width: 210mm; margin: 16px auto 0; display: flex; justify-content: flex-end; gap: 8px; }
+    .toolbar button { height: 40px; padding: 0 16px; border-radius: 8px; border: 1px solid #14233A; background: #14233A; color: #fff; font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; }
+    .print-header { border-bottom: 2px solid #14233A; }
+    .summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 14px 0 18px; }
+    .summary div { border: 1px solid #E4E2DB; border-radius: 6px; padding: 8px 10px; }
+    .summary b { display: block; font-size: 16px; }
+    .summary span { color: #5B6472; font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; }
+    h2 { font-size: 13px; margin: 18px 0 6px; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 6px 8px; border-bottom: 1px solid #E4E2DB; text-align: left; vertical-align: top; }
+    th { background: #F4F3EF; color: #5B6472; font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; }
+    .num { text-align: right; }
+    tr { break-inside: avoid; }
+    .muted { color: #5B6472; }
+    .report-footer { margin-top: 24px; padding-top: 8px; border-top: 1px solid #E4E2DB; text-align: center; font-size: 10px; color: #5B6472; }
+    @media print {
+        body { background: #fff; }
+        .toolbar { display: none; }
+        .page { margin: 0; padding: 0; max-width: none; }
+    }
+</style>
+</head>
+<body>
+<div class="toolbar"><button type="button" onclick="window.print()">Print / Save as PDF</button></div>
+<div class="page">
+    {% include "partials/print_header.html" with hospital=hospital print_title="Lab Report" %}
+    <div class="muted">Period: <b style="color:#15202E">{{ period_start|date:"j M Y" }} – {{ period_end|date:"j M Y" }}</b> · Generated {% now "j M Y, H:i" %} by {{ request.user.get_full_name|default:request.user.username }}</div>
+
+    <div class="summary">
+        <div><span>Tests ordered</span><b>{{ total_ordered }}</b></div>
+        <div><span>Resulted</span><b>{{ total_resulted }}</b></div>
+        <div><span>Test types</span><b>{{ distinct_test_count }}</b></div>
+        <div><span>Most ordered</span><b>{% if top_test %}{{ top_test.test__name }} ({{ top_test.count }}){% else %}—{% endif %}</b></div>
+    </div>
+
+    <h2>Tests carried out</h2>
+    <table>
+        <thead><tr><th>Test</th><th>Category</th><th class="num">Ordered</th><th>Result breakdown</th></tr></thead>
+        <tbody>
+            {% for row in volume_rows %}
+            <tr>
+                <td>{{ row.test__name }}</td>
+                <td class="muted">{{ row.test__category__name|default:"—" }}</td>
+                <td class="num">{{ row.count }}</td>
+                <td>{% if row.breakdown %}{% for label, count in row.breakdown.items %}{{ label }}: {{ count }}{% if not forloop.last %} · {% endif %}{% endfor %}{% else %}—{% endif %}</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="4" class="muted">No tests ordered in this period.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <h2>By technician</h2>
+    <table>
+        <thead><tr><th>Technician</th><th class="num">Collected</th><th class="num">Entered</th><th class="num">Reviewed</th><th class="num">Released</th><th>Top tests entered</th></tr></thead>
+        <tbody>
+            {% for row in technician_rows %}
+            <tr>
+                <td>{{ row.name }}</td>
+                <td class="num">{{ row.collected }}</td>
+                <td class="num">{{ row.entered }}</td>
+                <td class="num">{{ row.reviewed }}</td>
+                <td class="num">{{ row.released }}</td>
+                <td class="muted">{{ row.top_tests|default:"—" }}</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="6" class="muted">No lab activity recorded in this period.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <div class="report-footer">
+        <b>{{ hospital.name|default:"Hospital EMR" }}</b>{% if hospital.phone_number %} · {{ hospital.phone_number }}{% endif %}
+        <div style="margin-top:4px;">Powered by Ternah Health</div>
+    </div>
+</div>
+<script>window.addEventListener('load', function () { window.print(); });</script>
+</body>
+</html>

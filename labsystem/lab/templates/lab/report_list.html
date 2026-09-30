@@ -7,43 +7,8 @@
 
 {% block content %}
 <div class="space-y-6">
-    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div class="card">
-            <div class="text-4xl font-bold text-text-main">{{ total_reports }}</div>
-            <div class="text-xs text-text-muted uppercase tracking-widest mt-2">Total Reports (legacy)</div>
-        </div>
-        <div class="card">
-            <div class="text-4xl font-bold text-text-main">{{ printed_count }}</div>
-            <div class="text-xs text-text-muted uppercase tracking-widest mt-2">Printed Reports</div>
-        </div>
-        <div class="card">
-            <div class="text-4xl font-bold text-text-main">{{ draft_count }}</div>
-            <div class="text-xs text-text-muted uppercase tracking-widest mt-2">Draft Reports</div>
-        </div>
-        <div class="card">
-            <div class="text-4xl font-bold text-text-main">{{ next_engine_count }}</div>
-            <div class="text-xs text-text-muted uppercase tracking-widest mt-2">New Engine Orders</div>
-        </div>
-    </div>
-
-    <div class="card border-2 border-blue-100 bg-blue-50/40">
-        <h3 class="text-sm font-bold text-text-main">Test Volume Report</h3>
-        <p class="text-xs text-text-muted mt-0.5 mb-3">See how many of each test were carried out in a period, with result breakdowns (e.g. positive vs negative).</p>
-        <form method="get" action="{% url 'lab_test_volume_report' %}" id="volumeReportEntryForm" class="flex flex-wrap items-end gap-3">
-            <div class="flex flex-col gap-1">
-                <label class="text-xs font-semibold uppercase text-text-muted">Month</label>
-                <input type="month" id="volumeReportEntryMonth" class="form-control">
-            </div>
-            <div class="flex flex-col gap-1">
-                <label class="text-xs font-semibold uppercase text-text-muted">From</label>
-                <input type="date" name="start" id="volumeReportEntryStart" class="form-control">
-            </div>
-            <div class="flex flex-col gap-1">
-                <label class="text-xs font-semibold uppercase text-text-muted">To</label>
-                <input type="date" name="end" id="volumeReportEntryEnd" class="form-control">
-            </div>
-            <button type="submit" class="btn btn-primary btn-sm">Generate Report</button>
-        </form>
+    <div class="flex justify-end">
+        <a href="{% url 'lab_test_volume_report' %}" class="btn btn-secondary btn-sm">Lab Reports &rarr;</a>
     </div>
 
     <div class="card space-y-4">
@@ -213,14 +178,5 @@ document.getElementById('technicianFilter').addEventListener('change', applyFilt
 document.getElementById('dateFromFilter').addEventListener('change', applyFilters);
 document.getElementById('dateToFilter').addEventListener('change', applyFilters);
 
-document.getElementById('volumeReportEntryMonth')?.addEventListener('change', function () {
-    if (!this.value) return;
-    const [year, month] = this.value.split('-').map(Number);
-    const firstDay = new Date(year, month - 1, 1);
-    const lastDay = new Date(year, month, 0);
-    const fmt = d => d.toISOString().slice(0, 10);
-    document.getElementById('volumeReportEntryStart').value = fmt(firstDay);
-    document.getElementById('volumeReportEntryEnd').value = fmt(lastDay);
-});
 </script>
 {% endblock %}

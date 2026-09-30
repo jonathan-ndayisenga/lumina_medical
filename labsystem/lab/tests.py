@@ -1551,5 +1551,44 @@ class LabTestVolumeReportTests(LabEngineTestBase):
 
     def test_report_list_page_links_to_the_volume_report(self):
         response = self.client.get(reverse("report_list"))
-        self.assertContains(response, "Generate Report")
+        self.assertContains(response, "Lab Reports")
         self.assertContains(response, reverse("lab_test_volume_report"))
+        self.assertNotContains(response, "New Engine Orders")
+
+    def test_report_shows_what_each_technician_did(self):
+        response = self.client.get(
+            reverse("lab_test_volume_report"),
+            {"start": self.this_month_day.isoformat(), "end": self.today.isoformat()},
+        )
+        rows = {row["name"]: row for row in response.context["technician_rows"]}
+        # All three saved results were entered today by the lab user, even the
+        # one on last month's order: activity counts on when it happened.
+        tech = rows[self.lab_user.get_full_name()]
+        self.assertEqual(tech["entered"], 3)
+        self.assertIn("Malaria RDT 3", tech["top_tests"])
+        self.assertContains(response, "By technician")
+
+    def test_technician_rows_credit_whoever_entered_the_result(self):
+        other = Hospital.objects.create(name="Other Lab", subdomain="other-lab-tech")
+        UserModel = get_user_model()
+        other_user = UserModel.objects.create_user(username="otherlab", password="x", role=UserModel.ROLE_LAB_ATTENDANT, hospital=other)
+        from lab.models import LabResult
+        LabResult.objects.filter(order__hospital=self.hospital).update(entered_by=other_user)
+        response = self.client.get(reverse("lab_test_volume_report"))
+        names = [row["name"] for row in response.context["technician_rows"]]
+        self.assertEqual(names, ["otherlab"])
+
+    def test_pdf_export_has_hospital_header_and_technicians(self):
+        response = self.client.get(
+            reverse("lab_test_volume_report"),
+            {"start": self.this_month_day.isoformat(), "end": self.today.isoformat(), "export": "pdf"},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "lab/test_volume_report_print.html")
+        self.assertContains(response, self.hospital.name.upper())
+        self.assertContains(response, "By technician")
+        self.assertContains(response, "window.print()")
+
+    def test_csv_export_includes_technicians(self):
+        response = self.client.get(reverse("lab_test_volume_report"), {"export": "csv"})
+        self.assertIn("Results Entered", response.content.decode())
