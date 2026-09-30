@@ -1553,7 +1553,7 @@ class LabTestVolumeReportTests(LabEngineTestBase):
         response = self.client.get(reverse("report_list"))
         self.assertContains(response, "Generate Report")
         self.assertContains(response, reverse("lab_test_volume_report"))
-        self.assertContains(response, "Total Reports (legacy)")
+        self.assertContains(response, "Total Reports")
 
     def test_report_list_count_follows_the_technician_filter(self):
         response = self.client.get(reverse("report_list"))
@@ -1562,7 +1562,15 @@ class LabTestVolumeReportTests(LabEngineTestBase):
         # The Full Panel order has no result yet, so no technician on it.
         response = self.client.get(reverse("report_list"), {"technician": self.lab_user.get_full_name()})
         self.assertEqual(response.context["filtered_report_count"], 3)
-        self.assertContains(response, "technician: <strong class=\"text-text-main\">" + self.lab_user.get_full_name())
+
+    def test_report_list_count_follows_the_test_filter_per_report(self):
+        # Give one malaria patient a second, different test: filtering
+        # "Malaria RDT" must count only malaria reports, not that extra one.
+        malaria_order = LabOrder.objects.filter(test=self.malaria_test).first()
+        LabOrder.objects.create(visit_service=malaria_order.visit_service, test=self.test, hospital=self.hospital)
+        response = self.client.get(reverse("report_list"), {"test": "Malaria RDT"})
+        self.assertEqual(response.context["filtered_report_count"], 3)
+        self.assertContains(response, "Filtered · Malaria RDT")
 
     def test_report_shows_what_each_technician_did(self):
         response = self.client.get(

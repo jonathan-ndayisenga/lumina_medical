@@ -30,6 +30,12 @@
     .tile { position: relative; display: flex; flex-direction: column; min-height: 160px; padding: 24px; background: var(--surface); border: 1px solid var(--border); border-radius: 20px; }
     .tile-wide { grid-column: span 2; min-height: 170px; }
     .tile-head { display: inline-flex; align-items: center; gap: 12px; align-self: flex-start; color: var(--ink); text-decoration: none; font-size: 17px; font-weight: 600; border-radius: 12px; }
+    /* The title link stretches over the whole tile, so a click anywhere opens
+       the module; the action pills sit above it and keep their own targets. */
+    .tile-head::after { content: ""; position: absolute; inset: 0; border-radius: 20px; }
+    .tile .tile-head:focus-visible { outline: none; }
+    .tile:has(.tile-head:focus-visible) { outline: 2px solid var(--ink); outline-offset: 2px; }
+    .tile-actions { position: relative; z-index: 1; }
     .tile-icon { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border-radius: 12px; background: var(--icon-bg); color: var(--ink); }
     .tile:has(.is-warn) .tile-icon { background: var(--warn-bg); color: var(--warn); }
     .tile-body { margin-top: 20px; min-height: 48px; }

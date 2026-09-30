@@ -9,8 +9,9 @@
 <div class="space-y-6">
     <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div class="card">
-            <div class="text-4xl font-bold text-text-main">{{ total_reports }}</div>
-            <div class="text-xs text-text-muted uppercase tracking-widest mt-2">Total Reports (legacy)</div>
+            <div class="text-4xl font-bold text-text-main">{{ filtered_report_count }}</div>
+            <div class="text-xs text-text-muted uppercase tracking-widest mt-2">Total Reports</div>
+            <div class="text-xs text-text-muted mt-1">{% if search or test_filter or technician_filter or date_from or date_to %}Filtered{% if test_filter %} · {{ test_filter }}{% endif %}{% if technician_filter %} · {{ technician_filter }}{% endif %}{% if date_from or date_to %} · {{ date_from|default:"start" }} to {{ date_to|default:"today" }}{% endif %}{% if search %} · "{{ search }}"{% endif %}{% else %}All reports{% endif %}</div>
         </div>
         <div class="card">
             <div class="text-4xl font-bold text-text-main">{{ printed_count }}</div>
@@ -89,11 +90,6 @@
             {% endif %}
         </div>
     </div>
-
-    <p class="text-sm text-text-muted" id="filteredCount">
-        <strong class="text-text-main">{{ filtered_report_count }} report{{ filtered_report_count|pluralize }}</strong>
-        for {{ filtered_patient_count }} patient{{ filtered_patient_count|pluralize }}{% if technician_filter %} · technician: <strong class="text-text-main">{{ technician_filter }}</strong>{% endif %}{% if test_filter %} · test: <strong class="text-text-main">{{ test_filter }}</strong>{% endif %}{% if date_from or date_to %} · {{ date_from|default:"start" }} to {{ date_to|default:"today" }}{% endif %}{% if search %} · search: "{{ search }}"{% endif %}
-    </p>
 
     {% if patients.object_list %}
     <div class="card overflow-hidden">

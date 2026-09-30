@@ -340,12 +340,11 @@ def report_list(request):
         base_qs = base_qs.filter(filters)
 
     base_stats = base_qs.aggregate(
-        total=Count("id"),
         printed_total=Count("id", filter=Q(printed=True)),
         draft_total=Count("id", filter=Q(printed=False)),
     )
 
-    patient_details = defaultdict(lambda: {'tests': [], 'technician': None, 'age': '', 'sex': '', 'engines': set()})
+    patient_details = defaultdict(lambda: {'tests': [], 'technician': None, 'age': '', 'sex': '', 'engines': set(), 'reports': []})
 
     # ---- Legacy (old lab app) side, grouped by patient name ----
     legacy_groups = {
@@ -364,10 +363,13 @@ def report_list(request):
         label = r.profile.name if r.profile else r.specimen_type
         if label not in pd['tests']:
             pd['tests'].append(label)
+        report_technician = r.attendant_name or (
+            r.attendant.get_full_name() or r.attendant.username if r.attendant else None
+        )
         if not pd['technician']:
-            pd['technician'] = r.attendant_name or (
-                r.attendant.get_full_name() or r.attendant.username if r.attendant else None
-            )
+            pd['technician'] = report_technician
+        sample_date = r.sample_date.date() if hasattr(r.sample_date, 'date') else r.sample_date
+        pd['reports'].append((label, report_technician, sample_date))
         # Age/sex from most recent report (first encountered, already ordered -sample_date)
         if not pd['age']:
             pd['age'] = r.patient_age
@@ -398,15 +400,17 @@ def report_list(request):
         pd['engines'].add('next')
         if order.test.name not in pd['tests']:
             pd['tests'].append(order.test.name)
+        result = getattr(order, 'result', None)
+        technician_user = (result.entered_by if result else None) or order.collected_by
+        order_technician = (technician_user.get_full_name() or technician_user.username) if technician_user else None
+        pd['reports'].append((order.test.name, order_technician, order_date))
         if not pd['technician']:
             # Prefer whoever actually entered the result -- every released
             # order goes through save_results, while "mark sample collected"
             # is a separate step some workflows skip, leaving collected_by
             # null even though a real technician did the work.
-            result = getattr(order, 'result', None)
-            technician_user = (result.entered_by if result else None) or order.collected_by
-            if technician_user:
-                pd['technician'] = technician_user.get_full_name() or technician_user.username
+            if order_technician:
+                pd['technician'] = order_technician
         if not pd['age']:
             pd['age'] = patient.age
             pd['sex'] = patient.get_sex_display()
@@ -462,7 +466,21 @@ def report_list(request):
         except ValueError:
             date_to = ''
 
-    filtered_report_count = sum(row['report_count'] for row in merged_rows)
+    # Count individual reports, not whole patients: filtering "Malaria" should
+    # give the number of malaria reports, not every report those patients had.
+    def report_matches(test, technician, when):
+        return (
+            (not test_filter or test == test_filter)
+            and (not technician_filter or technician == technician_filter)
+            and (not date_from or (when and when.isoformat() >= date_from))
+            and (not date_to or (when and when.isoformat() <= date_to))
+        )
+
+    filtered_report_count = sum(
+        report_matches(*report)
+        for row in merged_rows
+        for report in patient_details[row['patient_name']]['reports']
+    )
 
     paginator = Paginator(merged_rows, 20)
     patients = paginator.get_page(request.GET.get('page'))
@@ -484,12 +502,10 @@ def report_list(request):
     context = {
         'patients': patients,
         'patient_details': dict(patient_details),
-        'total_reports': base_stats['total'],
         'printed_count': base_stats['printed_total'],
         'draft_count': base_stats['draft_total'],
         'next_engine_count': sum(g['report_count'] for g in next_groups.values()),
         'filtered_report_count': filtered_report_count,
-        'filtered_patient_count': len(merged_rows),
         'active_nav': 'dashboard',
         'search': search,
         'test_filter': test_filter,

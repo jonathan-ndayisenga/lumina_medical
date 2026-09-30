@@ -1,8 +1,8 @@
 {% extends 'base.html' %}
 {% load reception_extras %}
-{% block title %}Patients Seen - Lumina{% endblock %}
-{% block page_title %}Patients Seen Report{% endblock %}
-{% block page_subtitle %}Patients seen by doctors within the selected period.{% endblock %}
+{% block title %}Doctor Consultations{% endblock %}
+{% block page_title %}Doctor Consultations{% endblock %}
+{% block page_subtitle %}Patients seen, how long they waited, what each doctor recommended, and what their visits were worth.{% endblock %}
 {% block content_container_classes %}max-w-[100rem] mx-auto px-4 lg:px-8 py-6{% endblock %}
 
 {% block content %}
@@ -40,16 +40,105 @@
     </div>
 
     {# ── Stat cards ── #}
-    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
         <div class="card">
-            <p class="text-xs uppercase tracking-wide text-text-muted">Total Consultations</p>
+            <p class="text-xs uppercase tracking-wide text-text-muted">Consultations</p>
             <p class="mt-2 text-3xl font-bold text-text-main">{{ total_consultations }}</p>
-            <p class="mt-1 text-xs text-text-muted">{{ date_start }} to {{ date_end }}</p>
+            <p class="mt-1 text-xs text-text-muted">{{ unique_patients }} unique patient{{ unique_patients|pluralize }}</p>
         </div>
         <div class="card">
-            <p class="text-xs uppercase tracking-wide text-text-muted">Unique Patients</p>
-            <p class="mt-2 text-3xl font-bold text-blue-700">{{ unique_patients }}</p>
-            <p class="mt-1 text-xs text-text-muted">Distinct patients seen in this period.</p>
+            <p class="text-xs uppercase tracking-wide text-text-muted">Queue to consultation</p>
+            <p class="mt-2 text-3xl font-bold text-text-main">{% if summary.avg_wait is not None %}{{ summary.avg_wait }} min{% else %}&mdash;{% endif %}</p>
+            <p class="mt-1 text-xs text-text-muted">Average, from joining the doctor's queue</p>
+        </div>
+        <div class="card">
+            <p class="text-xs uppercase tracking-wide text-text-muted">Visits billed</p>
+            <p class="mt-2 text-3xl font-bold text-text-main">{{ summary.billed|floatformat:"0g" }}</p>
+            <p class="mt-1 text-xs text-text-muted">UGX, whole visits consulted</p>
+        </div>
+        <div class="card">
+            <p class="text-xs uppercase tracking-wide text-text-muted">Collected</p>
+            <p class="mt-2 text-3xl font-bold text-text-main">{{ summary.collected|floatformat:"0g" }}</p>
+            <p class="mt-1 text-xs {% if summary.outstanding > 0 %}text-amber-700{% else %}text-text-muted{% endif %}">UGX {{ summary.outstanding|floatformat:"0g" }} outstanding</p>
+        </div>
+        <div class="card">
+            <p class="text-xs uppercase tracking-wide text-text-muted">Recommended by doctors</p>
+            <p class="mt-2 text-3xl font-bold text-text-main">{{ summary.recommended_value|floatformat:"0g" }}</p>
+            <p class="mt-1 text-xs text-text-muted">UGX in lab, scans, drugs &amp; procedures</p>
+        </div>
+        <div class="card">
+            <p class="text-xs uppercase tracking-wide text-text-muted">Ordered lab tests</p>
+            <p class="mt-2 text-3xl font-bold text-text-main">{{ summary.lab_rate }}%</p>
+            <p class="mt-1 text-xs text-text-muted">Of consultations &middot; UGX {{ summary.per_consultation|floatformat:"0g" }} billed per consultation</p>
+        </div>
+    </div>
+
+    {# Doctor performance #}
+    <div class="card">
+        <div class="mb-4">
+            <h3 class="text-lg font-bold text-text-main">Doctor performance</h3>
+            <p class="text-sm text-text-muted">Ranked by what each doctor's consulted visits were billed. "Recommended" counts lab, scans, drugs and procedures added after the patient reached the doctor.</p>
+        </div>
+        {% if doctor_rows %}
+        <div class="mb-6" style="height: {% widthratio doctor_rows|length 1 44 %}px; min-height: 140px;"><canvas id="doctorRevenueChart" aria-label="Billed and collected per doctor" role="img"></canvas></div>
+        {% endif %}
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead>
+                    <tr>
+                        <th>Doctor</th>
+                        <th class="text-right">Consultations</th>
+                        <th class="text-right">Patients</th>
+                        <th class="text-right">Queue to consult</th>
+                        <th class="text-right">Ordered lab</th>
+                        <th class="text-right">Recommended</th>
+                        <th class="text-right">Recommended value</th>
+                        <th class="text-right">Visits billed</th>
+                        <th class="text-right">Collected</th>
+                        <th class="text-right">Per consultation</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for d in doctor_rows %}
+                    <tr>
+                        <td class="font-semibold text-text-main">{{ d.name }}</td>
+                        <td class="text-right">{{ d.consultations }}</td>
+                        <td class="text-right">{{ d.patients }}</td>
+                        <td class="text-right">{% if d.avg_wait is not None %}{{ d.avg_wait }} min{% else %}&mdash;{% endif %}</td>
+                        <td class="text-right">{{ d.lab_rate }}%</td>
+                        <td class="text-right">{{ d.recommended_count }}</td>
+                        <td class="text-right">{{ d.recommended_value|floatformat:"0g" }}</td>
+                        <td class="text-right font-semibold text-text-main">{{ d.billed|floatformat:"0g" }}</td>
+                        <td class="text-right">{{ d.collected|floatformat:"0g" }}</td>
+                        <td class="text-right">{{ d.per_consultation|floatformat:"0g" }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="10" class="py-8 text-center text-text-muted">No consultations in this period.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    {# Most recommended services #}
+    <div class="card">
+        <h3 class="text-lg font-bold text-text-main mb-4">Most recommended services</h3>
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead><tr><th>Service</th><th>Category</th><th class="text-right">Times</th><th class="text-right">Value (UGX)</th></tr></thead>
+                <tbody>
+                    {% for svc in top_services %}
+                    <tr>
+                        <td class="font-semibold text-text-main">{{ svc.name }}</td>
+                        <td class="text-text-muted">{{ svc.category }}</td>
+                        <td class="text-right">{{ svc.count }}</td>
+                        <td class="text-right">{{ svc.value|floatformat:"0g" }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="4" class="py-8 text-center text-text-muted">No services recommended in this period.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
         </div>
     </div>
 
@@ -62,6 +151,7 @@
             </div>
             <div class="flex gap-2">
                 <a href="?{{ filter_qs }}&export=csv" class="btn btn-secondary btn-sm">Export CSV</a>
+                <a href="?{{ filter_qs }}&export=pdf" target="_blank" rel="noopener" class="btn btn-secondary btn-sm">Export PDF</a>
                 <a href="{% url 'hospital_reports' %}" class="btn btn-secondary btn-sm">All Reports</a>
             </div>
         </div>
@@ -128,6 +218,29 @@
 
 </div>
 
+{% if doctor_rows %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+<script>
+(function () {
+    const data = {{ chart_json|safe }};
+    new Chart(document.getElementById('doctorRevenueChart'), {
+        type: 'bar',
+        data: { labels: data.labels, datasets: [
+            { label: 'Visits billed', data: data.billed, backgroundColor: '#14233A', borderRadius: 6 },
+            { label: 'Collected', data: data.collected, backgroundColor: '#A7B4C6', borderRadius: 6 },
+        ] },
+        options: {
+            indexAxis: 'y', maintainAspectRatio: false,
+            plugins: {
+                legend: { position: 'bottom' },
+                tooltip: { callbacks: { label: function (c) { return c.dataset.label + ': UGX ' + c.parsed.x.toLocaleString(); } } },
+            },
+            scales: { x: { beginAtZero: true, ticks: { callback: function (v) { return v.toLocaleString(); } } } },
+        },
+    });
+})();
+</script>
+{% endif %}
 <script>
 function rptPreset(preset) {
     const fmt = d => d.toISOString().slice(0, 10);

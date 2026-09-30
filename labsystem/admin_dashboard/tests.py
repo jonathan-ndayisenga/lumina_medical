@@ -737,3 +737,74 @@ class HospitalReportsHubTests(TestCase):
 
         self.assertFalse(response.context["lab_enabled"])
         self.assertNotContains(response, "Lab Reports")
+
+
+class ConsultationsReportTests(TestCase):
+    """Doctor Consultations report: waiting time, what each doctor
+    recommended, and what their consulted visits were billed and paid."""
+
+    def setUp(self):
+        from datetime import timedelta
+        from django.utils import timezone
+        from doctor.models import Consultation
+        from reception.models import Patient, Payment, QueueEntry, Service, Visit, VisitService
+
+        UserModel = get_user_model()
+        self.hospital = Hospital.objects.create(name="Consult Report Hospital", subdomain="consult-report")
+        _enable_modules(self.hospital, "hospital_mgmt", "doctor")
+        self.admin = UserModel.objects.create_user(
+            username="consultadmin", password="StrongPass123!", role=UserModel.ROLE_HOSPITAL_ADMIN, hospital=self.hospital,
+        )
+        self.doctor = UserModel.objects.create_user(
+            username="amina", password="StrongPass123!", first_name="Amina", last_name="Okello",
+            role=UserModel.ROLE_DOCTOR, hospital=self.hospital,
+        )
+        consult = Service.objects.create(hospital=self.hospital, name="Consultation", category=Service.CATEGORY_CONSULTATION, price=Decimal("20000"))
+        malaria = Service.objects.create(hospital=self.hospital, name="Malaria test", category=Service.CATEGORY_LAB, price=Decimal("5000"))
+
+        now = timezone.now()
+        patient = Patient.objects.create(hospital=self.hospital, name="Test Patient", age="30YRS", sex="F")
+        visit = Visit.objects.create(patient=patient, hospital=self.hospital, created_by=self.admin, total_amount=Decimal("25000"))
+        fee = VisitService.objects.create(visit=visit, service=consult, price_at_time=consult.price)
+        entry = QueueEntry.objects.create(hospital=self.hospital, visit=visit, queue_type=QueueEntry.TYPE_DOCTOR)
+        lab = VisitService.objects.create(visit=visit, service=malaria, price_at_time=malaria.price)
+        consultation = Consultation.objects.create(
+            visit=visit, created_by=self.doctor, signs_symptoms="Fever", diagnosis="Malaria", treatment="ACT",
+        )
+        # Reception billed the fee first; the patient then waited 15 minutes
+        # for the doctor, who ordered the malaria test during the consultation.
+        VisitService.objects.filter(pk=fee.pk).update(created_at=now - timedelta(minutes=30))
+        QueueEntry.objects.filter(pk=entry.pk).update(created_at=now - timedelta(minutes=20))
+        VisitService.objects.filter(pk=lab.pk).update(created_at=now - timedelta(minutes=10))
+        Consultation.objects.filter(pk=consultation.pk).update(created_at=now - timedelta(minutes=5))
+        Payment.objects.create(visit=visit, amount=Decimal("25000"), amount_paid=Decimal("10000"), mode=Payment.MODE_CASH, recorded_by=self.admin)
+        self.client.force_login(self.admin)
+
+    def test_doctor_performance_counts_wait_recommendations_and_money(self):
+        response = self.client.get(reverse("report_consultations"))
+        self.assertEqual(response.status_code, 200)
+        doctor = response.context["doctor_rows"][0]
+        self.assertEqual(doctor["name"], "Dr. Amina Okello")
+        self.assertEqual(doctor["consultations"], 1)
+        self.assertEqual(doctor["avg_wait"], 15)
+        self.assertEqual(doctor["recommended_count"], 1)  # the fee billed before the doctor doesn't count
+        self.assertEqual(doctor["recommended_value"], Decimal("5000"))
+        self.assertEqual(doctor["billed"], Decimal("25000"))
+        self.assertEqual(doctor["collected"], Decimal("10000"))
+        self.assertEqual(doctor["lab_rate"], 100)
+        self.assertEqual(response.context["summary"]["outstanding"], Decimal("15000"))
+        self.assertEqual(response.context["top_services"][0]["name"], "Malaria test")
+        self.assertContains(response, "Doctor performance")
+
+    def test_pdf_export_has_hospital_header(self):
+        response = self.client.get(reverse("report_consultations"), {"export": "pdf"})
+        self.assertTemplateUsed(response, "admin_dashboard/report_consultations_print.html")
+        self.assertContains(response, self.hospital.name.upper())
+        self.assertContains(response, "Amina Okello")
+        self.assertContains(response, "window.print()")
+
+    def test_csv_export_includes_doctor_performance(self):
+        response = self.client.get(reverse("report_consultations"), {"export": "csv"})
+        body = response.content.decode()
+        self.assertIn("Visit billed", body)
+        self.assertIn("Malaria test", body)

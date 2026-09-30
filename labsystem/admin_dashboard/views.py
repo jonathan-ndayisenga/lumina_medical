@@ -2404,6 +2404,8 @@ def report_consultations(request):
 
     total_consultations = qs.count()
     unique_patients = qs.values("visit__patient_id").distinct().count()
+    from .consultation_metrics import consultation_metrics
+    summary, doctor_rows, top_services = consultation_metrics(qs)
 
     # CSV export
     if request.GET.get("export") == "csv":
@@ -2423,6 +2425,17 @@ def report_consultations(request):
                 c.created_by.get_full_name() if c.created_by else "—",
                 c.follow_up_date or "",
             ])
+        writer.writerow([])
+        writer.writerow(["Doctor", "Consultations", "Patients", "Avg queue to consultation (min)", "Ordered lab (%)",
+                         "Services recommended", "Recommended value", "Visit billed", "Collected", "Billed per consultation"])
+        for d in doctor_rows:
+            writer.writerow([d["name"], d["consultations"], d["patients"], d["avg_wait"] if d["avg_wait"] is not None else "",
+                             d["lab_rate"], d["recommended_count"], d["recommended_value"], d["billed"], d["collected"],
+                             round(d["per_consultation"], 2)])
+        writer.writerow([])
+        writer.writerow(["Top recommended service", "Category", "Times", "Value"])
+        for svc in top_services:
+            writer.writerow([svc["name"], svc["category"], svc["count"], svc["value"]])
         return response
 
     doctors = (
@@ -2444,8 +2457,8 @@ def report_consultations(request):
     context = hospital_admin_context(
         request,
         "hospital_reports",
-        "Patients Seen Report",
-        "Patients seen by doctors within the selected period.",
+        "Doctor Consultations",
+        "Patients seen, waiting time, what each doctor recommended, and what their visits were worth.",
     )
     context.update({
         "consultations": page_obj,
@@ -2457,7 +2470,19 @@ def report_consultations(request):
         "filter_qs": filter_qs,
         "total_consultations": total_consultations,
         "unique_patients": unique_patients,
+        "summary": summary,
+        "doctor_rows": doctor_rows,
+        "top_services": top_services,
+        "hospital": hospital,
+        "chart_json": json.dumps({
+            "labels": [d["name"] for d in doctor_rows],
+            "billed": [float(d["billed"]) for d in doctor_rows],
+            "collected": [float(d["collected"]) for d in doctor_rows],
+        }),
     })
+    if request.GET.get("export") == "pdf":
+        context["all_consultations"] = qs
+        return render(request, "admin_dashboard/report_consultations_print.html", context)
     return render(request, "admin_dashboard/report_consultations.html", context)
 
 
