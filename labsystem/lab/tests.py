@@ -1551,9 +1551,18 @@ class LabTestVolumeReportTests(LabEngineTestBase):
 
     def test_report_list_page_links_to_the_volume_report(self):
         response = self.client.get(reverse("report_list"))
-        self.assertContains(response, "Lab Reports")
+        self.assertContains(response, "Generate Report")
         self.assertContains(response, reverse("lab_test_volume_report"))
-        self.assertNotContains(response, "New Engine Orders")
+        self.assertContains(response, "Total Reports (legacy)")
+
+    def test_report_list_count_follows_the_technician_filter(self):
+        response = self.client.get(reverse("report_list"))
+        self.assertEqual(response.context["filtered_report_count"], 4)
+
+        # The Full Panel order has no result yet, so no technician on it.
+        response = self.client.get(reverse("report_list"), {"technician": self.lab_user.get_full_name()})
+        self.assertEqual(response.context["filtered_report_count"], 3)
+        self.assertContains(response, "technician: <strong class=\"text-text-main\">" + self.lab_user.get_full_name())
 
     def test_report_shows_what_each_technician_did(self):
         response = self.client.get(

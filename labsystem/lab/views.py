@@ -339,6 +339,12 @@ def report_list(request):
         )
         base_qs = base_qs.filter(filters)
 
+    base_stats = base_qs.aggregate(
+        total=Count("id"),
+        printed_total=Count("id", filter=Q(printed=True)),
+        draft_total=Count("id", filter=Q(printed=False)),
+    )
+
     patient_details = defaultdict(lambda: {'tests': [], 'technician': None, 'age': '', 'sex': '', 'engines': set()})
 
     # ---- Legacy (old lab app) side, grouped by patient name ----
@@ -456,6 +462,8 @@ def report_list(request):
         except ValueError:
             date_to = ''
 
+    filtered_report_count = sum(row['report_count'] for row in merged_rows)
+
     paginator = Paginator(merged_rows, 20)
     patients = paginator.get_page(request.GET.get('page'))
 
@@ -476,6 +484,12 @@ def report_list(request):
     context = {
         'patients': patients,
         'patient_details': dict(patient_details),
+        'total_reports': base_stats['total'],
+        'printed_count': base_stats['printed_total'],
+        'draft_count': base_stats['draft_total'],
+        'next_engine_count': sum(g['report_count'] for g in next_groups.values()),
+        'filtered_report_count': filtered_report_count,
+        'filtered_patient_count': len(merged_rows),
         'active_nav': 'dashboard',
         'search': search,
         'test_filter': test_filter,
