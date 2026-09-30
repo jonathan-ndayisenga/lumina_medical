@@ -199,7 +199,10 @@ class ReceiptRenderingTests(TestCase):
             follow=True,
         )
         self.assertEqual(resp.status_code, 200)
-        self.assertContains(resp, "LUMINA MEDICAL SERVICES")
+        # Regression guard: this used to hardcode "LUMINA MEDICAL SERVICES"
+        # regardless of which hospital the receipt was actually for --
+        # every tenant's receipt showed the same wrong name.
+        self.assertContains(resp, self.hospital.name.upper())
 
         payment = Payment.objects.filter(visit=self.visit).order_by("-id").first()
         self.assertIsNotNone(payment)
@@ -210,6 +213,26 @@ class ReceiptRenderingTests(TestCase):
         self.assertIsNotNone(cash_txn)
         self.assertEqual(cash_txn.cash_drawer_id, self.cash_drawer.id)
         self.assertEqual(cash_txn.amount, Decimal("50.00"))
+
+        # Paper size picker (58mm / 80mm / A4) -- shown as a popup over
+        # the app, defaulting to 80mm (Standard).
+        self.assertContains(resp, "Paper Size")
+        self.assertContains(resp, "58mm (Small)")
+        self.assertContains(resp, "80mm (Standard)")
+        self.assertContains(resp, "A4 (Full Page)")
+        self.assertContains(resp, 'data-paper-size="80mm"')
+
+    def test_visit_billing_summary_receipt_has_paper_size_picker(self):
+        self.client.force_login(self.receptionist)
+
+        response = self.client.get(reverse("print_receipt", args=[self.visit.pk]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Paper Size")
+        self.assertContains(response, "58mm (Small)")
+        self.assertContains(response, "80mm (Standard)")
+        self.assertContains(response, "A4 (Full Page)")
+        self.assertContains(response, reverse("patient_visits", args=[self.patient.pk]))
 
 
 class FinancialChannelSyncTests(TestCase):

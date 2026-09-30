@@ -5,15 +5,98 @@
 <meta charset="UTF-8">
 <title>{{ hospital.name }} - Receipt</title>
 <style>
-    @page { size: 48mm auto; margin: 0mm; }
-
     * { margin: 0; padding: 0; box-sizing: border-box; }
 
+    /* Named print pages -- lets the same stylesheet declare a different
+       @page size per paper option; the printable surface below picks
+       which one applies via the `page` property, driven by the
+       data-paper-size attribute the dropdown sets on <body>. Chromium
+       (what POS/reception terminals actually print from) honors this;
+       other engines just fall back to their default page size, which is
+       harmless. */
+    @page thermal58 { size: 58mm auto; margin: 0; }
+    @page thermal80 { size: 80mm auto; margin: 0; }
+    @page a4page { size: A4; margin: 12mm; }
+
     body {
-        width: 48mm;
-        padding: 2mm 1mm;
+        background: #e5e7eb;
         font-family: 'Courier New', Courier, monospace;
-        font-size: 11px;
+        min-height: 100vh;
+    }
+
+    /* Screen-only modal chrome -- dimmed backdrop, centered card, close
+       button and paper-size picker, same look as the reference receipt
+       popup. None of this is printed. */
+    .modal-backdrop {
+        position: fixed;
+        inset: 0;
+        background: rgba(15, 23, 42, 0.55);
+        display: flex;
+        align-items: flex-start;
+        justify-content: center;
+        padding: 5vh 16px;
+        overflow-y: auto;
+        font-family: -apple-system, 'Segoe UI', Inter, sans-serif;
+    }
+    .modal-card {
+        background: #fff;
+        border-radius: 12px;
+        box-shadow: 0 20px 50px rgba(0, 0, 0, 0.25);
+        width: 100%;
+        max-width: 420px;
+        padding: 20px 20px 16px;
+        position: relative;
+    }
+    .modal-close {
+        position: absolute;
+        top: 14px;
+        right: 16px;
+        background: none;
+        border: none;
+        font-size: 22px;
+        line-height: 1;
+        color: #6b7280;
+        cursor: pointer;
+        text-decoration: none;
+    }
+    .modal-close:hover { color: #111827; }
+    .modal-title {
+        font-size: 18px;
+        font-weight: 700;
+        color: #111827;
+    }
+    .modal-subtitle {
+        font-size: 13px;
+        color: #6b7280;
+        margin-top: 2px;
+    }
+    .paper-size-field {
+        margin-top: 16px;
+    }
+    .paper-size-field label {
+        display: block;
+        font-size: 12px;
+        font-weight: 600;
+        color: #374151;
+        margin-bottom: 4px;
+    }
+    .paper-size-field select {
+        width: 100%;
+        padding: 8px 10px;
+        border: 1px solid #d1d5db;
+        border-radius: 8px;
+        font-size: 14px;
+        font-family: -apple-system, 'Segoe UI', Inter, sans-serif;
+        background: #fff;
+    }
+
+    /* The receipt itself -- width/font scale with the chosen paper size,
+       both on screen (so the preview actually looks like what will print)
+       and when printing. */
+    .receipt-surface {
+        margin: 16px auto 0;
+        border: 1px dashed #d1d5db;
+        padding: 2mm 1mm;
         font-weight: bold;
         line-height: 1.05;
         color: #000;
@@ -21,6 +104,9 @@
         -webkit-print-color-adjust: exact;
         print-color-adjust: exact;
     }
+    body[data-paper-size="58mm"] .receipt-surface { width: 58mm; font-size: 10px; page: thermal58; }
+    body[data-paper-size="80mm"] .receipt-surface { width: 80mm; font-size: 12px; page: thermal80; }
+    body[data-paper-size="a4"] .receipt-surface   { width: 100%; max-width: 180mm; font-size: 14px; padding: 10mm; page: a4page; }
 
     .c   { text-align: center; }
     .lbl { display: inline-block; width: 52px; }
@@ -33,47 +119,70 @@
     .row .n { flex: 1; }
     .row .p { white-space: nowrap; }
 
-    body, div, span {
-        page-break-inside: avoid;
-        break-inside: avoid;
-    }
-
     .sep {
         border-top: 1.5px solid #000;
         margin: 2px 0;
         height: 0;
     }
 
+    .actions {
+        margin-top: 16px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
     .btn {
         display: block;
         width: 100%;
-        margin-top: 5px;
-        padding: 3px 0;
-        font-family: 'Courier New', Courier, monospace;
-        font-size: 11px;
+        padding: 9px 0;
+        font-family: -apple-system, 'Segoe UI', Inter, sans-serif;
+        font-size: 13px;
+        font-weight: 600;
         text-align: center;
         cursor: pointer;
-        border: 1px solid #000;
-        background: #fff;
-        color: #000;
+        border-radius: 8px;
+        border: 1px solid #1d3557;
+        background: #1d3557;
+        color: #fff;
         text-decoration: none;
     }
-    .wa { background: #25d366; color: #fff; border-color: #25d366; }
-    .lab-btn { background: #1d3557; color: #fff; border-color: #1d3557; }
-    form.btn-form { margin-top: 5px; }
-    form.btn-form .btn { margin-top: 0; }
+    .wa { background: #25d366; border-color: #25d366; }
+    .lab-btn { background: #1d3557; border-color: #1d3557; }
+    form.btn-form { margin: 0; }
 
-    @media print { .btn, form.btn-form { display: none !important; } }
+    @media print {
+        body { background: #fff; }
+        .modal-backdrop { position: static; padding: 0; display: block; background: none; }
+        .modal-card { box-shadow: none; border-radius: 0; max-width: none; width: auto; padding: 0; }
+        .modal-close, .modal-title, .modal-subtitle, .paper-size-field, .actions { display: none !important; }
+        .receipt-surface { border: none; margin: 0; }
+        body, div, span { page-break-inside: avoid; break-inside: avoid; }
+    }
 </style>
 </head>
-<body>
+<body data-paper-size="80mm">
+<div class="modal-backdrop">
+<div class="modal-card">
+    <a href="{% url 'patient_visits' visit.patient_id %}" class="modal-close" aria-label="Close">&times;</a>
+    <div class="modal-title">Receipt</div>
+    <div class="modal-subtitle">Print this receipt</div>
 
-<div class="c">LUMINA MEDICAL SERVICES</div>
+    <div class="paper-size-field">
+        <label for="paperSizeSelect">Paper Size</label>
+        <select id="paperSizeSelect" onchange="document.body.setAttribute('data-paper-size', this.value)">
+            <option value="58mm">58mm (Small)</option>
+            <option value="80mm" selected>80mm (Standard)</option>
+            <option value="a4">A4 (Full Page)</option>
+        </select>
+    </div>
+
+<div class="receipt-surface">
+<div class="c">{{ hospital.name|default:"LUMINA MEDICAL SERVICES"|upper }}</div>
 <div class="c">{{ payment.receipt_number }}</div>
 <div class="c">{{ payment.paid_at|date:"Y-m-d H:i" }}</div>
 <div class="sep"></div>
 
-<div><span class="lbl">Patient:</span> {{ visit.patient.name|truncatechars:16 }}</div>
+<div><span class="lbl">Patient:</span> {{ visit.patient.name|truncatechars:24 }}</div>
 <div><span class="lbl">Age/Sex:</span> {{ visit.patient|age_at:visit.visit_date }} / {{ visit.patient.get_sex_display|slice:":1" }}</div>
 <div><span class="lbl">Visit Date:</span> {{ visit.visit_date|date:"Y-m-d" }}</div>
 <div><span class="lbl">Visit:</span> #{{ visit.id }}</div>
@@ -83,7 +192,7 @@
 <div>SERVICES</div>
 {% for item in service_items %}
 <div class="row">
-    <span class="n">{{ item.name|truncatechars:16 }}</span>
+    <span class="n">{{ item.name|truncatechars:24 }}</span>
     <span class="p">{{ item.price }}</span>
 </div>
 {% endfor %}
@@ -93,7 +202,7 @@
 <div>DRUGS</div>
 {% for item in drug_items %}
 <div class="row">
-    <span class="n">{{ item.name|truncatechars:16 }}</span>
+    <span class="n">{{ item.name|truncatechars:24 }}</span>
     <span class="p">{{ item.price }}</span>
 </div>
 {% endfor %}
@@ -109,28 +218,31 @@
 <div class="sep"></div>
 
 <div><span class="lbl">Mode:</span> {{ payment.get_mode_display }}</div>
-<div><span class="lbl">By:</span> {% if payment.recorded_by %}{{ payment.recorded_by.get_full_name|default:payment.recorded_by.username|truncatechars:16 }}{% else %}-{% endif %}</div>
+<div><span class="lbl">By:</span> {% if payment.recorded_by %}{{ payment.recorded_by.get_full_name|default:payment.recorded_by.username|truncatechars:24 }}{% else %}-{% endif %}</div>
 
 {% if payment.notes %}
 <div class="sep"></div>
-<div>{{ payment.notes|truncatechars:60 }}</div>
+<div>{{ payment.notes|truncatechars:80 }}</div>
 {% endif %}
 
 <div class="sep"></div>
 <div class="c">Thank you</div>
 <div class="c">Get well soon</div>
+</div>
 
-{% if walink %}
-<a href="{{ walink }}" target="_blank" class="btn wa">Send via WhatsApp</a>
-{% endif %}
-<button onclick="window.print()" class="btn">Print / Save as PDF</button>
-
-{% if reception_queue_entry %}
-<form method="post" action="{% url 'reception_queue_approve_lab' reception_queue_entry.pk %}" class="btn-form">
-    {% csrf_token %}
-    <button type="submit" class="btn lab-btn">Send Patient to Lab Queue</button>
-</form>
-{% endif %}
-
+    <div class="actions">
+        {% if walink %}
+        <a href="{{ walink }}" target="_blank" class="btn wa">Send via WhatsApp</a>
+        {% endif %}
+        <button onclick="window.print()" class="btn">Print Receipt</button>
+        {% if reception_queue_entry %}
+        <form method="post" action="{% url 'reception_queue_approve_lab' reception_queue_entry.pk %}" class="btn-form">
+            {% csrf_token %}
+            <button type="submit" class="btn lab-btn">Send Patient to Lab Queue</button>
+        </form>
+        {% endif %}
+    </div>
+</div>
+</div>
 </body>
 </html>
