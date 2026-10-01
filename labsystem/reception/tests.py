@@ -1689,6 +1689,18 @@ class AdminOverridePolicyTests(TestCase):
         # The account itself is hospital-level chart of accounts, untouched.
         self.assertTrue(Account.objects.filter(pk=revenue_account.pk).exists())
 
+    def test_deleting_from_the_patients_own_page_lands_on_the_patient_list(self):
+        # The Delete Patient button sits on that patient's visit history page
+        # and passes it as "next"; going back there after the delete was a 404.
+        self.client.force_login(self.admin_user)
+        own_page = reverse("patient_visits", args=[self.patient.pk])
+        response = self.client.post(
+            reverse("patient_delete", args=[self.patient.pk]),
+            {"admin_reason": "Duplicate registration created in error.", "next": own_page},
+        )
+        self.assertRedirects(response, reverse("patient_list"), fetch_redirect_response=False)
+        self.assertFalse(Patient.objects.filter(pk=self.patient.pk).exists())
+
     def test_non_admin_cannot_delete_patient(self):
         self.client.force_login(self.receptionist)
 

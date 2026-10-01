@@ -1224,7 +1224,12 @@ def patient_delete(request, patient_id):
                 details=details,
             )
             messages.success(request, f"{patient_name} and the linked visit records were removed.")
-            return redirect(resolve_next_url(request, reverse("patient_list")))
+            # "Delete Patient" is opened from that patient's own visit page;
+            # returning there now would 404, so fall back to the patient list.
+            next_url = resolve_next_url(request, reverse("patient_list"))
+            if next_url.split("?")[0].startswith(reverse("patient_visits", args=[patient_id_value]).rsplit("visits/", 1)[0]):
+                next_url = reverse("patient_list")
+            return redirect(next_url)
 
     return render(
         request,
