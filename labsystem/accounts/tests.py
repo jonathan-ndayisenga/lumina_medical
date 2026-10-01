@@ -247,3 +247,19 @@ class SmoothNavigationTests(TestCase):
         self.assertContains(response, 'type="speculationrules"')
         # Not on hover: some GET links change state (e.g. entering a module section).
         self.assertContains(response, '"eagerness": "conservative"')
+
+    def test_no_template_comment_leaks_onto_the_page(self):
+        # Django's {# #} only works on one line; a multi-line one renders as
+        # visible text (it showed at the top of every page once).
+        from pathlib import Path
+        from django.conf import settings
+
+        offenders = [
+            f"{path}:{number}"
+            for path in Path(settings.BASE_DIR).rglob("*.html")
+            if "staticfiles" not in path.parts
+            for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1)
+            if "{#" in line and "#}" not in line
+        ]
+        self.assertEqual(offenders, [])
+        self.assertNotContains(self.client.get(reverse("login")), "{#")

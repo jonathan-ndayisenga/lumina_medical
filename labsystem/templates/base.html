@@ -6,9 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Hospital EMR - Lumina Medical Services{% endblock %}</title>
     <link rel="manifest" href="{% url 'pwa_manifest' %}">
-    {# Start fetching a page as soon as the mouse/finger goes down on a link,
-       not on hover: some GET links here change state (e.g. entering a module
-       section), so only fetch what the user is already clicking. #}
+    {% comment %}Prefetch on press, not hover: some GET links here change state (e.g. entering a module section).{% endcomment %}
     <script type="speculationrules">
     {
         "prefetch": [{

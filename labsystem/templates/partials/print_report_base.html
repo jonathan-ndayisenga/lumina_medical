@@ -1,8 +1,10 @@
 <style>
-  {# Shared print/screen system for every "one visit's clinical record" style
+  {% comment %}
+     Shared print/screen system for every "one visit's clinical record" style
      document (Lab Report, Visit Report). Keeping this in one place means a
      tuning pass (font sizes, footer-pinning, table padding) applies to every
-     document that includes it instead of drifting apart per-template. #}
+     document that includes it instead of drifting apart per-template.
+  {% endcomment %}
 
   /* Screen sizing stays roomy (these templates double as the in-app review
      screen); print is what actually needs to be compact. */
