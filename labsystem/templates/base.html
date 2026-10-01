@@ -6,6 +6,23 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Hospital EMR - Lumina Medical Services{% endblock %}</title>
     <link rel="manifest" href="{% url 'pwa_manifest' %}">
+    {# Start fetching a page as soon as the mouse/finger goes down on a link,
+       not on hover: some GET links here change state (e.g. entering a module
+       section), so only fetch what the user is already clicking. #}
+    <script type="speculationrules">
+    {
+        "prefetch": [{
+            "where": {
+                "and": [
+                    {"href_matches": "/*"},
+                    {"not": {"href_matches": ["/accounts/logout/*", "/*?*export=*", "/static/*", "/media/*"]}},
+                    {"not": {"selector_matches": "[target=_blank], [download], [data-no-prefetch]"}}
+                ]
+            },
+            "eagerness": "conservative"
+        }]
+    }
+    </script>
     <meta name="theme-color" content="#14233A">
     <link rel="icon" type="image/png" href="{% static 'pwa/favicon-32.png' %}">
     <link rel="apple-touch-icon" href="{% static 'pwa/apple-touch-icon.png' %}">
@@ -94,6 +111,17 @@
         }
 
         .app-sidebar { background: var(--nav); padding: 24px 16px; scrollbar-width: thin; scrollbar-color: var(--nav-active) transparent; }
+        /* Page-to-page navigation: Chrome/Edge cross-fade the content instead of
+           blanking the screen, and the sidebar + top bar swap in place so they
+           read as fixed. Other browsers keep normal page loads. */
+        @media (prefers-reduced-motion: no-preference) {
+            @view-transition { navigation: auto; }
+            ::view-transition-old(root), ::view-transition-new(root) { animation-duration: 160ms; }
+        }
+        #appSidebar { view-transition-name: app-sidebar; }
+        .app-header { view-transition-name: app-header; }
+        ::view-transition-old(app-sidebar), ::view-transition-old(app-header) { display: none; }
+        ::view-transition-new(app-sidebar), ::view-transition-new(app-header) { animation: none; }
         .app-header { min-height: 72px; background: rgba(244, 243, 239, .82); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border-bottom: 1px solid var(--border); }
         .app-logo { position: relative; width: 40px; height: 40px; flex-shrink: 0; border-radius: 12px; overflow: hidden; background: var(--surface); color: var(--nav); display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 17px; }
         .app-logo img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: var(--surface); }

@@ -238,3 +238,12 @@ class InstallableAppTests(TestCase):
         self.assertContains(response, f'rel="manifest" href="{reverse("pwa_manifest")}"')
         self.assertContains(response, 'id="installApp"')
         self.assertContains(response, "serviceWorker.register")
+
+
+class SmoothNavigationTests(TestCase):
+    def test_pages_cross_fade_and_prefetch_on_press_only(self):
+        response = self.client.get(reverse("login"))
+        self.assertContains(response, "@view-transition { navigation: auto; }")
+        self.assertContains(response, 'type="speculationrules"')
+        # Not on hover: some GET links change state (e.g. entering a module section).
+        self.assertContains(response, '"eagerness": "conservative"')
