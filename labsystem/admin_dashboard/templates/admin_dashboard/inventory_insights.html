@@ -316,7 +316,6 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
 <script>
 (function () {
     const labels           = {{ chart_labels_json|safe }};
@@ -371,7 +370,7 @@
 })();
 
 // ── Restock modal ─────────────────────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', function () {
+onPageReady(function () {
     const modal      = document.getElementById('restockModal');
     const form       = document.getElementById('restockForm');
     const titleEl    = document.getElementById('restockModalTitle');

@@ -241,12 +241,15 @@ class InstallableAppTests(TestCase):
 
 
 class SmoothNavigationTests(TestCase):
-    def test_pages_cross_fade_and_prefetch_on_press_only(self):
+    def test_links_load_in_place_and_forms_keep_normal_submits(self):
         response = self.client.get(reverse("login"))
-        self.assertContains(response, "@view-transition { navigation: auto; }")
-        self.assertContains(response, 'type="speculationrules"')
-        # Not on hover: some GET links change state (e.g. entering a module section).
-        self.assertContains(response, '"eagerness": "conservative"')
+        self.assertContains(response, 'hx-boost="true"')
+        self.assertContains(response, "htmx.org@2.0.4")
+        self.assertContains(response, "head-support")
+        # Forms keep full submits so their confirm prompts and checks still apply.
+        self.assertContains(response, "const NO_BOOST = 'form, ")
+        # Prefetching would double every request now that links load in the background.
+        self.assertNotContains(response, 'type="speculationrules"')
 
     def test_no_template_comment_leaks_onto_the_page(self):
         # Django's {# #} only works on one line; a multi-line one renders as

@@ -768,7 +768,7 @@
     return '';
   }
 
-  document.addEventListener('DOMContentLoaded', async function () {
+  onPageReady(async function () {
     const page = document.querySelector('[data-lab-services-url][data-add-lab-service-url]');
     if (!page) {
       return;

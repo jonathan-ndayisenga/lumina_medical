@@ -109,15 +109,3 @@
 </div>
 {% endif %}
 {% endblock %}
-
-{% block extra_js %}
-<script src="https://cdn.jsdelivr.net/npm/htmx.org@2.0.4/dist/htmx.min.js"></script>
-<script>
-    // Skip the swap when nothing changed, so aria-live only announces real changes.
-    document.body.addEventListener('htmx:beforeSwap', function (e) {
-        const current = e.detail.target.querySelector('[data-v]');
-        const next = new DOMParser().parseFromString(e.detail.serverResponse, 'text/html').querySelector('[data-v]');
-        if (current && next && current.dataset.v === next.dataset.v) e.detail.shouldSwap = false;
-    });
-</script>
-{% endblock %}

@@ -303,7 +303,7 @@ function toggleSourceFields(source) {
     document.getElementById('mobileMoneyField').classList.toggle('hidden', source !== 'mobile_money');
 }
 // Re-apply on page load in case form re-renders with errors
-document.addEventListener('DOMContentLoaded', function() {
+onPageReady(function() {
     const sel = document.getElementById('sourceSelect');
     if (sel) toggleSourceFields(sel.value);
 });

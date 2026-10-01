@@ -6,20 +6,118 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Hospital EMR - Lumina Medical Services{% endblock %}</title>
     <link rel="manifest" href="{% url 'pwa_manifest' %}">
-    {% comment %}Prefetch on press, not hover: some GET links here change state (e.g. entering a module section).{% endcomment %}
-    <script type="speculationrules">
-    {
-        "prefetch": [{
-            "where": {
-                "and": [
-                    {"href_matches": "/*"},
-                    {"not": {"href_matches": ["/accounts/logout/*", "/*?*export=*", "/static/*", "/media/*"]}},
-                    {"not": {"selector_matches": "[target=_blank], [download], [data-no-prefetch]"}}
-                ]
-            },
-            "eagerness": "conservative"
-        }]
-    }
+    <meta name="htmx-config" content='{"historyCacheSize": 0, "refreshOnHistoryMiss": false, "responseHandling": [{"code": "204", "swap": false}, {"code": ".*", "swap": true}]}'>
+    <script src="https://cdn.jsdelivr.net/npm/htmx.org@2.0.4/dist/htmx.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/htmx-ext-head-support@2.0.4/head-support.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+    <script>
+        // Links load in the background and only the page body is swapped
+        // (hx-boost on <body>), so the app never does a full reload. This
+        // script lives in <head>, runs once, and survives every swap.
+        // Page setup code: after a full load it waits for DOMContentLoaded;
+        // during a swap it waits until the whole new page is in place, since
+        // a page's script can sit above the markup it uses.
+        let pendingReady = null;
+        window.onPageReady = function (fn) {
+            if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', fn);
+            else if (pendingReady) pendingReady.push(fn);
+            else fn();
+        };
+        document.addEventListener('htmx:afterSettle', function () {
+            const queue = pendingReady;
+            pendingReady = null;
+            if (queue) queue.forEach(function (fn) { fn(); });
+        });
+        (function () {
+            // Keep a normal page load for every form (their confirm prompts and
+            // checks rely on it), downloads, exports, prints and new tabs.
+            const NO_BOOST = 'form, a[download], a[target]:not([target="_self"]), a[href*="export="], a[href*="print"], a[href^="/static/"], a[href^="/media/"], a[href^="#"], a[href^="javascript:"], [data-no-boost]';
+            document.addEventListener('htmx:beforeProcessNode', function (e) {
+                const root = e.target;
+                if (!root.querySelectorAll) return;
+                if (root.matches(NO_BOOST)) root.setAttribute('hx-boost', 'false');
+                root.querySelectorAll(NO_BOOST).forEach(function (el) { el.setAttribute('hx-boost', 'false'); });
+            });
+
+            // Anything that isn't a page (a file, an error with no HTML) or a
+            // dropped connection falls back to a normal navigation.
+            let sidebarScroll = 0;
+            document.addEventListener('htmx:beforeSwap', function (e) {
+                if (!e.detail.boosted) return;
+                const type = e.detail.xhr.getResponseHeader('Content-Type') || '';
+                if (!type.includes('text/html')) {
+                    e.detail.shouldSwap = false;
+                    window.location.href = e.detail.xhr.responseURL || e.detail.pathInfo.requestPath;
+                    return;
+                }
+                const sidebar = document.getElementById('appSidebar');
+                sidebarScroll = sidebar ? sidebar.scrollTop : 0;
+                pendingReady = [];
+            });
+            document.addEventListener('htmx:afterSwap', function (e) {
+                if (!e.detail.boosted) return;
+                const sidebar = document.getElementById('appSidebar');
+                if (sidebar) sidebar.scrollTop = sidebarScroll;
+            });
+            document.addEventListener('htmx:sendError', function (e) {
+                if (e.detail.boosted) window.location.href = e.detail.pathInfo.requestPath;
+            });
+            // Tailwind's generated styles live in <head> but aren't in the
+            // server's HTML; never let the head merge drop them.
+            document.addEventListener('htmx:removingHeadElement', function (e) {
+                const el = e.detail.headElement;
+                if (el.tagName === 'STYLE' && el.textContent.includes('tailwindcss')) e.preventDefault();
+            });
+
+            // Live numbers (home tiles): skip identical refreshes so screen
+            // readers only hear real changes.
+            document.addEventListener('htmx:beforeSwap', function (e) {
+                if (e.detail.boosted || !e.detail.target.querySelector) return;
+                const current = e.detail.target.querySelector(':scope > [data-v]');
+                if (!current) return;
+                const next = new DOMParser().parseFromString(e.detail.serverResponse, 'text/html').querySelector('[data-v]');
+                if (next && current.dataset.v === next.dataset.v) e.detail.shouldSwap = false;
+            });
+
+            // Mobile sidebar, via delegation so it keeps working after swaps.
+            function setSidebarOpen(isOpen) {
+                const sidebar = document.getElementById('appSidebar');
+                const overlay = document.getElementById('sidebarOverlay');
+                const toggle = document.getElementById('mobileNavToggle');
+                const shell = document.getElementById('appShell');
+                if (!sidebar) return;
+                sidebar.classList.toggle('-translate-x-full', !isOpen);
+                sidebar.classList.toggle('translate-x-0', isOpen);
+                if (overlay) overlay.classList.toggle('hidden', !isOpen);
+                if (shell) shell.classList.toggle('lg:overflow-hidden', isOpen);
+                if (toggle) toggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+            }
+            document.addEventListener('click', function (e) {
+                if (e.target.closest('#mobileNavToggle')) {
+                    const sidebar = document.getElementById('appSidebar');
+                    setSidebarOpen(!(sidebar && sidebar.classList.contains('translate-x-0')));
+                } else if (e.target.closest('#sidebarClose, #sidebarOverlay')) {
+                    setSidebarOpen(false);
+                } else if (e.target.closest('#appSidebar a[href]') && window.innerWidth < 1024) {
+                    setSidebarOpen(false);
+                }
+            });
+            window.addEventListener('resize', function () { if (window.innerWidth >= 1024) setSidebarOpen(false); });
+
+            document.addEventListener('keydown', function (e) {
+                if (e.key === 'Escape') setSidebarOpen(false);
+                const search = document.getElementById('patientSearch');
+                const typing = e.target.closest('input, textarea, select, [contenteditable="true"]');
+                if (e.key === '/' && search && !typing && !e.ctrlKey && !e.metaKey && !e.altKey) {
+                    e.preventDefault();
+                    search.focus();
+                }
+            });
+
+            if ('serviceWorker' in navigator) {
+                window.addEventListener('load', function () { navigator.serviceWorker.register('{% url "service_worker" %}'); });
+            }
+        })();
     </script>
     <meta name="theme-color" content="#14233A">
     <link rel="icon" type="image/png" href="{% static 'pwa/favicon-32.png' %}">
@@ -321,7 +419,7 @@
     </style>
     {% block extra_css %}{% endblock %}
 </head>
-<body class="bg-surface-muted">
+<body class="bg-surface-muted" hx-boost="true" hx-ext="head-support" hx-swap="innerHTML transition:true">
     {% if user.is_authenticated %}
         <!-- App Grid: Sidebar + Main Content -->
         <div class="min-h-screen lg:grid lg:grid-cols-[256px_1fr]" id="appShell">
@@ -812,87 +910,6 @@
             {% block auth_content %}{% endblock %}
         </div>
     {% endif %}
-    <script>
-        document.addEventListener('keydown', function (e) {
-            const search = document.getElementById('patientSearch');
-            const typing = e.target.closest('input, textarea, select, [contenteditable="true"]');
-            if (e.key === '/' && search && !typing && !e.ctrlKey && !e.metaKey && !e.altKey) {
-                e.preventDefault();
-                search.focus();
-            }
-        });
-
-        document.addEventListener('DOMContentLoaded', function () {
-            const appShell = document.getElementById('appShell');
-            const mobileNavToggle = document.getElementById('mobileNavToggle');
-            const sidebarClose = document.getElementById('sidebarClose');
-            const sidebarOverlay = document.getElementById('sidebarOverlay');
-            const sidebar = document.getElementById('appSidebar');
-
-            if (!mobileNavToggle || !sidebar) return;
-
-            function setSidebarOpen(isOpen) {
-                if (isOpen) {
-                    sidebar.classList.remove('-translate-x-full');
-                    sidebar.classList.add('translate-x-0');
-                    if (sidebarOverlay) sidebarOverlay.classList.remove('hidden');
-                    if (appShell) appShell.classList.add('lg:overflow-hidden');
-                } else {
-                    sidebar.classList.add('-translate-x-full');
-                    sidebar.classList.remove('translate-x-0');
-                    if (sidebarOverlay) sidebarOverlay.classList.add('hidden');
-                    if (appShell) appShell.classList.remove('lg:overflow-hidden');
-                }
-                mobileNavToggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
-            }
-
-            mobileNavToggle.addEventListener('click', function () {
-                const isOpen = sidebar.classList.contains('translate-x-0');
-                setSidebarOpen(!isOpen);
-            });
-
-            if (sidebarClose) {
-                sidebarClose.addEventListener('click', function () {
-                    setSidebarOpen(false);
-                });
-            }
-
-            if (sidebarOverlay) {
-                sidebarOverlay.addEventListener('click', function () {
-                    setSidebarOpen(false);
-                });
-            }
-
-            // Close sidebar on nav link click (mobile)
-            const navLinks = sidebar.querySelectorAll('a[href]');
-            navLinks.forEach(link => {
-                link.addEventListener('click', function () {
-                    if (window.innerWidth < 1024) {
-                        setSidebarOpen(false);
-                    }
-                });
-            });
-
-            // Close sidebar on escape
-            document.addEventListener('keydown', function (e) {
-                if (e.key === 'Escape' && sidebar.classList.contains('translate-x-0')) {
-                    setSidebarOpen(false);
-                }
-            });
-
-            // Handle window resize
-            window.addEventListener('resize', function () {
-                if (window.innerWidth >= 1024) {
-                    setSidebarOpen(false);
-                }
-            });
-        });
-    </script>
-    <script>
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', function () { navigator.serviceWorker.register('{% url "service_worker" %}'); });
-        }
-    </script>
     {% block extra_js %}{% endblock %}
 </body>
 </html>

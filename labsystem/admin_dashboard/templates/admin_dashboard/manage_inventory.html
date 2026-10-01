@@ -525,7 +525,7 @@
 
 {% block extra_js %}
 <script>
-  document.addEventListener('DOMContentLoaded', function () {
+  onPageReady(function () {
     const categoryField = document.getElementById('id_category');
     const unitsPerPackField = document.getElementById('id_units_per_pack');
     const sellingPriceField = document.getElementById('id_selling_price');
@@ -728,7 +728,7 @@
   });
 
   // ── Restock modal ──────────────────────────────────────────────────────────
-  document.addEventListener('DOMContentLoaded', function () {
+  onPageReady(function () {
     const restockModal      = document.getElementById('restockModal');
     const restockForm       = document.getElementById('restockForm');
     const restockTitle      = document.getElementById('restockModalTitle');

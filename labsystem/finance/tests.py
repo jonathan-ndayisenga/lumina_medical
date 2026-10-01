@@ -76,3 +76,52 @@ class ExpenseIdempotencyTests(TestCase):
             reversal_of__isnull=True,
         ).count()
         self.assertEqual(active, 1, "Only one active (un-reversed) journal entry should exist per expense")
+
+
+class JournalReferenceAndIsolationTests(TestCase):
+    """Production bug (Oct 2026): creating a visit crashed with
+    TransactionManagementError after a duplicate journal reference."""
+
+    def setUp(self):
+        self.hospital = Hospital.objects.create(name="Journal Ref Hospital", subdomain="journal-ref")
+
+    def _entry(self):
+        return JournalEntry.objects.create(hospital=self.hospital, description="Test entry")
+
+    def test_reference_after_a_deleted_entry_does_not_reuse_an_existing_number(self):
+        first, second, third = self._entry(), self._entry(), self._entry()
+        second.delete()
+        # The old count-based numbering produced third's reference again here.
+        fourth = self._entry()
+        self.assertNotEqual(fourth.reference, third.reference)
+        self.assertTrue(fourth.reference.endswith("-0004"))
+
+    def test_reference_retries_when_the_number_is_taken(self):
+        from unittest.mock import patch
+
+        taken = self._entry()
+        original_first = JournalEntry.objects.none().__class__.first
+        calls = {"n": 0}
+
+        def stale_first(qs):
+            # First lookup sees no entries yet (another request won the race).
+            calls["n"] += 1
+            return None if calls["n"] == 1 else original_first(qs)
+
+        with patch("django.db.models.query.QuerySet.first", stale_first):
+            entry = self._entry()
+        self.assertNotEqual(entry.reference, taken.reference)
+
+    def test_a_failed_posting_does_not_break_the_surrounding_transaction(self):
+        from django.db import transaction
+        from finance.signals import _safe_post
+
+        taken = self._entry()
+
+        def duplicate_reference():
+            JournalEntry.objects.create(hospital=self.hospital, description="dup", reference=taken.reference)
+
+        with transaction.atomic():
+            _safe_post(duplicate_reference)
+            # Before the fix this query raised TransactionManagementError.
+            self.assertEqual(JournalEntry.objects.filter(hospital=self.hospital).count(), 1)

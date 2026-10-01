@@ -123,7 +123,7 @@
 </div>
 {% block extra_js %}
 <script>
-document.addEventListener('DOMContentLoaded', function () {
+onPageReady(function () {
     const btn    = document.getElementById('terminateBtn');
     const panel  = document.getElementById('terminatePanel');
     const cancel = document.getElementById('cancelTerminate');

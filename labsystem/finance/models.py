@@ -2,7 +2,7 @@ from decimal import Decimal
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
-from django.db import models
+from django.db import IntegrityError, models, transaction
 from django.utils import timezone
 
 
@@ -155,13 +155,24 @@ class JournalEntry(models.Model):
         return f"{self.reference} — {self.description}"
 
     def save(self, *args, **kwargs):
-        if not self.reference:
-            stamp = timezone.localdate().strftime("%Y%m%d")
-            last = JournalEntry.objects.filter(
-                reference__startswith=f"JNL-{stamp}"
-            ).count()
-            self.reference = f"JNL-{stamp}-{str(last + 1).zfill(4)}"
-        super().save(*args, **kwargs)
+        if self.reference:
+            return super().save(*args, **kwargs)
+        # Next number after the highest one used today, not "count + 1": a
+        # deleted entry made the count reuse an existing reference. Two saves
+        # racing for the same number retry with the next one.
+        prefix = f"JNL-{timezone.localdate():%Y%m%d}-"
+        for attempt in range(5):
+            last = (
+                JournalEntry.objects.filter(reference__startswith=prefix)
+                .order_by("-reference").values_list("reference", flat=True).first()
+            )
+            self.reference = f"{prefix}{(int(last.rsplit('-', 1)[1]) + 1) if last else 1:04d}"
+            try:
+                with transaction.atomic():
+                    return super().save(*args, **kwargs)
+            except IntegrityError:
+                if attempt == 4 or not JournalEntry.objects.filter(reference=self.reference).exists():
+                    raise
 
     def is_balanced(self):
         agg = self.lines.aggregate(d=models.Sum("debit"), c=models.Sum("credit"))
