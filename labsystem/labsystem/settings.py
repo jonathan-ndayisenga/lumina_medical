@@ -212,8 +212,10 @@ USE_TZ = True
 STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 
-project_static_dir = PROJECT_ROOT / "static"
-STATICFILES_DIRS = [project_static_dir] if project_static_dir.exists() else []
+# labsystem/static, not the repo-root static/: the deploy only ships the
+# labsystem/ folder (source_dir), so files kept outside it never reached the
+# server and every logo/icon there was a 404 in production.
+STATICFILES_DIRS = [BASE_DIR / "static"]
 
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
