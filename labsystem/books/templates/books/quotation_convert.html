@@ -1,0 +1,22 @@
+{% extends "books/base.html" %}
+{% load books_extras %}
+{% block title %}Convert {{ quotation.number }} - Ternah Books{% endblock %}
+{% block content %}
+<h1 class="page-title">Convert {{ quotation.number }} to an invoice</h1>
+<div class="card" style="max-width:640px;">
+    <p>This creates a <strong>draft invoice</strong> for {{ quotation.client.name }} with the same {{ quotation.lines.count }} item{{ quotation.lines.count|pluralize }} ({{ quotation.currency }} {{ quotation.total|money }}). You can review it before issuing.</p>
+    <form method="post">
+        {% csrf_token %}
+        {% for field in form %}
+        <div style="margin-bottom:1rem;">
+            <label style="display:block;font-size:0.85rem;font-weight:600;margin-bottom:0.3rem;">{{ field.label }}</label>
+            {{ field }}
+            {% if field.help_text %}<p style="font-size:0.78rem;color:var(--muted);margin:0.3rem 0 0;">{{ field.help_text }}</p>{% endif %}
+            {% for error in field.errors %}<p style="color:#a12b2b;font-size:0.8rem;">{{ error }}</p>{% endfor %}
+        </div>
+        {% endfor %}
+        <button type="submit" class="btn">Create draft invoice</button>
+        <a href="{% url 'books:quotation_detail' quotation.pk %}" class="btn btn-secondary">Cancel</a>
+    </form>
+</div>
+{% endblock %}

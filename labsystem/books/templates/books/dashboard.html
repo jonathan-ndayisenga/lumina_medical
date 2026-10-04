@@ -19,20 +19,77 @@
     <div class="card"><div class="stat-label">Missing receipts</div><div class="stat-value">{{ missing_receipt_count }}</div></div>
 </div>
 
+{% if recurring_due %}
+<form method="post" action="{% url 'books:recurring_generate' %}" class="banner-danger" style="display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap;">
+    {% csrf_token %}<input type="hidden" name="next" value="{% url 'books:dashboard' %}">
+    <span><strong>{{ recurring_due|length }} monthly invoice{{ recurring_due|length|pluralize }} due:</strong> {% for plan in recurring_due %}{{ plan.client.name }}{% if not forloop.last %}, {% endif %}{% endfor %}.</span>
+    <button type="submit" class="btn">Issue due invoices</button>
+</form>
+{% endif %}
+
+<div class="card">
+    <h3>Last 12 months</h3>
+    <p style="font-size:0.8rem;color:var(--muted);margin-top:-0.5rem;">Invoiced vs actually collected vs spent, per month.</p>
+    <div style="height:300px;"><canvas id="trendChart" role="img" aria-label="Invoiced, collected and spent per month for the last 12 months"></canvas></div>
+</div>
+
+<div class="dash-grid">
+    <div class="card">
+        <h3>Cash position</h3>
+        <div class="stat-value">UGX {{ cash.total|money }}</div>
+        <p style="color:var(--muted);font-size:0.85rem;">{% if cash.runway_months is not None %}Covers about <strong>{{ cash.runway_months }} month{{ cash.runway_months|pluralize }}</strong> of spending (average UGX {{ cash.monthly_spend|money }}/month over the last 3 months).{% else %}Runway appears once there's cash and at least one month of expenses.{% endif %}</p>
+        <table>
+            {% for account in cash.accounts %}<tr><td>{{ account.name }}</td><td style="text-align:right;">UGX {{ account.balance|money }}</td></tr>
+            {% empty %}<tr><td>No payment accounts. Tick "Is payment account" on your bank / MoMo / cash accounts.</td></tr>{% endfor %}
+        </table>
+    </div>
+    <div class="card">
+        <h3>Quotation pipeline</h3>
+        <div class="stat-value">UGX {{ pipeline.waiting_value|money }}</div>
+        <p style="color:var(--muted);font-size:0.85rem;">{{ pipeline.waiting_count }} quotation{{ pipeline.waiting_count|pluralize }} sent and waiting on the client.</p>
+        <p style="font-size:0.9rem;"><strong>Win rate (90 days):</strong> {% if pipeline.win_rate is not None %}{{ pipeline.win_rate }}% ({{ pipeline.won }} of {{ pipeline.decided }} decided){% else %}no decisions yet{% endif %}</p>
+        <a href="{% url 'books:quotation_list' %}?status=sent">See waiting quotations</a>
+    </div>
+    <div class="card">
+        <h3>Top clients{% if financial_year %} ({{ financial_year.label }}){% endif %}</h3>
+        <table>
+            {% for client in top_clients %}<tr><td>{{ client.name }}</td><td style="text-align:right;">UGX {{ client.total|money }}</td><td style="text-align:right;color:var(--muted);">{{ client.share }}%</td></tr>
+            {% empty %}<tr><td>No invoices yet.</td></tr>{% endfor %}
+        </table>
+    </div>
+    <div class="card">
+        <h3>Budgets this month</h3>
+        {% if budgets %}
+        <table>
+            {% for row in budgets %}
+            <tr>
+                <td>{{ row.account }}</td>
+                <td style="text-align:right;">UGX {{ row.spent|money }} / {{ row.budget|money }}</td>
+                <td style="text-align:right;">{% if row.over %}<span class="badge badge-void">Over · {{ row.percent }}%</span>{% else %}<span class="badge badge-paid">{{ row.percent }}%</span>{% endif %}</td>
+            </tr>
+            {% endfor %}
+        </table>
+        {% else %}
+        <p style="color:var(--muted);font-size:0.85rem;">No budgets set. <a href="{% url 'books:budgets' %}">Set monthly budgets</a>.</p>
+        {% endif %}
+    </div>
+</div>
+
 <div class="card">
     <h3>Overdue invoices</h3>
     <table>
-        <thead><tr><th>Invoice</th><th>Client</th><th>Due date</th><th>Balance</th></tr></thead>
+        <thead><tr><th>Invoice</th><th>Client</th><th>Due date</th><th>Balance</th><th></th></tr></thead>
         <tbody>
-            {% for invoice in overdue_invoices %}
+            {% for row in overdue_rows %}
             <tr>
-                <td><a href="{% url 'books:invoice_detail' invoice.pk %}">{{ invoice.number }}</a></td>
-                <td>{{ invoice.client.name }}</td>
-                <td>{{ invoice.due_date }}</td>
-                <td>UGX {{ invoice.balance|money }}</td>
+                <td><a href="{% url 'books:invoice_detail' row.invoice.pk %}">{{ row.invoice.number }}</a></td>
+                <td>{{ row.invoice.client.name }}</td>
+                <td>{{ row.invoice.due_date }}</td>
+                <td>UGX {{ row.invoice.balance|money }}</td>
+                <td>{% if row.invoice.client.phone %}<a href="{{ row.remind_url }}" target="_blank" rel="noopener">Remind on WhatsApp</a>{% else %}<span style="color:var(--muted);">No phone on file</span>{% endif %}</td>
             </tr>
             {% empty %}
-            <tr><td colspan="4">Nothing overdue.</td></tr>
+            <tr><td colspan="5">Nothing overdue.</td></tr>
             {% endfor %}
         </tbody>
     </table>
@@ -56,4 +113,31 @@
         </tbody>
     </table>
 </div>
+<style>
+    .dash-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; margin-bottom: 1rem; }
+    .dash-grid .card { margin-bottom: 0; }
+    .dash-grid table td { padding: 0.35rem 0; border: none; }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+{{ trend|json_script:"trend-data" }}
+<script>
+(function () {
+    const trend = JSON.parse(document.getElementById('trend-data').textContent);
+    const money = v => 'UGX ' + Math.round(v).toLocaleString();
+    new Chart(document.getElementById('trendChart'), {
+        type: 'line',
+        data: { labels: trend.labels, datasets: [
+            { label: 'Invoiced', data: trend.invoiced, borderColor: '#14233A', backgroundColor: '#14233A', tension: 0.3 },
+            { label: 'Collected', data: trend.collected, borderColor: '#2F9E62', backgroundColor: '#2F9E62', tension: 0.3 },
+            { label: 'Spent', data: trend.spent, borderColor: '#8A4A0E', backgroundColor: '#8A4A0E', borderDash: [6, 4], tension: 0.3 },
+        ] },
+        options: {
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: { legend: { position: 'bottom' }, tooltip: { callbacks: { label: c => c.dataset.label + ': ' + money(c.parsed.y) } } },
+            scales: { y: { beginAtZero: true, ticks: { callback: v => v.toLocaleString() } } },
+        },
+    });
+})();
+</script>
 {% endblock %}

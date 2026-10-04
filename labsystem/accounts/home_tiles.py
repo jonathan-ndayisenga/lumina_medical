@@ -118,9 +118,19 @@ def _doctor(hospital):
 
 def _lab(hospital):
     from lab.models import LabOrder, OrderStage
+    from reception.models import QueueEntry
+    # Same definition as the Lab Queue page: tests awaiting a sample or a
+    # result on a visit that is still open in the lab queue. Orders left at
+    # "pending" after their queue entry was closed (visit terminated, patient
+    # moved on) used to inflate this number with nobody visible in the queue.
+    open_visits = QueueEntry.objects.filter(
+        hospital=hospital, processed=False,
+        queue_type__in=[QueueEntry.TYPE_LAB_RECEPTION, QueueEntry.TYPE_LAB_DOCTOR],
+    ).values("visit_id")
     qs = LabOrder.objects.filter(
         hospital=hospital,
-        stage__in=[OrderStage.PENDING, OrderStage.SAMPLE_COLLECTED, OrderStage.IN_PROGRESS],
+        stage__in=[OrderStage.PENDING, OrderStage.SAMPLE_COLLECTED],
+        visit_service__visit_id__in=open_visits,
     )
     count = qs.count()
     oldest = qs.aggregate(oldest=Min("created_at"))["oldest"]

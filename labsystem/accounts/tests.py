@@ -164,6 +164,35 @@ class HomeStatusBoardTests(TestCase):
         self.assertContains(response, "42 min")
         self.assertNotContains(response, "needs attention")
 
+    def test_lab_tile_counts_only_patients_still_in_the_lab_queue(self):
+        from decimal import Decimal
+        from accounts.models import HospitalModuleSubscription, Module
+        from lab.models import LabOrder, LabTest, ResultType, ServiceCategory
+        from reception.models import QueueEntry, Service, VisitService
+
+        module, _ = Module.objects.get_or_create(code="lab", defaults={"name": "Lab"})
+        HospitalModuleSubscription.objects.get_or_create(hospital=self.hospital, module=module, defaults={"is_active": True})
+        test = LabTest.objects.create(
+            hospital=self.hospital, name="Malaria RDT", category=ServiceCategory.objects.create(name="Tile Cat"),
+            result_type=ResultType.FREE_ENTRY,
+        )
+        service = Service.objects.create(hospital=self.hospital, name="Malaria", category=Service.CATEGORY_LAB, price=Decimal("5000"))
+
+        def pending_order(queue_open):
+            entry = self._queue_patient(self.hospital, QueueEntry.TYPE_LAB_RECEPTION)
+            if not queue_open:
+                QueueEntry.objects.filter(pk=entry.pk).update(processed=True)
+            vs = VisitService.objects.create(visit=entry.visit, service=service, price_at_time=service.price)
+            LabOrder.objects.create(visit_service=vs, test=test, hospital=self.hospital)
+
+        pending_order(queue_open=True)
+        # Left at "pending" after its queue entry was closed: nobody to see
+        # in the Lab Queue, so it must not show on the tile either.
+        pending_order(queue_open=False)
+
+        response = self.client.get(reverse("home_tile", args=["lab"]))
+        self.assertEqual(response.context["n"]["value"], 1)
+
     def test_counts_are_per_hospital(self):
         from reception.models import QueueEntry
 

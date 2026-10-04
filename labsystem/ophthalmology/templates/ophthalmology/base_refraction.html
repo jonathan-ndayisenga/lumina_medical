@@ -1,0 +1,90 @@
+{% extends 'base.html' %}
+{% load reception_extras %}
+{% block title %}Base Refraction - {{ visit.patient.name }}{% endblock %}
+{% block page_title %}Base Refraction{% endblock %}
+{% block page_subtitle %}Eye pre-exam for {{ visit.patient.name }}: acuity, pupils, refraction and keratometry, before the main exam.{% endblock %}
+
+{% block content %}
+<form method="post" class="space-y-5">
+    {% csrf_token %}
+    <div class="card flex flex-wrap items-center justify-between gap-4">
+        <div>
+            <p class="text-lg font-semibold text-text-main">{{ visit.patient.name }}</p>
+            <p class="text-sm text-text-muted">{{ visit.patient|age_at:visit.visit_date }} · {{ visit.patient.get_sex_display }} · Visit #{{ visit.pk }} · {{ visit.visit_date|date:"j M Y" }}</p>
+        </div>
+        <div class="flex gap-2">
+            <a href="{{ skip_url }}" class="btn btn-secondary">Skip to main exam</a>
+            <button type="submit" class="btn">Save and continue</button>
+        </div>
+    </div>
+
+    <div class="card">
+        <h3 class="text-base font-semibold text-text-main mb-3">Visual Acuity</h3>
+        {% include "ophthalmology/_eye_grid.html" with rows=va_rows %}
+    </div>
+
+    <div class="card">
+        <h3 class="text-base font-semibold text-text-main mb-3">Neuro / Psych</h3>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+            <label class="flex items-center gap-2 text-sm font-semibold text-text-main"><input type="checkbox" name="oriented" {% if data.oriented %}checked{% endif %}> Oriented x3</label>
+            <div>
+                <label class="block text-sm font-semibold text-text-main mb-1" for="mood">Mood / affect</label>
+                <select id="mood" name="mood" class="form-control">
+                    <option value="">—</option>
+                    {% for mood in moods %}<option value="{{ mood }}"{% if mood == data.mood %} selected{% endif %}>{{ mood }}</option>{% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="block text-sm font-semibold text-text-main mb-1" for="mood_description">Mood description</label>
+                <input id="mood_description" name="mood_description" value="{{ data.mood_description|default:'' }}" class="form-control">
+            </div>
+        </div>
+        <label class="block text-sm font-semibold text-text-main mt-4 mb-1" for="neuro_notes">Notes</label>
+        <textarea id="neuro_notes" name="neuro_notes" rows="2" class="form-control">{{ data.neuro_notes|default:'' }}</textarea>
+    </div>
+
+    <div class="card">
+        <div class="flex items-center justify-between gap-3 mb-3 flex-wrap">
+            <h3 class="text-base font-semibold text-text-main">Pupils</h3>
+            <label class="flex items-center gap-2 text-sm font-semibold text-text-main"><input type="checkbox" name="pupils_perrl" {% if data.pupils_perrl %}checked{% endif %}> PERRL (equal, round, reactive to light)</label>
+        </div>
+        {% include "ophthalmology/_eye_grid.html" with rows=pupil_rows %}
+    </div>
+
+    <div class="card">
+        <h3 class="text-base font-semibold text-text-main mb-3">Refraction</h3>
+        <div class="grid grid-cols-1 xl:grid-cols-3 gap-5">
+            {% for block in refraction_blocks %}
+            <div>
+                <p class="text-sm font-semibold text-text-muted mb-2">{{ block.label }}</p>
+                {% include "ophthalmology/_eye_grid.html" with rows=block.rows %}
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        <div class="card">
+            <h3 class="text-base font-semibold text-text-main mb-3">Keratometry</h3>
+            {% include "ophthalmology/_eye_grid.html" with rows=keratometry_rows %}
+        </div>
+        <div class="card">
+            <h3 class="text-base font-semibold text-text-main mb-3">Add / PD</h3>
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div><label class="block text-sm font-semibold text-text-main mb-1" for="add_power">Add</label><input id="add_power" name="add_power" value="{{ data.add_power|default:'' }}" class="form-control" placeholder="+1.50"></div>
+                <div><label class="block text-sm font-semibold text-text-main mb-1" for="pd_right">PD right (mm)</label><input id="pd_right" name="pd_right" value="{{ data.pd_right|default:'' }}" class="form-control"></div>
+                <div><label class="block text-sm font-semibold text-text-main mb-1" for="pd_left">PD left (mm)</label><input id="pd_left" name="pd_left" value="{{ data.pd_left|default:'' }}" class="form-control"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <label class="block text-base font-semibold text-text-main mb-2" for="comments">Comments</label>
+        <textarea id="comments" name="comments" rows="3" class="form-control">{{ comments }}</textarea>
+        <div class="flex justify-end gap-2 mt-4">
+            <a href="{{ skip_url }}" class="btn btn-secondary">Skip to main exam</a>
+            <button type="submit" class="btn">Save and continue to main exam</button>
+        </div>
+    </div>
+</form>
+{% endblock %}

@@ -1709,6 +1709,34 @@ class AdminOverridePolicyTests(TestCase):
         self.assertEqual(response.status_code, 403)
         self.assertTrue(Patient.objects.filter(pk=self.patient.pk).exists())
 
+    def test_terminating_a_visit_clears_untested_lab_orders_but_keeps_results(self):
+        # Live case: an HIV order sat at "pending" on a terminated visit,
+        # counted on the home tile with nobody left in the Lab Queue.
+        from lab.models import LabOrder, LabResult, LabTest, ResultType, ServiceCategory
+
+        lab_service = Service.objects.create(hospital=self.hospital, name="HIV", category=Service.CATEGORY_LAB, price=Decimal("10000"))
+        category = ServiceCategory.objects.create(name="Terminate Serology")
+        hiv = LabTest.objects.create(hospital=self.hospital, name="HIV", category=category, result_type=ResultType.FREE_ENTRY)
+        malaria = LabTest.objects.create(hospital=self.hospital, name="Malaria", category=category, result_type=ResultType.FREE_ENTRY)
+        untested = LabOrder.objects.create(
+            visit_service=VisitService.objects.create(visit=self.visit, service=lab_service, price_at_time=lab_service.price),
+            test=hiv, hospital=self.hospital,
+        )
+        resulted = LabOrder.objects.create(
+            visit_service=VisitService.objects.create(visit=self.visit, service=lab_service, price_at_time=lab_service.price),
+            test=malaria, hospital=self.hospital,
+        )
+        LabResult.objects.create(order=resulted, result_type=ResultType.FREE_ENTRY, free_text="Negative")
+        self.client.force_login(self.admin_user)
+
+        self.client.post(
+            reverse("visit_terminate", args=[self.visit.pk]),
+            {"admin_reason": "Patient left before the test.", "next": reverse("patient_visits", args=[self.patient.pk])},
+        )
+
+        self.assertFalse(LabOrder.objects.filter(pk=untested.pk).exists())
+        self.assertTrue(LabOrder.objects.filter(pk=resulted.pk).exists())
+
     def test_hospital_admin_can_terminate_visit_and_clear_open_queues(self):
         QueueEntry.objects.create(
             hospital=self.hospital,

@@ -54,6 +54,8 @@
             <p class="text-sm"><strong class="text-text-main">Diagnosis:</strong><br><span class="text-text-muted">{{ consultation_instance.diagnosis|linebreaksbr }}</span></p>
             <p class="text-sm"><strong class="text-text-main">Treatment:</strong><br><span class="text-text-muted">{{ consultation_instance.treatment|linebreaksbr }}</span></p>
             <p class="text-sm"><strong class="text-text-main">Follow Up Date:</strong> <span class="text-text-muted">{{ consultation_instance.follow_up_date|date:"Y-m-d"|default:"-" }}</span></p>
+            <p class="text-sm"><strong class="text-text-main">Visit Outcome:</strong> <span class="text-text-muted">{{ consultation_instance.get_outcome_display }}{% if consultation_instance.outcome_notes %} — {{ consultation_instance.outcome_notes }}{% endif %}</span></p>
+            {% if is_eye_visit %}{% include "ophthalmology/_eye_exam_summary.html" %}{% endif %}
         </div>
     </div>
 

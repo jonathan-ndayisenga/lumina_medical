@@ -1,0 +1,104 @@
+<div class="space-y-6" id="eye-main-exam">
+    {% if base_refraction %}
+    <div class="p-3 rounded-lg border border-gray-200 text-sm flex flex-wrap items-center justify-between gap-3">
+        <span><strong class="text-text-main">Base refraction recorded.</strong>
+            <span class="text-text-muted">Best vision OD {{ base_refraction.data.va_best_right|default:"—" }} · OS {{ base_refraction.data.va_best_left|default:"—" }}</span></span>
+        <a href="{% url 'eye_base_refraction' visit.pk %}" class="btn btn-secondary btn-sm">View / edit base refraction</a>
+    </div>
+    {% else %}
+    <div class="p-3 rounded-lg border border-amber-200 bg-amber-50 text-sm text-amber-800 flex flex-wrap items-center justify-between gap-3">
+        <span>Base refraction has not been recorded for this visit.</span>
+        <a href="{% url 'eye_base_refraction' visit.pk %}" class="btn btn-sm">Record Base Refraction</a>
+    </div>
+    {% endif %}
+
+    <div>
+        <h4 class="text-sm font-semibold text-text-main mb-3">External Exam</h4>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div><label class="block text-sm font-semibold text-text-main mb-1" for="external_right">Right eye (OD)</label>
+                <textarea id="external_right" name="external_right" rows="2" class="form-control">{{ eye_values.external_right }}</textarea></div>
+            <div><label class="block text-sm font-semibold text-text-main mb-1" for="external_left">Left eye (OS)</label>
+                <textarea id="external_left" name="external_left" rows="2" class="form-control">{{ eye_values.external_left }}</textarea></div>
+        </div>
+    </div>
+
+    <div>
+        <h4 class="text-sm font-semibold text-text-main mb-1">Slit Lamp Examination</h4>
+        <p class="text-xs text-text-muted mb-3">Tick every finding that applies per eye. Anything not listed goes in "Other".</p>
+        <div class="space-y-3">
+            {% for section in slit_lamp_rows %}
+            <div class="rounded-lg border border-gray-200 p-3">
+                <p class="text-sm font-semibold text-text-main mb-2">{{ section.label }}</p>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {% for eye in section.eyes %}
+                    <div>
+                        <p class="text-xs font-semibold uppercase text-text-muted mb-1">{{ eye.label }}</p>
+                        <div class="flex flex-wrap gap-1.5">
+                            {% for option in eye.options %}
+                            <label class="eye-pill"><input type="checkbox" name="{{ eye.name }}" value="{{ option.value }}"{% if option.checked %} checked{% endif %}><span>{{ option.value }}</span></label>
+                            {% endfor %}
+                        </div>
+                        <input name="{{ eye.name }}_other" value="{{ eye.other }}" class="form-control mt-2" placeholder="Other finding" aria-label="{{ section.label }} {{ eye.label }} other finding">
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <div>
+        <h4 class="text-sm font-semibold text-text-main mb-3">Measurements</h4>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div><label class="block text-sm font-semibold text-text-main mb-1" for="cdr_right">CDR right</label><input id="cdr_right" name="cdr_right" value="{{ eye_values.cdr_right }}" class="form-control" placeholder="0.3"></div>
+            <div><label class="block text-sm font-semibold text-text-main mb-1" for="cdr_left">CDR left</label><input id="cdr_left" name="cdr_left" value="{{ eye_values.cdr_left }}" class="form-control" placeholder="0.3"></div>
+            <div><label class="block text-sm font-semibold text-text-main mb-1" for="iop_right">IOP right (mmHg)</label><input id="iop_right" name="iop_right" value="{{ eye_values.iop_right }}" class="form-control" placeholder="16"></div>
+            <div><label class="block text-sm font-semibold text-text-main mb-1" for="iop_left">IOP left (mmHg)</label><input id="iop_left" name="iop_left" value="{{ eye_values.iop_left }}" class="form-control" placeholder="16"></div>
+        </div>
+    </div>
+
+    <div>
+        <div class="flex items-center justify-between gap-3 mb-2">
+            <h4 class="text-sm font-semibold text-text-main">Diagnosis</h4>
+            <button type="button" class="btn btn-secondary btn-sm" id="add-eye-diagnosis">+ Add diagnosis</button>
+        </div>
+        <div class="space-y-2" id="eye-diagnoses">
+            {% for diagnosis in eye_values.diagnoses %}
+            <div class="flex gap-2 eye-diagnosis-row"><input name="eye_diagnosis" value="{{ diagnosis }}" class="form-control" aria-label="Diagnosis"><button type="button" class="btn btn-secondary btn-sm eye-diagnosis-remove" aria-label="Remove diagnosis">Remove</button></div>
+            {% endfor %}
+        </div>
+        <p class="text-xs text-text-muted mt-1" id="eye-diagnoses-empty"{% if eye_values.diagnoses %} hidden{% endif %}>No diagnosis added yet.</p>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div><label class="block text-sm font-semibold text-text-main mb-1" for="history_comments">History comments</label>
+            <textarea id="history_comments" name="history_comments" rows="3" class="form-control">{{ eye_values.history_comments }}</textarea></div>
+        <div><label class="block text-sm font-semibold text-text-main mb-1" for="management_plan">Management plan</label>
+            <textarea id="management_plan" name="management_plan" rows="3" class="form-control">{{ eye_values.management_plan }}</textarea></div>
+    </div>
+</div>
+
+<style>
+    .eye-pill input { position: absolute; opacity: 0; pointer-events: none; }
+    .eye-pill span { display: inline-flex; padding: 4px 10px; border: 1px solid var(--border); border-radius: 999px; font-size: 13px; color: var(--muted); cursor: pointer; background: #fff; }
+    .eye-pill input:checked + span { background: var(--nav); border-color: var(--nav); color: #fff; }
+    .eye-pill input:focus-visible + span { outline: 2px solid var(--ink); outline-offset: 2px; }
+</style>
+<script>
+(function () {
+    const list = document.getElementById('eye-diagnoses');
+    const empty = document.getElementById('eye-diagnoses-empty');
+    function refresh() { empty.hidden = list.children.length > 0; }
+    document.getElementById('add-eye-diagnosis').addEventListener('click', function () {
+        const row = document.createElement('div');
+        row.className = 'flex gap-2 eye-diagnosis-row';
+        row.innerHTML = '<input name="eye_diagnosis" class="form-control" aria-label="Diagnosis"><button type="button" class="btn btn-secondary btn-sm eye-diagnosis-remove" aria-label="Remove diagnosis">Remove</button>';
+        list.appendChild(row);
+        row.querySelector('input').focus();
+        refresh();
+    });
+    list.addEventListener('click', function (e) {
+        if (e.target.classList.contains('eye-diagnosis-remove')) { e.target.closest('.eye-diagnosis-row').remove(); refresh(); }
+    });
+})();
+</script>

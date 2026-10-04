@@ -1,6 +1,6 @@
 from django import forms
 
-from .models import Consultation, LabRequest
+from .models import Consultation, LabRequest, VisitOutcome
 
 
 class ConsultationForm(forms.ModelForm):
@@ -19,17 +19,27 @@ class ConsultationForm(forms.ModelForm):
 
     class Meta:
         model = Consultation
-        fields = ["signs_symptoms", "diagnosis", "treatment", "follow_up_date"]
+        fields = ["signs_symptoms", "diagnosis", "treatment", "follow_up_date", "outcome", "outcome_notes"]
+        labels = {"follow_up_date": "Follow-up / review date", "outcome": "Visit outcome", "outcome_notes": "Outcome details"}
         widgets = {
+            "outcome": forms.Select(attrs={"class": "form-control"}),
+            "outcome_notes": forms.TextInput(attrs={"class": "form-control", "placeholder": "e.g. Referred to Mulago Eye Unit"}),
             "signs_symptoms": forms.Textarea(attrs={"rows": 4, "class": "form-control"}),
             "diagnosis": forms.Textarea(attrs={"rows": 4, "class": "form-control"}),
             "treatment": forms.Textarea(attrs={"rows": 4, "class": "form-control"}),
             "follow_up_date": forms.DateInput(attrs={"type": "date", "class": "form-control"}),
         }
 
-    def __init__(self, *args, hospital=None, triage=None, **kwargs):
+    def __init__(self, *args, hospital=None, triage=None, eye_visit=False, **kwargs):
         super().__init__(*args, **kwargs)
         self._triage_instance = triage
+        # Optional on submit: a missing outcome (an older open page, an API
+        # post) means the visit is still Ongoing.
+        self.fields["outcome"].required = False
+        if eye_visit:
+            # The eye exam fills these from its own history, diagnoses and plan.
+            for field_name in ("signs_symptoms", "diagnosis", "treatment"):
+                self.fields[field_name].required = False
         for field_name in (
             "weight_kg",
             "bp_systolic",
@@ -75,6 +85,9 @@ class ConsultationForm(forms.ModelForm):
             self.initial["glucose_mg_dl"] = vitals.get("glucose") or vitals.get("glucose_mg_dl") or ""
             self.initial["oxygen_saturation"] = vitals.get("spo2") or vitals.get("oxygen_saturation") or ""
 
+    def clean_outcome(self):
+        return self.cleaned_data.get("outcome") or VisitOutcome.ONGOING
+
     def clean(self):
         cleaned_data = super().clean()
         destinations = sum([
@@ -91,6 +104,8 @@ class ConsultationForm(forms.ModelForm):
                 f"You selected {' and '.join(selected)} at the same time — you can only hand off to one destination. "
                 f"Please choose one and save again."
             )
+        if cleaned_data.get("outcome") == VisitOutcome.REVIEW and not cleaned_data.get("follow_up_date"):
+            self.add_error("follow_up_date", "A Review Appointment needs a review date.")
         return cleaned_data
 
     def cleaned_triage_data(self):

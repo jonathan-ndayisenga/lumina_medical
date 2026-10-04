@@ -1,0 +1,33 @@
+{% extends "books/base.html" %}
+{% load books_extras %}
+{% block title %}Quotations - Ternah Books{% endblock %}
+{% block content %}
+<h1 class="page-title">Quotations</h1>
+<p>
+    <a href="{% url 'books:quotation_create' %}" class="btn">New quotation</a>
+    {% for value, label in statuses %}
+    <a href="?status={{ value }}" class="btn {% if status != value %}btn-secondary{% endif %}">{{ label }}</a>
+    {% endfor %}
+    <a href="{% url 'books:quotation_list' %}" class="btn {% if status %}btn-secondary{% endif %}">All</a>
+</p>
+<div class="card">
+    <table>
+        <thead><tr><th>Number</th><th>Client</th><th>Title</th><th>Date</th><th>Valid until</th><th>Total</th><th>Status</th></tr></thead>
+        <tbody>
+            {% for quotation in quotations %}
+            <tr>
+                <td><a href="{% url 'books:quotation_detail' quotation.pk %}">{{ quotation.number }}</a></td>
+                <td>{{ quotation.client.name }}</td>
+                <td>{{ quotation.subtitle }}</td>
+                <td>{{ quotation.issue_date }}</td>
+                <td>{{ quotation.valid_until }}</td>
+                <td>{{ quotation.currency }} {{ quotation.total|money }}</td>
+                <td><span class="badge badge-{{ quotation.status }}">{{ quotation.get_status_display }}</span></td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="7">No quotations yet.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

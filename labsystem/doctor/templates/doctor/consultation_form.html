@@ -555,6 +555,12 @@
             {% include "partials/triage_form.html" with triage_form=form %}
         </div>
 
+        {% if is_eye_visit %}
+        <div>
+            <h4 class="text-sm font-semibold text-text-main mb-4">Eye Examination</h4>
+            {% include "ophthalmology/_main_exam_fields.html" %}
+        </div>
+        {% else %}
         <div>
             <h4 class="text-sm font-semibold text-text-main mb-4">Clinical Assessment</h4>
             <div class="space-y-4">
@@ -575,12 +581,30 @@
                 </div>
             </div>
         </div>
+        {% endif %}
 
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div>
                 <label for="{{ form.follow_up_date.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">Follow-Up Date</label>
                 {{ form.follow_up_date }}
                 {% if form.follow_up_date.errors %}<div class="text-xs text-red-600 mt-1">{{ form.follow_up_date.errors }}</div>{% endif %}
+                <label for="{{ form.outcome.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1 mt-4">Visit outcome</label>
+                {{ form.outcome }}
+                {% if form.outcome.errors %}<div class="text-xs text-red-600 mt-1">{{ form.outcome.errors }}</div>{% endif %}
+                <div id="outcome-notes-wrap" class="mt-3">
+                    <label for="{{ form.outcome_notes.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">Referred / admitted / sent to</label>
+                    {{ form.outcome_notes }}
+                </div>
+                <p class="text-xs text-text-muted mt-2">For a Review Appointment, set the review date above; reception books the follow-up visit when the patient returns.</p>
+                <script>
+                    (function () {
+                        const outcome = document.getElementById('{{ form.outcome.id_for_label }}');
+                        const wrap = document.getElementById('outcome-notes-wrap');
+                        function sync() { wrap.hidden = !['referred', 'admitted', 'theatre'].includes(outcome.value); }
+                        outcome.addEventListener('change', sync);
+                        sync();
+                    })();
+                </script>
             </div>
             <div class="space-y-3">
                 <p class="text-xs font-semibold text-text-muted uppercase tracking-wide">Hand off patient after saving</p>

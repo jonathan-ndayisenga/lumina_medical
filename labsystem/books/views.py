@@ -88,6 +88,17 @@ def dashboard(request):
         "recent_payments": recent_payments,
         "missing_receipt_count": missing_receipt_count,
     }
+    from . import insights
+    from .planning_models import RecurringInvoice
+    context.update({
+        "trend": insights.monthly_trend(today),
+        "cash": insights.cash_position(today),
+        "pipeline": insights.quotation_pipeline(today),
+        "top_clients": insights.top_clients(financial_year.start_date if financial_year else None),
+        "budgets": insights.budget_status(today),
+        "recurring_due": [plan for plan in RecurringInvoice.objects.filter(active=True).select_related("client") if plan.is_due],
+        "overdue_rows": [{"invoice": inv, "remind_url": insights.payment_reminder_url(inv)} for inv in overdue_invoices],
+    })
     return render(request, "books/dashboard.html", context)
 
 
@@ -382,7 +393,9 @@ def invoice_detail(request, pk):
         pk=pk,
     )
     journal_lines = invoice.journal_entry.lines.select_related("account").all() if invoice.journal_entry_id else []
-    return render(request, "books/invoice_detail.html", {"invoice": invoice, "journal_lines": journal_lines})
+    from .insights import payment_reminder_url
+    remind_url = payment_reminder_url(invoice) if invoice.status == Invoice.STATUS_OPEN and invoice.balance > 0 else ""
+    return render(request, "books/invoice_detail.html", {"invoice": invoice, "journal_lines": journal_lines, "remind_url": remind_url})
 
 
 @books_staff_required
@@ -553,6 +566,26 @@ def expense_create(request):
     else:
         form = ExpenseForm(initial={"date": date.today()})
     return render(request, "books/expense_form.html", {"form": form})
+
+
+@books_staff_required
+def expense_edit(request, pk):
+    expense = get_object_or_404(Expense, pk=pk)
+    if expense.voided_at:
+        messages.error(request, "A void expense cannot be edited.")
+        return redirect("books:expense_list")
+    form = ExpenseForm(request.POST or None, request.FILES or None, instance=expense)
+    if request.method == "POST" and form.is_valid():
+        try:
+            with transaction.atomic():
+                expense = form.save()
+                expense.amend(user=request.user)
+        except ValidationError as exc:
+            messages.error(request, "; ".join(exc.messages))
+        else:
+            messages.success(request, "Expense corrected. The old entry was reversed and the corrected one posted.")
+            return redirect("books:expense_list")
+    return render(request, "books/expense_form.html", {"form": form, "expense": expense, "edit_mode": True})
 
 
 @books_staff_required

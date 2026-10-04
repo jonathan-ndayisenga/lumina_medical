@@ -1,0 +1,60 @@
+{% extends "books/base.html" %}
+{% block title %}Quotation settings - Ternah Books{% endblock %}
+{% block content %}
+<h1 class="page-title">Settings</h1>
+{% include "books/_settings_nav.html" %}
+
+<div class="card" style="max-width:800px;">
+    <h3>Extra quotation fields</h3>
+    <p style="font-size:0.85rem;color:var(--muted);margin-top:-0.5rem;">Each active field appears on every quotation form, and in the printed details box under Quotation No. and Date.</p>
+    <table>
+        <thead><tr><th>Label</th><th>Type</th><th>Order</th><th>Status</th><th></th></tr></thead>
+        <tbody>
+            {% for field in fields %}
+            <tr>
+                <td>{{ field.label }}</td>
+                <td>{{ field.get_field_type_display }}</td>
+                <td>{{ field.sort_order }}</td>
+                <td>{% if field.active %}Active{% else %}Hidden{% endif %}</td>
+                <td>
+                    <form method="post" style="display:inline;">
+                        {% csrf_token %}<input type="hidden" name="action" value="toggle_field"><input type="hidden" name="field_id" value="{{ field.pk }}">
+                        <button type="submit" class="btn btn-secondary">{% if field.active %}Hide{% else %}Show{% endif %}</button>
+                    </form>
+                </td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="5">No extra fields yet. Add one below, e.g. "Project duration" or "Prepared by".</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    <form method="post" style="display:flex; flex-wrap:wrap; gap:0.75rem; align-items:flex-end; margin-top:1rem;">
+        {% csrf_token %}<input type="hidden" name="action" value="add_field">
+        {% for field in field_form %}
+        <div style="flex:1; min-width:160px;">
+            <label style="display:block;font-size:0.85rem;font-weight:600;margin-bottom:0.3rem;">{{ field.label }}</label>
+            {{ field }}
+            {% for error in field.errors %}<p style="color:#a12b2b;font-size:0.8rem;">{{ error }}</p>{% endfor %}
+        </div>
+        {% endfor %}
+        <button type="submit" class="btn">Add field</button>
+    </form>
+</div>
+
+<div class="card" style="max-width:800px;">
+    <h3>Quotation defaults</h3>
+    <p style="font-size:0.85rem;color:var(--muted);margin-top:-0.5rem;">Pre-filled on every new quotation, and editable per quotation.</p>
+    <form method="post">
+        {% csrf_token %}<input type="hidden" name="action" value="settings">
+        {% for field in form %}
+        <div style="margin-bottom:1rem;">
+            <label style="display:block;font-size:0.85rem;font-weight:600;margin-bottom:0.3rem;">{{ field.label }}</label>
+            {{ field }}
+            {% if field.help_text %}<p style="font-size:0.78rem;color:var(--muted);margin:0.3rem 0 0;">{{ field.help_text }}</p>{% endif %}
+            {% for error in field.errors %}<p style="color:#a12b2b;font-size:0.8rem;">{{ error }}</p>{% endfor %}
+        </div>
+        {% endfor %}
+        <button type="submit" class="btn">Save defaults</button>
+    </form>
+</div>
+{% endblock %}

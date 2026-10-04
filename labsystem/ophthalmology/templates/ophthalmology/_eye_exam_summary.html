@@ -1,0 +1,30 @@
+<div class="mt-4 pt-4 border-t border-gray-200 space-y-3 text-sm">
+    <h4 class="font-semibold text-text-main">Eye Examination</h4>
+    {% if base_refraction %}
+    <p><strong class="text-text-main">Base refraction:</strong>
+        <span class="text-text-muted">Best vision OD {{ base_refraction.data.va_best_right|default:"—" }}, OS {{ base_refraction.data.va_best_left|default:"—" }}{% if base_refraction.data.add_power %} · Add {{ base_refraction.data.add_power }}{% endif %}{% if base_refraction.data.pd_right or base_refraction.data.pd_left %} · PD {{ base_refraction.data.pd_right|default:"—" }}/{{ base_refraction.data.pd_left|default:"—" }}{% endif %}</span>
+        <a href="{% url 'eye_base_refraction' visit.pk %}" class="text-text-main underline ml-1">Full record</a></p>
+    {% else %}
+    <p class="text-text-muted italic">Base refraction was not recorded.</p>
+    {% endif %}
+    {% if eye_values.external_right or eye_values.external_left %}
+    <p><strong class="text-text-main">External exam:</strong> <span class="text-text-muted">OD {{ eye_values.external_right|default:"—" }} · OS {{ eye_values.external_left|default:"—" }}</span></p>
+    {% endif %}
+    <table class="w-full">
+        <thead><tr><th>Slit lamp</th><th>Right eye (OD)</th><th>Left eye (OS)</th></tr></thead>
+        <tbody>
+            {% for section in slit_lamp_rows %}
+            {% if section.eyes.0.findings or section.eyes.1.findings %}
+            <tr>
+                <td class="font-semibold text-text-main">{{ section.label }}</td>
+                {% for eye in section.eyes %}<td class="text-text-muted">{{ eye.findings|join:", "|default:"—" }}</td>{% endfor %}
+            </tr>
+            {% endif %}
+            {% empty %}
+            <tr><td colspan="3" class="text-text-muted">No slit-lamp findings recorded.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    <p><strong class="text-text-main">CDR:</strong> <span class="text-text-muted">OD {{ eye_values.cdr_right|default:"—" }} · OS {{ eye_values.cdr_left|default:"—" }}</span>
+       &nbsp; <strong class="text-text-main">IOP:</strong> <span class="text-text-muted">OD {{ eye_values.iop_right|default:"—" }} · OS {{ eye_values.iop_left|default:"—" }} mmHg</span></p>
+</div>

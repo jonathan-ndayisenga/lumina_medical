@@ -12,6 +12,7 @@
     <a href="{% url 'books:invoice_pdf' invoice.pk %}" class="btn btn-secondary" target="_blank">Print / PDF</a>
     {% if invoice.status == 'open' and invoice.balance > 0 %}
     <a href="{% url 'books:invoice_payment_create' invoice.pk %}" class="btn">Record payment</a>
+    {% if remind_url %}<a href="{{ remind_url }}" class="btn btn-secondary" target="_blank" rel="noopener">Remind on WhatsApp</a>{% endif %}
     {% endif %}
     {% if invoice.client.is_withholding_agent and invoice.balance > 0 %}
     <a href="{% url 'books:wht_credit_create' invoice.pk %}" class="btn btn-secondary">Record WHT credit</a>

@@ -162,6 +162,17 @@ def terminate_visit_workflow(*, visit: Visit, actor, reason: str) -> int:
     closed_queue_count = open_queue_entries.count()
     open_queue_entries.update(processed=True, processed_at=processed_at)
 
+    # Lab tests never carried out (no result yet) would otherwise stay
+    # "pending" forever with nobody left in the Lab Queue to do them.
+    from lab.models import LabOrder, OrderStage
+    untested_lab_orders = LabOrder.objects.filter(
+        visit_service__visit=visit,
+        stage__in=[OrderStage.PENDING, OrderStage.SAMPLE_COLLECTED],
+        result__isnull=True,
+    )
+    removed_lab_order_count = untested_lab_orders.count()
+    untested_lab_orders.delete()
+
     note_line = f"[Admin terminated {processed_at:%Y-%m-%d %H:%M}] {reason.strip()}"
     visit.status = Visit.STATUS_CANCELLED
     visit.notes = f"{visit.notes}\n{note_line}".strip() if visit.notes else note_line
@@ -178,6 +189,7 @@ def terminate_visit_workflow(*, visit: Visit, actor, reason: str) -> int:
             "patient_name": visit.patient.name,
             "reason": reason,
             "closed_queue_count": closed_queue_count,
+            "removed_untested_lab_orders": removed_lab_order_count,
             "previous_status": previous_status,
         },
     )

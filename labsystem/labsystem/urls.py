@@ -22,6 +22,7 @@ urlpatterns = [
     path('reception/', include('reception.urls')),
     path('doctor/', include('doctor.urls')),
     path('nurse/', include('nurse.urls')),
+    path('eye/', include('ophthalmology.urls')),
     path('lab/', include('lab.urls')),  # Lab moved to /lab/ prefix
     path('finance/', include('finance.urls')),
     path('homecare/', include('homecare.urls')),

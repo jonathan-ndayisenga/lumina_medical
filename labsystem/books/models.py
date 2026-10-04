@@ -11,3 +11,11 @@ from .document_models import (  # noqa: F401
     Product,
     WithholdingCredit,
 )
+from .quotation_models import (  # noqa: F401
+    Quotation,
+    QuotationField,
+    QuotationFieldValue,
+    QuotationLine,
+    QuotationSettings,
+)
+from .planning_models import ExpenseBudget, RecurringInvoice  # noqa: F401

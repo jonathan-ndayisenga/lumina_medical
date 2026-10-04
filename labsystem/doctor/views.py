@@ -929,6 +929,29 @@ def queue_reason_is_results_ready(reason: str) -> bool:
     return "lab results ready" in (reason or "").lower()
 
 
+def _eye_exam_context(is_eye_visit, base_refraction, eye_exam, post=None):
+    """Values for the eye exam block: what was just posted (after an error),
+    else what was saved."""
+    if not is_eye_visit:
+        return {"is_eye_visit": False}
+    from ophthalmology.exam import slit_lamp_rows
+
+    fields = ("external_right", "external_left", "cdr_right", "cdr_left", "iop_right", "iop_left",
+              "history_comments", "management_plan")
+    if post is not None:
+        values = {name: post.get(name, "") for name in fields}
+        values["diagnoses"] = [d for d in post.getlist("eye_diagnosis") if d.strip()]
+    else:
+        values = {name: getattr(eye_exam, name, "") if eye_exam else "" for name in fields}
+        values["diagnoses"] = eye_exam.diagnoses if eye_exam else []
+    return {
+        "is_eye_visit": True,
+        "base_refraction": base_refraction,
+        "eye_values": values,
+        "slit_lamp_rows": slit_lamp_rows(eye_exam, post),
+    }
+
+
 @doctor_role_required
 @transaction.atomic
 def consultation(request, visit_id):
@@ -941,6 +964,15 @@ def consultation(request, visit_id):
         messages.error(request, "This visit was terminated by an administrator and can no longer be edited.")
         return redirect("doctor_queue")
     consultation_instance = getattr(visit, "consultation", None)
+    is_eye_visit = visit.is_eye_visit
+    base_refraction = getattr(visit, "base_refraction", None) if is_eye_visit else None
+    eye_exam = getattr(visit, "eye_exam", None) if is_eye_visit else None
+    if is_eye_visit and request.method == "GET" and base_refraction is None:
+        skip_key = f"eye_refraction_skipped_{visit.pk}"
+        if request.GET.get("skip_refraction") == "1":
+            request.session[skip_key] = True
+        elif not request.session.get(skip_key):
+            return redirect("eye_base_refraction", visit_id=visit.pk)
     try:
         triage_instance = visit.triage
     except Triage.DoesNotExist:
@@ -1015,11 +1047,18 @@ def consultation(request, visit_id):
             instance=consultation_instance,
             hospital=visit.hospital,
             triage=triage_instance,
+            eye_visit=is_eye_visit,
         )
         if form.is_valid():
             consultation = form.save(commit=False)
             consultation.visit = visit
             consultation.created_by = request.user
+            if is_eye_visit:
+                from ophthalmology.exam import save_eye_exam
+                eye_exam = save_eye_exam(visit, request.POST, request.user)
+                consultation.signs_symptoms = eye_exam.history_comments or "Eye examination (see eye exam)."
+                consultation.diagnosis = "; ".join(eye_exam.diagnoses) or "See eye exam."
+                consultation.treatment = eye_exam.management_plan or "See eye exam."
             consultation.save()
 
             feedback = [f"Consultation saved for {visit.patient.name}."]
@@ -1126,7 +1165,9 @@ def consultation(request, visit_id):
             return redirect("consultation_detail", visit_id=visit.pk)
         messages.error(request, "Please fix the consultation details below.")
     else:
-        form = ConsultationForm(instance=consultation_instance, hospital=visit.hospital, triage=triage_instance)
+        form = ConsultationForm(
+            instance=consultation_instance, hospital=visit.hospital, triage=triage_instance, eye_visit=is_eye_visit,
+        )
 
     return render(
         request,
@@ -1151,6 +1192,7 @@ def consultation(request, visit_id):
             "prescriptions": prescriptions,
             "adjustment_origin_prescription": adjustment_origin_prescription,
             "adjustment_default_duration": visit.adjustment_remaining_days or 1,
+            **_eye_exam_context(is_eye_visit, base_refraction, eye_exam, request.POST if request.method == "POST" else None),
         },
     )
 
@@ -1194,6 +1236,7 @@ def consultation_detail(request, visit_id):
             "scan_reports": scan_reports,
             "nurse_queue_entries": nurse_queue_entries,
             "nurse_notes": nurse_notes,
+            **_eye_exam_context(visit.is_eye_visit, getattr(visit, "base_refraction", None), getattr(visit, "eye_exam", None)),
         },
     )
 

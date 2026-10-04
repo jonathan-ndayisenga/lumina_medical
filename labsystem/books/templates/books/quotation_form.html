@@ -1,0 +1,109 @@
+{% extends "books/base.html" %}
+{% block title %}{% if quotation %}Edit {{ quotation.number }}{% else %}New Quotation{% endif %} - Ternah Books{% endblock %}
+{% block content %}
+<style>
+    .q-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 1rem; }
+    .q-field { margin-bottom: 1rem; }
+    .q-field label { display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.3rem; }
+    .q-help { font-size: 0.78rem; color: var(--muted); margin: 0.3rem 0 0; }
+    .q-error { color: #a12b2b; font-size: 0.8rem; }
+    .q-wide { grid-column: 1 / -1; }
+    .item { background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 0.9rem; margin-bottom: 0.75rem; }
+    .item-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.6rem; font-weight: 700; font-size: 0.85rem; }
+    .item-grid { display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 0.6rem; }
+    .item-grid textarea { grid-column: 1 / -1; }
+    .item-remove { background: none; border: none; color: #a12b2b; cursor: pointer; font-size: 0.8rem; }
+    .totals-line { text-align: right; font-weight: 700; margin: 0.5rem 0 1.25rem; }
+    @media (max-width: 640px) { .q-grid, .item-grid { grid-template-columns: 1fr; } }
+</style>
+
+<h1 class="page-title">{% if quotation %}Edit quotation {{ quotation.number }}{% else %}New quotation{% endif %}</h1>
+<form method="post" class="card" style="max-width: 900px;">
+    {% csrf_token %}
+    <h3>Quotation</h3>
+    <div class="q-grid">
+        {% for field in form %}
+        <div class="q-field{% if field.name in 'intro note_left_body note_right_body highlight_body' %} q-wide{% endif %}">
+            <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+            {{ field }}
+            {% if field.help_text %}<p class="q-help">{{ field.help_text }}</p>{% endif %}
+            {% for error in field.errors %}<p class="q-error">{{ error }}</p>{% endfor %}
+        </div>
+        {% endfor %}
+        {% for extra in extra_fields %}
+        <div class="q-field">
+            <label for="xf_{{ extra.field.pk }}">{{ extra.field.label }}</label>
+            <input id="xf_{{ extra.field.pk }}" name="xf_{{ extra.field.pk }}" value="{{ extra.value }}" class="form-control"
+                   type="{% if extra.field.field_type == 'date' %}date{% elif extra.field.field_type == 'number' %}number{% else %}text{% endif %}">
+            <p class="q-help">Shown in the details box, under Quotation No. and Date.</p>
+        </div>
+        {% endfor %}
+    </div>
+
+    <h3>Items</h3>
+    <div class="q-field" style="max-width: 240px;">
+        <label for="itemCount">Number of items</label>
+        <input id="itemCount" type="number" min="1" max="50" class="form-control" value="{{ rows|length }}">
+        <p class="q-help">Type how many lines this quotation has; that many item rows appear below.</p>
+    </div>
+    <div id="items">
+        {% for row in rows %}
+        <div class="item">
+            <div class="item-head"><span class="item-number">Item {{ forloop.counter }}</span><button type="button" class="item-remove">Remove</button></div>
+            <div class="item-grid">
+                <input name="line_title" class="form-control" placeholder="Description, e.g. System configuration &amp; setup" value="{{ row.title|default:'' }}">
+                <input name="line_basis" class="form-control" placeholder="Basis, e.g. One-time" value="{{ row.basis|default:'' }}">
+                <input name="line_amount" class="form-control line-amount" inputmode="decimal" placeholder="Amount" value="{{ row.amount|default:'' }}">
+                <textarea name="line_description" class="form-control" rows="2" placeholder="Detail shown under the description">{{ row.description|default:'' }}</textarea>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    <template id="itemTemplate">
+        <div class="item">
+            <div class="item-head"><span class="item-number"></span><button type="button" class="item-remove">Remove</button></div>
+            <div class="item-grid">
+                <input name="line_title" class="form-control" placeholder="Description, e.g. Staff training">
+                <input name="line_basis" class="form-control" placeholder="Basis, e.g. 3 days x 150,000">
+                <input name="line_amount" class="form-control line-amount" inputmode="decimal" placeholder="Amount">
+                <textarea name="line_description" class="form-control" rows="2" placeholder="Detail shown under the description"></textarea>
+            </div>
+        </div>
+    </template>
+    <p class="totals-line">Subtotal: <span id="itemsTotal">0</span></p>
+
+    <button type="submit" class="btn">Save quotation</button>
+    <a href="{% if quotation %}{% url 'books:quotation_detail' quotation.pk %}{% else %}{% url 'books:quotation_list' %}{% endif %}" class="btn btn-secondary">Cancel</a>
+</form>
+
+<script>
+(function () {
+    const items = document.getElementById('items');
+    const count = document.getElementById('itemCount');
+    const template = document.getElementById('itemTemplate');
+    const total = document.getElementById('itemsTotal');
+
+    function renumber() {
+        items.querySelectorAll('.item').forEach(function (item, i) { item.querySelector('.item-number').textContent = 'Item ' + (i + 1); });
+        count.value = items.children.length;
+        let sum = 0;
+        items.querySelectorAll('.line-amount').forEach(function (input) { sum += parseFloat(input.value.replace(/,/g, '')) || 0; });
+        total.textContent = sum.toLocaleString();
+    }
+    count.addEventListener('change', function () {
+        const wanted = Math.max(1, Math.min(50, parseInt(count.value, 10) || 1));
+        while (items.children.length < wanted) items.appendChild(template.content.cloneNode(true));
+        while (items.children.length > wanted) items.lastElementChild.remove();
+        renumber();
+    });
+    items.addEventListener('click', function (e) {
+        if (e.target.classList.contains('item-remove') && items.children.length > 1) {
+            e.target.closest('.item').remove();
+            renumber();
+        }
+    });
+    items.addEventListener('input', function (e) { if (e.target.classList.contains('line-amount')) renumber(); });
+    renumber();
+})();
+</script>
+{% endblock %}

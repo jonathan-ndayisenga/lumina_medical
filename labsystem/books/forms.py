@@ -256,3 +256,74 @@ class ManualEntryForm(forms.Form):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         _style(self.fields)
+
+
+from .quotation_models import Quotation, QuotationField, QuotationSettings  # noqa: E402
+
+
+class QuotationForm(forms.ModelForm):
+    class Meta:
+        model = Quotation
+        fields = [
+            "client", "code", "subtitle", "attention", "location", "issue_date", "valid_until", "currency",
+            "apply_vat", "intro", "highlight_title", "highlight_body",
+            "note_left_title", "note_left_body", "note_right_title", "note_right_body",
+        ]
+        labels = {
+            "code": "Quotation code", "subtitle": "Title under QUOTATION", "attention": "Attention (Attn:)",
+            "apply_vat": "Charge VAT", "intro": "Opening paragraph", "highlight_title": "Highlight box: heading",
+            "highlight_body": "Highlight box: detail", "note_left_title": "Left note: heading",
+            "note_left_body": "Left note: text", "note_right_title": "Right note: heading",
+            "note_right_body": "Right note: text",
+        }
+        widgets = {
+            "issue_date": forms.DateInput(attrs={"type": "date"}),
+            "valid_until": forms.DateInput(attrs={"type": "date"}),
+            "intro": forms.Textarea(attrs={"rows": 3}),
+            "note_left_body": forms.Textarea(attrs={"rows": 3}),
+            "note_right_body": forms.Textarea(attrs={"rows": 3}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["client"].queryset = Client.objects.filter(active=True)
+        self.fields["valid_until"].required = False
+        self.fields["valid_until"].help_text = "Leave blank to use the default validity from Quotation settings."
+        _style(self.fields)
+
+
+class QuotationSettingsForm(forms.ModelForm):
+    class Meta:
+        model = QuotationSettings
+        exclude = []
+        widgets = {
+            "intro": forms.Textarea(attrs={"rows": 3}),
+            "note_left_body": forms.Textarea(attrs={"rows": 3}),
+            "note_right_body": forms.Textarea(attrs={"rows": 3}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        _style(self.fields)
+
+
+class QuotationFieldForm(forms.ModelForm):
+    class Meta:
+        model = QuotationField
+        fields = ["label", "field_type", "sort_order"]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        _style(self.fields)
+
+
+class QuotationConvertForm(forms.Form):
+    revenue_account = forms.ModelChoiceField(
+        queryset=Account.objects.none(), help_text="Income account every line of the invoice is posted to.",
+    )
+    kind = forms.ChoiceField(choices=Invoice.KIND_CHOICES, initial=Invoice.KIND_ONBOARDING)
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["revenue_account"].queryset = Account.objects.filter(active=True, type=Account.TYPE_INCOME)
+        _style(self.fields)

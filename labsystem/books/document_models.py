@@ -673,6 +673,20 @@ class Expense(models.Model):
         return self
 
     @transaction.atomic
+    def amend(self, user=None):
+        """After an edit: reverse the old ledger entry on its own date and
+        post the corrected one, so the journal shows the correction rather
+        than figures silently changing under a posted entry."""
+        if self.voided_at:
+            raise ValidationError("A void expense cannot be edited.")
+        if self.journal_entry_id:
+            old = self.journal_entry
+            old.reverse(old.date, f"Correction of expense: {self.description}", user)
+        from . import posting
+        posting.post_expense(self, user)
+        return self
+
+    @transaction.atomic
     def void(self, reason: str, user=None):
         if self.voided_at:
             raise ValidationError("This expense is already void.")

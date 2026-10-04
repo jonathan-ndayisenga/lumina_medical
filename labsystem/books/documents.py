@@ -119,3 +119,87 @@ def statement_context(client, start=None, end=None) -> dict:
         "events": statement["events"],
         "closing_balance": statement["closing_balance"],
     }
+
+
+_ONES = ["", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Eleven",
+         "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen", "Eighteen", "Nineteen"]
+_TENS = ["", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety"]
+
+
+def _below_thousand(n: int) -> str:
+    hundreds, rest = divmod(n, 100)
+    words = []
+    if hundreds:
+        words.append(f"{_ONES[hundreds]} Hundred")
+    if rest:
+        tens = _ONES[rest] if rest < 20 else " ".join(w for w in (_TENS[rest // 10], _ONES[rest % 10]) if w)
+        words.append(("and " if hundreds else "") + tens)
+    return " ".join(words)
+
+
+def amount_in_words(value, currency="UGX") -> str:
+    """3400000 -> 'Three Million, Four Hundred Thousand Uganda Shillings only.'"""
+    n = int(round(float(value)))
+    if n == 0:
+        spoken = "Zero"
+    else:
+        parts = []
+        for size, name in ((10**9, "Billion"), (10**6, "Million"), (10**3, "Thousand"), (1, "")):
+            count, n = divmod(n, size)
+            if count:
+                parts.append(f"{_below_thousand(count)} {name}".strip())
+        spoken = ", ".join(parts)
+    currency_name = "Uganda Shillings" if currency == "UGX" else currency
+    return f"{spoken} {currency_name} only."
+
+
+def quotation_context(quotation) -> dict:
+    from .quotation_models import QuotationField, QuotationSettings
+
+    values = {fv.field_id: fv.value for fv in quotation.field_values.all()}
+    company = _company_block()
+    settings_row = CompanySettings.load()
+    preparer = quotation.prepared_by
+    # Header lettering like the PDF: "TERNAH" big, "SOFTWARE COMPANY LTD" small.
+    brand_name = settings_row.trading_name or settings_row.legal_name
+    brand_sub = settings_row.legal_name.replace(settings_row.trading_name, "", 1).strip() if settings_row.trading_name else ""
+    return {
+        "company": company,
+        "brand_name": brand_name,
+        "brand_sub": brand_sub or settings_row.tagline,
+        "reg_no": settings_row.company_reg_no,
+        "logo_url": settings_row.logo.url if settings_row.logo else "",
+        "client": _client_block(quotation.client),
+        "number": quotation.number,
+        "subtitle": quotation.subtitle,
+        "attention": quotation.attention,
+        "location": quotation.location,
+        "issue_date": quotation.issue_date,
+        "valid_until": quotation.valid_until,
+        "currency": quotation.currency,
+        "currency_label": "UGX (Ugandan Shilling)" if quotation.currency == "UGX" else quotation.currency,
+        "extra_fields": [
+            {"label": field.label, "value": values.get(field.pk, "")}
+            for field in QuotationField.objects.filter(active=True)
+            if values.get(field.pk)
+        ],
+        "intro": quotation.intro,
+        "lines": [
+            {"title": line.title, "description": line.description, "basis": line.basis, "amount": line.amount}
+            for line in quotation.lines.all()
+        ],
+        "subtotal": quotation.subtotal,
+        "tax_label": f"VAT {CompanySettings.load().vat_rate}%",
+        "tax_amount": quotation.tax_amount,
+        "apply_vat": quotation.apply_vat,
+        "total": quotation.total,
+        "amount_in_words": amount_in_words(quotation.total, quotation.currency),
+        "highlight_title": quotation.highlight_title,
+        "highlight_body": quotation.highlight_body,
+        "note_left_title": quotation.note_left_title,
+        "note_left_body": quotation.note_left_body,
+        "note_right_title": quotation.note_right_title,
+        "note_right_body": quotation.note_right_body,
+        "prepared_by_name": (preparer.get_full_name() or preparer.username) if preparer else "",
+        "footer_tagline": QuotationSettings.load().footer_tagline,
+    }

@@ -1,0 +1,22 @@
+<table class="w-full text-sm">
+    <thead><tr><th></th>{% for eye, eye_label in eyes %}<th>{{ eye_label }}</th>{% endfor %}</tr></thead>
+    <tbody>
+        {% for row in rows %}
+        <tr>
+            <td class="font-semibold text-text-main whitespace-nowrap">{{ row.label }}</td>
+            {% for cell in row.cells %}
+            <td>
+                {% if cell.options %}
+                <select name="{{ cell.name }}" class="form-control" aria-label="{{ row.label }}">
+                    <option value="">—</option>
+                    {% for option in cell.options %}<option value="{{ option }}"{% if option == cell.value %} selected{% endif %}>{{ option }}</option>{% endfor %}
+                </select>
+                {% else %}
+                <input name="{{ cell.name }}" value="{{ cell.value }}" class="form-control" aria-label="{{ row.label }}">
+                {% endif %}
+            </td>
+            {% endfor %}
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>

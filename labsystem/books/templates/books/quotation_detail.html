@@ -1,0 +1,35 @@
+{% extends "books/base.html" %}
+{% load books_extras %}
+{% block title %}{{ quotation.number }} - Ternah Books{% endblock %}
+{% block content %}
+<h1 class="page-title">Quotation {{ quotation.number }} <span class="badge badge-{{ quotation.status }}">{{ quotation.get_status_display }}</span></h1>
+<p style="display:flex; flex-wrap:wrap; gap:0.5rem;">
+    <a href="{% url 'books:quotation_pdf' quotation.pk %}" target="_blank" rel="noopener" class="btn">Print / PDF</a>
+    {% if quotation.is_editable %}<a href="{% url 'books:quotation_edit' quotation.pk %}" class="btn btn-secondary">Edit</a>{% endif %}
+    {% if quotation.status != 'converted' %}
+        {% for value, label in quotation.STATUS_CHOICES %}
+            {% if value == 'sent' or value == 'accepted' or value == 'declined' %}
+                {% if value != quotation.status %}
+                <form method="post" action="{% url 'books:quotation_status' quotation.pk %}" style="display:inline;">
+                    {% csrf_token %}<input type="hidden" name="status" value="{{ value }}">
+                    <button type="submit" class="btn btn-secondary">Mark {{ label|lower }}</button>
+                </form>
+                {% endif %}
+            {% endif %}
+        {% endfor %}
+        {% if quotation.status != 'declined' %}
+        <a href="{% url 'books:quotation_convert' quotation.pk %}" class="btn">Convert to invoice</a>
+        {% endif %}
+    {% elif quotation.invoice %}
+        <a href="{% url 'books:invoice_detail' quotation.invoice.pk %}" class="btn btn-secondary">View invoice {{ quotation.invoice }}</a>
+    {% endif %}
+    <a href="{% url 'books:quotation_list' %}" class="btn btn-secondary">All quotations</a>
+</p>
+<div class="card">
+    <p><strong>{{ quotation.client.name }}</strong>{% if quotation.subtitle %} · {{ quotation.subtitle }}{% endif %}</p>
+    <p>Date {{ quotation.issue_date }} · Valid until {{ quotation.valid_until }} · <strong>{{ quotation.currency }} {{ quotation.total|money }}</strong></p>
+</div>
+<div class="card" style="padding:0; overflow:hidden;">
+    <iframe src="{% url 'books:quotation_pdf' quotation.pk %}" title="Quotation preview" style="width:100%; height:1150px; border:0;"></iframe>
+</div>
+{% endblock %}

@@ -1,9 +1,29 @@
 # Specialty-Triggered Doctor Consultations (Ophthalmology first) — Design Plan
 
-> **Status: PLAN, not built.** This document captures what was studied from a reference system
-> (Town Eye Clinic, an ophthalmology-specific EMR) and how it would map onto Ternah Health's
-> existing architecture. Nothing described here has been implemented yet — it's the groundwork
-> for a future build, and open questions are flagged explicitly rather than silently decided.
+> **Status (4 Oct 2026): Phase 1 built — eye exam. Phase 2 (Optical, §2.3 / §5.1) not built yet.**
+>
+> **Built in Phase 1:**
+> - `Service.specialty` (General / Ophthalmology / Dentistry placeholder), set on consultation
+>   services in Hospital Management → Services; `Visit.specialty` / `Visit.is_eye_visit`.
+> - The trigger: opening an eye visit from the Doctor Queue goes to **Base Refraction** first
+>   (`ophthalmology/views.py`, `/eye/visit/<id>/base-refraction/`), then the **Main Exam**.
+> - The Main Exam lives *inside* the existing consultation screen: for eye visits the general
+>   "Clinical Assessment" block is replaced by the eye exam (external exam, 13 slit-lamp sections
+>   per eye, CDR/IOP, diagnosis list, history, plan). Vitals, labs, services, prescriptions and
+>   hand-offs stay shared, and each eye exam also writes the shared `Consultation` row so reports
+>   and history include eye visits. Data: `ophthalmology.BaseRefraction`, `ophthalmology.EyeExam`.
+> - **Visit Outcome** on *every* consultation (`doctor.VisitOutcome`, `Consultation.outcome` +
+>   `outcome_notes`); Review Appointment requires the review date.
+>
+> **Decisions taken (Open Questions 1–4):** soft nudge, not a hard gate (Main Exam shows a
+> "Record Base Refraction" banner; "Skip to main exam" is remembered per visit); new
+> `ophthalmology` app; the doctor records Base Refraction in the same visit; slit-lamp findings
+> are a fixed vocabulary (`ophthalmology/constants.py`) plus an "other finding" box per section per
+> eye; Dentistry stays a placeholder. Referred / Admitted / Sent to Theatre are recorded with a
+> "where to" note only — no receiving workflows yet (Open Question 5 still open).
+>
+> **Still open:** Open Questions 5–9 (outcome routing, Optical module placement, `OpticalItem`
+> model, optical billing) — for Phase 2.
 
 **Framework:** Django · **Scope:** `doctor` app (today), likely a new `ophthalmology` app · **Pattern:** category-triggered form branching, following precedent already in this codebase (Package services, Lab's DEFINED_OPTION tests)
 

@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import views
+from . import planning_views, quotation_views, views
 
 app_name = "books"
 
@@ -39,6 +39,20 @@ urlpatterns = [
     path("invoices/<int:invoice_pk>/wht/new/", views.wht_credit_create, name="wht_credit_create"),
     path("invoices/<int:invoice_pk>/payments/new/", views.payment_create, name="invoice_payment_create"),
 
+    path("quotations/", quotation_views.quotation_list, name="quotation_list"),
+    path("quotations/new/", quotation_views.quotation_create, name="quotation_create"),
+    path("quotations/<int:pk>/", quotation_views.quotation_detail, name="quotation_detail"),
+    path("quotations/<int:pk>/edit/", quotation_views.quotation_edit, name="quotation_edit"),
+    path("quotations/<int:pk>/status/", quotation_views.quotation_status, name="quotation_status"),
+    path("quotations/<int:pk>/convert/", quotation_views.quotation_convert, name="quotation_convert"),
+    path("quotations/<int:pk>/pdf/", quotation_views.quotation_pdf, name="quotation_pdf"),
+    path("settings/quotations/", quotation_views.quotation_settings, name="quotation_settings"),
+
+    path("recurring/", planning_views.recurring_list, name="recurring_list"),
+    path("recurring/generate/", planning_views.recurring_generate, name="recurring_generate"),
+    path("recurring/<int:pk>/toggle/", planning_views.recurring_toggle, name="recurring_toggle"),
+    path("settings/budgets/", planning_views.budgets, name="budgets"),
+
     path("payments/new/", views.payment_create, name="payment_create"),
     path("payments/<int:pk>/void/", views.payment_void, name="payment_void"),
 
@@ -47,6 +61,7 @@ urlpatterns = [
 
     path("expenses/", views.expense_list, name="expense_list"),
     path("expenses/new/", views.expense_create, name="expense_create"),
+    path("expenses/<int:pk>/edit/", views.expense_edit, name="expense_edit"),
     path("expenses/<int:pk>/void/", views.expense_void, name="expense_void"),
 
     path("reports/trial-balance/", views.report_trial_balance, name="report_trial_balance"),

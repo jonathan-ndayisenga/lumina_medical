@@ -5,6 +5,19 @@ from django.db import models
 from django.utils import timezone
 
 
+class VisitOutcome(models.TextChoices):
+    """How the doctor closed the visit. One shared vocabulary for every
+    specialty so outcome reporting adds up across them."""
+
+    ONGOING = "ongoing", "Ongoing"
+    DISCHARGED = "discharged", "Discharged"
+    REFERRED = "referred", "Referred"
+    ADMITTED = "admitted", "Admitted"
+    THEATRE = "theatre", "Sent to Theatre"
+    DIED = "died", "Died"
+    REVIEW = "review", "Review Appointment"
+
+
 class Consultation(models.Model):
     visit = models.OneToOneField("reception.Visit", on_delete=models.CASCADE, related_name="consultation")
     created_by = models.ForeignKey(
@@ -20,6 +33,11 @@ class Consultation(models.Model):
     treatment = models.TextField()
     lab_requests = models.JSONField(default=list, blank=True)
     follow_up_date = models.DateField(null=True, blank=True)
+    outcome = models.CharField(max_length=20, choices=VisitOutcome.choices, default=VisitOutcome.ONGOING)
+    outcome_notes = models.CharField(
+        max_length=255, blank=True,
+        help_text="Where to, for Referred / Admitted / Sent to Theatre (e.g. Mulago Eye Unit).",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

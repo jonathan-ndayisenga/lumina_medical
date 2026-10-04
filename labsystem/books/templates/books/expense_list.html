@@ -22,7 +22,7 @@
                 <td>{{ expense.account.name }}</td>
                 <td>UGX {{ expense.total_cost_ugx|money }}</td>
                 <td>{{ expense.is_deductible|yesno:"Yes,No" }}</td>
-                <td>{% if not expense.voided_at %}<a href="{% url 'books:expense_void' expense.pk %}">Void</a>{% endif %}</td>
+                <td>{% if not expense.voided_at %}<a href="{% url 'books:expense_edit' expense.pk %}">Edit</a> &middot; <a href="{% url 'books:expense_void' expense.pk %}">Void</a>{% endif %}</td>
             </tr>
             {% empty %}
             <tr><td colspan="6">No expenses yet.</td></tr>

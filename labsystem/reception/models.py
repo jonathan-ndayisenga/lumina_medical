@@ -92,8 +92,11 @@ class Patient(models.Model):
 
     def age_at(self, visit_date):
         """Age calculated from DOB vs a specific visit date."""
-        d = visit_date.date() if hasattr(visit_date, "date") else visit_date
-        return self._age_string(d)
+        # A stored visit time is UTC; the hospital's calendar day is local
+        # (Kampala is UTC+3), so a visit just after midnight belongs to today.
+        if hasattr(visit_date, "date"):
+            visit_date = timezone.localtime(visit_date).date() if timezone.is_aware(visit_date) else visit_date.date()
+        return self._age_string(visit_date)
 
 
 class Visit(models.Model):
@@ -201,6 +204,21 @@ class Visit(models.Model):
     @property
     def is_package_visit(self):
         return self.visit_type == self.TYPE_PACKAGE
+
+    @property
+    def specialty(self):
+        """The specialty of the consultation service billed on this visit,
+        which decides the doctor's exam form. "general" when none is set."""
+        specialties = (
+            self.visit_services.filter(service__category=Service.CATEGORY_CONSULTATION)
+            .exclude(service__specialty=Service.SPECIALTY_GENERAL)
+            .values_list("service__specialty", flat=True)
+        )
+        return specialties.first() or Service.SPECIALTY_GENERAL
+
+    @property
+    def is_eye_visit(self):
+        return self.specialty == Service.SPECIALTY_OPHTHALMOLOGY
 
     def validate_billing_structure(self):
         """
@@ -385,9 +403,24 @@ class Service(models.Model):
         (CATEGORY_OTHER, "Other"),
     ]
 
+    # Only meaningful for consultation services: decides which exam the
+    # doctor gets when they open the visit (general form vs eye exam).
+    SPECIALTY_GENERAL = "general"
+    SPECIALTY_OPHTHALMOLOGY = "ophthalmology"
+    SPECIALTY_DENTISTRY = "dentistry"
+    SPECIALTY_CHOICES = [
+        (SPECIALTY_GENERAL, "General"),
+        (SPECIALTY_OPHTHALMOLOGY, "Ophthalmology (eye)"),
+        (SPECIALTY_DENTISTRY, "Dentistry (coming soon)"),
+    ]
+
     hospital = models.ForeignKey(Hospital, on_delete=models.CASCADE, related_name="services")
     name = models.CharField(max_length=100)
     category = models.CharField(max_length=50, choices=CATEGORY_CHOICES)
+    specialty = models.CharField(
+        max_length=20, choices=SPECIALTY_CHOICES, default=SPECIALTY_GENERAL,
+        help_text="For consultation services: which exam the doctor fills in for this visit.",
+    )
     price = models.DecimalField(max_digits=10, decimal_places=2)
     is_active = models.BooleanField(default=True)
     is_per_day = models.BooleanField(

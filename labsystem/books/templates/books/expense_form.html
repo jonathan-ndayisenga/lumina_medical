@@ -1,7 +1,8 @@
 {% extends "books/base.html" %}
-{% block title %}New Expense - Ternah Books{% endblock %}
+{% block title %}{% if edit_mode %}Edit Expense{% else %}New Expense{% endif %} - Ternah Books{% endblock %}
 {% block content %}
-<h1 class="page-title">New expense</h1>
+<h1 class="page-title">{% if edit_mode %}Edit expense{% else %}New expense{% endif %}</h1>
+{% if edit_mode %}<p style="color:var(--muted);font-size:0.85rem;max-width:600px;">Saving reverses the original journal entry and posts the corrected one, so the journal keeps a record of the change.</p>{% endif %}
 {% if duplicate %}
 <div class="banner-danger">This receipt looks identical to expense #{{ duplicate.pk }} ({{ duplicate.description }}). Tick the confirmation box below if this really is a separate charge.</div>
 {% endif %}
@@ -16,8 +17,13 @@
             {% for error in field.errors %}<p style="color:#a12b2b;font-size:0.8rem;">{{ error }}</p>{% endfor %}
         </div>
         {% endfor %}
+        {% if edit_mode %}
+        <button type="submit" class="btn">Save correction</button>
+        <a href="{% url 'books:expense_list' %}" class="btn btn-secondary">Cancel</a>
+        {% else %}
         <button type="submit" class="btn">Save expense</button>
         <button type="submit" name="save_and_add_another" value="1" class="btn btn-secondary">Save and add another</button>
+        {% endif %}
     </form>
 </div>
 {% endblock %}

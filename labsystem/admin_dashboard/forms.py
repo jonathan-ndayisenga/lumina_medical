@@ -427,7 +427,7 @@ class HospitalServiceForm(forms.ModelForm):
     class Meta:
         model = Service
         fields = (
-            "name", "category", "price", "lab_tests_next", "package_services", "package_drugs",
+            "name", "category", "specialty", "price", "lab_tests_next", "package_services", "package_drugs",
             "max_visits", "validity_months", "test_profile", "is_active", "is_per_day",
         )
         widgets = {
@@ -436,9 +436,15 @@ class HospitalServiceForm(forms.ModelForm):
             "package_drugs": forms.SelectMultiple(attrs={"class": "hidden", "id": "package-drugs-select-hidden"}),
         }
 
+    def clean_specialty(self):
+        if self.cleaned_data.get("category") != Service.CATEGORY_CONSULTATION:
+            return Service.SPECIALTY_GENERAL
+        return self.cleaned_data.get("specialty") or Service.SPECIALTY_GENERAL
+
     def __init__(self, *args, hospital=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.hospital = hospital
+        self.fields["specialty"].required = False
         self.fields["lab_tests_next"].queryset = (
             LabTest.objects.filter(hospital=hospital).order_by("name") if hospital else LabTest.objects.none()
         )

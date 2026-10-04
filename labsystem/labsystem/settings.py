@@ -128,6 +128,7 @@ INSTALLED_APPS = [
     "homecare",
     "lab",
     "nurse",
+    "ophthalmology",
     "reception",
 ]
 

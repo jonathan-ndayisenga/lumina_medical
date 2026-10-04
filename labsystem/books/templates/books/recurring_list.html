@@ -1,0 +1,58 @@
+{% extends "books/base.html" %}
+{% load books_extras %}
+{% block title %}Recurring invoices - Ternah Books{% endblock %}
+{% block content %}
+<h1 class="page-title">Recurring invoices</h1>
+<p style="color:var(--muted);max-width:720px;">Monthly charges such as hosting &amp; maintenance. On each plan's date, Books issues the invoice for you: press <strong>Issue due invoices</strong> (also on the dashboard when something is due). Missed months are caught up.</p>
+
+{% if due_count %}
+<form method="post" action="{% url 'books:recurring_generate' %}" class="banner-danger" style="display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap;">
+    {% csrf_token %}
+    <span><strong>{{ due_count }} plan{{ due_count|pluralize }} due.</strong> Issue the invoice{{ due_count|pluralize }} now.</span>
+    <button type="submit" class="btn">Issue due invoices</button>
+</form>
+{% endif %}
+
+<div class="card">
+    <table>
+        <thead><tr><th>Client</th><th>Description</th><th>Monthly amount</th><th>Next invoice</th><th>Ends</th><th>Status</th><th></th></tr></thead>
+        <tbody>
+            {% for plan in plans %}
+            <tr>
+                <td>{{ plan.client.name }}</td>
+                <td>{{ plan.description }}</td>
+                <td>UGX {{ plan.amount|money }}</td>
+                <td>{{ plan.next_run_date }}{% if plan.is_due %} <span class="badge badge-open">Due</span>{% endif %}</td>
+                <td>{{ plan.end_date|default:"—" }}</td>
+                <td>{% if plan.is_finished %}Finished{% elif plan.active %}Active{% else %}Paused{% endif %}</td>
+                <td>
+                    {% if not plan.is_finished %}
+                    <form method="post" action="{% url 'books:recurring_toggle' plan.pk %}" style="display:inline;">
+                        {% csrf_token %}<button type="submit" class="btn btn-secondary">{% if plan.active %}Pause{% else %}Resume{% endif %}</button>
+                    </form>
+                    {% endif %}
+                </td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="7">No recurring invoices yet. Add one below.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<div class="card" style="max-width:720px;">
+    <h3>New monthly invoice</h3>
+    <form method="post">
+        {% csrf_token %}
+        {% for field in form %}
+        <div style="margin-bottom:1rem;">
+            <label style="display:block;font-size:0.85rem;font-weight:600;margin-bottom:0.3rem;">{{ field.label }}</label>
+            {{ field }}
+            {% if field.help_text %}<p style="font-size:0.78rem;color:var(--muted);margin:0.3rem 0 0;">{{ field.help_text }}</p>{% endif %}
+            {% for error in field.errors %}<p style="color:#a12b2b;font-size:0.8rem;">{{ error }}</p>{% endfor %}
+        </div>
+        {% endfor %}
+        <button type="submit" class="btn">Save plan</button>
+    </form>
+</div>
+{% endblock %}
