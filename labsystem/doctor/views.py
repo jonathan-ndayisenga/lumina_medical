@@ -15,7 +15,7 @@ from django.views.decorators.http import require_http_methods
 from accounts.models import User
 from admin_dashboard.models import InventoryBatch, InventoryItem, InventoryTransaction
 from lab.models import LabOrder, LabReport
-from nurse.models import NurseNote
+from nurse.models import NursingAdmission, NursingCareItem, NurseNote
 from reception.models import QueueEntry, Service, Triage, Visit, VisitService
 from reception.workflow import (
     active_package_drug,
@@ -79,6 +79,34 @@ def resolve_next_url(request, fallback_url):
     ):
         return candidate
     return fallback_url
+
+
+def attach_prescription_to_active_nursing_admission(visit, prescription):
+    if not prescription.nursing_managed:
+        return
+
+    try:
+        admission = visit.nursing_admission
+    except Visit.nursing_admission.RelatedObjectDoesNotExist:
+        return
+
+    if admission.status != NursingAdmission.STATUS_ACTIVE:
+        return
+
+    if admission.care_items.filter(prescription_id=prescription.pk).exists():
+        return
+
+    doses_planned = max(1, (prescription.frequency_per_day or 1) * (prescription.duration_days or 1))
+    per_dose_quantity = Decimal("0")
+    if prescription.total_quantity:
+        per_dose_quantity = (Decimal(prescription.total_quantity) / doses_planned).quantize(Decimal("0.0001"))
+
+    NursingCareItem.objects.create(
+        admission=admission,
+        prescription=prescription,
+        doses_planned=doses_planned,
+        per_dose_quantity=per_dose_quantity,
+    )
 
 
 def lab_visit_services(visit, *, performed=None):
@@ -663,6 +691,7 @@ def add_prescription_api(request, visit_id):
         duration_days=duration,
         notes=notes,
         prescribed_by=request.user,
+        nursing_managed=Prescription.should_manage_by_nurse(drug),
         is_adjustment=visit.is_adjustment_visit,
         parent_prescription=visit.adjustment_origin_prescription if visit.is_adjustment_visit else None,
         covered_by_previous=visit.is_adjustment_visit,
@@ -700,6 +729,9 @@ def add_prescription_api(request, visit_id):
 
         visit.total_amount += prescription.total_price
         visit.save(update_fields=["total_amount"])
+
+    if prescription.nursing_managed:
+        attach_prescription_to_active_nursing_admission(visit, prescription)
 
     message = f"{drug.name} added to the prescription list."
     if visit.is_adjustment_visit:

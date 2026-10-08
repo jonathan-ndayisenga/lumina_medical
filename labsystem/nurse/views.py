@@ -2,13 +2,14 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
 from django.db import transaction
+from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 
 from decimal import Decimal
 
 from accounts.models import User
-from admin_dashboard.models import InventoryTransaction
+from admin_dashboard.models import InventoryItem, InventoryTransaction
 from doctor.models import Consultation, Prescription
 from lab.models import LabReport
 from reception.models import QueueEntry, Triage, Visit
@@ -345,11 +346,18 @@ def start_nursing_admission(request, visit_id):
         messages.info(request, f"{visit.patient.name} is already under nursing care.")
         return redirect("nursing_admission_detail", admission_id=visit.nursing_admission.pk)
 
-    # Only IV/infusion prescriptions make sense for nursing care
-    iv_prescriptions = visit.prescriptions.filter(
-        dispensed=False,
-        nursing_managed=False,
-    ).select_related("drug").exclude(drug__category__in=["tablet", "capsule"])
+    iv_categories = [
+        InventoryItem.CATEGORY_IV_FLUID,
+        InventoryItem.CATEGORY_IV_MED,
+        InventoryItem.CATEGORY_IM,
+    ]
+    iv_prescriptions = (
+        visit.prescriptions.filter(dispensed=False, nursing_care_item__isnull=True)
+        .select_related("drug")
+        .exclude(drug__category__in=["tablet", "capsule"])
+        .filter(Q(nursing_managed=True) | Q(drug__category__in=iv_categories))
+        .order_by("-prescribed_at", "-id")
+    )
 
     if request.method == "POST":
         selected_ids = request.POST.getlist("prescription_ids")

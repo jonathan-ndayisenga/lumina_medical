@@ -211,6 +211,23 @@ class Prescription(models.Model):
     def __str__(self):
         return f"{self.drug.name} for {self.visit.patient.name}"
 
+    @staticmethod
+    def should_manage_by_nurse(drug):
+        if drug is None:
+            return False
+        return getattr(drug, "category", "") in {
+            "iv_fluid",
+            "iv_med",
+            "im",
+        }
+
+    def save(self, *args, **kwargs):
+        if self.drug_id is not None:
+            self.nursing_managed = self.should_manage_by_nurse(self.drug)
+        else:
+            self.nursing_managed = False
+        super().save(*args, **kwargs)
+
     @property
     def is_liquid(self):
         return self.drug.category in {

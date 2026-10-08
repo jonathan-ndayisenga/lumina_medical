@@ -21,6 +21,15 @@ from .models import Account, JournalEntry, JournalLine
 # Account resolution helpers
 # ---------------------------------------------------------------------------
 
+def _coerce_decimal(value):
+    """Normalize database/form values to Decimal so comparisons stay safe."""
+    if value is None or value == "":
+        return Decimal("0")
+    if isinstance(value, Decimal):
+        return value
+    return Decimal(str(value))
+
+
 def _ensure_accounts(hospital):
     """Provisioning used to only happen when someone opened the Finance
     Dashboard — so any charge/payment recorded before that page was ever
@@ -166,8 +175,8 @@ def post_visit_service(visit_service):
     DR  Accounts Receivable         price_at_time
         CR  [Category] Revenue          price_at_time
     """
-    amount = visit_service.price_at_time
-    if not amount or amount <= 0:
+    amount = _coerce_decimal(visit_service.price_at_time)
+    if amount <= 0:
         return
 
     hospital = visit_service.visit.hospital
@@ -205,7 +214,7 @@ def post_payment(payment):
     from reception.models import Payment as Pmt
 
     hospital = payment.visit.hospital
-    amount = payment.amount_paid
+    amount = _coerce_decimal(payment.amount_paid)
     _ensure_accounts(hospital)
 
     if payment.status == Pmt.STATUS_WAIVED or amount <= 0:
@@ -238,8 +247,8 @@ def post_expense(expense):
     DR  [Expense Category Account]   amount
         CR  Cash / Bank / Mobile         amount
     """
-    amount = expense.amount
-    if not amount or amount <= 0:
+    amount = _coerce_decimal(expense.amount)
+    if amount <= 0:
         return
 
     hospital = expense.hospital
@@ -275,7 +284,8 @@ def post_salary(salary):
     hospital = salary.hospital
     _ensure_accounts(hospital)
 
-    if not salary.paid or not salary.amount or salary.amount <= 0:
+    amount = _coerce_decimal(salary.amount)
+    if not salary.paid or amount <= 0:
         _reverse_salary(salary)
         return
 
@@ -302,8 +312,8 @@ def post_salary(salary):
         description=f"Salary: {employee_name} — {salary.month.strftime('%B %Y')}",
         source_type=JournalEntry.SOURCE_EXPENSE,
     )
-    JournalLine.objects.create(entry=entry, account=salary_acc, debit=salary.amount, description=f"Salary — {employee_name}")
-    JournalLine.objects.create(entry=entry, account=cash_acc, credit=salary.amount, description="Salary payment")
+    JournalLine.objects.create(entry=entry, account=salary_acc, debit=amount, description=f"Salary — {employee_name}")
+    JournalLine.objects.create(entry=entry, account=cash_acc, credit=amount, description="Salary payment")
 
 
 def _reverse_salary(salary):

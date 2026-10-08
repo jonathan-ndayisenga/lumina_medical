@@ -7,7 +7,7 @@ from django.urls import reverse
 from accounts.models import Hospital, HospitalModuleSubscription, Module
 from admin_dashboard.models import InventoryBatch, InventoryItem, InventoryTransaction
 from doctor.models import Prescription
-from nurse.models import NurseNote, ScanReport
+from nurse.models import NurseNote, NursingAdmission, NursingCareItem, ScanReport
 from reception.models import Patient, QueueEntry, Service, Visit, VisitService
 
 
@@ -244,6 +244,168 @@ class NurseWorkflowTests(TestCase):
         self.assertEqual(reagent_drug.current_quantity, Decimal("8.00"))  # 10 - 2 = 8
         self.assertEqual(batch.quantity, Decimal("8.00"))
         self.assertEqual(transaction.quantity, Decimal("2.00"))
+
+    def test_iv_prescription_auto_flags_for_nursing_and_full_administration_cycle(self):
+        doctor = self.User.objects.create_user(
+            username="doctor1",
+            password="StrongPass123!",
+            role=self.User.ROLE_DOCTOR,
+            hospital=self.hospital,
+        )
+        self.client.force_login(doctor)
+
+        iv_drug = InventoryItem.objects.create(
+            hospital=self.hospital,
+            name="Ceftriaxone IV",
+            category=InventoryItem.CATEGORY_IV_MED,
+            unit="vial",
+            base_unit="vial",
+            units_per_pack=Decimal("1"),
+            current_quantity=Decimal("10"),
+            unit_cost=Decimal("150.00"),
+            selling_price=Decimal("600.00"),
+            reorder_level=Decimal("2"),
+        )
+        InventoryBatch.objects.create(
+            item=iv_drug,
+            batch_number="CEF-001",
+            quantity="10",
+            expiry_date="2028-01-31",
+            unit_cost="150.00",
+        )
+        iv_drug.recalculate_current_quantity()
+
+        response = self.client.post(
+            reverse("add_prescription_api", args=[self.visit.pk]),
+            {
+                "drug_id": iv_drug.pk,
+                "dosage_mg": "250",
+                "frequency_per_day": "1",
+                "duration_days": "1",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        prescription = Prescription.objects.get(visit=self.visit, drug=iv_drug)
+        self.assertTrue(prescription.nursing_managed)
+
+        self.client.force_login(self.nurse)
+        admit_response = self.client.post(
+            reverse("start_nursing_admission", args=[self.visit.pk]),
+            {"prescription_ids": [str(prescription.pk)]},
+        )
+        self.assertEqual(admit_response.status_code, 302)
+        self.assertTrue(hasattr(self.visit, "nursing_admission"))
+        admission = self.visit.nursing_admission
+        care_item = admission.care_items.get(prescription=prescription)
+        self.assertEqual(care_item.doses_planned, 1)
+
+        before_quantity = iv_drug.current_quantity
+        dose_response = self.client.post(reverse("administer_dose", args=[care_item.pk]), {"notes": "Infusion started"})
+
+        self.assertEqual(dose_response.status_code, 302)
+        iv_drug.refresh_from_db()
+        self.assertLess(iv_drug.current_quantity, before_quantity)
+        self.assertEqual(care_item.doses.count(), 1)
+        prescription.refresh_from_db()
+        self.assertTrue(prescription.dispensed)
+
+        discharge_response = self.client.post(
+            reverse("discharge_nursing", args=[admission.pk]),
+            {"discharge_notes": "Completed IV therapy and stable."},
+        )
+
+        self.assertEqual(discharge_response.status_code, 302)
+        admission.refresh_from_db()
+        self.assertEqual(admission.status, "discharged")
+        self.assertIn("Completed IV therapy", admission.discharge_notes)
+
+    def test_doctor_can_add_new_iv_prescription_while_patient_is_in_active_nursing_care(self):
+        doctor = self.User.objects.create_user(
+            username="doctor_iv_addon",
+            password="StrongPass123!",
+            role=self.User.ROLE_DOCTOR,
+            hospital=self.hospital,
+        )
+        self.client.force_login(doctor)
+
+        admission = NursingAdmission.objects.create(
+            visit=self.visit,
+            hospital=self.hospital,
+            admitted_by=self.nurse,
+        )
+
+        initial_iv = InventoryItem.objects.create(
+            hospital=self.hospital,
+            name="Initial IV Medication",
+            category=InventoryItem.CATEGORY_IV_MED,
+            unit="vial",
+            base_unit="vial",
+            units_per_pack=Decimal("1"),
+            current_quantity=Decimal("5"),
+            unit_cost=Decimal("100.00"),
+            selling_price=Decimal("400.00"),
+            reorder_level=Decimal("1"),
+        )
+        InventoryBatch.objects.create(
+            item=initial_iv,
+            batch_number="INIT-001",
+            quantity="5",
+            expiry_date="2028-01-31",
+            unit_cost="100.00",
+        )
+        initial_iv.recalculate_current_quantity()
+        initial_rx = Prescription.objects.create(
+            visit=self.visit,
+            drug=initial_iv,
+            dosage_mg="250",
+            frequency_per_day=1,
+            duration_days=1,
+            prescribed_by=doctor,
+            nursing_managed=True,
+        )
+        NursingCareItem.objects.create(
+            admission=admission,
+            prescription=initial_rx,
+            doses_planned=1,
+            per_dose_quantity=Decimal("250"),
+        )
+
+        new_iv = InventoryItem.objects.create(
+            hospital=self.hospital,
+            name="Add-on IV Antibiotic",
+            category=InventoryItem.CATEGORY_IV_MED,
+            unit="vial",
+            base_unit="vial",
+            units_per_pack=Decimal("1"),
+            current_quantity=Decimal("3"),
+            unit_cost=Decimal("200.00"),
+            selling_price=Decimal("800.00"),
+            reorder_level=Decimal("1"),
+        )
+        InventoryBatch.objects.create(
+            item=new_iv,
+            batch_number="ADD-001",
+            quantity="3",
+            expiry_date="2028-01-31",
+            unit_cost="200.00",
+        )
+        new_iv.recalculate_current_quantity()
+
+        response = self.client.post(
+            reverse("add_prescription_api", args=[self.visit.pk]),
+            {
+                "drug_id": new_iv.pk,
+                "dosage_mg": "250",
+                "frequency_per_day": "1",
+                "duration_days": "1",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        new_rx = Prescription.objects.get(visit=self.visit, drug=new_iv)
+        self.assertTrue(new_rx.nursing_managed)
+        self.assertTrue(admission.care_items.filter(prescription=new_rx).exists())
 
     def test_nurse_cannot_dispense_when_insufficient_stock(self):
         # Zero the batch first, then recalculate — avoids the InventoryItem.save()
