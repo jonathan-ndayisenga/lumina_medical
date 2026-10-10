@@ -895,6 +895,21 @@ class SonographerReceptionApprovalTests(TestCase):
         ).first()
         self.assertIsNotNone(reception_entry, "the visit must land in reception's queue for approval")
 
+    def test_doctor_can_submit_decimal_glucose_reading(self):
+        self.client.force_login(self.doctor)
+        response = self.client.post(
+            reverse("consultation", args=[self.visit.pk]),
+            {
+                "weight_kg": "60.0", "bp_systolic": "120", "bp_diastolic": "80", "pulse": "78",
+                "respiratory_rate": "18", "temperature_celsius": "36.7", "glucose_mg_dl": "98.6",
+                "oxygen_saturation": "99", "signs_symptoms": "Abdominal pain", "diagnosis": "Rule out gallstones",
+                "treatment": "Ultrasound requested", "follow_up_date": "", "send_to_sonographer": "on",
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        self.visit.refresh_from_db()
+        self.assertEqual(self.visit.triage.glucose_mg_dl, Decimal("98.6"))
+
     def test_reception_approve_scan_then_routes_to_sonographer_queue(self):
         self.client.force_login(self.doctor)
         self.client.post(

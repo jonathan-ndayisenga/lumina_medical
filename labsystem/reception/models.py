@@ -1,3 +1,4 @@
+import re
 from decimal import Decimal
 
 from django.conf import settings
@@ -15,14 +16,19 @@ def hospital_initials(name: str, fallback: str = "RCT") -> str:
     'Home_care'               -> 'HC'  (splits on underscore/hyphen too)
     Words like 'and', 'the', 'of' are skipped.
     """
-    import re
     stop = {"and", "the", "of", "a", "an", "for", "in", "at", "by"}
-    # Split on spaces, underscores, and hyphens
     parts = re.split(r"[\s_\-]+", name or "")
     initials = "".join(
         w[0].upper() for w in parts if w and w.lower() not in stop and w[0].isalpha()
     )
     return initials or fallback
+
+
+def format_doctor_name(name: str) -> str:
+    if not name:
+        return ""
+    cleaned = re.sub(r"^(?:dr\.?|doctor)\s*", "", name.strip(), flags=re.IGNORECASE).strip()
+    return f"Dr. {cleaned}" if cleaned else ""
 
 
 class Patient(models.Model):
@@ -349,7 +355,7 @@ class Triage(models.Model):
     respiratory_rate = models.IntegerField(null=True, blank=True)  # breaths per minute
     temperature_celsius = models.DecimalField(max_digits=4, decimal_places=1, null=True, blank=True)
     oxygen_saturation = models.IntegerField(null=True, blank=True)  # SpO2 %
-    glucose_mg_dl = models.IntegerField(null=True, blank=True)
+    glucose_mg_dl = models.DecimalField(max_digits=5, decimal_places=1, null=True, blank=True)
     recorded_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
@@ -565,13 +571,13 @@ class VisitService(models.Model):
             return "Self-requested"
         if self.requested_by_type == self.REQUESTED_BY_INTERNAL_DOCTOR:
             if self.requested_by_user_id:
-                return f"Dr. {self.requested_by_user.get_full_name() or self.requested_by_user.username}"
+                return format_doctor_name(self.requested_by_user.get_full_name() or self.requested_by_user.username)
             return "Doctor (this facility)"
         if self.requested_by_type == self.REQUESTED_BY_EXTERNAL_DOCTOR:
-            name = self.external_requester_name or "External doctor"
+            name = format_doctor_name(self.external_requester_name or "External doctor")
             if self.external_requester_facility:
-                return f"Dr. {name} — {self.external_requester_facility}"
-            return f"Dr. {name}"
+                return f"{name} — {self.external_requester_facility}"
+            return name
         return ""
 
 

@@ -935,6 +935,32 @@ class ReceptionVisitFormTests(TestCase):
         self.assertEqual(visit_service.external_requester_facility, "St. Mary's Clinic, Mbarara")
         self.assertEqual(visit_service.requested_by_display, "Dr. Amina Okello — St. Mary's Clinic, Mbarara")
 
+    def test_internal_doctor_request_display_does_not_repeat_dr_prefix(self):
+        doctor = User.objects.create_user(
+            username="doctor_double_prefix",
+            password="StrongPass123!",
+            role=User.ROLE_DOCTOR,
+            hospital=self.hospital,
+            first_name="Amina",
+            last_name="Okello",
+        )
+        visit = Visit.objects.create(
+            patient=self.patient,
+            hospital=self.hospital,
+            visit_type=Visit.TYPE_NORMAL,
+            status=Visit.STATUS_IN_PROGRESS,
+        )
+        lab_service = Service.objects.get(name="CBC")
+        visit_service = VisitService.objects.create(
+            visit=visit,
+            service=lab_service,
+            price_at_time=Decimal("30.00"),
+            requested_by_type=VisitService.REQUESTED_BY_INTERNAL_DOCTOR,
+            requested_by_user=doctor,
+        )
+        self.assertEqual(doctor.get_full_name(), "Dr. Amina Okello")
+        self.assertEqual(visit_service.requested_by_display, "Dr. Amina Okello")
+
     def test_non_lab_service_never_gets_requester_fields(self):
         consult_service = Service.objects.get(name="Consultation")
         lab_service = Service.objects.get(name="CBC")

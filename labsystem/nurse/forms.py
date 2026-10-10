@@ -41,7 +41,7 @@ class TriageForm(forms.ModelForm):
             "respiratory_rate": forms.NumberInput(attrs={"class": "form-control"}),
             "temperature_celsius": forms.NumberInput(attrs={"class": "form-control", "step": "0.1"}),
             "oxygen_saturation": forms.NumberInput(attrs={"class": "form-control"}),
-            "glucose_mg_dl": forms.NumberInput(attrs={"class": "form-control"}),
+            "glucose_mg_dl": forms.NumberInput(attrs={"class": "form-control", "step": "0.1"}),
         }
 
     def __init__(self, *args, **kwargs):

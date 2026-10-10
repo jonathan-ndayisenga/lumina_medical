@@ -1,3 +1,5 @@
+import re
+
 from django.conf import settings
 from django.contrib.auth.models import AbstractUser
 from django.templatetags.static import static
@@ -332,7 +334,8 @@ class User(AbstractUser):
 
     def get_full_name(self):
         full = f"{self.first_name} {self.last_name}".strip()
-        if self.role == self.ROLE_DOCTOR and full and not full.startswith("Dr."):
+        full = re.sub(r"^(?:dr\.?|doctor)\s*", "", full, flags=re.IGNORECASE).strip()
+        if self.role == self.ROLE_DOCTOR and full:
             return f"Dr. {full}"
         return full or self.username
 

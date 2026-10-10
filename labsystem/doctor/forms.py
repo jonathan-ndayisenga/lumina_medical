@@ -12,7 +12,7 @@ class ConsultationForm(forms.ModelForm):
     respiratory_rate = forms.IntegerField(label="Respiratory Rate", required=False)
     temperature_celsius = forms.DecimalField(label="Temperature (C)", required=False)
     oxygen_saturation = forms.IntegerField(label="SpO2 (%)", required=False)
-    glucose_mg_dl = forms.IntegerField(label="Glucose (mg/dL)", required=False)
+    glucose_mg_dl = forms.DecimalField(label="Glucose (mg/dL)", required=False, max_digits=5, decimal_places=1)
     send_to_nurse = forms.BooleanField(required=False)
     send_to_sonographer = forms.BooleanField(required=False, label="Send to sonographer for scan")
     send_to_reception = forms.BooleanField(required=False, label="Send to reception for billing")
@@ -51,6 +51,9 @@ class ConsultationForm(forms.ModelForm):
             "glucose_mg_dl",
         ):
             self.fields[field_name].widget.attrs.update({"class": "form-control"})
+        self.fields["weight_kg"].widget.attrs.update({"step": "0.01"})
+        self.fields["temperature_celsius"].widget.attrs.update({"step": "0.1"})
+        self.fields["glucose_mg_dl"].widget.attrs.update({"step": "0.1"})
 
         # Prefer existing Triage values; fall back to legacy Consultation.vitals.
         if self._triage_instance is not None and getattr(self._triage_instance, "pk", None):
