@@ -2,6 +2,7 @@ from datetime import date
 from decimal import Decimal
 
 from django.conf import settings
+from django.core.files.base import ContentFile
 from django.test import TestCase
 from django.urls import reverse
 
@@ -121,6 +122,21 @@ class QuotationTests(TestCase):
         )
         self.client.force_login(outsider)
         self.assertEqual(self.client.get(reverse("books:quotation_list")).status_code, 403)
+
+    def test_books_print_context_prefers_linked_hospital_logo(self):
+        from books import documents
+
+        hospital = Hospital.objects.create(name="Lumina Medical Centre", subdomain="lumina-medical")
+        hospital.logo.save("hospital-logo.png", ContentFile(b"fake-png-data"), save=False)
+        company = CompanySettings.load()
+        company.logo.save("company-logo.png", ContentFile(b"fake-company-data"), save=False)
+        company.save()
+        client = Client.objects.create(name="Western Labs", hospital=hospital)
+        invoice = Invoice.objects.create(client=client, currency="UGX")
+
+        context = documents.invoice_context(invoice)
+        self.assertEqual(context["company"]["logo"], hospital.logo)
+        self.assertNotEqual(context["company"]["logo"], company.logo)
 
     def test_amount_in_words(self):
         self.assertEqual(amount_in_words(3400000), "Three Million, Four Hundred Thousand Uganda Shillings only.")

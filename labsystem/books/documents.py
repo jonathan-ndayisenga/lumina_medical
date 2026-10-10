@@ -7,8 +7,13 @@ from . import reports
 from .document_models import CompanySettings
 
 
-def _company_block():
+def _company_block(hospital=None):
     settings_row = CompanySettings.load()
+    logo = None
+    if hospital and getattr(hospital, "logo", None):
+        logo = hospital.logo
+    elif settings_row.logo:
+        logo = settings_row.logo
     return {
         "legal_name": settings_row.legal_name,
         "trading_name": settings_row.trading_name,
@@ -19,7 +24,7 @@ def _company_block():
         "city": settings_row.city,
         "phone": settings_row.phone,
         "email": settings_row.email,
-        "logo": settings_row.logo,
+        "logo": logo,
         "bank_name": settings_row.bank_name,
         "bank_account_name": settings_row.bank_account_name,
         "bank_account_number": settings_row.bank_account_number,
@@ -50,8 +55,9 @@ def format_money(value, currency="UGX") -> str:
 
 def invoice_context(invoice) -> dict:
     settings_row = CompanySettings.load()
+    hospital = getattr(invoice.client, "hospital", None)
     return {
-        "company": _company_block(),
+        "company": _company_block(hospital),
         "client": _client_block(invoice.client),
         "heading": settings_row.invoice_heading,
         "number": invoice.number,
@@ -88,8 +94,9 @@ def invoice_context(invoice) -> dict:
 
 def receipt_context(payment) -> dict:
     settings_row = CompanySettings.load()
+    hospital = getattr(payment.client, "hospital", None)
     return {
-        "company": _company_block(),
+        "company": _company_block(hospital),
         "client": _client_block(payment.client),
         "receipt_number": payment.receipt_number,
         "date": payment.date,
@@ -111,8 +118,9 @@ def receipt_context(payment) -> dict:
 
 def statement_context(client, start=None, end=None) -> dict:
     statement = reports.client_statement(client, start, end)
+    hospital = getattr(client, "hospital", None)
     return {
-        "company": _company_block(),
+        "company": _company_block(hospital),
         "client": _client_block(client),
         "start": start,
         "end": end,
@@ -157,7 +165,7 @@ def quotation_context(quotation) -> dict:
     from .quotation_models import QuotationField, QuotationSettings
 
     values = {fv.field_id: fv.value for fv in quotation.field_values.all()}
-    company = _company_block()
+    company = _company_block(getattr(quotation.client, "hospital", None))
     settings_row = CompanySettings.load()
     preparer = quotation.prepared_by
     # Header lettering like the PDF: "TERNAH" big, "SOFTWARE COMPANY LTD" small.
@@ -168,7 +176,7 @@ def quotation_context(quotation) -> dict:
         "brand_name": brand_name,
         "brand_sub": brand_sub or settings_row.tagline,
         "reg_no": settings_row.company_reg_no,
-        "logo_url": settings_row.logo.url if settings_row.logo else "",
+        "logo_url": company["logo"].url if company.get("logo") else "",
         "client": _client_block(quotation.client),
         "number": quotation.number,
         "subtitle": quotation.subtitle,
