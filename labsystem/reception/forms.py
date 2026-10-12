@@ -53,10 +53,12 @@ class PatientForm(forms.ModelForm):
             "weight_kg",
             "sex",
             "contact",
-            "email",
             "address",
+            "email",
             "next_of_kin",
             "next_of_kin_contact",
+            "next_of_kin_email",
+            "next_of_kin_address",
             "nin",
             "id_verified",
             "insurance_provider",
@@ -67,10 +69,12 @@ class PatientForm(forms.ModelForm):
             "weight_kg": forms.NumberInput(attrs={"class": "form-control", "step": "0.01", "placeholder": "Weight (kg)"}),
             "sex": forms.Select(attrs={"class": "form-control"}),
             "contact": forms.TextInput(attrs={"class": "form-control"}),
-            "email": forms.EmailInput(attrs={"class": "form-control"}),
             "address": forms.TextInput(attrs={"class": "form-control"}),
+            "email": forms.EmailInput(attrs={"class": "form-control"}),
             "next_of_kin": forms.TextInput(attrs={"class": "form-control"}),
             "next_of_kin_contact": forms.TextInput(attrs={"class": "form-control"}),
+            "next_of_kin_email": forms.EmailInput(attrs={"class": "form-control"}),
+            "next_of_kin_address": forms.TextInput(attrs={"class": "form-control"}),
             "nin": forms.TextInput(attrs={"class": "form-control"}),
             "id_verified": forms.CheckboxInput(attrs={"class": "form-checkbox"}),
             "insurance_provider": forms.TextInput(attrs={"class": "form-control"}),
@@ -82,6 +86,12 @@ class PatientForm(forms.ModelForm):
         self.fields["age_value"].widget.attrs.update({"class": "form-control"})
         self.fields["age_unit"].widget.attrs.update({"class": "form-control"})
         self.fields["date_of_birth"].widget.attrs.update({"class": "form-control"})
+        self.fields["address"].label = "Patient Address"
+        self.fields["email"].label = "Patient Email"
+        self.fields["email"].help_text = "If the patient has no personal email, record the next of kin email here."
+        self.fields["next_of_kin_email"].label = "Next of Kin Email"
+        self.fields["next_of_kin_address"].label = "Next of Kin Address"
+        self.fields["next_of_kin_address"].help_text = "Residential address of the next of kin for emergency contact." 
         if not self.is_bound and not self.instance.pk and "registration_date" not in self.initial:
             self.initial["registration_date"] = timezone.localdate()
         age_value, age_unit = split_age(self.instance.age if self.instance.pk else self.initial.get("age"))

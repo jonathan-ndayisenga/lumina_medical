@@ -1980,6 +1980,52 @@ class PatientAgeDisplayTests(TestCase):
         self.assertNotIn("1YRS", body)
 
 
+class PatientRegistrationAddressTests(TestCase):
+    def setUp(self):
+        plan = SubscriptionPlan.objects.create(
+            name="Address Capture", price_monthly=Decimal("0.00"), price_yearly=Decimal("0.00"),
+        )
+        self.hospital = Hospital.objects.create(
+            name="Lumina Address Hospital", subdomain="lumina-address-capture", subscription_plan=plan,
+        )
+        _enable_modules(self.hospital, "reception")
+        self.receptionist = User.objects.create_user(
+            username="addressdesk", password="pass12345",
+            role=User.ROLE_RECEPTIONIST, hospital=self.hospital, is_active=True,
+        )
+        self.client.force_login(self.receptionist)
+
+    def test_registration_form_keeps_address_visible_and_labels_next_of_kin_fields(self):
+        body = self.client.get(reverse("patient_create")).content.decode()
+        self.assertIn("Patient Address", body)
+        self.assertIn("Patient Email", body)
+        self.assertIn("Next of Kin Details", body)
+        self.assertIn("Next of Kin Address", body)
+        self.assertIn("Next of Kin Email", body)
+
+    def test_registration_saves_patient_and_next_of_kin_address_data(self):
+        payload = {
+            "name": "Address Capture Patient",
+            "registration_date": timezone.localdate().isoformat(),
+            "sex": "F",
+            "contact": "0777000000",
+            "address": "Kampala, Uganda",
+            "email": "patient@example.org",
+            "next_of_kin": "Jane Doe",
+            "next_of_kin_contact": "0777111111",
+            "next_of_kin_email": "kin@example.org",
+            "next_of_kin_address": "Mbarara, Uganda",
+            "age_value": "30",
+            "age_unit": "YRS",
+        }
+        response = self.client.post(reverse("patient_create"), payload, follow=True)
+        self.assertEqual(response.status_code, 200)
+        patient = Patient.objects.get(name="Address Capture Patient")
+        self.assertEqual(patient.address, "Kampala, Uganda")
+        self.assertEqual(patient.next_of_kin_address, "Mbarara, Uganda")
+        self.assertEqual(patient.next_of_kin_email, "kin@example.org")
+
+
 class PatientListOrderingTests(TestCase):
     """A returning patient's newest visit, not their original registration
     date, decides where they sit on the Patients list -- coming back for a

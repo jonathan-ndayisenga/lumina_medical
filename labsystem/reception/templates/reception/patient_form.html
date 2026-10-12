@@ -133,28 +133,31 @@
             </div>
 
             <div class="md:col-span-2">
-                <label for="{{ form.contact.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">Contact</label>
+                <label for="{{ form.contact.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">Contact Number</label>
                 {{ form.contact }}
                 {% for error in form.contact.errors %}<div class="text-xs text-red-600 mt-1">{{ error }}</div>{% endfor %}
             </div>
 
             <div class="md:col-span-2">
-                <label for="{{ form.email.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">Email (optional)</label>
+                <label for="{{ form.address.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">Patient Address</label>
+                {{ form.address }}
+                <p class="mt-1 text-xs text-text-muted">This is the patient’s residential address for demographic reporting and follow-up.</p>
+                {% for error in form.address.errors %}<div class="text-xs text-red-600 mt-1">{{ error }}</div>{% endfor %}
+            </div>
+
+            <div class="md:col-span-2">
+                <label for="{{ form.email.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">Patient Email</label>
                 {{ form.email }}
+                {% if form.email.help_text %}<p class="mt-1 text-xs text-text-muted">{{ form.email.help_text }}</p>{% endif %}
                 {% for error in form.email.errors %}<div class="text-xs text-red-600 mt-1">{{ error }}</div>{% endfor %}
             </div>
         </div>
 
         <details class="rounded-lg border border-gray-200 bg-gray-50 p-4" {% if edit_mode %}open{% endif %}>
-            <summary class="cursor-pointer text-sm font-semibold text-text-main">Address & Emergency Contact</summary>
+            <summary class="cursor-pointer text-sm font-semibold text-text-main">Next of Kin Details</summary>
             <div class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div class="md:col-span-2">
-                    <label for="{{ form.address.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">Address</label>
-                    {{ form.address }}
-                    {% for error in form.address.errors %}<div class="text-xs text-red-600 mt-1">{{ error }}</div>{% endfor %}
-                </div>
                 <div>
-                    <label for="{{ form.next_of_kin.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">Next of Kin</label>
+                    <label for="{{ form.next_of_kin.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">Next of Kin Name</label>
                     {{ form.next_of_kin }}
                     {% for error in form.next_of_kin.errors %}<div class="text-xs text-red-600 mt-1">{{ error }}</div>{% endfor %}
                 </div>
@@ -162,6 +165,17 @@
                     <label for="{{ form.next_of_kin_contact.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">Next of Kin Contact</label>
                     {{ form.next_of_kin_contact }}
                     {% for error in form.next_of_kin_contact.errors %}<div class="text-xs text-red-600 mt-1">{{ error }}</div>{% endfor %}
+                </div>
+                <div>
+                    <label for="{{ form.next_of_kin_email.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">Next of Kin Email</label>
+                    {{ form.next_of_kin_email }}
+                    {% for error in form.next_of_kin_email.errors %}<div class="text-xs text-red-600 mt-1">{{ error }}</div>{% endfor %}
+                </div>
+                <div>
+                    <label for="{{ form.next_of_kin_address.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">Next of Kin Address</label>
+                    {{ form.next_of_kin_address }}
+                    {% if form.next_of_kin_address.help_text %}<p class="mt-1 text-xs text-text-muted">{{ form.next_of_kin_address.help_text }}</p>{% endif %}
+                    {% for error in form.next_of_kin_address.errors %}<div class="text-xs text-red-600 mt-1">{{ error }}</div>{% endfor %}
                 </div>
             </div>
         </details>

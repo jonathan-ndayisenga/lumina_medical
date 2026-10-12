@@ -7,9 +7,91 @@
 {% block content %}
 <div class="space-y-8">
 
+    <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
+        <a href="#patient-reports" class="card hover:shadow-md transition-shadow cursor-pointer group">
+            <div class="flex items-start gap-4">
+                <div class="w-12 h-12 rounded-2xl bg-violet-50 flex items-center justify-center flex-shrink-0">
+                    <svg class="w-6 h-6 text-violet-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/>
+                    </svg>
+                </div>
+                <div class="flex-1">
+                    <div class="flex items-center justify-between gap-3">
+                        <h2 class="text-lg font-bold text-text-main group-hover:text-violet-600 transition-colors">Patient Reports</h2>
+                        <span class="text-[10px] font-semibold uppercase tracking-[0.2em] text-violet-600 bg-violet-50 px-2 py-1 rounded-full">Overview</span>
+                    </div>
+                    <p class="text-xs text-text-muted mt-2">Patient activity, visit flow, and patient-level reporting across the care journey.</p>
+                </div>
+            </div>
+        </a>
+
+        <a href="#clinical-reports" class="card hover:shadow-md transition-shadow cursor-pointer group">
+            <div class="flex items-start gap-4">
+                <div class="w-12 h-12 rounded-2xl bg-blue-50 flex items-center justify-center flex-shrink-0">
+                    <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
+                    </svg>
+                </div>
+                <div class="flex-1">
+                    <div class="flex items-center justify-between gap-3">
+                        <h2 class="text-lg font-bold text-text-main group-hover:text-blue-600 transition-colors">Clinical Reports</h2>
+                        <span class="text-[10px] font-semibold uppercase tracking-[0.2em] text-blue-600 bg-blue-50 px-2 py-1 rounded-full">Doctor</span>
+                    </div>
+                    <p class="text-xs text-text-muted mt-2">Consultation activity, provider metrics, and clinical performance insights.</p>
+                </div>
+            </div>
+        </a>
+    </div>
+
+    <!-- ── Patient Reports ── -->
+    <div id="patient-reports" class="pt-8">
+        <h2 class="text-sm font-bold uppercase tracking-widest text-text-muted mb-4">Patient Reports</h2>
+        <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+            <a href="{% url 'report_list' %}" class="card hover:shadow-md transition-shadow cursor-pointer group">
+                <div class="flex items-start gap-4">
+                    <div class="w-10 h-10 rounded-xl bg-violet-50 flex items-center justify-center flex-shrink-0">
+                        <svg class="w-5 h-5 text-violet-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
+                        </svg>
+                    </div>
+                    <div>
+                        <h3 class="text-sm font-bold text-text-main group-hover:text-violet-600 transition-colors">Patient Activity Report</h3>
+                        <p class="text-xs text-text-muted mt-1">Recent patient lab activity, test history, and patient-level reporting details.</p>
+                    </div>
+                </div>
+            </a>
+            <a href="{% url 'report_list' %}" class="card hover:shadow-md transition-shadow cursor-pointer group">
+                <div class="flex items-start gap-4">
+                    <div class="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center flex-shrink-0">
+                        <svg class="w-5 h-5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/>
+                        </svg>
+                    </div>
+                    <div>
+                        <h3 class="text-sm font-bold text-text-main group-hover:text-violet-600 transition-colors">Patient Demographic Report</h3>
+                        <p class="text-xs text-text-muted mt-1">Address, locality, age, and population profile insights for catchment analysis.</p>
+                    </div>
+                </div>
+            </a>
+            <a href="{% url 'lab_test_volume_report' %}" class="card hover:shadow-md transition-shadow cursor-pointer group">
+                <div class="flex items-start gap-4">
+                    <div class="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center flex-shrink-0">
+                        <svg class="w-5 h-5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                        </svg>
+                    </div>
+                    <div>
+                        <h3 class="text-sm font-bold text-text-main group-hover:text-emerald-600 transition-colors">Visit Summary Report</h3>
+                        <p class="text-xs text-text-muted mt-1">Monthly visit patterns, repeat visits, and patient flow by service or attendant.</p>
+                    </div>
+                </div>
+            </a>
+        </div>
+    </div>
+
     <!-- ── Clinical Reports ── -->
-    <div>
-        <h2 class="text-sm font-bold uppercase tracking-widest text-text-muted mb-4">Clinical</h2>
+    <div id="clinical-reports" class="pt-8">
+        <h2 class="text-sm font-bold uppercase tracking-widest text-text-muted mb-4">Clinical Reports</h2>
         <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
             <a href="{% url 'report_consultations' %}" class="card hover:shadow-md transition-shadow cursor-pointer group">
                 <div class="flex items-start gap-4">
@@ -20,8 +102,21 @@
                         </svg>
                     </div>
                     <div>
-                        <h3 class="text-sm font-bold text-text-main group-hover:text-blue-600 transition-colors">Doctor Consultations</h3>
+                        <h3 class="text-sm font-bold text-text-main group-hover:text-blue-600 transition-colors">Provider Activity Report</h3>
                         <p class="text-xs text-text-muted mt-1">All patients seen by doctors — filter by doctor and date range. Export to CSV.</p>
+                    </div>
+                </div>
+            </a>
+            <a href="{% url 'report_consultations' %}" class="card hover:shadow-md transition-shadow cursor-pointer group">
+                <div class="flex items-start gap-4">
+                    <div class="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center flex-shrink-0">
+                        <svg class="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-3-3v6m8-6a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                    </div>
+                    <div>
+                        <h3 class="text-sm font-bold text-text-main group-hover:text-indigo-600 transition-colors">Consultation Reports</h3>
+                        <p class="text-xs text-text-muted mt-1">Summary of consultations, doctor workload, and treatment flow across visits.</p>
                     </div>
                 </div>
             </a>
@@ -34,7 +129,7 @@
                         </svg>
                     </div>
                     <div>
-                        <h3 class="text-sm font-bold text-text-main group-hover:text-emerald-600 transition-colors">Lab Reports</h3>
+                        <h3 class="text-sm font-bold text-text-main group-hover:text-emerald-600 transition-colors">Clinical Performance Report</h3>
                         <p class="text-xs text-text-muted mt-1">Tests performed by type and result breakdown — filter by month or date range.</p>
                     </div>
                 </div>

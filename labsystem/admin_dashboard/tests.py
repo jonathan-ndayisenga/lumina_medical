@@ -712,7 +712,7 @@ class PackageServiceCatalogTests(TestCase):
 
 class HospitalReportsHubTests(TestCase):
     """Hospital Management -> Reports links out to each module's own
-    report -- confirms the Lab Reports card only appears when the
+    report -- confirms the Clinical Performance card only appears when the
     hospital actually has the lab module enabled."""
 
     def setUp(self):
@@ -730,13 +730,13 @@ class HospitalReportsHubTests(TestCase):
         response = self.client.get(reverse("hospital_reports"))
 
         self.assertTrue(response.context["lab_enabled"])
-        self.assertContains(response, "Lab Reports")
+        self.assertContains(response, "Clinical Performance Report")
 
     def test_lab_report_card_hidden_when_lab_module_not_enabled(self):
         response = self.client.get(reverse("hospital_reports"))
 
         self.assertFalse(response.context["lab_enabled"])
-        self.assertNotContains(response, "Lab Reports")
+        self.assertNotContains(response, "Clinical Performance Report")
 
 
 class ConsultationsReportTests(TestCase):

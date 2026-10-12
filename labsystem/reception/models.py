@@ -50,6 +50,8 @@ class Patient(models.Model):
     address = models.CharField(max_length=255, blank=True)
     next_of_kin = models.CharField(max_length=200, blank=True)
     next_of_kin_contact = models.CharField(max_length=50, blank=True)
+    next_of_kin_email = models.EmailField(blank=True)
+    next_of_kin_address = models.CharField(max_length=255, blank=True)
     nin = models.CharField(max_length=50, blank=True, help_text="National Identification Number (optional).")
     id_verified = models.BooleanField(default=False)
     insurance_provider = models.CharField(max_length=200, blank=True)
