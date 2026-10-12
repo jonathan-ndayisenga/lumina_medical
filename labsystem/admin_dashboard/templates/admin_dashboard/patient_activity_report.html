@@ -1,0 +1,108 @@
+{% extends 'base.html' %}
+{% load humanize %}
+{% block title %}Patient Activity Report{% endblock %}
+{% block page_title %}Patient Activity Report{% endblock %}
+{% block page_subtitle %}Hospital-wide visit activity across the selected period.{% endblock %}
+
+{% block content %}
+<div class="space-y-5">
+    <div class="card">
+        <form method="get" class="flex flex-wrap items-end gap-3">
+            <div class="flex flex-col gap-1">
+                <label class="text-xs font-semibold uppercase text-text-muted">From</label>
+                <input type="date" name="start" value="{{ date_start }}" class="form-control">
+            </div>
+            <div class="flex flex-col gap-1">
+                <label class="text-xs font-semibold uppercase text-text-muted">To</label>
+                <input type="date" name="end" value="{{ date_end }}" class="form-control">
+            </div>
+            <div class="flex items-end gap-2">
+                <button type="submit" class="btn btn-primary btn-sm">Apply</button>
+                <a href="{% url 'hospital_reports' %}" class="btn btn-secondary btn-sm">All Reports</a>
+            </div>
+        </form>
+    </div>
+
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div class="card">
+            <p class="text-xs uppercase tracking-wide text-text-muted">Patients with visits</p>
+            <p class="mt-2 text-3xl font-bold text-text-main">{{ patient_rows|length }}</p>
+        </div>
+        <div class="card">
+            <p class="text-xs uppercase tracking-wide text-text-muted">Visits recorded</p>
+            <p class="mt-2 text-3xl font-bold text-text-main">{{ total_visits }}</p>
+        </div>
+        <div class="card">
+            <p class="text-xs uppercase tracking-wide text-text-muted">Total billed</p>
+            <p class="mt-2 text-3xl font-bold text-text-main">UGX {{ total_billed|floatformat:0|intcomma }}</p>
+        </div>
+    </div>
+
+    <div class="card">
+        <h3 class="text-lg font-bold text-text-main mb-4">Monthly visit trend</h3>
+        <div style="height: 260px;">
+            <canvas id="activityChart" aria-label="Patient activity chart" role="img"></canvas>
+        </div>
+    </div>
+
+    <div class="card">
+        <h3 class="text-lg font-bold text-text-main mb-4">Patient activity detail</h3>
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead>
+                    <tr>
+                        <th class="text-left py-2">Patient</th>
+                        <th class="text-right py-2">Visits</th>
+                        <th class="text-right py-2">Last visit</th>
+                        <th class="text-right py-2">Billed</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in patient_rows %}
+                    <tr>
+                        <td class="py-2 font-semibold text-text-main">{{ row.patient__name }}</td>
+                        <td class="py-2 text-right">{{ row.visit_count }}</td>
+                        <td class="py-2 text-right">{{ row.last_visit|date:"d M Y" }}</td>
+                        <td class="py-2 text-right">UGX {{ row.total_amount|floatformat:0|intcomma }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="4" class="py-8 text-center text-text-muted">No visit activity for this period.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+(function () {
+  const data = {{ chart_json|safe }};
+  const ctx = document.getElementById('activityChart');
+  if (!ctx || !data || !data.labels || !data.labels.length) return;
+  new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: data.labels,
+      datasets: [{
+        label: 'Visits',
+        data: data.counts,
+        borderColor: '#4F46E5',
+        backgroundColor: 'rgba(79, 70, 229, 0.15)',
+        fill: true,
+        tension: 0.25,
+        pointRadius: 3,
+      }],
+    },
+    options: {
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        y: { beginAtZero: true, ticks: { precision: 0 } }
+      }
+    }
+  });
+})();
+</script>
+{% endblock %}

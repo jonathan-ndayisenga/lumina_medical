@@ -1,0 +1,120 @@
+{% extends 'base.html' %}
+{% load humanize %}
+{% block title %}Visit Summary Report{% endblock %}
+{% block page_title %}Visit Summary Report{% endblock %}
+{% block page_subtitle %}Monthly case volume, visit status mix, and visit value overview.{% endblock %}
+
+{% block content %}
+<div class="space-y-5">
+    <div class="card">
+        <form method="get" class="flex flex-wrap items-end gap-3">
+            <div class="flex flex-col gap-1">
+                <label class="text-xs font-semibold uppercase text-text-muted">From</label>
+                <input type="date" name="start" value="{{ date_start }}" class="form-control">
+            </div>
+            <div class="flex flex-col gap-1">
+                <label class="text-xs font-semibold uppercase text-text-muted">To</label>
+                <input type="date" name="end" value="{{ date_end }}" class="form-control">
+            </div>
+            <div class="flex items-end gap-2">
+                <button type="submit" class="btn btn-primary btn-sm">Apply</button>
+                <a href="{% url 'hospital_reports' %}" class="btn btn-secondary btn-sm">All Reports</a>
+            </div>
+        </form>
+    </div>
+
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div class="card">
+            <p class="text-xs uppercase tracking-wide text-text-muted">Total visits</p>
+            <p class="mt-2 text-3xl font-bold text-text-main">{{ total_visits }}</p>
+        </div>
+        <div class="card">
+            <p class="text-xs uppercase tracking-wide text-text-muted">Total value</p>
+            <p class="mt-2 text-3xl font-bold text-text-main">UGX {{ total_amount|floatformat:0|intcomma }}</p>
+        </div>
+        <div class="card">
+            <p class="text-xs uppercase tracking-wide text-text-muted">Average visit</p>
+            <p class="mt-2 text-3xl font-bold text-text-main">UGX {{ average_visit_value|floatformat:0|intcomma }}</p>
+        </div>
+    </div>
+
+    <div class="card">
+        <h3 class="text-lg font-bold text-text-main mb-4">Visit trend</h3>
+        <div style="height: 260px;">
+            <canvas id="visitTrendChart" aria-label="Visit trend chart" role="img"></canvas>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 xl:grid-cols-2 gap-5">
+        <div class="card">
+            <h3 class="text-lg font-bold text-text-main mb-4">Visit status overview</h3>
+            <table class="w-full text-sm">
+                <thead>
+                    <tr><th class="text-left">Status</th><th class="text-right">Visits</th></tr>
+                </thead>
+                <tbody>
+                    {% for row in status_summary %}
+                    <tr>
+                        <td class="py-2">{{ row.status }}</td>
+                        <td class="py-2 text-right">{{ row.count }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="2" class="py-8 text-center text-text-muted">No visit statuses recorded.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="card">
+            <h3 class="text-lg font-bold text-text-main mb-4">Recent visits</h3>
+            <table class="w-full text-sm">
+                <thead>
+                    <tr><th class="text-left">Patient</th><th class="text-left">Date</th><th class="text-right">Value</th></tr>
+                </thead>
+                <tbody>
+                    {% for visit in recent_visits %}
+                    <tr>
+                        <td class="py-2">{{ visit.patient.name }}</td>
+                        <td class="py-2">{{ visit.visit_date|date:"d M Y" }}</td>
+                        <td class="py-2 text-right">UGX {{ visit.total_amount|floatformat:0|intcomma }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="3" class="py-8 text-center text-text-muted">No visits found.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+(function () {
+  const data = {{ chart_json|safe }};
+  const ctx = document.getElementById('visitTrendChart');
+  if (!ctx || !data || !data.labels || !data.labels.length) return;
+  new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: data.labels,
+      datasets: [{
+        label: 'Visits',
+        data: data.counts,
+        backgroundColor: '#10B981',
+        borderRadius: 6,
+      }, {
+        label: 'Value (UGX)',
+        data: data.amounts,
+        backgroundColor: '#A7F3D0',
+        borderRadius: 6,
+      }],
+    },
+    options: {
+      maintainAspectRatio: false,
+      scales: {
+        y: { beginAtZero: true }
+      }
+    }
+  });
+})();
+</script>
+{% endblock %}

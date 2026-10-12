@@ -1,11 +1,12 @@
 import shutil
 import tempfile
-from datetime import date
+from datetime import date, datetime, timezone as dt_timezone
 from pathlib import Path
 from unittest.mock import patch
 
 from django.contrib.auth.models import Group
 from django.contrib.auth import get_user_model
+from django.utils import timezone
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.templatetags.static import static
 from django.test import TestCase, override_settings
@@ -738,6 +739,73 @@ class HospitalReportsHubTests(TestCase):
         self.assertFalse(response.context["lab_enabled"])
         self.assertNotContains(response, "Clinical Performance Report")
 
+class HospitalPatientAnalyticsReportTests(TestCase):
+    """Patient-facing analytics should come from patient and visit models,
+    not from lab-specific report links."""
+
+    def setUp(self):
+        from reception.models import Patient, Visit
+
+        self.User = get_user_model()
+        self.hospital = Hospital.objects.create(name="Analytics Hospital", subdomain="analytics-hospital")
+        self.admin_user = self.User.objects.create_user(
+            username="analyticsadmin", password="StrongPass123!",
+            role=self.User.ROLE_HOSPITAL_ADMIN, hospital=self.hospital,
+        )
+        self.client.force_login(self.admin_user)
+        self.Patient = Patient
+        self.Visit = Visit
+
+    def test_patient_activity_report_uses_real_visit_history(self):
+        patient = self.Patient.objects.create(
+            hospital=self.hospital, name="Jane Patient", age="32YRS", sex="F",
+            registration_date=date(2024, 1, 12),
+        )
+        visit = self.Visit.objects.create(
+            patient=patient, hospital=self.hospital, created_by=self.admin_user,
+            status=self.Visit.STATUS_COMPLETED, total_amount=Decimal("120000"),
+        )
+        self.Visit.objects.filter(pk=visit.pk).update(visit_date=datetime(2024, 2, 10, 9, 15, tzinfo=dt_timezone.utc))
+
+        response = self.client.get(reverse("patient_activity_report"), {"start": "2024-01-01", "end": "2024-12-31"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Patient Activity Report")
+        self.assertContains(response, "Jane Patient")
+
+    def test_patient_demographic_report_groups_by_age_band_and_sex(self):
+        self.Patient.objects.create(
+            hospital=self.hospital, name="Baby Patient", age="6MTH", sex="M",
+            registration_date=date(2024, 2, 1),
+        )
+        self.Patient.objects.create(
+            hospital=self.hospital, name="Adult Patient", age="28YRS", sex="F",
+            registration_date=date(2024, 3, 2),
+        )
+
+        response = self.client.get(reverse("patient_demographic_report"), {"start": "2024-01-01", "end": "2024-12-31"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Patient Demographic Report")
+        self.assertContains(response, "Adult")
+        self.assertContains(response, "Baby")
+
+    def test_visit_summary_report_uses_visit_status_and_amounts(self):
+        patient = self.Patient.objects.create(
+            hospital=self.hospital, name="Summary Patient", age="45YRS", sex="M",
+            registration_date=date(2024, 5, 5),
+        )
+        visit = self.Visit.objects.create(
+            patient=patient, hospital=self.hospital, created_by=self.admin_user,
+            status=self.Visit.STATUS_COMPLETED, total_amount=Decimal("50000"),
+        )
+        self.Visit.objects.filter(pk=visit.pk).update(visit_date=datetime(2024, 6, 15, 13, 30, tzinfo=dt_timezone.utc))
+
+        response = self.client.get(reverse("visit_summary_report"), {"start": "2024-01-01", "end": "2024-12-31"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Visit Summary Report")
+        self.assertContains(response, "Completed")
 
 class ConsultationsReportTests(TestCase):
     """Doctor Consultations report: waiting time, what each doctor

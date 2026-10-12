@@ -2486,6 +2486,191 @@ def report_consultations(request):
     return render(request, "admin_dashboard/report_consultations.html", context)
 
 
+@role_required(User.ROLE_HOSPITAL_ADMIN)
+def patient_activity_report(request):
+    hospital = active_hospital(request)
+    start = parse_date_param(request.GET.get("start"), timezone.localdate() - timedelta(days=365))
+    end = parse_date_param(request.GET.get("end"), timezone.localdate())
+
+    qs = (
+        Visit.objects.filter(hospital=hospital, visit_date__date__gte=start, visit_date__date__lte=end)
+        .select_related("patient")
+        .order_by("-visit_date")
+    )
+
+    by_month = (
+        qs.annotate(month=TruncMonth("visit_date"))
+        .values("month")
+        .annotate(total_visits=models.Count("id"))
+        .order_by("month")
+    )
+
+    labels = []
+    counts = []
+    for row in by_month:
+        labels.append(row["month"].strftime("%b %Y") if row["month"] else "Unknown")
+        counts.append(int(row["total_visits"]))
+
+    patient_rows = list(
+        qs.values("patient__id", "patient__name")
+        .annotate(visit_count=models.Count("id"), last_visit=models.Max("visit_date"), total_amount=Sum("total_amount"))
+        .order_by("-last_visit")
+    )
+    total_visits = sum(int(row["visit_count"]) for row in patient_rows)
+    total_billed = sum((row["total_amount"] or Decimal("0")) for row in patient_rows)
+
+    context = hospital_admin_context(
+        request,
+        "hospital_reports",
+        "Patient Activity Report",
+        "Monthly visit activity and the patients with the most recent care episodes.",
+    )
+    context.update({
+        "hospital": hospital,
+        "date_start": start.isoformat(),
+        "date_end": end.isoformat(),
+        "patient_rows": patient_rows,
+        "total_visits": total_visits,
+        "total_billed": total_billed,
+        "chart_json": json.dumps({"labels": labels, "counts": counts}),
+    })
+    return render(request, "admin_dashboard/patient_activity_report.html", context)
+
+
+@role_required(User.ROLE_HOSPITAL_ADMIN)
+def patient_demographic_report(request):
+    hospital = active_hospital(request)
+    start = parse_date_param(request.GET.get("start"), timezone.localdate() - timedelta(days=365))
+    end = parse_date_param(request.GET.get("end"), timezone.localdate())
+
+    patients = Patient.objects.filter(hospital=hospital, registration_date__isnull=False)
+    if start and end:
+        patients = patients.filter(registration_date__gte=start, registration_date__lte=end)
+
+    def age_bucket(patient):
+        dob = patient.date_of_birth
+        if dob:
+            delta = timezone.localdate() - dob
+            years = delta.days // 365
+            if years < 2:
+                return "Baby"
+            if years < 18:
+                return "Child"
+            return "Adult"
+        age_text = (patient.age or "").upper()
+        if re.search(r"\b\d+\s*(MTH|MONTHS|MONTH)\b", age_text):
+            return "Baby"
+        if re.search(r"\b\d+\s*(WK|WKS|WEEK|WEEKS|DAY|DAYS)\b", age_text):
+            return "Baby"
+        match = re.search(r"\b(\d+)\s*YRS?\b", age_text)
+        if match:
+            age_years = int(match.group(1))
+            if age_years < 2:
+                return "Baby"
+            if age_years < 18:
+                return "Child"
+            return "Adult"
+        return "Adult"
+
+    age_rows = []
+    age_summary = {"Adult": 0, "Child": 0, "Baby": 0}
+    sex_summary = {"Male": 0, "Female": 0, "Other": 0}
+    address_summary = {}
+
+    for patient in patients:
+        bucket = age_bucket(patient)
+        age_summary[bucket] = age_summary.get(bucket, 0) + 1
+        sex_label = {"M": "Male", "F": "Female", "O": "Other"}.get(patient.sex, "Other")
+        sex_summary[sex_label] = sex_summary.get(sex_label, 0) + 1
+        raw_address = (patient.address or "").strip()
+        locality = raw_address.split(",")[-1].strip() if raw_address else "Not provided"
+        if not locality:
+            locality = "Not provided"
+        address_summary[locality] = address_summary.get(locality, 0) + 1
+
+    for label in ["Adult", "Child", "Baby"]:
+        age_rows.append({"label": label, "count": age_summary.get(label, 0)})
+
+    sex_rows = [{"label": label, "count": count} for label, count in sex_summary.items() if count]
+    address_rows = [{"label": label, "count": count} for label, count in sorted(address_summary.items(), key=lambda item: (-item[1], item[0]))]
+
+    context = hospital_admin_context(
+        request,
+        "hospital_reports",
+        "Patient Demographic Report",
+        "Population profile grouped by age band, sex, and recorded location.",
+    )
+    context.update({
+        "hospital": hospital,
+        "date_start": start.isoformat(),
+        "date_end": end.isoformat(),
+        "age_rows": age_rows,
+        "sex_rows": sex_rows,
+        "address_rows": address_rows,
+        "total_patients": patients.count(),
+    })
+    return render(request, "admin_dashboard/patient_demographic_report.html", context)
+
+
+@role_required(User.ROLE_HOSPITAL_ADMIN)
+def visit_summary_report(request):
+    hospital = active_hospital(request)
+    start = parse_date_param(request.GET.get("start"), timezone.localdate() - timedelta(days=365))
+    end = parse_date_param(request.GET.get("end"), timezone.localdate())
+
+    qs = (
+        Visit.objects.filter(hospital=hospital, visit_date__date__gte=start, visit_date__date__lte=end)
+        .select_related("patient")
+        .order_by("-visit_date")
+    )
+
+    by_month = (
+        qs.annotate(month=TruncMonth("visit_date"))
+        .values("month")
+        .annotate(visit_count=models.Count("id"), total_amount=Sum("total_amount"))
+        .order_by("month")
+    )
+
+    status_counts = list(qs.values("status").annotate(count=models.Count("id")).order_by("-count"))
+    status_lookup = {code: label for code, label in Visit.STATUS_CHOICES}
+    status_summary = [
+        {"status": status_lookup.get(row["status"], row["status"]), "count": row["count"]}
+        for row in status_counts
+    ]
+    total_visits = qs.count()
+    total_amount = qs.aggregate(total=Sum("total_amount"))["total"] or Decimal("0")
+    average_visit_value = (total_amount / total_visits) if total_visits else Decimal("0")
+
+    labels = []
+    counts = []
+    amounts = []
+    for row in by_month:
+        labels.append(row["month"].strftime("%b %Y") if row["month"] else "Unknown")
+        counts.append(int(row["visit_count"]))
+        amounts.append(float(row["total_amount"] or 0))
+
+    recent_visits = list(qs[:10])
+
+    context = hospital_admin_context(
+        request,
+        "hospital_reports",
+        "Visit Summary Report",
+        "Operational snapshot of visit volume, status mix, and cumulative value across the selected period.",
+    )
+    context.update({
+        "hospital": hospital,
+        "date_start": start.isoformat(),
+        "date_end": end.isoformat(),
+        "total_visits": total_visits,
+        "total_amount": total_amount,
+        "average_visit_value": average_visit_value,
+        "status_summary": status_summary,
+        "chart_json": json.dumps({"labels": labels, "counts": counts, "amounts": amounts}),
+        "recent_visits": recent_visits,
+    })
+    return render(request, "admin_dashboard/visit_summary_report.html", context)
+
+
 @inventory_access_required
 def download_inventory_report(request):
     hospital = active_hospital(request)

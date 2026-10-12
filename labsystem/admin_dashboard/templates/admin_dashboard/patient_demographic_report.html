@@ -1,0 +1,100 @@
+{% extends 'base.html' %}
+{% load humanize %}
+{% block title %}Patient Demographic Report{% endblock %}
+{% block page_title %}Patient Demographic Report{% endblock %}
+{% block page_subtitle %}Registered patient profile by age band, sex, and locality.{% endblock %}
+
+{% block content %}
+<div class="space-y-5">
+    <div class="card">
+        <form method="get" class="flex flex-wrap items-end gap-3">
+            <div class="flex flex-col gap-1">
+                <label class="text-xs font-semibold uppercase text-text-muted">From</label>
+                <input type="date" name="start" value="{{ date_start }}" class="form-control">
+            </div>
+            <div class="flex flex-col gap-1">
+                <label class="text-xs font-semibold uppercase text-text-muted">To</label>
+                <input type="date" name="end" value="{{ date_end }}" class="form-control">
+            </div>
+            <div class="flex items-end gap-2">
+                <button type="submit" class="btn btn-primary btn-sm">Apply</button>
+                <a href="{% url 'hospital_reports' %}" class="btn btn-secondary btn-sm">All Reports</a>
+            </div>
+        </form>
+    </div>
+
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div class="card">
+            <p class="text-xs uppercase tracking-wide text-text-muted">Total patients</p>
+            <p class="mt-2 text-3xl font-bold text-text-main">{{ total_patients }}</p>
+        </div>
+        <div class="card">
+            <p class="text-xs uppercase tracking-wide text-text-muted">Adults</p>
+            <p class="mt-2 text-3xl font-bold text-text-main">{{ age_rows.0.count }}</p>
+        </div>
+        <div class="card">
+            <p class="text-xs uppercase tracking-wide text-text-muted">Children & babies</p>
+            <p class="mt-2 text-3xl font-bold text-text-main">{{ age_rows.1.count|add:age_rows.2.count }}</p>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 xl:grid-cols-3 gap-5">
+        <div class="card">
+            <h3 class="text-lg font-bold text-text-main mb-4">Age bands</h3>
+            <table class="w-full text-sm">
+                <thead>
+                    <tr><th class="text-left">Band</th><th class="text-right">Patients</th></tr>
+                </thead>
+                <tbody>
+                    {% for row in age_rows %}
+                    <tr>
+                        <td class="py-2">{{ row.label }}</td>
+                        <td class="py-2 text-right">{{ row.count }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="2" class="py-8 text-center text-text-muted">No patients in this range.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="card">
+            <h3 class="text-lg font-bold text-text-main mb-4">Sex mix</h3>
+            <table class="w-full text-sm">
+                <thead>
+                    <tr><th class="text-left">Sex</th><th class="text-right">Patients</th></tr>
+                </thead>
+                <tbody>
+                    {% for row in sex_rows %}
+                    <tr>
+                        <td class="py-2">{{ row.label }}</td>
+                        <td class="py-2 text-right">{{ row.count }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="2" class="py-8 text-center text-text-muted">No sex data available.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="card">
+            <h3 class="text-lg font-bold text-text-main mb-4">By locality</h3>
+            <table class="w-full text-sm">
+                <thead>
+                    <tr><th class="text-left">Location</th><th class="text-right">Patients</th></tr>
+                </thead>
+                <tbody>
+                    {% for row in address_rows %}
+                    <tr>
+                        <td class="py-2">{{ row.label }}</td>
+                        <td class="py-2 text-right">{{ row.count }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="2" class="py-8 text-center text-text-muted">No locality data captured.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
