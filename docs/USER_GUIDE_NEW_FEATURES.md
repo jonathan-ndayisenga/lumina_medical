@@ -104,10 +104,10 @@ A follow-up visit has no consultation fee. Reception can't add services when cre
 - If nothing was billed, the billing page shows **Finish Follow-up Visit**. Click it to close the visit; no payment is recorded.
 
 ### Debtors: clearing the reception queue
-**Who:** reception (moves patients), finance (collects and clears).
+**Who:** hospital admin (moves patients early), finance (collects and clears).
 
 A patient whose only remaining step is paying a balance doesn't stay in the reception queue forever:
-- **After 3 days** waiting, a **Move to Debtors** button appears on their queue row. Reception can use it to clear the queue early.
+- **After 3 days** waiting, a **Move to Debtors** button appears on their queue row, **for hospital admins only**. Receptionists don't see it.
 - **After 30 days**, they move to the Debtor Ledger on their own.
 
 Patients with anything else open (lab, doctor, nurse, scan, medicine to dispense) are never moved.

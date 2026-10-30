@@ -379,6 +379,7 @@ def receptionist_queue(request):
     scan_services = list(scan_services_queryset(hospital)) if hospital else []
     queue_entries = list(reception_queue_queryset(hospital)) if hospital else []
     queue_rows = []
+    can_move_debtors = user_can_admin_override(request.user)
     lab_settings_row = LabSettings.objects.filter(hospital=hospital).first() if hospital else None
     lab_payment_required = bool(lab_settings_row and lab_settings_row.payment_required_before_lab)
 
@@ -428,7 +429,7 @@ def receptionist_queue(request):
                 "has_pending_scan_approval": has_pending_scan_approval,
                 "payment_status": payment_status,
                 "balance_due": visit.balance_due,
-                "can_move_to_debtors": debtor_move_available(entry),
+                "can_move_to_debtors": can_move_debtors and debtor_move_available(entry),
                 "billed_service_names": ", ".join(visit.visit_services.values_list("service__name", flat=True)),
                 "selected_consultation_service_id": (
                     pending_consultation_line.service_id
@@ -696,6 +697,8 @@ def receptionist_queue_bill(request, queue_entry_id):
 def receptionist_queue_move_to_debtors(request, queue_entry_id):
     if request.method != "POST":
         raise PermissionDenied("Moving a patient to the Debtor Ledger requires a POST request.")
+    # Only a hospital admin moves patients early; receptionists never see it.
+    require_admin_override(request.user)
     hospital = get_active_hospital(request)
     queue_entry, stale_response = resolve_open_reception_entry(request, hospital, queue_entry_id)
     if stale_response is not None:

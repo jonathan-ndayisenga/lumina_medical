@@ -30,6 +30,11 @@ class _Base(TestCase):
             username="debt-accountant", password="pass12345", role=User.ROLE_ACCOUNTANT,
             hospital=self.hospital, is_active=True,
         )
+        _enable_modules(self.hospital, "hospital_mgmt")
+        self.admin_user = User.objects.create_user(
+            username="debt-admin", password="pass12345", role=User.ROLE_HOSPITAL_ADMIN,
+            hospital=self.hospital, is_active=True,
+        )
         self.doctor = User.objects.create_user(
             username="debt-doctor", password="pass12345", role=User.ROLE_DOCTOR,
             hospital=self.hospital, is_active=True,
@@ -77,14 +82,24 @@ class DebtorQueueTests(_Base):
         self.assertFalse(debtor_move_available(fresh))
         self.assertTrue(debtor_move_available(waited))
 
-        self.client.force_login(self.receptionist)
+        self.client.force_login(self.admin_user)
         response = self.client.get(reverse("reception_queue"))
         self.assertContains(response, reverse("reception_queue_move_to_debtors", args=[waited.pk]))
         self.assertNotContains(response, reverse("reception_queue_move_to_debtors", args=[fresh.pk]))
 
-    def test_reception_moves_patient_to_debtors_after_three_days(self):
-        visit, entry = self._owing_visit(days_waiting=4)
+    def test_receptionist_never_sees_or_uses_move_to_debtors(self):
+        _, waited = self._owing_visit(days_waiting=4)
         self.client.force_login(self.receptionist)
+        response = self.client.get(reverse("reception_queue"))
+        self.assertNotContains(response, reverse("reception_queue_move_to_debtors", args=[waited.pk]))
+        response = self.client.post(reverse("reception_queue_move_to_debtors", args=[waited.pk]))
+        self.assertEqual(response.status_code, 403)
+        waited.refresh_from_db()
+        self.assertFalse(waited.processed)
+
+    def test_admin_moves_patient_to_debtors_after_three_days(self):
+        visit, entry = self._owing_visit(days_waiting=4)
+        self.client.force_login(self.admin_user)
         self.client.post(reverse("reception_queue_move_to_debtors", args=[entry.pk]))
 
         entry.refresh_from_db()
@@ -95,7 +110,7 @@ class DebtorQueueTests(_Base):
 
     def test_move_is_refused_before_three_days(self):
         visit, entry = self._owing_visit(days_waiting=1)
-        self.client.force_login(self.receptionist)
+        self.client.force_login(self.admin_user)
         self.client.post(reverse("reception_queue_move_to_debtors", args=[entry.pk]))
         entry.refresh_from_db()
         self.assertFalse(entry.processed)
