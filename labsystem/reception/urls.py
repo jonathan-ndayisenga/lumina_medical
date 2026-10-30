@@ -9,6 +9,7 @@ urlpatterns = [
     path("queue/<int:queue_entry_id>/approve-lab/", views.receptionist_queue_approve_lab, name="reception_queue_approve_lab"),
     path("queue/<int:queue_entry_id>/approve-scan/", views.receptionist_queue_approve_scan, name="reception_queue_approve_scan"),
     path("queue/<int:queue_entry_id>/bill/", views.receptionist_queue_bill, name="reception_queue_bill"),
+    path("queue/<int:queue_entry_id>/move-to-debtors/", views.receptionist_queue_move_to_debtors, name="reception_queue_move_to_debtors"),
     path("queue/<int:queue_entry_id>/send-to-doctor/", views.receptionist_queue_send_to_doctor, name="reception_queue_send_to_doctor"),
     path("queue/<int:queue_entry_id>/send-to-sonographer/", views.receptionist_queue_send_to_sonographer, name="reception_queue_send_to_sonographer"),
     path("queue/<int:queue_entry_id>/send-to-module/", views.receptionist_queue_send_to_module, name="reception_queue_send_to_module"),

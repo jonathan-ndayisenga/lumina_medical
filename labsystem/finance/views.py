@@ -1,15 +1,18 @@
 from datetime import date
 from decimal import Decimal
 
+from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.db import transaction
 from django.db.models import Q, Sum
 from django.http import HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.utils import timezone
 
 from admin_dashboard.forms import ExpenseForm
 from admin_dashboard.models import Expense
-from reception.models import Payment, Visit
+from reception.models import Payment, QueueEntry, Visit
 
 from .accounts_seed import provision_chart_of_accounts
 from .models import Account, JournalEntry, JournalLine
@@ -361,6 +364,41 @@ def cashbook(request):
 # Debtor Ledger
 # ---------------------------------------------------------------------------
 
+DEBT_AGE_BUCKETS = [
+    ("0–30 days", 0, 30),
+    ("31–90 days", 31, 90),
+    ("91–365 days", 91, 365),
+    ("Over a year", 366, None),
+]
+
+
+def _open_debts(hospital):
+    """Every not-terminated, not-cleared visit that still owes money."""
+    visits = (
+        Visit.objects.filter(hospital=hospital, debt_cleared_at__isnull=True)
+        .exclude(status=Visit.STATUS_CANCELLED)
+        .select_related("patient")
+        .prefetch_related("payments", "queue_entries")
+        .order_by("visit_date")
+    )
+    return [v for v in visits if v.balance_due > 0]
+
+
+def _debt_location(visit):
+    """Where the debt is handled. Finance collects only once the visit has
+    left every queue; while it is still queued, reception bills it."""
+    open_queues = {entry.queue_type for entry in visit.queue_entries.all() if not entry.processed}
+    if not open_queues:
+        return "ledger"
+    if open_queues == {QueueEntry.TYPE_RECEPTION}:
+        return "reception"
+    return "in_progress"
+
+
+def _age_days(visit, today):
+    return (today - timezone.localtime(visit.visit_date).date()).days
+
+
 @login_required
 def debtor_ledger(request):
     guard = _require_finance(request)
@@ -368,20 +406,131 @@ def debtor_ledger(request):
         return guard
 
     hospital = _hospital(request)
-    visits = (
-        Visit.objects.filter(hospital=hospital)
-        .select_related("patient")
-        .prefetch_related("payments", "visit_services")
-        .order_by("patient__name", "-visit_date")
-    )
-    debtors = [v for v in visits if v.balance_due > 0]
-    total_outstanding = sum(v.balance_due for v in debtors)
+    from reception.workflow import sweep_reception_queue_to_debtors
+    sweep_reception_queue_to_debtors(hospital)
+
+    today = timezone.localdate()
+    debtors = _open_debts(hospital)
+    buckets = [{"label": label, "count": 0, "total": Decimal("0")} for label, _, _ in DEBT_AGE_BUCKETS]
+    for visit in debtors:
+        visit.age_days = _age_days(visit, today)
+        visit.location = _debt_location(visit)
+        visit.clearable = visit.age_days > Visit.DEBT_CLEARABLE_AFTER_DAYS
+        for bucket, (_, low, high) in zip(buckets, DEBT_AGE_BUCKETS):
+            if visit.age_days >= low and (high is None or visit.age_days <= high):
+                bucket["count"] += 1
+                bucket["total"] += visit.balance_due
+                break
+    debtors.sort(key=lambda v: (v.patient.name.lower(), v.visit_date))
+    clearable = [v for v in debtors if v.clearable]
 
     return render(request, "finance/debtor_ledger.html", {
         "active_nav": "finance_debtors",
         "hospital": hospital,
         "debtors": debtors,
-        "total_outstanding": total_outstanding,
+        "total_outstanding": sum(v.balance_due for v in debtors),
+        "buckets": buckets,
+        "clearable_count": len(clearable),
+        "clearable_total": sum(v.balance_due for v in clearable),
+        "cleared_count": Visit.objects.filter(hospital=hospital, debt_cleared_at__isnull=False).count(),
+    })
+
+
+@login_required
+def debtor_clear_old(request):
+    """Clear (stop listing) debts more than a year old. Never automatic:
+    finance presses the button. Each balance stays on the visit's record."""
+    guard = _require_finance(request)
+    if guard:
+        return guard
+    if request.method != "POST":
+        return redirect("finance_debtors")
+
+    from accounts.models import AuditLog
+
+    hospital = _hospital(request)
+    today = timezone.localdate()
+    cleared = [v for v in _open_debts(hospital) if _age_days(v, today) > Visit.DEBT_CLEARABLE_AFTER_DAYS]
+    if not cleared:
+        messages.info(request, "No debts older than a year to clear.")
+        return redirect("finance_debtors")
+
+    total = sum(v.balance_due for v in cleared)
+    Visit.objects.filter(pk__in=[v.pk for v in cleared]).update(
+        debt_cleared_at=timezone.now(), debt_cleared_by=request.user,
+    )
+    AuditLog.objects.create(
+        user=request.user, hospital=hospital, action="clear_old_debts", model_name="Visit",
+        object_id=str(len(cleared)),
+        details={"count": len(cleared), "total": str(total), "visit_ids": [v.pk for v in cleared]},
+    )
+    plural = "s" if len(cleared) != 1 else ""
+    messages.success(
+        request,
+        f"Cleared {len(cleared)} debt{plural} older than a year (UGX {total:,.0f}). "
+        "They stay on each patient's record.",
+    )
+    return redirect("finance_debtors")
+
+
+@login_required
+@transaction.atomic
+def debtor_collect(request, visit_id):
+    """Finance collects a debtor's balance, once the visit has left every queue."""
+    guard = _require_finance(request)
+    if guard:
+        return guard
+
+    from reception.forms import CompleteVisitForm
+
+    hospital = _hospital(request)
+    visit = get_object_or_404(
+        Visit.objects.select_related("patient").prefetch_related("visit_services__service", "payments", "queue_entries"),
+        pk=visit_id, hospital=hospital,
+    )
+    if visit.status == Visit.STATUS_CANCELLED or visit.debt_cleared_at or visit.balance_due <= 0:
+        messages.error(request, "This visit has no open debt to collect.")
+        return redirect("finance_debtor_patient", patient_id=visit.patient_id)
+    if _debt_location(visit) != "ledger":
+        messages.error(request, "This patient is still in a queue, so reception bills them there.")
+        return redirect("finance_debtor_patient", patient_id=visit.patient_id)
+
+    if request.method == "POST":
+        form = CompleteVisitForm(request.POST, remaining_balance=visit.balance_due, hospital=hospital)
+        if form.is_valid() and form.cleaned_data["amount_paid"] <= 0:
+            form.add_error("amount_paid", "Enter the amount received.")
+        if form.is_valid():
+            # Cash receipts are mirrored to the daily cash statement in Payment.save().
+            payment = Payment.objects.create(
+                visit=visit,
+                amount=visit.total_amount,
+                amount_paid=form.cleaned_data["amount_paid"],
+                mode=form.cleaned_data["payment_mode"],
+                bank_account=form.cleaned_data["bank_account"],
+                mobile_account=form.cleaned_data["mobile_account"],
+                recorded_by=request.user,
+                notes=form.cleaned_data["payment_notes"] or "Debtor balance collected by finance.",
+            )
+            visit.refresh_from_db()
+            if visit.is_fully_paid:
+                visit.status = Visit.STATUS_COMPLETED
+                visit.save(update_fields=["status"])
+                messages.success(request, f"Payment recorded. {visit.patient.name}'s visit is now fully paid.")
+            else:
+                messages.success(request, f"Payment recorded. Balance still due: UGX {visit.balance_due:,.0f}.")
+            target = reverse("finance_debtor_patient", args=[visit.patient_id])
+            return redirect(f"{target}?receipt={payment.pk}")
+    else:
+        form = CompleteVisitForm(
+            remaining_balance=visit.balance_due, hospital=hospital,
+            initial={"amount_paid": visit.balance_due, "payment_mode": Payment.MODE_CASH},
+        )
+
+    return render(request, "finance/debtor_collect.html", {
+        "active_nav": "finance_debtors",
+        "hospital": hospital,
+        "visit": visit,
+        "form": form,
     })
 
 
@@ -396,14 +545,21 @@ def debtor_patient(request, patient_id):
     patient = get_object_or_404(Patient, pk=patient_id, hospital=hospital)
     visits = (
         Visit.objects.filter(patient=patient, hospital=hospital)
-        .prefetch_related("payments", "visit_services__service")
+        .prefetch_related("payments", "visit_services__service", "queue_entries")
         .order_by("-visit_date")
     )
-    total_billed = sum(v.total_amount for v in visits)
-    total_paid = sum(v.total_paid for v in visits)
-    total_balance = sum(v.balance_due for v in visits)
+    open_visits = [v for v in visits if v.status != Visit.STATUS_CANCELLED and not v.debt_cleared_at]
+    for visit in visits:
+        visit.collectable = visit in open_visits and visit.balance_due > 0 and _debt_location(visit) == "ledger"
+    total_billed = sum(v.total_amount for v in open_visits)
+    total_paid = sum(v.total_paid for v in open_visits)
+    total_balance = sum(v.balance_due for v in open_visits)
+    receipt_payment = None
+    if request.GET.get("receipt", "").isdigit():
+        receipt_payment = Payment.objects.filter(pk=request.GET["receipt"], visit__patient=patient).first()
 
     return render(request, "finance/debtor_patient.html", {
+        "receipt_payment": receipt_payment,
         "active_nav": "finance_debtors",
         "hospital": hospital,
         "patient": patient,

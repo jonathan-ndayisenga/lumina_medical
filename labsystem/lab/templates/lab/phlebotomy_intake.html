@@ -11,7 +11,7 @@
       {% for vs in added_services %}
       <tr>
         <td>{{ vs.service.name }}</td>
-        <td>UGX {{ vs.price_at_time }}</td>
+        <td>{% if vs.is_charged %}UGX {{ vs.price_at_time }}{% else %}{{ vs.billing_label }}{% endif %}</td>
         <td>
           <form method="post" class="inline">
             {% csrf_token %}
@@ -40,8 +40,16 @@
         {% endfor %}
       </select>
     </div>
+    {% if visit.is_follow_up_visit %}
+    <label class="inline-flex items-center gap-2 text-sm font-medium text-blue-800 whitespace-nowrap">
+      <input type="checkbox" name="free_follow_up" value="1" class="h-4 w-4"> Free (follow-up)
+    </label>
+    {% endif %}
     <button type="submit" class="btn btn-secondary">Add</button>
   </form>
+  {% if visit.is_follow_up_visit %}
+  <p class="mt-2 text-xs text-blue-800">Follow-up visit: tests are billed unless you tick "Free (follow-up)" before adding them.</p>
+  {% endif %}
 </div>
 
 <div class="card">

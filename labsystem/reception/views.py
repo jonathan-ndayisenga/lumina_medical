@@ -23,14 +23,17 @@ from .forms import CompleteVisitForm, PatientForm, QuickDispenseStartForm, Visit
 from .models import Patient, Payment, QueueEntry, Service, Triage, Visit, VisitService
 from .workflow import (
     active_package_visit_service,
+    debtor_move_available,
     package_expiry_for,
     ensure_pending_queue_entry,
     mark_queue_entries_processed,
+    move_visit_to_debtors,
     package_services_available_on_visit,
     record_admin_override,
     reception_source_from_entry,
     require_admin_override,
     send_to_reception_queue,
+    sweep_reception_queue_to_debtors,
     sync_visit_status,
     terminate_visit_workflow,
     user_can_admin_override,
@@ -311,7 +314,7 @@ def reception_dashboard(request):
     patients = Patient.objects.filter(hospital=hospital).order_by("-created_at")[:5] if hospital else Patient.objects.none()
     visits = Visit.objects.filter(hospital=hospital).select_related("patient").order_by("-visit_date")[:5] if hospital else Visit.objects.none()
     ready_for_billing = (
-        Visit.objects.filter(hospital=hospital, status=Visit.STATUS_READY_FOR_BILLING)
+        Visit.objects.filter(hospital=hospital, status=Visit.STATUS_READY_FOR_BILLING, moved_to_debtors_at__isnull=True)
         .select_related("patient")
         .annotate(
             undispensed_prescription_count=Count(
@@ -326,13 +329,13 @@ def reception_dashboard(request):
     ready_for_dispense = [visit for visit in ready_for_billing if getattr(visit, "undispensed_prescription_count", 0) > 0]
 
     billing_status_qs = (
-        Visit.objects.filter(hospital=hospital, status=Visit.STATUS_READY_FOR_BILLING)
+        Visit.objects.filter(hospital=hospital, status=Visit.STATUS_READY_FOR_BILLING, moved_to_debtors_at__isnull=True)
         .annotate(_paid_total=Sum("payments__amount_paid", filter=~Q(payments__status="waived")))
         if hospital else Visit.objects.none()
     )
     outstanding_balance_count = billing_status_qs.filter(_paid_total__gt=0).count() if hospital else 0
     unbilled_count = (
-        Visit.objects.filter(hospital=hospital, status=Visit.STATUS_READY_FOR_BILLING).count() - outstanding_balance_count
+        Visit.objects.filter(hospital=hospital, status=Visit.STATUS_READY_FOR_BILLING, moved_to_debtors_at__isnull=True).count() - outstanding_balance_count
         if hospital else 0
     )
 
@@ -365,6 +368,13 @@ def _phlebotomy_enabled_for(hospital):
 @reception_role_required
 def receptionist_queue(request):
     hospital = get_active_hospital(request)
+    auto_moved = sweep_reception_queue_to_debtors(hospital)
+    if auto_moved:
+        messages.info(
+            request,
+            f"{auto_moved} patient{'s' if auto_moved != 1 else ''} who only owed money for "
+            f"{Visit.DEBTOR_AUTO_MOVE_DAYS}+ days moved to the Debtor Ledger.",
+        )
     consultation_services = list(consultation_services_queryset(hospital)) if hospital else []
     scan_services = list(scan_services_queryset(hospital)) if hospital else []
     queue_entries = list(reception_queue_queryset(hospital)) if hospital else []
@@ -418,6 +428,7 @@ def receptionist_queue(request):
                 "has_pending_scan_approval": has_pending_scan_approval,
                 "payment_status": payment_status,
                 "balance_due": visit.balance_due,
+                "can_move_to_debtors": debtor_move_available(entry),
                 "billed_service_names": ", ".join(visit.visit_services.values_list("service__name", flat=True)),
                 "selected_consultation_service_id": (
                     pending_consultation_line.service_id
@@ -678,6 +689,32 @@ def receptionist_queue_bill(request, queue_entry_id):
         else "Visit opened for reception billing.",
     )
     return redirect("complete_visit", visit_id=visit.pk)
+
+
+@reception_role_required
+@transaction.atomic
+def receptionist_queue_move_to_debtors(request, queue_entry_id):
+    if request.method != "POST":
+        raise PermissionDenied("Moving a patient to the Debtor Ledger requires a POST request.")
+    hospital = get_active_hospital(request)
+    queue_entry, stale_response = resolve_open_reception_entry(request, hospital, queue_entry_id)
+    if stale_response is not None:
+        return stale_response
+    if not debtor_move_available(queue_entry):
+        messages.error(
+            request,
+            f"Only patients who just owe money and have waited {Visit.DEBTOR_MANUAL_MOVE_DAYS}+ days "
+            "can be moved to the Debtor Ledger.",
+        )
+        return redirect("reception_queue")
+    visit = queue_entry.visit
+    move_visit_to_debtors(visit, actor=request.user)
+    messages.success(
+        request,
+        f"{visit.patient.name} moved to the Debtor Ledger (balance UGX {visit.balance_due:,.0f}). "
+        "Finance collects the balance from there.",
+    )
+    return redirect("reception_queue")
 
 
 @reception_role_required
@@ -1669,6 +1706,24 @@ def complete_visit(request, visit_id):
         latest_payment = visit.payments.order_by("-paid_at", "-id").first()
         return redirect_to_receipt_overlay(visit, latest_payment)
 
+    if request.method == "POST" and request.POST.get("finish_follow_up_visit"):
+        if not visit.is_follow_up_visit:
+            raise PermissionDenied("Only follow-up visits can be finished without payment from this action.")
+        if visit.balance_due > 0:
+            messages.error(request, "This follow-up visit has billable items. Record the payment to finish it.")
+            return redirect("complete_visit", visit_id=visit.pk)
+        if visit.prescriptions.filter(dispensed=False).exists():
+            messages.error(request, "Dispense the medicine before finishing this follow-up visit.")
+            return redirect("complete_visit", visit_id=visit.pk)
+        if reception_queue_other_open_work(visit).exists():
+            messages.error(request, "This follow-up visit still has work open in another queue.")
+            return redirect("complete_visit", visit_id=visit.pk)
+        visit.status = Visit.STATUS_COMPLETED
+        visit.save(update_fields=["status"])
+        mark_queue_entries_processed(visit=visit, queue_type=QueueEntry.TYPE_RECEPTION)
+        messages.success(request, "Follow-up visit finished. Nothing was billed.")
+        return redirect("patient_visits", patient_id=visit.patient_id)
+
     if request.method == "POST" and request.POST.get("finish_adjustment_visit"):
         if not visit.is_adjustment_visit:
             raise PermissionDenied("Only adjustment visits can be closed without payment from this action.")
@@ -2123,8 +2178,17 @@ def print_receipt(request, visit_id):
     )
 
 
+def reception_or_finance_required(view_func):
+    @login_required
+    def wrapped(request, *args, **kwargs):
+        if getattr(request.user, "can_access_finance", False):
+            return view_func(request, *args, **kwargs)
+        return reception_role_required(view_func)(request, *args, **kwargs)
+    return wrapped
+
+
 @xframe_options_sameorigin
-@reception_role_required
+@reception_or_finance_required
 def print_payment_receipt(request, payment_id):
     """Print a receipt for a specific payment (supports partial payments)."""
     hospital = get_active_hospital(request)
@@ -2159,6 +2223,7 @@ def print_payment_receipt(request, payment_id):
         service_items.append({
             "name": vs.service.name,
             "price": vs.price_at_time,
+            "label": "" if vs.is_charged else vs.billing_label,
         })
 
     walink = ""

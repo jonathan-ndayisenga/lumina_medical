@@ -59,7 +59,7 @@
                             <tr data-visit-service-id="{{ item.pk }}">
                                 <td class="py-3 pr-4 text-text-main">{{ item.service.name }}</td>
                                 <td class="py-3 pr-4 text-text-muted">{{ item.service.get_category_display }}</td>
-                                <td class="py-3 {% if request.user.can_access_hospital_admin %}pr-4{% endif %} text-right text-text-main">{{ item.price_at_time }}</td>
+                                <td class="py-3 {% if request.user.can_access_hospital_admin %}pr-4{% endif %} text-right text-text-main">{{ item.billing_label }}</td>
                                 {% if request.user.can_access_hospital_admin %}
                                 <td class="py-3 text-right">
                                     {% if not item.performed %}
@@ -231,6 +231,16 @@
 
     <div class="card h-fit">
         <h3 class="text-sm font-semibold text-text-main mb-4">Payment Details</h3>
+        {% if visit.is_follow_up_visit and balance_due == 0 %}
+        <div class="card border-2 border-blue-200 bg-blue-50">
+            <h3 class="text-sm font-semibold text-text-main">Follow-up visit: nothing to pay</h3>
+            <p class="text-sm text-text-muted mt-1 mb-3">The doctor gave everything on this follow-up free, so there's no bill. Finish the visit to close it.</p>
+            <form method="post">
+                {% csrf_token %}
+                <button type="submit" name="finish_follow_up_visit" value="1" class="btn btn-primary">Finish Follow-up Visit</button>
+            </form>
+        </div>
+        {% endif %}
         {% if visit.is_adjustment_visit and balance_due == 0 %}
         <form method="post" class="space-y-4">
             {% csrf_token %}

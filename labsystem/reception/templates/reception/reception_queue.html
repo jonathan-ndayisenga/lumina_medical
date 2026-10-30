@@ -130,6 +130,12 @@
                                                 {% csrf_token %}
                                                 <button type="submit" class="btn btn-secondary btn-sm">Finish Visit</button>
                                             </form>
+                                            {% if row.can_move_to_debtors %}
+                                                <form method="post" action="{% url 'reception_queue_move_to_debtors' row.entry.pk %}" onsubmit="return confirm('Move {{ row.visit.patient.name|escapejs }} to the Debtor Ledger? Finance will collect the UGX {{ row.balance_due|floatformat:0 }} balance from there.');">
+                                                    {% csrf_token %}
+                                                    <button type="submit" class="btn btn-secondary btn-sm border-red-200 text-red-700" title="Waiting {{ row.entry.created_at|timesince }} with only a balance left. Moves on its own after 30 days.">Move to Debtors</button>
+                                                </form>
+                                            {% endif %}
                                             <a href="{% url 'view_visit_report' row.visit.pk %}" class="btn btn-secondary btn-sm">Visit Report</a>
                                             {% if request.user.can_access_hospital_admin %}
                                                 <a href="{% url 'visit_terminate' row.visit.pk %}?next={{ request.get_full_path|urlencode }}" class="btn btn-danger btn-sm">Terminate</a>

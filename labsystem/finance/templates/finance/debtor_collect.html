@@ -1,0 +1,47 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}Collect Payment — {{ visit.patient.name }}{% endblock %}
+{% block page_title %}Collect Payment{% endblock %}
+{% block page_subtitle %}{{ visit.patient.name }} · visit of {{ visit.visit_date|date:"M d, Y" }}{% endblock %}
+
+{% block content %}
+<div class="space-y-4 max-w-2xl">
+    <a href="{% url 'finance_debtor_patient' visit.patient_id %}" class="btn btn-secondary">&larr; Patient Ledger</a>
+
+    <div class="grid grid-cols-3 gap-4">
+        <div class="card text-center"><div class="text-xs text-text-muted uppercase font-semibold mb-1">Billed</div><div class="font-bold font-mono">UGX {{ visit.total_amount|floatformat:0|intcomma }}</div></div>
+        <div class="card text-center"><div class="text-xs text-text-muted uppercase font-semibold mb-1">Paid</div><div class="font-bold font-mono text-emerald-700">UGX {{ visit.total_paid|floatformat:0|intcomma }}</div></div>
+        <div class="card text-center"><div class="text-xs text-text-muted uppercase font-semibold mb-1">Balance</div><div class="font-bold font-mono text-red-600">UGX {{ visit.balance_due|floatformat:0|intcomma }}</div></div>
+    </div>
+
+    <form method="post" class="card space-y-4">
+        {% csrf_token %}
+        {% if form.non_field_errors %}<div class="text-sm text-red-600">{{ form.non_field_errors }}</div>{% endif %}
+        {% for field in form %}
+            {% if field.name != 'whatsapp_number' %}
+            <div data-field="{{ field.name }}">
+                <label for="{{ field.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">{{ field.label }}</label>
+                {{ field }}
+                {% for error in field.errors %}<p class="mt-1 text-xs text-red-600">{{ error }}</p>{% endfor %}
+            </div>
+            {% endif %}
+        {% endfor %}
+        <button type="submit" class="btn btn-primary">Record Payment</button>
+    </form>
+</div>
+<script>
+onPageReady(function () {
+    const mode = document.getElementById('{{ form.payment_mode.id_for_label }}');
+    const bank = document.querySelector('[data-field="bank_account"]');
+    const mobile = document.querySelector('[data-field="mobile_account"]');
+    if (!mode) return;
+    const sync = () => {
+        bank.classList.toggle('hidden', mode.value !== 'card');
+        mobile.classList.toggle('hidden', mode.value !== 'mobile_money');
+    };
+    mode.addEventListener('change', sync);
+    sync();
+});
+</script>
+{% endblock %}

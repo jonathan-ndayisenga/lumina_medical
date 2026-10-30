@@ -1,4 +1,5 @@
 import calendar
+from datetime import timedelta
 
 from django.core.exceptions import PermissionDenied
 from django.db.models import Count
@@ -321,3 +322,70 @@ def close_competing_queue_entries(visit: Visit, new_type: str) -> int:
     return visit.queue_entries.filter(
         queue_type__in=types_to_close, processed=False
     ).update(processed=True, processed_at=timezone.now())
+
+
+# ---------------------------------------------------------------------------
+# Debtors: patients whose only reason to be in the reception queue is money
+# owed leave it for the finance Debtor Ledger -- by hand once they've waited
+# Visit.DEBTOR_MANUAL_MOVE_DAYS, on their own after DEBTOR_AUTO_MOVE_DAYS.
+# Only finance collects from the ledger.
+# ---------------------------------------------------------------------------
+
+def visit_only_owes_money(visit: Visit) -> bool:
+    """True when nothing is left for the visit except paying the balance."""
+    if visit.status in {Visit.STATUS_CANCELLED, Visit.STATUS_COMPLETED} or visit.balance_due <= 0:
+        return False
+    if visit.prescriptions.filter(dispensed=False).exists():
+        return False
+    if visit.visit_services.filter(
+        service__category__in=[Service.CATEGORY_LAB, Service.CATEGORY_SCAN], is_approved=False,
+    ).exists():
+        return False
+    return not visit.queue_entries.exclude(queue_type=QueueEntry.TYPE_RECEPTION).filter(processed=False).exists()
+
+
+def debtor_move_available(entry: QueueEntry, now=None) -> bool:
+    """Whether reception may move this queue entry's patient to the Debtor Ledger yet."""
+    now = now or timezone.now()
+    waited = now - entry.created_at
+    return waited >= timedelta(days=Visit.DEBTOR_MANUAL_MOVE_DAYS) and visit_only_owes_money(entry.visit)
+
+
+def move_visit_to_debtors(visit: Visit, *, actor=None, automatic=False) -> None:
+    now = timezone.now()
+    mark_queue_entries_processed(visit=visit, queue_type=QueueEntry.TYPE_RECEPTION)
+    visit.moved_to_debtors_at = now
+    visit.save(update_fields=["moved_to_debtors_at"])
+    sync_visit_status(visit)
+    AuditLog.objects.create(
+        user=actor,
+        hospital=visit.hospital,
+        action="move_to_debtors",
+        model_name="Visit",
+        object_id=str(visit.pk),
+        details={
+            "patient_name": visit.patient.name,
+            "balance_due": str(visit.balance_due),
+            "automatic": automatic,
+        },
+    )
+
+
+def sweep_reception_queue_to_debtors(hospital) -> int:
+    """Move every reception queue patient who has only owed money for
+    DEBTOR_AUTO_MOVE_DAYS or more to the Debtor Ledger. Runs whenever the
+    queue is opened, so no scheduled job is needed."""
+    if not hospital:
+        return 0
+    cutoff = timezone.now() - timedelta(days=Visit.DEBTOR_AUTO_MOVE_DAYS)
+    stale_visit_ids = set(
+        QueueEntry.objects.filter(
+            hospital=hospital, queue_type=QueueEntry.TYPE_RECEPTION, processed=False, created_at__lte=cutoff,
+        ).values_list("visit_id", flat=True)
+    )
+    moved = 0
+    for visit in Visit.objects.filter(pk__in=stale_visit_ids).select_related("patient", "hospital"):
+        if visit_only_owes_money(visit):
+            move_visit_to_debtors(visit, automatic=True)
+            moved += 1
+    return moved

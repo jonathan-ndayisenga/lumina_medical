@@ -9,6 +9,13 @@
 <div class="space-y-4">
     <a href="{% url 'finance_debtors' %}" class="btn btn-secondary">&larr; Debtor Ledger</a>
 
+    {% if receipt_payment %}
+    <div class="card border-2 border-emerald-200 bg-emerald-50 flex flex-wrap items-center justify-between gap-3">
+        <p class="text-sm text-emerald-800 font-semibold">Payment {{ receipt_payment.receipt_number }} recorded: UGX {{ receipt_payment.amount_paid|floatformat:0|intcomma }}.</p>
+        <a href="{% url 'print_payment_receipt' receipt_payment.pk %}" target="_blank" rel="noopener" class="btn btn-primary btn-sm">Print Receipt</a>
+    </div>
+    {% endif %}
+
     <!-- Summary -->
     <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div class="card text-center border-t-4 border-blue-400">
@@ -30,12 +37,15 @@
         <div class="flex flex-wrap gap-2 justify-between items-start mb-3">
             <div>
                 <h3 class="font-bold text-text-main">Visit — {{ visit.visit_date|date:"M d, Y" }}</h3>
-                <p class="text-xs text-text-muted">{{ visit.get_status_display }}</p>
+                <p class="text-xs text-text-muted">{{ visit.get_status_display }}{% if visit.is_follow_up_visit %} · Follow-up{% endif %}</p>
+                {% if visit.debt_cleared_at %}<span class="inline-flex mt-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-600">Debt cleared {{ visit.debt_cleared_at|date:"M d, Y" }}</span>{% endif %}
+                {% if visit.status == 'cancelled' %}<span class="inline-flex mt-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-600">Terminated: not a debt</span>{% endif %}
             </div>
             <div class="text-right shrink-0">
                 <div class="text-sm font-semibold font-mono tabular-nums {% if visit.balance_due %}text-red-600{% else %}text-emerald-600{% endif %}">
                     {% if visit.balance_due %}Balance: UGX {{ visit.balance_due|floatformat:0|intcomma }}{% else %}Settled{% endif %}
                 </div>
+                {% if visit.collectable %}<a href="{% url 'finance_debtor_collect' visit.pk %}" class="btn btn-primary btn-sm mt-2">Collect</a>{% endif %}
             </div>
         </div>
 
@@ -47,7 +57,7 @@
                 {% if vs.service.category != 'pharmacy' %}
                 <tr class="border-b border-gray-100">
                     <td class="py-1 text-text-main">{{ vs.service.name }}</td>
-                    <td class="py-1 text-right font-mono font-semibold text-text-main">UGX {{ vs.price_at_time|floatformat:0|intcomma }}</td>
+                    <td class="py-1 text-right font-mono font-semibold text-text-main">{% if vs.is_charged %}UGX {{ vs.price_at_time|floatformat:0|intcomma }}{% else %}{{ vs.billing_label }}{% endif %}</td>
                 </tr>
                 {% endif %}
                 {% endfor %}

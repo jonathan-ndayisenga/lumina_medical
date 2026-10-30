@@ -82,6 +82,44 @@ Every consultation now records how the visit ended: **Ongoing** (default), **Dis
 - **Referred / Admitted / Sent to Theatre:** type where to (e.g. *Mulago Eye Unit*).
 - **Review Appointment:** set the review date. Reception books the follow-up visit when the patient comes back.
 
+### Follow-up visits: billed or free, item by item
+**Who:** doctors, lab/phlebotomy staff, reception.
+
+A follow-up visit has no consultation fee. Reception can't add services when creating one; the doctor or lab decides what's billed.
+
+**Doctor:**
+1. A blue **FOLLOW-UP VISIT** banner shows the visit it follows, with the previous diagnosis and treatment and a link to that consultation.
+2. **Medicines are always billed.** There's no choice for prescriptions.
+3. For lab tests, scans and other services, **tick "Free (follow-up)" before adding** anything you're giving free. Left unticked, it's billed.
+   - Lab tests: the tick box next to **Send to Lab**.
+   - Other services: the tick box under **Add to Bill**.
+   - Scans: the tick box under the **Sonographer** hand-off.
+4. Free items show as **Free (follow-up)** on the consultation, the bill and the receipt. Their normal price is kept on record.
+5. **Reception** is pre-selected as the hand-off. A follow-up always ends at reception.
+
+**Lab (phlebotomy intake):** tests added on a follow-up have the same **Free (follow-up)** tick box.
+
+**Reception:**
+- If anything was billed, collect payment as usual.
+- If nothing was billed, the billing page shows **Finish Follow-up Visit**. Click it to close the visit; no payment is recorded.
+
+### Debtors: clearing the reception queue
+**Who:** reception (moves patients), finance (collects and clears).
+
+A patient whose only remaining step is paying a balance doesn't stay in the reception queue forever:
+- **After 3 days** waiting, a **Move to Debtors** button appears on their queue row. Reception can use it to clear the queue early.
+- **After 30 days**, they move to the Debtor Ledger on their own.
+
+Patients with anything else open (lab, doctor, nurse, scan, medicine to dispense) are never moved.
+
+**Finance → Debtor Ledger:**
+- Totals by age: 0–30 days, 31–90, 91–365, and over a year.
+- **Where** shows whether a debt is in the ledger, still **at reception**, or the visit is still in progress.
+- **Collect** (on ledger debts only) records a payment; then **Print Receipt**. When the balance reaches zero, the visit is completed. Only finance staff can collect from the ledger. While a patient is still in a queue, reception bills them as usual.
+- **Start the year afresh:** **Clear debts older than a year** removes debts over a year old from the ledger. It's never automatic and asks you to confirm. Cleared balances stay on the patient's ledger page (marked "Debt cleared") and in the audit log.
+
+Terminated visits are not listed as debts.
+
 ### Home screen: Laboratory "results pending"
 The Laboratory tile now counts exactly the patients you can see in the **Lab Queue**, so the two always agree.
 

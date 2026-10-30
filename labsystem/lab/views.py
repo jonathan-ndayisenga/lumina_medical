@@ -1351,10 +1351,14 @@ def phlebotomy_intake(request, queue_entry_id):
             if VisitService.objects.filter(visit=visit, service=service).exists():
                 messages.error(request, f"{service.name} is already on this visit — it's already under way, not added again.")
             else:
-                VisitService.objects.create(visit=visit, service=service, price_at_time=service.price)
-                visit.total_amount = (visit.total_amount or Decimal("0")) + service.price
-                visit.save(update_fields=["total_amount"])
-                messages.success(request, f"{service.name} added.")
+                free = visit.is_follow_up_visit and request.POST.get("free_follow_up") == "1"
+                VisitService.objects.create(
+                    visit=visit, service=service, price_at_time=service.price, free_follow_up=free,
+                )
+                if not free:
+                    visit.total_amount = (visit.total_amount or Decimal("0")) + service.price
+                    visit.save(update_fields=["total_amount"])
+                messages.success(request, f"{service.name} added{' free (follow-up)' if free else ''}.")
             return redirect("phlebotomy_intake", queue_entry_id=entry.pk)
 
         if action == "remove_service":
@@ -1366,8 +1370,9 @@ def phlebotomy_intake(request, queue_entry_id):
             except DjangoValidationError as exc:
                 messages.error(request, "; ".join(exc.messages))
                 return redirect("phlebotomy_intake", queue_entry_id=entry.pk)
-            visit.total_amount = max(Decimal("0"), (visit.total_amount or Decimal("0")) - vs.price_at_time)
-            visit.save(update_fields=["total_amount"])
+            if vs.is_charged:
+                visit.total_amount = max(Decimal("0"), (visit.total_amount or Decimal("0")) - vs.price_at_time)
+                visit.save(update_fields=["total_amount"])
             vs.delete()
             return redirect("phlebotomy_intake", queue_entry_id=entry.pk)
 

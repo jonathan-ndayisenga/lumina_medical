@@ -3,13 +3,27 @@
 
 {% block title %}Debtor Ledger — {{ hospital.name }}{% endblock %}
 {% block page_title %}Debtor Ledger{% endblock %}
-{% block page_subtitle %}{{ debtors|length }} patient{{ debtors|length|pluralize }} with outstanding balances{% endblock %}
+{% block page_subtitle %}{{ debtors|length }} visit{{ debtors|length|pluralize }} with outstanding balances{% endblock %}
 
 {% block content %}
 <div class="space-y-4">
     <div class="flex flex-wrap gap-3 items-center justify-between">
         <a href="{% url 'finance_dashboard' %}" class="btn btn-secondary">&larr; Dashboard</a>
         <div class="text-sm font-semibold text-text-main">Total Outstanding: <span class="text-red-600 font-mono tabular-nums">UGX {{ total_outstanding|floatformat:0|intcomma }}</span></div>
+    </div>
+
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {% for bucket in buckets %}
+        <div class="card">
+            <div class="text-xs text-text-muted uppercase font-semibold mb-1">{{ bucket.label }}</div>
+            <div class="text-lg font-bold font-mono tabular-nums {% if forloop.last and bucket.count %}text-red-600{% else %}text-text-main{% endif %}">UGX {{ bucket.total|floatformat:0|intcomma }}</div>
+            <div class="text-xs text-text-muted">{{ bucket.count }} visit{{ bucket.count|pluralize }}</div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <div class="card text-sm text-text-muted">
+        Patients who only owe money leave the reception queue for this ledger: reception can move them after 3 days, and they move on their own after 30. Collect their balance here with <strong class="text-text-main">Collect</strong>. Patients still in a queue are billed by reception.
     </div>
 
     <div class="card">
@@ -19,6 +33,8 @@
                     <tr>
                         <th class="text-left py-2 pr-4 text-xs font-semibold text-text-muted uppercase">Patient</th>
                         <th class="text-left py-2 pr-4 text-xs font-semibold text-text-muted uppercase">Visit Date</th>
+                        <th class="text-right py-2 pr-4 text-xs font-semibold text-text-muted uppercase">Age</th>
+                        <th class="text-left py-2 pr-4 text-xs font-semibold text-text-muted uppercase">Where</th>
                         <th class="text-right py-2 pr-4 text-xs font-semibold text-text-muted uppercase">Billed</th>
                         <th class="text-right py-2 pr-4 text-xs font-semibold text-text-muted uppercase">Paid</th>
                         <th class="text-right py-2 pr-4 text-xs font-semibold text-red-600 uppercase">Balance</th>
@@ -27,24 +43,42 @@
                 </thead>
                 <tbody class="divide-y divide-gray-100">
                     {% for visit in debtors %}
-                    {% with days=visit.visit_date|timesince %}
                     <tr class="hover:bg-gray-50">
                         <td class="py-2 pr-4 font-medium text-text-main">{{ visit.patient.name }}</td>
                         <td class="py-2 pr-4 text-text-muted">{{ visit.visit_date|date:"M d, Y" }}</td>
+                        <td class="py-2 pr-4 text-right font-mono {% if visit.clearable %}text-red-600 font-semibold{% else %}text-text-muted{% endif %}">{{ visit.age_days }}d</td>
+                        <td class="py-2 pr-4">
+                            {% if visit.location == 'ledger' %}<span class="inline-flex px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-700">Debtors{% if visit.moved_to_debtors_at %} since {{ visit.moved_to_debtors_at|date:"M d" }}{% endif %}</span>
+                            {% elif visit.location == 'reception' %}<span class="inline-flex px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800">At reception</span>
+                            {% else %}<span class="inline-flex px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-700">Visit in progress</span>{% endif %}
+                        </td>
                         <td class="py-2 pr-4 text-right font-mono">{{ visit.total_amount|floatformat:0|intcomma }}</td>
                         <td class="py-2 pr-4 text-right font-mono text-emerald-600">{{ visit.total_paid|floatformat:0|intcomma }}</td>
                         <td class="py-2 pr-4 text-right font-mono font-bold text-red-600">{{ visit.balance_due|floatformat:0|intcomma }}</td>
-                        <td class="py-2 text-right">
-                            <a href="{% url 'finance_debtor_patient' visit.patient.pk %}" class="text-xs text-blue-600 hover:underline font-medium">View Ledger</a>
+                        <td class="py-2 text-right whitespace-nowrap">
+                            {% if visit.location == 'ledger' %}<a href="{% url 'finance_debtor_collect' visit.pk %}" class="btn btn-primary btn-sm">Collect</a>{% endif %}
+                            <a href="{% url 'finance_debtor_patient' visit.patient.pk %}" class="text-xs text-blue-600 hover:underline font-medium ml-2">View Ledger</a>
                         </td>
                     </tr>
-                    {% endwith %}
                     {% empty %}
-                    <tr><td colspan="6" class="py-8 text-center text-sm text-text-muted">All accounts are settled.</td></tr>
+                    <tr><td colspan="8" class="py-8 text-center text-sm text-text-muted">All accounts are settled.</td></tr>
                     {% endfor %}
                 </tbody>
             </table>
         </div>
+    </div>
+
+    <div class="card">
+        <h3 class="text-sm font-bold text-text-main">Start the year afresh</h3>
+        <p class="text-xs text-text-muted mt-1 mb-3">Clear debts more than a year old from this ledger. Nothing is cleared automatically. Cleared balances stay on each patient's record and in the audit log.{% if cleared_count %} {{ cleared_count }} debt{{ cleared_count|pluralize }} cleared so far.{% endif %}</p>
+        {% if clearable_count %}
+        <form method="post" action="{% url 'finance_debtors_clear_old' %}" onsubmit="return confirm('Clear {{ clearable_count }} debt{{ clearable_count|pluralize }} older than a year, totalling UGX {{ clearable_total|floatformat:0|intcomma }}? They will no longer appear in the Debtor Ledger.');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger btn-sm">Clear {{ clearable_count }} debt{{ clearable_count|pluralize }} older than a year (UGX {{ clearable_total|floatformat:0|intcomma }})</button>
+        </form>
+        {% else %}
+        <p class="text-sm text-text-muted italic">No debts are older than a year.</p>
+        {% endif %}
     </div>
 </div>
 {% endblock %}

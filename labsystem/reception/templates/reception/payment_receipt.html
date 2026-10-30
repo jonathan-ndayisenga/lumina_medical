@@ -96,7 +96,7 @@
             <div>Received by : {% if payment.recorded_by %}{{ payment.recorded_by.get_full_name|default:payment.recorded_by.username }}{% else %}-{% endif %}</div>
             <div class="rule"></div>
             {% for item in service_items %}
-            <div class="row"><span>{{ item.name }}</span><span>{{ item.price|floatformat:"2g" }}</span></div>
+            <div class="row"><span>{{ item.name }}</span><span>{% if item.label %}{{ item.label }}{% else %}{{ item.price|floatformat:"2g" }}{% endif %}</span></div>
             {% endfor %}
             {% if drug_items %}
             {% if service_items %}<div class="rule"></div>{% endif %}

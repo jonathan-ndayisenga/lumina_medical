@@ -159,7 +159,7 @@
                 {% for vs in selected_row.non_pharmacy_services %}
                 <div class="flex items-center justify-between px-3 py-2 text-sm">
                     <span class="text-text-main">{{ vs.service.name }}</span>
-                    <span class="font-semibold text-text-main ml-4">{{ vs.price_at_time }}</span>
+                    <span class="font-semibold text-text-main ml-4">{{ vs.billing_label }}</span>
                 </div>
                 {% endfor %}
             </div>

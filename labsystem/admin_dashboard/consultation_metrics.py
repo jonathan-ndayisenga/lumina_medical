@@ -25,7 +25,7 @@ def consultation_metrics(consultations):
         # reception charged up front and package-covered items.
         recommended = [
             vs for vs in visit.visit_services.all()
-            if vs.service.category != Service.CATEGORY_CONSULTATION and not vs.covered_by_package
+            if vs.service.category != Service.CATEGORY_CONSULTATION and vs.is_charged
             and ((arrived and vs.created_at >= arrived) or (c.created_by_id and vs.requested_by_user_id == c.created_by_id))
         ]
         rec_value = sum((vs.price_at_time for vs in recommended), Decimal("0"))

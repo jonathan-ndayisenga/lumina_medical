@@ -27,7 +27,9 @@ def hospital_initials(name: str, fallback: str = "RCT") -> str:
 def format_doctor_name(name: str) -> str:
     if not name:
         return ""
-    cleaned = re.sub(r"^(?:dr\.?|doctor)\s*", "", name.strip(), flags=re.IGNORECASE).strip()
+    # Strip a typed-in title ("Dr.", "Dr ", "Doctor") but not names that just
+    # start with those letters ("Drake", "doctor1").
+    cleaned = re.sub(r"^(?:dr\.|dr\s+|doctor\b\.?)\s*", "", name.strip(), flags=re.IGNORECASE).strip()
     return f"Dr. {cleaned}" if cleaned else ""
 
 
@@ -174,6 +176,19 @@ class Visit(models.Model):
     notes = models.TextField(blank=True)
     whatsapp_number = models.CharField(max_length=20, blank=True, default="")
     weight_kg = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True, verbose_name="Weight at visit (kg)")
+    # Debtors: a visit that only owes money leaves the reception queue for
+    # the finance Debtor Ledger (by hand after DEBTOR_MANUAL_MOVE_DAYS, on
+    # its own after DEBTOR_AUTO_MOVE_DAYS). Finance can later clear debts
+    # older than a year; the balance stays on record, it just stops showing.
+    moved_to_debtors_at = models.DateTimeField(null=True, blank=True)
+    debt_cleared_at = models.DateTimeField(null=True, blank=True)
+    debt_cleared_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="+",
+    )
+
+    DEBTOR_MANUAL_MOVE_DAYS = 3
+    DEBTOR_AUTO_MOVE_DAYS = 30
+    DEBT_CLEARABLE_AFTER_DAYS = 365
 
     class Meta:
         ordering = ["-visit_date"]
@@ -212,6 +227,14 @@ class Visit(models.Model):
     @property
     def is_package_visit(self):
         return self.visit_type == self.TYPE_PACKAGE
+
+    @property
+    def is_follow_up_visit(self):
+        return self.visit_type == self.TYPE_FOLLOW_UP
+
+    @property
+    def is_in_debtors(self):
+        return bool(self.moved_to_debtors_at) and not self.debt_cleared_at
 
     @property
     def specialty(self):
@@ -263,7 +286,10 @@ class Visit(models.Model):
         elif self.visit_type == self.TYPE_FOLLOW_UP:
             # Follow-up visits MUST have a valid completed, fully paid parent
             # visit. That link is what earns the free trip to the doctor
-            # queue — no consultation fee or any other service is billed.
+            # queue — no consultation fee. Reception can't add services to
+            # one (VisitForm blocks it); whatever the doctor or lab adds
+            # afterwards is billed unless they mark it free_follow_up, and
+            # prescriptions are always billed.
             if not self.parent_visit:
                 raise ValidationError(
                     "Follow-up visits must be linked to a completed previous visit."
@@ -275,10 +301,6 @@ class Visit(models.Model):
             if not self.parent_visit.is_fully_paid:
                 raise ValidationError(
                     "Follow-up visits must link to a fully paid previous visit."
-                )
-            if self.visit_services.exists():
-                raise ValidationError(
-                    "Follow-up visits cannot include new billable services."
                 )
 
         elif self.visit_type == self.TYPE_ADJUSTMENT:
@@ -550,6 +572,10 @@ class VisitService(models.Model):
                    "captured at purchase time. Once set and past, this package can no longer be "
                    "reused on a new visit.",
     )
+    # Follow-up visits: the doctor (or lab) chooses per service whether it's
+    # billed or given free as part of the follow-up. Same shape as package
+    # coverage -- the real price is still recorded, just not charged.
+    free_follow_up = models.BooleanField(default=False)
 
     class Meta:
         ordering = ["created_at", "id"]
@@ -565,7 +591,14 @@ class VisitService(models.Model):
         # convention, which is used in a different, "UGX "-prefixed context.
         if self.covered_by_package and self.covering_package_id:
             return f"Covered by {self.covering_package.service.name}"
+        if self.free_follow_up:
+            return "Free (follow-up)"
         return str(self.price_at_time)
+
+    @property
+    def is_charged(self):
+        """Whether price_at_time is part of the visit's total_amount."""
+        return not (self.covered_by_package or self.free_follow_up)
 
     @property
     def requested_by_display(self):

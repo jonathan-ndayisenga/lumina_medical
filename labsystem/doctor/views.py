@@ -125,6 +125,13 @@ def lab_visit_services(visit, *, performed=None):
     return services
 
 
+def wants_free_follow_up(request, visit):
+    """On a follow-up visit the doctor (or lab) may give a service free
+    instead of billing it. Prescriptions are always billed, so they never
+    read this."""
+    return visit.is_follow_up_visit and request.POST.get("free_follow_up") in {"1", "on", "true"}
+
+
 def requested_lab_service_payload(visit_service):
     test_profile = getattr(visit_service.service, "test_profile", None)
     return {
@@ -132,6 +139,7 @@ def requested_lab_service_payload(visit_service):
         "service_id": visit_service.service_id,
         "service_name": visit_service.service.name,
         "price": str(visit_service.price_at_time),
+        "free_follow_up": visit_service.free_follow_up,
         "performed": visit_service.performed,
         "test_profile_id": test_profile.pk if test_profile else None,
         "test_profile_name": test_profile.name if test_profile else "",
@@ -451,6 +459,7 @@ def send_lab_request_api(request, visit_id):
     consultation_request_ids = []
     if consultation:
         consultation_request_ids = [int(item) for item in (consultation.lab_requests or [])]
+    free_follow_up = wants_free_follow_up(request, visit)
 
     created_visit_services = []
     skipped_pending = []
@@ -485,9 +494,11 @@ def send_lab_request_api(request, visit_id):
         if covering_package:
             visit_service_kwargs["covered_by_package"] = True
             visit_service_kwargs["covering_package"] = covering_package
+        elif free_follow_up:
+            visit_service_kwargs["free_follow_up"] = True
         visit_service = VisitService.objects.create(**visit_service_kwargs)
         created_visit_services.append(visit_service)
-        if not covering_package:
+        if visit_service.is_charged:
             added_total += service.price
         if consultation and service.pk not in consultation_request_ids:
             consultation_request_ids.append(service.pk)
@@ -600,6 +611,8 @@ def add_billable_service_api(request, visit_id):
     if covering_package:
         visit_service_defaults["covered_by_package"] = True
         visit_service_defaults["covering_package"] = covering_package
+    elif wants_free_follow_up(request, visit):
+        visit_service_defaults["free_follow_up"] = True
 
     visit_service, created = VisitService.objects.get_or_create(
         visit=visit,
@@ -609,16 +622,18 @@ def add_billable_service_api(request, visit_id):
     if not created:
         return JsonResponse({"error": f"{service.name} is already on this visit."}, status=400)
 
-    if not covering_package:
+    if visit_service.is_charged:
         visit.total_amount += total_price
         visit.save(update_fields=["total_amount"])
 
     display_name = f"{service.name} ({days} day{'s' if days != 1 else ''})" if service.is_per_day else service.name
-    message = (
-        f"{display_name} added — covered by {covering_package.service.name}."
-        if covering_package
-        else f"{display_name} added to the visit bill."
-    )
+    if covering_package:
+        message = f"{display_name} added — covered by {covering_package.service.name}."
+    elif visit_service.free_follow_up:
+        message = f"{display_name} added free as part of this follow-up (not billed)."
+    else:
+        message = f"{display_name} added to the visit bill."
+
     return JsonResponse(
         {
             "message": message,
@@ -627,6 +642,7 @@ def add_billable_service_api(request, visit_id):
                 "service_id": service.pk,
                 "service_name": display_name,
                 "price": str(visit_service.price_at_time),
+                "free_follow_up": visit_service.free_follow_up,
                 "category": service.get_category_display(),
             },
             "visit_total_amount": str(visit.total_amount),
@@ -798,7 +814,7 @@ def remove_lab_service_api(request, visit_id, visit_service_id):
     except ValidationError as exc:
         return JsonResponse({"error": "; ".join(exc.messages)}, status=400)
 
-    removed_price = visit_service.price_at_time
+    removed_price = visit_service.price_at_time if visit_service.is_charged else Decimal("0")
     service_name = visit_service.service.name
     service_pk = visit_service.service.pk
     visit_service.delete()
@@ -845,7 +861,7 @@ def remove_billable_service_api(request, visit_id, visit_service_id):
         visit=visit,
     )
 
-    removed_price = visit_service.price_at_time
+    removed_price = visit_service.price_at_time if visit_service.is_charged else Decimal("0")
     service_name = visit_service.service.name
     visit_service.delete()
 
@@ -1143,15 +1159,18 @@ def consultation(request, visit_id):
                 if scan_service:
                     already_billed = visit.visit_services.filter(service=scan_service).exists()
                     if not already_billed:
+                        scan_free = visit.is_follow_up_visit and request.POST.get("scan_free_follow_up") == "1"
                         VisitService.objects.create(
                             visit=visit,
                             service=scan_service,
                             price_at_time=scan_service.price,
                             is_approved=False,
+                            free_follow_up=scan_free,
                             notes="Added automatically when doctor referred patient to sonographer.",
                         )
-                        visit.total_amount = (visit.total_amount or 0) + scan_service.price
-                        visit.save(update_fields=["total_amount"])
+                        if not scan_free:
+                            visit.total_amount = (visit.total_amount or 0) + scan_service.price
+                            visit.save(update_fields=["total_amount"])
                 send_to_reception_queue(
                     visit=visit,
                     hospital=visit.hospital,
@@ -1200,6 +1219,10 @@ def consultation(request, visit_id):
         form = ConsultationForm(
             instance=consultation_instance, hospital=visit.hospital, triage=triage_instance, eye_visit=is_eye_visit,
         )
+        if visit.is_follow_up_visit and not nurse_queue_is_open:
+            # A follow-up always ends at reception -- to pay for anything
+            # billed, or just to close the visit when nothing is.
+            form.fields["send_to_reception"].initial = True
 
     return render(
         request,
@@ -1224,6 +1247,10 @@ def consultation(request, visit_id):
             "prescriptions": prescriptions,
             "adjustment_origin_prescription": adjustment_origin_prescription,
             "adjustment_default_duration": visit.adjustment_remaining_days or 1,
+            "follow_up_parent": visit.parent_visit if visit.is_follow_up_visit else None,
+            "follow_up_parent_consultation": (
+                Consultation.objects.filter(visit=visit.parent_visit).first() if visit.is_follow_up_visit else None
+            ),
             **_eye_exam_context(is_eye_visit, base_refraction, eye_exam, request.POST if request.method == "POST" else None),
         },
     )
