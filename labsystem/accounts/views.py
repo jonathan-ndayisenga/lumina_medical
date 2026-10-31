@@ -20,6 +20,7 @@ from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_POST
 
 from .home_tiles import TILES, tile_numbers
+from .login_throttle import ThrottledAuthenticationForm
 from .models import (
     DirectMessage,
     Hospital,
@@ -140,6 +141,7 @@ def _accessible_sections(user):
 @method_decorator(ensure_csrf_cookie, name="dispatch")
 class RoleAwareLoginView(LoginView):
     template_name = "registration/login.html"
+    form_class = ThrottledAuthenticationForm
 
     def form_valid(self, form):
         user = form.get_user()

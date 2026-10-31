@@ -5,6 +5,11 @@ from django.urls import include, path, re_path
 from django.views.generic.base import RedirectView
 from django.views.static import serve
 
+from accounts.login_throttle import ThrottledAdminAuthenticationForm
+
+# /admin/ gets the same brute-force lockout as the app's own sign-in pages.
+admin.site.login_form = ThrottledAdminAuthenticationForm
+
 urlpatterns = [
     path(
         'accounts/login/',

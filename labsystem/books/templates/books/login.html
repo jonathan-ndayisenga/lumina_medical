@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+{% load static %}<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -84,13 +84,14 @@
             <form method="post">
                 {% csrf_token %}
                 <label for="{{ form.username.id_for_label }}">Username</label>
-                <input type="text" name="username" id="{{ form.username.id_for_label }}" autofocus required>
+                <input type="text" name="username" id="{{ form.username.id_for_label }}" autocomplete="username" autofocus required>
                 <label for="{{ form.password.id_for_label }}">Password</label>
-                <input type="password" name="password" id="{{ form.password.id_for_label }}" required>
+                <input type="password" name="password" id="{{ form.password.id_for_label }}" autocomplete="current-password" data-password-field required>
                 <input type="hidden" name="next" value="{{ next }}">
                 <button type="submit">Sign in</button>
             </form>
         </div>
     </div>
+    <script src="{% static 'js/password-field.js' %}"></script>
 </body>
 </html>

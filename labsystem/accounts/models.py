@@ -741,3 +741,19 @@ class HospitalInvoice(models.Model):
             ).count()
             self.invoice_number = f"INV-{stamp}-{str(last + 1).zfill(4)}"
         super().save(*args, **kwargs)
+
+
+class LoginThrottle(models.Model):
+    """Failed sign-in counter for one username or one IP address.
+
+    Checked before the password is hashed, so a locked key costs a single
+    indexed lookup instead of a CPU-heavy password check.
+    """
+
+    key = models.CharField(max_length=200, unique=True)
+    failures = models.PositiveIntegerField(default=0)
+    window_started_at = models.DateTimeField()
+    locked_until = models.DateTimeField(null=True, blank=True)
+
+    def __str__(self):
+        return f"{self.key} ({self.failures} failures)"

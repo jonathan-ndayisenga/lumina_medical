@@ -1,5 +1,6 @@
 from datetime import date
 from decimal import Decimal
+from unittest import mock
 
 from django.conf import settings
 from django.core.files.base import ContentFile
@@ -263,7 +264,9 @@ class BooksInsightsAndPlanningTests(TestCase):
 
         self._plan(date(2026, 1, 1))
         ExpenseBudget.objects.create(account=self.rent, monthly_amount=Decimal("500000"))
-        response = self.client.get(reverse("books:dashboard"))
+        # The dashboard reads the real clock, so pin "today" to the seeded month.
+        with mock.patch("django.utils.timezone.localdate", return_value=self.today):
+            response = self.client.get(reverse("books:dashboard"))
         self.assertEqual(response.status_code, 200)
         for text in ("Last 12 months", "trendChart", "Cash position", "Quotation pipeline", "Top clients",
                      "Budgets this month", "Over ·", "monthly invoice", "Issue due invoices"):

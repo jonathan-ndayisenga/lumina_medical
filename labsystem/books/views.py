@@ -28,11 +28,13 @@ from .forms import (
     WithholdingCreditForm,
 )
 from .ledger_models import Account, FinancialYear, JournalEntry
+from accounts.login_throttle import ThrottledAuthenticationForm
 from .permissions import _is_books_user, books_admin_required, books_staff_required
 
 
 class BooksLoginView(LoginView):
     template_name = "books/login.html"
+    form_class = ThrottledAuthenticationForm
     redirect_authenticated_user = False
 
     def get_success_url(self):
