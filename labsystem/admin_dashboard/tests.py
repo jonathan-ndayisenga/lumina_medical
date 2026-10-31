@@ -771,7 +771,18 @@ class HospitalPatientAnalyticsReportTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Patient Activity Report")
+        # The detail list defaults to the last 30 days, so February isn't listed...
+        self.assertContains(response, "Showing: Last 30 days")
+        self.assertNotContains(response, "Jane Patient")
+        self.assertContains(response, '<option value="2024-02"')
+
+        # ...until that month is picked (filter or chart click).
+        response = self.client.get(
+            reverse("patient_activity_report"), {"start": "2024-01-01", "end": "2024-12-31", "month": "2024-02"},
+        )
+        self.assertContains(response, "Showing: Feb 2024")
         self.assertContains(response, "Jane Patient")
+        self.assertContains(response, "Total (1 patient)")
 
     def test_patient_demographic_report_groups_by_age_band_and_sex(self):
         self.Patient.objects.create(

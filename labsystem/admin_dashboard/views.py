@@ -2507,17 +2507,35 @@ def patient_activity_report(request):
 
     labels = []
     counts = []
+    month_keys = []
     for row in by_month:
         labels.append(row["month"].strftime("%b %Y") if row["month"] else "Unknown")
         counts.append(int(row["total_visits"]))
+        month_keys.append(row["month"].strftime("%Y-%m") if row["month"] else "")
 
-    patient_rows = list(
-        qs.values("patient__id", "patient__name")
-        .annotate(visit_count=models.Count("id"), last_visit=models.Max("visit_date"), total_amount=Sum("total_amount"))
-        .order_by("-last_visit")
-    )
-    total_visits = sum(int(row["visit_count"]) for row in patient_rows)
-    total_billed = sum((row["total_amount"] or Decimal("0")) for row in patient_rows)
+    def patient_summary(visits):
+        return list(
+            visits.values("patient__id", "patient__name")
+            .annotate(visit_count=models.Count("id"), last_visit=models.Max("visit_date"), total_amount=Sum("total_amount"))
+            .order_by("-last_visit")
+        )
+
+    period_rows = patient_summary(qs)
+    total_visits = sum(int(row["visit_count"]) for row in period_rows)
+    total_billed = sum((row["total_amount"] or Decimal("0")) for row in period_rows)
+
+    # The detail list stays short: the last 30 days by default, or one month
+    # picked from the filter / by clicking the chart.
+    selected_month = request.GET.get("month", "")
+    if selected_month and selected_month in month_keys:
+        year, month = (int(part) for part in selected_month.split("-"))
+        detail_qs = qs.filter(visit_date__year=year, visit_date__month=month)
+        detail_label = labels[month_keys.index(selected_month)]
+    else:
+        selected_month = ""
+        detail_qs = qs.filter(visit_date__date__gt=end - timedelta(days=30))
+        detail_label = "Last 30 days"
+    patient_rows = patient_summary(detail_qs)
 
     context = hospital_admin_context(
         request,
@@ -2529,10 +2547,16 @@ def patient_activity_report(request):
         "hospital": hospital,
         "date_start": start.isoformat(),
         "date_end": end.isoformat(),
+        "patient_count": len(period_rows),
         "patient_rows": patient_rows,
+        "detail_label": detail_label,
+        "detail_visits": sum(int(row["visit_count"]) for row in patient_rows),
+        "detail_billed": sum((row["total_amount"] or Decimal("0")) for row in patient_rows),
+        "selected_month": selected_month,
+        "month_options": list(reversed(list(zip(month_keys, labels)))),
         "total_visits": total_visits,
         "total_billed": total_billed,
-        "chart_json": json.dumps({"labels": labels, "counts": counts}),
+        "chart_json": json.dumps({"labels": labels, "counts": counts, "months": month_keys}),
     })
     return render(request, "admin_dashboard/patient_activity_report.html", context)
 

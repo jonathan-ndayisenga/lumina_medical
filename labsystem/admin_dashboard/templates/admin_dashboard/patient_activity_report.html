@@ -26,7 +26,7 @@
     <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div class="card">
             <p class="text-xs uppercase tracking-wide text-text-muted">Patients with visits</p>
-            <p class="mt-2 text-3xl font-bold text-text-main">{{ patient_rows|length }}</p>
+            <p class="mt-2 text-3xl font-bold text-text-main">{{ patient_count }}</p>
         </div>
         <div class="card">
             <p class="text-xs uppercase tracking-wide text-text-muted">Visits recorded</p>
@@ -39,14 +39,31 @@
     </div>
 
     <div class="card">
-        <h3 class="text-lg font-bold text-text-main mb-4">Monthly visit trend</h3>
+        <h3 class="text-lg font-bold text-text-main">Monthly visit trend</h3>
+        <p class="text-xs text-text-muted mb-4">Click a month to list its patients below.</p>
         <div style="height: 260px;">
             <canvas id="activityChart" aria-label="Patient activity chart" role="img"></canvas>
         </div>
     </div>
 
-    <div class="card">
-        <h3 class="text-lg font-bold text-text-main mb-4">Patient activity detail</h3>
+    <div class="card" id="activity-detail">
+        <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+            <div>
+                <h3 class="text-lg font-bold text-text-main">Patient activity detail</h3>
+                <p class="text-xs text-text-muted">Showing: {{ detail_label }}</p>
+            </div>
+            <form method="get" action="#activity-detail" class="flex items-center gap-2">
+                <input type="hidden" name="start" value="{{ date_start }}">
+                <input type="hidden" name="end" value="{{ date_end }}">
+                <label for="activity-month" class="text-xs font-semibold uppercase text-text-muted">Month</label>
+                <select id="activity-month" name="month" class="form-control" onchange="this.form.submit()">
+                    <option value="" {% if not selected_month %}selected{% endif %}>Last 30 days</option>
+                    {% for key, label in month_options %}
+                    <option value="{{ key }}" {% if key == selected_month %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </form>
+        </div>
         <div class="overflow-x-auto">
             <table class="w-full text-sm">
                 <thead>
@@ -71,6 +88,16 @@
                     </tr>
                     {% endfor %}
                 </tbody>
+                {% if patient_rows %}
+                <tfoot>
+                    <tr class="border-t-2 font-bold text-text-main">
+                        <td class="py-2">Total ({{ patient_rows|length }} patient{{ patient_rows|length|pluralize }})</td>
+                        <td class="py-2 text-right">{{ detail_visits }}</td>
+                        <td class="py-2"></td>
+                        <td class="py-2 text-right">UGX {{ detail_billed|floatformat:0|intcomma }}</td>
+                    </tr>
+                </tfoot>
+                {% endif %}
             </table>
         </div>
     </div>
@@ -98,6 +125,16 @@
     options: {
       maintainAspectRatio: false,
       plugins: { legend: { display: false } },
+      interaction: { mode: 'index', intersect: false },
+      onHover: (event, points) => { event.native.target.style.cursor = points.length ? 'pointer' : 'default'; },
+      onClick: (event, points) => {
+        if (!points.length) return;
+        const month = data.months[points[0].index];
+        if (!month) return;
+        const params = new URLSearchParams(window.location.search);
+        params.set('month', month);
+        window.location.href = window.location.pathname + '?' + params.toString() + '#activity-detail';
+      },
       scales: {
         y: { beginAtZero: true, ticks: { precision: 0 } }
       }
