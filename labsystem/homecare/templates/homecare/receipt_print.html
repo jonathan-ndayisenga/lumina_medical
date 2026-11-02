@@ -1,12 +1,13 @@
-<!DOCTYPE html>
+{% load static %}<!DOCTYPE html>
 <html>
 <head>
 <meta charset="UTF-8">
 <title>Receipt {{ receipt.receipt_number }}</title>
 <style>
-    @page { size: 80mm auto; margin: 0mm; }
+    /* The height is a fallback: thermal-print.js sets the real one when printing. */
+    @page thermal80 { size: 80mm 297mm; margin: 0; }
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: 'Courier New', monospace; font-size: 11px; font-weight: bold; line-height: 1.1; color: #000; background: #fff; width: 80mm; padding: 3mm 2mm; }
+    body { font-family: 'Courier New', monospace; font-size: 11px; font-weight: bold; line-height: 1.1; color: #000; background: #fff; width: 72mm; margin: 0 auto; padding: 3mm 1mm; page: thermal80; }
     .c { text-align: center; }
     .sep { border-top: 1.5px solid #000; margin: 2px 0; height: 0; }
     .row { display: flex; justify-content: space-between; }
@@ -14,7 +15,7 @@
     @media print { .btn { display: none !important; } }
 </style>
 </head>
-<body>
+<body data-paper-size="80mm" data-receipt>
 
 <div class="c">{{ receipt.placement.hospital.name }}</div>
 <div class="c" style="font-size:9px; font-weight:normal;">{{ receipt.placement.hospital.location }}</div>
@@ -39,5 +40,6 @@
 
 <button onclick="window.print()" class="btn">Print / Save as PDF</button>
 
+<script src="{% static 'js/thermal-print.js' %}"></script>
 </body>
 </html>

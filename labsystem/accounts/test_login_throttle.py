@@ -77,3 +77,16 @@ class LoginThrottleTests(TestCase):
         response = self.client.get(reverse("login"))
         self.assertContains(response, "data-password-field")
         self.assertContains(response, "js/password-field.js")
+
+
+class LandingPageContactTests(TestCase):
+    def test_log_in_buttons_lead_to_contacting_ternah(self):
+        response = self.client.get(reverse("landing"))
+        self.assertContains(response, 'href="#contact"', count=3)
+        self.assertNotContains(response, f'href="{reverse("login")}" class="btn')
+        self.assertContains(response, 'id="contact"')
+        self.assertContains(response, "mailto:ternah22@gmail.com")
+        self.assertContains(response, "tel:+256787770007")
+
+    def test_sign_in_page_still_works_at_its_own_address(self):
+        self.assertEqual(self.client.get(reverse("login")).status_code, 200)

@@ -234,6 +234,9 @@ class ReceiptRenderingTests(TestCase):
         self.assertContains(receipt_resp, "80mm (Standard)")
         self.assertContains(receipt_resp, "A4 (Full Page)")
         self.assertContains(receipt_resp, 'data-paper-size="80mm"')
+        # Sized to what the print head can reach, or the figures get cut off.
+        self.assertContains(receipt_resp, "width: 72mm")
+        self.assertNotContains(receipt_resp, "size: 80mm auto")
 
     def test_visit_billing_summary_receipt_has_paper_size_picker(self):
         self.client.force_login(self.receptionist)

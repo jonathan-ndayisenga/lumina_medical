@@ -1,4 +1,4 @@
-{% load reception_extras %}
+{% load static reception_extras %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -11,9 +11,10 @@
 <style>
     /* Named print pages: the receipt picks one via `page`, driven by the
        data-paper-size the dropdown sets on <body>. Chromium honours this;
-       other engines fall back to their default page size. */
-    @page thermal58 { size: 58mm auto; margin: 0; }
-    @page thermal80 { size: 80mm auto; margin: 0; }
+       other engines fall back to their default page size. The height here is
+       a fallback: thermal-print.js sets the real one when printing. */
+    @page thermal58 { size: 58mm 297mm; margin: 0; }
+    @page thermal80 { size: 80mm 297mm; margin: 0; }
     @page a4page { size: A4; margin: 12mm; }
 
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -34,12 +35,15 @@
     .sheet a:focus-visible, .sheet button:focus-visible, .field select:focus-visible { outline: 2px solid #15202E; outline-offset: 2px; }
 
     .receipt { margin: 20px auto 0; font-family: 'Courier New', Courier, monospace; font-size: 12px; line-height: 1.55; text-align: center; color: #000; overflow-wrap: anywhere; }
-    body[data-paper-size="58mm"] .receipt { width: 58mm; font-size: 10px; page: thermal58; }
-    body[data-paper-size="80mm"] .receipt { width: 80mm; page: thermal80; }
+    /* The print head is narrower than the roll: an 80mm printer prints about
+       72mm across and a 58mm one about 48mm. Wider gets the figures cut off. */
+    body[data-paper-size="58mm"] .receipt { width: 48mm; padding: 0 1mm; font-size: 10px; page: thermal58; }
+    body[data-paper-size="80mm"] .receipt { width: 72mm; padding: 0 1mm; page: thermal80; }
     body[data-paper-size="a4"] .receipt { width: 100%; font-size: 14px; page: a4page; }
     .receipt .rule { border-top: 1px solid #E4E2DB; margin: 8px 0; }
     .receipt .row { display: flex; justify-content: space-between; gap: 8px; text-align: left; }
-    .receipt .row span:last-child { white-space: nowrap; }
+    .receipt .row span:first-child { flex: 1; min-width: 0; }
+    .receipt .row span:last-child { flex: none; white-space: nowrap; text-align: right; }
     .receipt b { font-weight: 700; }
 
     .sheet-foot { padding: 12px 20px 20px; display: flex; flex-direction: column; gap: 8px; }
@@ -81,7 +85,7 @@
             </select>
         </div>
 
-        <div class="receipt">
+        <div class="receipt" data-receipt>
             <div><b>{{ hospital.name|default:"LUMINA MEDICAL SERVICES"|upper }}</b></div>
             {% if hospital.location %}<div>{{ hospital.location }}</div>{% endif %}
             {% if hospital.phone_number %}<div>Tel: {{ hospital.phone_number }}</div>{% endif %}
@@ -106,10 +110,10 @@
             {% endif %}
             {% if not service_items and not drug_items %}<div>(no items)</div>{% endif %}
             <div class="rule"></div>
-            <div>Total : UGX {{ visit.total_amount|floatformat:"2g" }}</div>
-            <div><b>Amount Paid : UGX {{ payment.amount_paid|floatformat:"2g" }}</b></div>
-            <div>Balance : UGX {{ balance_due|floatformat:"2g" }}</div>
-            <div>Mode : {{ payment.get_mode_display }}</div>
+            <div class="row"><span>Total</span><span>UGX {{ visit.total_amount|floatformat:"2g" }}</span></div>
+            <div class="row"><span><b>Amount Paid</b></span><span><b>UGX {{ payment.amount_paid|floatformat:"2g" }}</b></span></div>
+            <div class="row"><span>Balance</span><span>UGX {{ balance_due|floatformat:"2g" }}</span></div>
+            <div class="row"><span>Mode</span><span>{{ payment.get_mode_display }}</span></div>
             {% if payment.notes %}<div>Note : {{ payment.notes|truncatechars:80 }}</div>{% endif %}
             <div class="rule"></div>
             <div><b>Thank you. Get well soon.</b></div>
@@ -132,5 +136,6 @@
         </button>
     </div>
 </div>
+<script src="{% static 'js/thermal-print.js' %}"></script>
 </body>
 </html>
