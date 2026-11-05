@@ -1,0 +1,64 @@
+{% extends "books/public_base.html" %}
+{% load books_extras %}
+{% block title %}Your account - {{ company.legal_name }}{% endblock %}
+{% block content %}
+<div class="card">
+    <h1>{{ client.name }}</h1>
+    <div class="muted">Balance owing</div>
+    <div class="big">UGX {{ client.balance|money }}</div>
+    <p style="margin-bottom:0;"><a href="{% url 'books:portal_statement' token %}">Download your statement</a></p>
+</div>
+
+<div class="card">
+    <h2>Invoices</h2>
+    <table>
+        <thead><tr><th>Invoice</th><th>Issued</th><th>Due</th><th>Status</th><th class="num">Total</th><th class="num">Balance</th></tr></thead>
+        <tbody>
+            {% for invoice in invoices %}
+            <tr>
+                <td><a href="{% url 'books:portal_invoice' token invoice.pk %}">{{ invoice.number }}</a></td>
+                <td>{{ invoice.issue_date|date:"j M Y" }}</td>
+                <td>{{ invoice.due_date|date:"j M Y" }}</td>
+                <td>{% if invoice.is_overdue %}<span class="no">Overdue</span>{% elif invoice.is_settled %}<span class="ok">Paid</span>{% else %}Open{% endif %}</td>
+                <td class="num">{{ invoice.total|money_in:invoice.currency }}</td>
+                <td class="num">{{ invoice.balance|money_in:invoice.currency }}</td>
+            </tr>
+            {% empty %}<tr><td colspan="6">No invoices yet.</td></tr>{% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<div class="card">
+    <h2>Receipts</h2>
+    <table>
+        <thead><tr><th>Receipt</th><th>Date</th><th>Method</th><th class="num">Amount</th></tr></thead>
+        <tbody>
+            {% for payment in payments %}
+            <tr><td><a href="{% url 'books:portal_receipt' token payment.pk %}">{{ payment.receipt_number }}</a></td><td>{{ payment.date|date:"j M Y" }}</td><td>{{ payment.get_method_display }}</td><td class="num">{{ payment.amount|money }}</td></tr>
+            {% empty %}<tr><td colspan="4">No payments yet.</td></tr>{% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{% if credit_notes %}
+<div class="card">
+    <h2>Credit notes</h2>
+    <table>
+        <thead><tr><th>Credit note</th><th>Date</th><th>Reason</th><th class="num">Amount</th></tr></thead>
+        <tbody>
+            {% for note in credit_notes %}<tr><td><a href="{% url 'books:portal_credit_note' token note.pk %}">{{ note.number }}</a></td><td>{{ note.date|date:"j M Y" }}</td><td>{{ note.reason }}</td><td class="num">{{ note.amount|money }}</td></tr>{% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+
+{% if company.bank_name or company.momo_mtn_number or company.momo_airtel_number %}
+<div class="card">
+    <h2>How to pay</h2>
+    {% if company.bank_name %}<div>{{ company.bank_name }}{% if company.bank_account_name %}, {{ company.bank_account_name }}{% endif %}{% if company.bank_account_number %}, {{ company.bank_account_number }}{% endif %}</div>{% endif %}
+    {% if company.momo_mtn_number %}<div>MTN MoMo: {{ company.momo_mtn_number }}{% if company.momo_mtn_name %} ({{ company.momo_mtn_name }}){% endif %}</div>{% endif %}
+    {% if company.momo_airtel_number %}<div>Airtel Money: {{ company.momo_airtel_number }}{% if company.momo_airtel_name %} ({{ company.momo_airtel_name }}){% endif %}</div>{% endif %}
+</div>
+{% endif %}
+<p class="muted">This page is private to {{ client.name }}. Please don't share the link.{% if company.phone %} Questions? Call {{ company.phone }}.{% endif %}</p>
+{% endblock %}

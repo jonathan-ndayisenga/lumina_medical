@@ -6,7 +6,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from accounts import login_throttle
-from accounts.models import LoginThrottle, User
+from accounts.models import Hospital, LoginThrottle, User
 
 
 class LoginThrottleTests(TestCase):
@@ -77,6 +77,29 @@ class LoginThrottleTests(TestCase):
         response = self.client.get(reverse("login"))
         self.assertContains(response, "data-password-field")
         self.assertContains(response, "js/password-field.js")
+
+
+class HomeTileIdleTests(TestCase):
+    def test_tile_check_does_not_count_as_activity_or_keep_the_session_alive(self):
+        hospital = Hospital.objects.create(name="Tile Hospital", subdomain="tile-hospital")
+        user = User.objects.create_user(
+            username="tile-admin", password="pass12345", role=User.ROLE_HOSPITAL_ADMIN, hospital=hospital, is_active=True,
+        )
+        self.client.force_login(user)
+        session = self.client.session
+        last_active = int(timezone.now().timestamp()) - 60
+        session["_session_last_activity_ts"] = last_active
+        session.save()
+        self.client.get(reverse("home_tile", args=["lab"]), headers={"X-Background-Poll": "1"})
+        self.assertEqual(self.client.session["_session_last_activity_ts"], last_active)
+
+        session = self.client.session
+        session["_session_last_activity_ts"] = 1000
+        session.save()
+        response = self.client.get(reverse("home_tile", args=["lab"]), headers={"X-Background-Poll": "1"})
+        self.assertEqual(response.status_code, 204)
+        self.assertEqual(response["HX-Redirect"], reverse("login"))
+        self.assertNotIn("_auth_user_id", self.client.session)
 
 
 class LandingPageContactTests(TestCase):

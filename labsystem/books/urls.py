@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import planning_views, quotation_views, views
+from . import collection_views, planning_views, quotation_views, views
 
 app_name = "books"
 
@@ -28,6 +28,8 @@ urlpatterns = [
     path("clients/<int:pk>/", views.client_detail, name="client_detail"),
     path("clients/<int:pk>/statement.pdf", views.client_statement_pdf, name="client_statement_pdf"),
     path("clients/<int:client_pk>/payments/new/", views.payment_create, name="client_payment_create"),
+    path("clients/<int:pk>/statement/download/", collection_views.statement_download, name="statement_download"),
+    path("clients/<int:pk>/portal/", collection_views.client_portal_toggle, name="client_portal_toggle"),
 
     path("invoices/", views.invoice_list, name="invoice_list"),
     path("invoices/new/", views.invoice_create, name="invoice_create"),
@@ -36,6 +38,12 @@ urlpatterns = [
     path("invoices/<int:pk>/delete/", views.invoice_delete, name="invoice_delete"),
     path("invoices/<int:pk>/void/", views.invoice_void, name="invoice_void"),
     path("invoices/<int:pk>/pdf/", views.invoice_pdf, name="invoice_pdf"),
+    path("invoices/<int:pk>/download/", collection_views.invoice_download, name="invoice_download"),
+    path("invoices/<int:pk>/email/", collection_views.invoice_email, name="invoice_email"),
+    path("invoices/<int:invoice_pk>/credit-notes/new/", collection_views.credit_note_create, name="credit_note_create"),
+    path("credit-notes/<int:pk>/", collection_views.credit_note_print, name="credit_note_print"),
+    path("credit-notes/<int:pk>/download/", collection_views.credit_note_download, name="credit_note_download"),
+    path("credit-notes/<int:pk>/void/", collection_views.credit_note_void, name="credit_note_void"),
     path("invoices/<int:invoice_pk>/wht/new/", views.wht_credit_create, name="wht_credit_create"),
     path("invoices/<int:invoice_pk>/payments/new/", views.payment_create, name="invoice_payment_create"),
 
@@ -46,6 +54,7 @@ urlpatterns = [
     path("quotations/<int:pk>/status/", quotation_views.quotation_status, name="quotation_status"),
     path("quotations/<int:pk>/convert/", quotation_views.quotation_convert, name="quotation_convert"),
     path("quotations/<int:pk>/pdf/", quotation_views.quotation_pdf, name="quotation_pdf"),
+    path("quotations/<int:pk>/download/", collection_views.quotation_download, name="quotation_download"),
     path("settings/quotations/", quotation_views.quotation_settings, name="quotation_settings"),
 
     path("recurring/", planning_views.recurring_list, name="recurring_list"),
@@ -58,6 +67,18 @@ urlpatterns = [
 
     path("receipts/", views.receipt_list, name="receipt_list"),
     path("receipts/<int:pk>/pdf/", views.receipt_pdf, name="receipt_pdf"),
+    path("receipts/<int:pk>/download/", collection_views.receipt_download, name="receipt_download"),
+    path("receipts/<int:pk>/email/", collection_views.receipt_email, name="receipt_email"),
+    path("verify/<str:token>/", collection_views.receipt_verify, name="receipt_verify"),
+
+    path("portal/<str:token>/", collection_views.portal_home, name="portal_home"),
+    path("portal/<str:token>/statement/", collection_views.portal_statement, name="portal_statement"),
+    path("portal/<str:token>/invoices/<int:pk>/", collection_views.portal_invoice, name="portal_invoice"),
+    path("portal/<str:token>/receipts/<int:pk>/", collection_views.portal_receipt, name="portal_receipt"),
+    path("portal/<str:token>/credit-notes/<int:pk>/", collection_views.portal_credit_note, name="portal_credit_note"),
+
+    path("reconcile/", collection_views.reconcile, name="reconcile"),
+    path("reconcile/<int:pk>/", collection_views.reconcile_action, name="reconcile_action"),
 
     path("expenses/", views.expense_list, name="expense_list"),
     path("expenses/new/", views.expense_create, name="expense_create"),

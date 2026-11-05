@@ -91,7 +91,7 @@ A follow-up visit has no consultation fee. Reception can't add services when cre
 1. A blue **FOLLOW-UP VISIT** banner shows the visit it follows, with the previous diagnosis and treatment and a link to that consultation.
 2. **Medicines are always billed.** There's no choice for prescriptions.
 3. For lab tests, scans and other services, **tick "Free (follow-up)" before adding** anything you're giving free. Left unticked, it's billed.
-   - Lab tests: the tick box next to **Send to Lab**.
+   - Lab tests: the tick box next to **Send to Reception for Approval**.
    - Other services: the tick box under **Add to Bill**.
    - Scans: the tick box under the **Sonographer** hand-off.
 4. Free items show as **Free (follow-up)** on the consultation, the bill and the receipt. Their normal price is kept on record.

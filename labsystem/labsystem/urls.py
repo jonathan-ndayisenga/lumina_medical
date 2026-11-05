@@ -1,11 +1,10 @@
 from django.contrib import admin
 from django.contrib.auth import views as auth_views
-from django.conf import settings
 from django.urls import include, path, re_path
 from django.views.generic.base import RedirectView
-from django.views.static import serve
 
 from accounts.login_throttle import ThrottledAdminAuthenticationForm
+from labsystem.media_views import serve_media
 
 # /admin/ gets the same brute-force lockout as the app's own sign-in pages.
 admin.site.login_form = ThrottledAdminAuthenticationForm
@@ -31,6 +30,5 @@ urlpatterns = [
     path('lab/', include('lab.urls')),  # Lab moved to /lab/ prefix
     path('finance/', include('finance.urls')),
     path('homecare/', include('homecare.urls')),
-    # Serve uploaded media files (hospital logos etc.) in all environments
-    re_path(r'^media/(?P<path>.*)$', serve, {'document_root': settings.MEDIA_ROOT}),
+    re_path(r'^media/(?P<path>.*)$', serve_media),
 ]

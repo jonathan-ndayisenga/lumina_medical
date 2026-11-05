@@ -3,13 +3,14 @@ from decimal import Decimal
 from unittest import mock
 
 from django.conf import settings
+from django.contrib.staticfiles import finders
 from django.core.files.base import ContentFile
 from django.test import TestCase
 from django.urls import reverse
 
 from accounts.models import Hospital, User
-from books.documents import amount_in_words
-from books.models import Account, Client, CompanySettings, Invoice
+from books.documents import amount_in_words, format_money
+from books.models import Account, Client, CompanySettings, Invoice, Payment
 from books.quotation_models import Quotation, QuotationField, QuotationSettings
 
 # The Kanyigo Bulonde SACCO quotation (TSC-SACCO-2026-001) used as the template.
@@ -75,7 +76,7 @@ class QuotationTests(TestCase):
         self._post_quotation(**{f"xf_{field.pk}": "6 weeks"})
         quote = Quotation.objects.get()
         response = self.client.get(reverse("books:quotation_pdf", args=[quote.pk]))
-        for text in ("QUOTATION", "SACCO Management System", "TERNAH", "Kanyigo Bulonde Community SACCO",
+        for text in ("QUOTATION", "SACCO Management System", "Ternah Software Company Ltd", "Kanyigo Bulonde Community SACCO",
                      "Attn: The Chairperson / Manager", "TSC-SACCO-2026-001", "1,400,000", "3,400,000",
                      "Three Million, Four Hundred Thousand Uganda Shillings only.", "Not applicable",
                      "3 months of FREE hosting", "Project duration", "6 weeks", "Prepared by: Jonathan Ndayisenga"):
@@ -296,3 +297,73 @@ class BooksInsightsAndPlanningTests(TestCase):
         response = self.client.post(reverse("books:recurring_generate"), {"next": reverse("books:dashboard")})
         self.assertRedirects(response, reverse("books:dashboard"), fetch_redirect_response=False)
         self.assertTrue(Invoice.objects.filter(client=self.sacco).exists())
+
+
+class PrintedDocumentTests(TestCase):
+    def setUp(self):
+        hospital, _ = Hospital.objects.get_or_create(subdomain=settings.TERNAH_BOOKS_HOSPITAL_SUBDOMAIN, defaults={"name": "Ternah Books"})
+        self.user = User.objects.create_user(username="books_printer", password="x", role=User.ROLE_HOSPITAL_ADMIN, hospital=hospital)
+        company = CompanySettings.load()
+        company.legal_name, company.tagline, company.tin = "Ternah Software Company Ltd", "Keep it simple", "1058472195"
+        company.address, company.city, company.phone = "Plot 1\nNtinda", "Kampala", "0787770007"
+        company.receipt_footer_notes = "thank you"
+        company.save()
+        Account.objects.create(code="1200", name="Receivables", type=Account.TYPE_ASSET, role=Account.ROLE_AR)
+        Account.objects.create(code="1000", name="Cash", type=Account.TYPE_ASSET, role=Account.ROLE_CASH, is_payment_account=True)
+        income = Account.objects.create(code="4000", name="Onboarding income", type=Account.TYPE_INCOME)
+        linked_hospital = Hospital.objects.create(name="Client Clinic", subdomain="client-clinic")
+        linked_hospital.logo.save("client-logo.png", ContentFile(b"fake-png-data"), save=False)
+        self.perisseia = Client.objects.create(name="Perisseia Ltd", address="Kakiika\nMbarara", phone="+25670531993", hospital=linked_hospital)
+        self.invoice = Invoice.objects.create(client=self.perisseia, kind=Invoice.KIND_ONBOARDING, due_date=date(2026, 10, 1))
+        self.invoice.lines.create(description="Onboarding fee", quantity=Decimal("1"), unit_price=Decimal("1500000"), revenue_account=income)
+        self.invoice.issue(user=self.user)
+        self.client.force_login(self.user)
+
+    def _pay(self, amount):
+        payment = Payment(client=self.perisseia, date=date(2026, 9, 4), amount=Decimal(amount), method=Payment.METHOD_CASH)
+        payment.save()
+        payment.record(user=self.user)
+        return payment
+
+    def _receipt(self, payment):
+        return self.client.get(reverse("books:receipt_pdf", args=[payment.pk]))
+
+    def test_receipt_shows_what_was_paid_and_what_is_still_owed(self):
+        response = self._receipt(self._pay("300000"))
+        for text in ("RECEIPT", "Received from", "Perisseia Ltd", "Kakiika<br>Mbarara", "4 September 2026", "Cash", "Our TIN", "1058472195",
+                     "Amount received", "300,000", "Invoice total", "1,500,000", "Now outstanding", "1,200,000", "Onboarding",
+                     f"Invoice {self.invoice.number}", "Total still outstanding", "thank you"):
+            self.assertContains(response, text)
+        self.assertNotContains(response, "&lt;br")
+
+    def test_receipt_says_when_the_account_is_clear(self):
+        response = self._receipt(self._pay("1500000"))
+        self.assertContains(response, "Account balance")
+        self.assertNotContains(response, "Total still outstanding")
+
+    def test_invoice_shows_the_amount_due_then_settled(self):
+        response = self.client.get(reverse("books:invoice_pdf", args=[self.invoice.pk]))
+        for text in ("Billed to", "Perisseia Ltd", "Onboarding fee", "Amount due", "1,500,000", self.invoice.number):
+            self.assertContains(response, text)
+        self.assertNotContains(response, "Received to date")
+
+        self._pay("1500000")
+        response = self.client.get(reverse("books:invoice_pdf", args=[self.invoice.pk]))
+        self.assertContains(response, "Settled in full")
+        self.assertContains(response, "Received to date")
+
+    def test_void_invoice_is_not_called_settled(self):
+        self.invoice.void("Raised in error", user=self.user)
+        response = self.client.get(reverse("books:invoice_pdf", args=[self.invoice.pk]))
+        self.assertContains(response, "Void: nothing due")
+        self.assertNotContains(response, "Settled in full")
+
+    def test_both_documents_carry_the_ternah_logo_not_the_clients(self):
+        self.assertIsNotNone(finders.find("images/ternah_logo.svg"))
+        for response in (self._receipt(self._pay("300000")), self.client.get(reverse("books:invoice_pdf", args=[self.invoice.pk]))):
+            self.assertContains(response, "images/ternah_logo")
+            self.assertNotContains(response, "client-logo")
+
+    def test_foreign_currency_invoice_keeps_its_cents(self):
+        self.assertEqual(format_money(Decimal("1250.5"), "USD"), "1,250.50")
+        self.assertEqual(format_money(Decimal("1250000"), "UGX"), "1,250,000")

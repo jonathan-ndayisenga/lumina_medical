@@ -1,0 +1,68 @@
+{% extends "books/base.html" %}
+{% load books_extras %}
+{% block title %}Match statements - Ternah Books{% endblock %}
+{% block content %}
+<h1 class="page-title">Match statements</h1>
+<p style="color:var(--muted);font-size:0.9rem;">Upload a bank or mobile money statement as CSV, then tie each line to a payment or expense already recorded. This only checks your records against the statement. It never adds anything to the ledger.</p>
+
+<div class="card" style="max-width:640px;">
+    <form method="post" enctype="multipart/form-data" style="display:flex;flex-wrap:wrap;gap:0.75rem;align-items:flex-end;">
+        {% csrf_token %}
+        {% for field in form %}
+        <div style="flex:1 1 220px;">
+            <label for="{{ field.id_for_label }}" style="display:block;font-size:0.85rem;font-weight:600;margin-bottom:0.3rem;">{{ field.label }}</label>
+            {{ field }}
+            {% for error in field.errors %}<p style="color:#a12b2b;font-size:0.8rem;">{{ error }}</p>{% endfor %}
+        </div>
+        {% endfor %}
+        <button type="submit" class="btn">Import</button>
+    </form>
+    {% if not form.fields.account.queryset %}<p style="color:var(--muted);font-size:0.85rem;">Tick "Is payment account" on your bank, MoMo and cash accounts first.</p>{% endif %}
+</div>
+
+<p>
+    <a href="?show=open" class="btn {% if show != 'open' %}btn-secondary{% endif %}">To match ({{ open_count }})</a>
+    <a href="?show=all" class="btn {% if show == 'open' %}btn-secondary{% endif %}">Everything</a>
+</p>
+
+<div class="card">
+    <table>
+        <thead><tr><th>Date</th><th>Account</th><th>Details</th><th style="text-align:right;">Amount</th><th>Match</th></tr></thead>
+        <tbody>
+            {% for row in rows %}
+            <tr>
+                <td style="white-space:nowrap;">{{ row.line.date }}</td>
+                <td>{{ row.line.account.name }}</td>
+                <td>{{ row.line.description }}{% if row.line.reference %}<div style="color:var(--muted);font-size:0.8rem;">{{ row.line.reference }}</div>{% endif %}</td>
+                <td style="text-align:right;white-space:nowrap;">{{ row.line.amount|money }}</td>
+                <td>
+                    <form method="post" action="{% url 'books:reconcile_action' row.line.pk %}" style="display:flex;flex-wrap:wrap;gap:0.4rem;align-items:center;">
+                        {% csrf_token %}
+                        {% if row.line.matched_payment %}
+                            <span class="badge badge-paid">{{ row.line.matched_payment.receipt_number }} &middot; {{ row.line.matched_payment.client.name }}</span>
+                            <button class="btn btn-secondary" name="action" value="undo">Undo</button>
+                        {% elif row.line.matched_expense %}
+                            <span class="badge badge-paid">{{ row.line.matched_expense.description }}</span>
+                            <button class="btn btn-secondary" name="action" value="undo">Undo</button>
+                        {% elif row.line.ignored %}
+                            <span class="badge badge-draft">Ignored</span>
+                            <button class="btn btn-secondary" name="action" value="undo">Undo</button>
+                        {% else %}
+                            <input type="hidden" name="action" value="match">
+                            {% for suggestion in row.suggestions %}
+                            <button class="btn" name="target" value="{{ suggestion.pk }}">{% if suggestion.receipt_number %}{{ suggestion.receipt_number }} &middot; {{ suggestion.client.name }}{% else %}{{ suggestion.description }}{% endif %} &middot; {{ suggestion.date|date:"j M" }}</button>
+                            {% empty %}
+                            <span style="color:var(--muted);font-size:0.85rem;">Nothing recorded for this amount.{% if row.line.amount > 0 %} <a href="{% url 'books:payment_create' %}">Record payment</a>{% else %} <a href="{% url 'books:expense_create' %}">Record expense</a>{% endif %}</span>
+                            {% endfor %}
+                            <button class="btn btn-secondary" name="action" value="ignore" formnovalidate>Ignore</button>
+                        {% endif %}
+                    </form>
+                </td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="5">{% if show == 'open' %}Nothing waiting to be matched.{% else %}No statements imported yet.{% endif %}</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

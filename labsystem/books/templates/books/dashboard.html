@@ -33,6 +33,12 @@
     <div style="height:300px;"><canvas id="trendChart" role="img" aria-label="Invoiced, collected and spent per month for the last 12 months"></canvas></div>
 </div>
 
+<div class="card">
+    <h3>Who owes us, by how late</h3>
+    <p style="font-size:0.8rem;color:var(--muted);margin-top:-0.5rem;">Unpaid invoice balances, grouped by days past their due date. <a href="{% url 'books:report_ageing' %}">See it per client</a>.</p>
+    <div style="height:220px;"><canvas id="ageingChart" role="img" aria-label="Unpaid invoice balances by days overdue"></canvas></div>
+</div>
+
 <div class="dash-grid">
     <div class="card">
         <h3>Cash position</h3>
@@ -120,6 +126,7 @@
 </style>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
 {{ trend|json_script:"trend-data" }}
+{{ ageing_chart|json_script:"ageing-data" }}
 <script>
 (function () {
     const trend = JSON.parse(document.getElementById('trend-data').textContent);
@@ -136,6 +143,16 @@
             interaction: { mode: 'index', intersect: false },
             plugins: { legend: { position: 'bottom' }, tooltip: { callbacks: { label: c => c.dataset.label + ': ' + money(c.parsed.y) } } },
             scales: { y: { beginAtZero: true, ticks: { callback: v => v.toLocaleString() } } },
+        },
+    });
+    const ageing = JSON.parse(document.getElementById('ageing-data').textContent);
+    new Chart(document.getElementById('ageingChart'), {
+        type: 'bar',
+        data: { labels: ageing.labels, datasets: [{ label: 'Owed', data: ageing.values, backgroundColor: '#14233A', borderRadius: 4, maxBarThickness: 56 }] },
+        options: {
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => money(c.parsed.y) } } },
+            scales: { x: { grid: { display: false } }, y: { beginAtZero: true, grid: { color: '#E4E2DB' }, ticks: { callback: v => v.toLocaleString() } } },
         },
     });
 })();

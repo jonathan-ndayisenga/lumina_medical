@@ -158,12 +158,14 @@ class JournalEntry(models.Model):
     SOURCE_PAYMENT = "payment"
     SOURCE_EXPENSE = "expense"
     SOURCE_WHT = "wht"
+    SOURCE_CREDIT_NOTE = "credit_note"
     SOURCE_MANUAL = "manual"
     SOURCE_CHOICES = [
         (SOURCE_INVOICE, "Invoice"),
         (SOURCE_PAYMENT, "Payment"),
         (SOURCE_EXPENSE, "Expense"),
         (SOURCE_WHT, "Withholding credit"),
+        (SOURCE_CREDIT_NOTE, "Credit note"),
         (SOURCE_MANUAL, "Manual entry"),
     ]
 

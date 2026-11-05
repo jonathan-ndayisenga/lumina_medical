@@ -81,6 +81,34 @@ def post_wht_credit(credit, user=None) -> JournalEntry:
 
 
 @transaction.atomic
+def post_credit_note(note, user=None) -> JournalEntry:
+    """The invoice's posting, in reverse and in proportion, line by line."""
+    invoice = note.invoice
+    entry = JournalEntry.objects.create(
+        date=note.date,
+        memo=f"Credit note {note.number} - {note.client.name}",
+        reference=note.number,
+        source_type=JournalEntry.SOURCE_CREDIT_NOTE,
+        source_id=note.pk,
+    )
+    net = note.net_amount
+    lines = list(invoice.lines.all())
+    remaining = net
+    for index, line in enumerate(lines):
+        share = remaining if index == len(lines) - 1 else (net * line.amount / invoice.subtotal).quantize(Decimal("0.01"))
+        remaining -= share
+        if share:
+            entry.add(line.resolved_revenue_account(), debit=share, narration=f"Credit: {line.description}")
+    if note.tax_amount:
+        entry.add(Account.by_role(Account.ROLE_VAT), debit=note.tax_amount, narration="VAT reversed")
+    entry.add(Account.by_role(Account.ROLE_AR), credit=note.amount, narration=f"Credit note on invoice {invoice.number}")
+    entry.post(user)
+    note.journal_entry = entry
+    note.save(update_fields=["journal_entry"])
+    return entry
+
+
+@transaction.atomic
 def post_expense(expense, user=None) -> JournalEntry:
     entry = JournalEntry.objects.create(
         date=expense.date,

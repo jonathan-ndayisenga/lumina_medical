@@ -4,6 +4,7 @@ from django.forms import inlineformset_factory
 from .document_models import (
     Client,
     CompanySettings,
+    CreditNote,
     Expense,
     Invoice,
     InvoiceLine,
@@ -26,7 +27,7 @@ def _style(fields):
 class CompanySettingsForm(forms.ModelForm):
     class Meta:
         model = CompanySettings
-        exclude = []
+        exclude = ["logo"]  # Documents always carry the Ternah logo from static files.
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -186,6 +187,39 @@ class WithholdingCreditForm(forms.ModelForm):
                 f"This exceeds the invoice's remaining balance of UGX {self.invoice.balance:,.0f}."
             )
         return amount
+
+
+class CreditNoteForm(forms.ModelForm):
+    class Meta:
+        model = CreditNote
+        fields = ["date", "amount", "reason"]
+        widgets = {"date": forms.DateInput(attrs={"type": "date"})}
+
+    def __init__(self, *args, invoice=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.invoice = invoice
+        self.fields["amount"].help_text = f"Includes any VAT. Invoice balance: {invoice.currency} {invoice.balance:,.0f}"
+        _style(self.fields)
+
+    def clean_amount(self):
+        amount = self.cleaned_data["amount"]
+        if amount <= 0:
+            raise forms.ValidationError("Enter an amount greater than zero.")
+        if amount > self.invoice.balance:
+            raise forms.ValidationError(
+                f"This is more than the invoice's balance of {self.invoice.balance:,.0f}. If the client has already paid, void or reallocate the payment first."
+            )
+        return amount
+
+
+class StatementUploadForm(forms.Form):
+    account = forms.ModelChoiceField(queryset=Account.objects.none(), label="Which account is this statement for?")
+    file = forms.FileField(label="Statement (CSV)", widget=forms.ClearableFileInput(attrs={"accept": ".csv,text/csv"}))
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["account"].queryset = Account.objects.filter(active=True, is_payment_account=True).order_by("code")
+        _style(self.fields)
 
 
 class AccountForm(forms.ModelForm):

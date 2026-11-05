@@ -93,7 +93,7 @@
             {{ tile.label }}
         </a>
         {% if tile.live_url %}
-        <div class="tile-body" aria-live="polite" hx-get="{{ tile.live_url }}" hx-trigger="load, every 30s [document.visibilityState === 'visible']" hx-swap="innerHTML">
+        <div class="tile-body" aria-live="polite" hx-get="{{ tile.live_url }}" hx-trigger="load, every 30s [document.visibilityState === 'visible']" hx-headers='{"X-Background-Poll": "1"}' hx-swap="innerHTML">
             <span class="tile-skeleton" aria-hidden="true"></span><span class="sr-only">Loading</span>
         </div>
         {% elif tile.key == "hospital_admin" %}

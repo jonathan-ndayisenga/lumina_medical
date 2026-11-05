@@ -18,6 +18,8 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from accounts.models import User
 from reception.models import Patient, QueueEntry, Service, Visit, VisitService
 from reception.workflow import (
+    AWAITING_RECEPTION_APPROVAL,
+    close_orphaned_lab_queue_entries,
     ensure_pending_queue_entry,
     mark_queue_entries_processed,
     record_admin_override,
@@ -1053,6 +1055,7 @@ def _parse_age_years(age_str):
 def _pending_lab_visit_services(visit):
     return (
         VisitService.objects.filter(visit=visit, service__category=Service.CATEGORY_LAB, performed=False)
+        .exclude(AWAITING_RECEPTION_APPROVAL)
         .prefetch_related("service__lab_tests_next", "lab_orders_next")
     )
 
@@ -1089,6 +1092,8 @@ def _ensure_orders_for_visit(visit):
 @staff_required
 def queue(request):
     hospital = get_active_hospital(request)
+    if hospital:
+        close_orphaned_lab_queue_entries(hospital)
     queue_entries = QueueEntry.objects.filter(
         queue_type__in=[QueueEntry.TYPE_LAB_RECEPTION, QueueEntry.TYPE_LAB_DOCTOR],
         processed=False,
@@ -1107,6 +1112,7 @@ def queue(request):
         orders = (
             LabOrder.objects.filter(visit_service__visit=visit)
             .filter(stage__in=[OrderStage.PENDING, OrderStage.SAMPLE_COLLECTED])
+            .filter(visit_service__in=VisitService.objects.exclude(AWAITING_RECEPTION_APPROVAL))
             .select_related("test", "result")
         )
         if not orders.exists() and not unmapped:

@@ -5,6 +5,7 @@ from . import views
 urlpatterns = [
     path("", views.reception_dashboard, name="reception_dashboard"),
     path("queue/", views.receptionist_queue, name="reception_queue"),
+    path("queue/status/", views.reception_queue_status, name="reception_queue_status"),
     path("queue/<int:queue_entry_id>/finish/", views.receptionist_queue_finish, name="reception_queue_finish"),
     path("queue/<int:queue_entry_id>/approve-lab/", views.receptionist_queue_approve_lab, name="reception_queue_approve_lab"),
     path("queue/<int:queue_entry_id>/approve-scan/", views.receptionist_queue_approve_scan, name="reception_queue_approve_scan"),

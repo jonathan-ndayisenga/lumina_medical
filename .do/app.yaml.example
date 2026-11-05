@@ -1,5 +1,15 @@
 name: lumina-medical-lab
 region: fra
+# Optional: run the daily Books jobs. Add under `jobs:` at the top level of your spec.
+# jobs:
+#   - name: books-daily
+#     kind: SCHEDULED
+#     schedule:
+#       cron: "0 6 * * *"
+#       time_zone: Africa/Kampala
+#     environment_slug: python
+#     source_dir: labsystem
+#     run_command: python manage.py generate_recurring_invoices && python manage.py send_invoice_reminders
 services:
   - name: web
     environment_slug: python

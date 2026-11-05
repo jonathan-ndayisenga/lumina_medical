@@ -1,0 +1,22 @@
+{% extends "books/public_base.html" %}
+{% load books_extras %}
+{% block title %}Check a receipt{% endblock %}
+{% block content %}
+<div class="card">
+    {% if payment is None %}
+    <h1 class="no">This receipt could not be confirmed</h1>
+    <p>This code doesn't match any receipt we issued. If you were handed this receipt, please contact us before relying on it.</p>
+    {% elif payment.voided_at %}
+    <h1 class="no">Receipt {{ payment.receipt_number }} was cancelled</h1>
+    <p>This receipt was issued by us but has since been voided, so it is no longer valid.</p>
+    {% else %}
+    <h1 class="ok">Genuine receipt</h1>
+    <table>
+        <tr><th>Receipt</th><td class="num">{{ payment.receipt_number }}</td></tr>
+        <tr><th>Date</th><td class="num">{{ payment.date|date:"j F Y" }}</td></tr>
+        <tr><th>Received from</th><td class="num">{{ payment.client.name }}</td></tr>
+        <tr><th>Amount</th><td class="num"><strong>UGX {{ payment.amount|money }}</strong></td></tr>
+    </table>
+    {% endif %}
+</div>
+{% endblock %}

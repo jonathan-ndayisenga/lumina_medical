@@ -149,6 +149,8 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "labsystem.middleware.SessionIdleTimeoutMiddleware",
     "labsystem.middleware.HospitalMiddleware",
+    "labsystem.middleware.BooksBoundaryMiddleware",
+    "labsystem.middleware.PrivatePagesMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
@@ -221,17 +223,50 @@ STATICFILES_DIRS = [BASE_DIR / "static"]
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
-# Use WhiteNoise manifest storage only in production-like environments.
-# In DEBUG/tests we avoid the manifest requirement so templates can render without collectstatic.
-if importlib.util.find_spec("whitenoise") is not None and not DEBUG:
-    STORAGES = {
-        "default": {
-            "BACKEND": "django.core.files.storage.FileSystemStorage",
-        },
-        "staticfiles": {
-            "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+# DigitalOcean Spaces for uploads. App Platform's own disk is wiped on every
+# deploy, so without this an uploaded file only lasts until the next one.
+# Files stay private: each link is signed and stops working after 10 minutes.
+SPACES_BUCKET = env("SPACES_BUCKET", "")
+SPACES_ENABLED = bool(SPACES_BUCKET)
+_default_storage = {"BACKEND": "django.core.files.storage.FileSystemStorage"}
+if SPACES_ENABLED:
+    _spaces_region = env("SPACES_REGION", "fra1")
+    _default_storage = {
+        "BACKEND": "storages.backends.s3.S3Storage",
+        "OPTIONS": {
+            "bucket_name": SPACES_BUCKET,
+            "access_key": env("SPACES_ACCESS_KEY", ""),
+            "secret_key": env("SPACES_SECRET_KEY", ""),
+            "region_name": _spaces_region,
+            "endpoint_url": f"https://{_spaces_region}.digitaloceanspaces.com",
+            "default_acl": "private",
+            "querystring_auth": True,
+            "querystring_expire": 600,
+            "file_overwrite": False,
+            "signature_version": "s3v4",
         },
     }
+
+# Use WhiteNoise manifest storage only in production-like environments.
+# In DEBUG/tests we avoid the manifest requirement so templates can render without collectstatic.
+_use_whitenoise_manifest = importlib.util.find_spec("whitenoise") is not None and not DEBUG
+STORAGES = {
+    "default": _default_storage,
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"
+        if _use_whitenoise_manifest else "django.contrib.staticfiles.storage.StaticFilesStorage",
+    },
+}
+
+# Email for invoices, receipts and reminders. Nothing is sent until EMAIL_HOST is set.
+EMAIL_HOST = env("EMAIL_HOST", "")
+EMAIL_HOST_CONFIGURED = bool(EMAIL_HOST)
+EMAIL_PORT = int(env("EMAIL_PORT", "587"))
+EMAIL_HOST_USER = env("EMAIL_HOST_USER", "")
+EMAIL_HOST_PASSWORD = env("EMAIL_HOST_PASSWORD", "")
+EMAIL_USE_TLS = env_bool("EMAIL_USE_TLS", True)
+EMAIL_TIMEOUT = 20
+DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", EMAIL_HOST_USER or "noreply@ternah.local")
 
 
 LOGIN_URL = "/"
@@ -239,7 +274,9 @@ LOGIN_REDIRECT_URL = "app_home"  # Role-based router that checks user role
 LOGOUT_REDIRECT_URL = "/"
 SESSION_IDLE_TIMEOUT_SECONDS = int(env("DJANGO_SESSION_IDLE_TIMEOUT_SECONDS", "1800"))
 SESSION_COOKIE_AGE = SESSION_IDLE_TIMEOUT_SECONDS
-SESSION_SAVE_EVERY_REQUEST = True
+# Off so background page checks don't write the session to the database. Real
+# requests still save it: SessionIdleTimeoutMiddleware updates it on each one.
+SESSION_SAVE_EVERY_REQUEST = False
 
 
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")

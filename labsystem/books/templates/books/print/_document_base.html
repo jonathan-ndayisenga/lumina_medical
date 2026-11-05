@@ -1,0 +1,130 @@
+{% load static %}<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{ heading }} {{ number|default:"Draft" }}</title>
+<style>
+    :root { --brand: #2f4cff; --ink: #14161c; --body: #4a4f5b; --muted: #767b88; --rule: #e2e5ec; --settled: #1f9d55; }
+    @page { size: A4 portrait; margin: 15mm; }
+    * { box-sizing: border-box; }
+    html { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; font-size: 9.5pt; line-height: 1.5; color: var(--ink); font-variant-numeric: tabular-nums; }
+    body { margin: 0; background: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .sheet { max-width: 180mm; margin: 0 auto; }
+
+    .brandrule { height: 4pt; background: var(--brand); border-radius: 2pt; margin-bottom: 7mm; }
+
+    .header { display: flex; justify-content: space-between; align-items: flex-start; gap: 8mm; }
+    .identity { display: flex; align-items: center; gap: 3mm; }
+    .identity img { height: 12mm; width: auto; flex: none; }
+    .company-name { font-size: 18pt; font-weight: 700; letter-spacing: -0.015em; line-height: 1.15; }
+    .tagline { margin-top: 2mm; color: var(--muted); font-size: 8.5pt; }
+    .issuer { margin-top: 2mm; color: var(--muted); font-size: 8.5pt; line-height: 1.45; max-width: 90mm; }
+    .doctype { text-align: right; flex: none; }
+    .doctype h1 { margin: 0; color: var(--brand); font-size: 14pt; font-weight: 700; letter-spacing: 0.02em; }
+    .doctype .docnum { margin-top: 1px; font-size: 11pt; font-weight: 700; }
+
+    .meta { display: flex; justify-content: space-between; gap: 16mm; margin-top: 9mm; }
+    .party { max-width: 85mm; overflow-wrap: anywhere; }
+    .label { color: var(--muted); }
+    .who { font-size: 11pt; font-weight: 700; line-height: 1.3; }
+    .dates { min-width: 72mm; }
+    .dates table { width: 100%; border-collapse: collapse; }
+    .dates td { padding: 3px 0; vertical-align: top; }
+    .dates td:first-child { color: var(--muted); font-size: 8.5pt; padding-right: 8mm; }
+    .dates td:last-child { text-align: right; }
+
+    .table-scroll { overflow-x: auto; }
+    .lines { width: 100%; border-collapse: collapse; margin-top: 8mm; }
+    .lines th { padding: 0 3mm 5px; border-bottom: 0.75pt solid var(--ink); color: var(--muted); font-size: 8.5pt; font-weight: 400; text-align: left; }
+    .lines td { padding: 8px 3mm; border-bottom: 0.5pt solid var(--rule); vertical-align: top; }
+    .lines .num { text-align: right; white-space: nowrap; }
+    .lines tr { break-inside: avoid; }
+    .desc { font-weight: 700; }
+    .detail { color: var(--muted); }
+
+    .totals { display: flex; justify-content: flex-end; margin-top: 5mm; }
+    .totals table { border-collapse: collapse; min-width: 86mm; }
+    .totals td { padding: 3px 3mm; }
+    .totals td:first-child { color: var(--muted); padding-right: 12mm; }
+    .totals td:last-child { text-align: right; white-space: nowrap; }
+    .totals tr.rule td { border-top: 0.5pt solid var(--rule); padding-top: 8px; }
+
+    .due { display: flex; justify-content: flex-end; margin-top: 7mm; break-inside: avoid; }
+    .due .box { display: flex; justify-content: space-between; align-items: center; gap: 10mm; min-width: 96mm; padding: 5px 3mm 5px 6mm; border-left: 2.5pt solid var(--brand); border-radius: 1pt; }
+    .due .duelabel { font-size: 11pt; font-weight: 700; white-space: nowrap; }
+    .due .dueamount { font-size: 19pt; font-weight: 700; letter-spacing: -0.01em; white-space: nowrap; }
+    .due .cur { color: var(--muted); font-size: 9.5pt; font-weight: 700; letter-spacing: 0.02em; margin-right: 1mm; }
+    .due.settled .box { border-left-color: var(--settled); }
+    .due.settled .dueamount { color: var(--settled); }
+
+    .blocks { display: flex; gap: 14mm; margin-top: 9mm; break-inside: avoid; }
+    .block { flex: 1; }
+    .block h3 { margin: 0 0 4px; font-size: 9.5pt; font-weight: 700; }
+    .block table { width: 100%; border-collapse: collapse; font-size: 8.5pt; }
+    .block td { padding: 2px 0; vertical-align: top; }
+    .block td.k { color: var(--muted); padding-right: 6mm; white-space: nowrap; }
+    .block td.amt { text-align: right; white-space: nowrap; }
+    .block .note { margin-top: 4px; color: var(--muted); font-size: 8.5pt; }
+
+    .stamp { position: absolute; top: 35mm; right: 6mm; padding: 3px 12px; border: 2px solid currentColor; border-radius: 4px; font-size: 15pt; font-weight: 700; letter-spacing: 0.08em; transform: rotate(-12deg); opacity: 0.85; }
+    .stamp-paid { color: var(--settled); }
+    .stamp-overdue, .stamp-void { color: #b42318; }
+    .stamp-draft { color: var(--muted); }
+    .verify { display: flex; align-items: center; gap: 4mm; margin-top: 8mm; color: var(--muted); font-size: 8.5pt; break-inside: avoid; }
+    .verify svg { width: 22mm; height: 22mm; flex: none; }
+    .print-bar { display: flex; justify-content: flex-end; gap: 8px; margin-bottom: 12px; }
+    .print-bar button { height: 40px; padding: 0 16px; border: 0; border-radius: 8px; background: #14233A; color: #fff; font: inherit; font-weight: 700; cursor: pointer; }
+
+    .footnote { margin-top: 9mm; color: var(--muted); font-size: 8.5pt; break-inside: avoid; }
+
+    .sheet { position: relative; }
+    @media screen { .sheet { padding: 8mm 0; } }
+    @media print { .print-bar { display: none; } }
+    @media screen and (max-width: 720px) {
+        .sheet { max-width: 100%; padding: 16px; }
+        .stamp { top: 76px; right: 16px; font-size: 12pt; }
+        .header, .meta, .blocks { flex-direction: column; gap: 5mm; }
+        .doctype { text-align: left; }
+        .party, .issuer { max-width: 100%; }
+        .dates { min-width: 0; width: 100%; }
+        .totals table, .due .box { width: 100%; min-width: 0; }
+        .due .box { gap: 4mm; padding-right: 0; }
+        .due .duelabel { font-size: 10pt; }
+        .due .dueamount { font-size: 16pt; }
+        .lines th, .lines td { padding-left: 2mm; padding-right: 2mm; }
+    }
+</style>
+</head>
+<body>
+<div class="sheet">
+    {% block toolbar %}{% endblock %}
+    <div class="brandrule"></div>
+    {% if stamp %}<div class="stamp stamp-{{ stamp|lower }}">{{ stamp }}</div>{% endif %}
+
+    <div class="header">
+        <div>
+            <div class="identity">
+                <img src="{% static 'images/ternah_logo.svg' %}" alt="">
+                <div class="company-name">{{ company.legal_name|default:company.trading_name }}</div>
+            </div>
+            {% if company.tagline %}<div class="tagline">{{ company.tagline }}</div>{% endif %}
+            <div class="issuer">
+                {% if company.address or company.city %}<div>{{ company.address|linebreaksbr }}{% if company.address and company.city %}, {% endif %}{{ company.city }}</div>{% endif %}
+                {% if company.phone %}<div>{{ company.phone }}</div>{% endif %}
+                {% if company.email %}<div>{{ company.email }}</div>{% endif %}
+            </div>
+        </div>
+        <div class="doctype">
+            <h1>{{ heading }}</h1>
+            <div class="docnum">{{ number|default:"Draft" }}</div>
+        </div>
+    </div>
+
+    {% block body %}{% endblock %}
+
+    {% if footer_notes %}<div class="footnote">{{ footer_notes|linebreaksbr }}</div>{% endif %}
+</div>
+{% block autoprint %}<script>window.addEventListener('load', () => window.print());</script>{% endblock %}
+</body>
+</html>

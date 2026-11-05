@@ -5,7 +5,11 @@
 {% block page_subtitle %}Receive patients back from lab, nurse, and doctor, then decide the final billing, dispensing, or doctor-review step.{% endblock %}
 
 {% block content %}
-<div class="space-y-6">
+<div class="space-y-6" id="reception-queue-live" data-status-url="{% url 'reception_queue_status' %}" data-signature="{{ queue_signature }}">
+    <div id="reception-queue-changed" class="card bg-amber-50 border border-amber-200 flex items-center justify-between gap-3 flex-wrap" style="display:none" role="status">
+        <p class="text-sm font-semibold text-amber-800">The queue has changed: a patient or request has arrived.</p>
+        <a href="{% url 'reception_queue' %}" class="btn btn-primary btn-sm">Refresh</a>
+    </div>
     <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div class="card">
             <p class="text-text-muted text-sm font-medium mb-2">Patients Waiting</p>
@@ -20,6 +24,31 @@
             <p class="text-lg font-semibold text-text-main">{{ hospital.name|default:"No active hospital" }}</p>
         </div>
     </div>
+
+    <script>
+    // New requests appear without anyone pressing refresh. Someone mid-way
+    // through picking a service gets a banner instead of losing their choice.
+    (function () {
+        const POLL_MS = 15000;
+        const timer = setInterval(function () {
+            const page = document.getElementById('reception-queue-live');
+            if (!page) { clearInterval(timer); return; }
+            if (document.visibilityState !== 'visible') return;
+            fetch(page.dataset.statusUrl, { headers: { 'X-Background-Poll': '1' } }).then(function (response) {
+                if (response.redirected) { window.location.reload(); return null; }
+                return response.ok ? response.json() : null;
+            }).then(function (data) {
+                if (!data || data.signature === page.dataset.signature) return;
+                const active = document.activeElement;
+                if (active && ['INPUT', 'SELECT', 'TEXTAREA'].includes(active.tagName)) {
+                    document.getElementById('reception-queue-changed').style.display = '';
+                } else {
+                    window.location.reload();
+                }
+            }).catch(function () {});
+        }, POLL_MS);
+    })();
+    </script>
 
     <div class="card bg-brand-soft border-l-4 border-brand-dark">
         <h4 class="text-sm font-semibold text-brand-dark mb-2">How this queue works</h4>

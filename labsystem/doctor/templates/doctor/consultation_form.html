@@ -95,7 +95,7 @@
             <div class="flex items-start justify-between gap-3 flex-wrap mb-4">
                 <div>
                     <h3 class="text-sm font-semibold text-text-main">Pending Lab Requests</h3>
-                    <p class="text-xs text-text-muted mt-1">Send tests straight to the lab, then let the lab attendant work through them one by one.</p>
+                    <p class="text-xs text-text-muted mt-1">Requests go to reception for approval first, then on to the lab.</p>
                 </div>
                 <span class="inline-flex items-center rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700" id="pending-lab-count">
                     {{ pending_lab_services|length }} pending
@@ -124,7 +124,7 @@
                     <p id="selected-lab-empty" class="text-sm text-text-muted italic">No lab services selected yet.</p>
                 </div>
                 <div class="flex justify-start items-center gap-4 flex-wrap">
-                    <button type="button" id="send-lab-request-btn" class="btn btn-primary btn-sm whitespace-nowrap">Send to Lab</button>
+                    <button type="button" id="send-lab-request-btn" class="btn btn-primary btn-sm whitespace-nowrap">Send to Reception for Approval</button>
                     {% if visit.is_follow_up_visit %}
                     <label class="inline-flex items-center gap-2 text-sm font-medium text-blue-800">
                         <input type="checkbox" id="lab-free-follow-up" class="h-4 w-4"> Free (follow-up): don't bill these tests
@@ -156,6 +156,7 @@
                             </div>
                         </div>
                         <p class="text-xs text-text-muted mt-2">{% if visit_service.is_charged %}UGX {{ visit_service.price_at_time }}{% else %}{{ visit_service.billing_label }}{% endif %}</p>
+                        <p class="text-xs font-semibold mt-1 {% if visit_service.is_approved %}text-emerald-700{% else %}text-amber-700{% endif %}">{% if visit_service.is_approved %}Approved: with the lab{% else %}Awaiting reception approval{% endif %}</p>
                     </div>
                 {% empty %}
                     <p id="pending-lab-empty" class="text-sm text-text-muted italic">No pending lab requests for this visit yet.</p>
@@ -954,6 +955,7 @@
           </div>
         </div>
         <p class="text-xs text-text-muted mt-2">${service.free_follow_up ? 'Free (follow-up)' : `UGX ${service.price}`}</p>
+        <p class="text-xs font-semibold mt-1 ${service.is_approved ? 'text-emerald-700' : 'text-amber-700'}">${service.is_approved ? 'Approved: with the lab' : 'Awaiting reception approval'}</p>
       `;
       return card;
     }

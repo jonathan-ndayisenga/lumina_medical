@@ -6,8 +6,30 @@
 <p>
     <a href="{% url 'books:client_payment_create' client.pk %}" class="btn">Record payment</a>
     <a href="{% url 'books:invoice_create' %}" class="btn btn-secondary">New invoice</a>
-    <a href="{% url 'books:client_statement_pdf' client.pk %}" class="btn btn-secondary">Print statement</a>
+    <a href="{% url 'books:client_statement_pdf' client.pk %}" class="btn btn-secondary" target="_blank">Print statement</a>
+    <a href="{% url 'books:statement_download' client.pk %}" class="btn btn-secondary">Download statement</a>
 </p>
+
+{% if is_books_admin %}
+<div class="card">
+    <h3>Client link</h3>
+    {% if portal_url %}
+    <p style="font-size:0.88rem;color:var(--muted);">Anyone holding this link can see this client's invoices, receipts and balance without signing in. Only share it with the client.</p>
+    <input type="text" class="form-control" readonly value="{{ portal_url }}" onclick="this.select()" aria-label="Client link" style="margin-bottom:0.75rem;">
+    <form method="post" action="{% url 'books:client_portal_toggle' client.pk %}" style="display:flex;gap:0.5rem;flex-wrap:wrap;">
+        {% csrf_token %}
+        <button type="submit" name="action" value="enable" class="btn btn-secondary">Make a new link</button>
+        <button type="submit" name="action" value="disable" class="btn btn-danger">Turn off</button>
+    </form>
+    {% else %}
+    <p style="font-size:0.88rem;color:var(--muted);">Off. Turn it on to give this client a private page with their invoices, receipts and balance.</p>
+    <form method="post" action="{% url 'books:client_portal_toggle' client.pk %}">
+        {% csrf_token %}
+        <button type="submit" name="action" value="enable" class="btn btn-secondary">Create client link</button>
+    </form>
+    {% endif %}
+</div>
+{% endif %}
 
 {% if client.hospital %}
 <div class="card">

@@ -1,5 +1,7 @@
 from django import template
 
+from books.documents import format_money
+
 register = template.Library()
 
 
@@ -19,3 +21,8 @@ def money(value):
         return f"{float(value):,.0f}"
     except (TypeError, ValueError):
         return value
+
+
+@register.filter
+def money_in(value, currency):
+    return format_money(value, currency)

@@ -9,7 +9,7 @@ from django.core.paginator import Paginator
 from django.db.models import Q
 from urllib.parse import urlencode
 
-from django.http import Http404, JsonResponse
+from django.http import Http404, HttpResponse, JsonResponse
 from django.templatetags.static import static
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -143,21 +143,12 @@ class RoleAwareLoginView(LoginView):
     template_name = "registration/login.html"
     form_class = ThrottledAuthenticationForm
 
-    def form_valid(self, form):
-        user = form.get_user()
-        hospital = getattr(user, "hospital", None)
-        if (
-            not user.is_superadmin
-            and hospital is not None
-            and hospital.subdomain == settings.TERNAH_BOOKS_HOSPITAL_SUBDOMAIN
-        ):
-            form.add_error(None, "This account is for Ternah Books — sign in at the Ternah Books login instead.")
-            return self.form_invalid(form)
-        return super().form_valid(form)
-
     def get_success_url(self):
         if self.request.user.is_superadmin:
             return reverse("developer_dashboard")
+        hospital = getattr(self.request.user, "hospital", None)
+        if hospital is not None and hospital.subdomain == settings.TERNAH_BOOKS_HOSPITAL_SUBDOMAIN:
+            return reverse("books:dashboard")
         return reverse("app_home")
 
 
@@ -171,8 +162,7 @@ def app_home(request):
 
     hospital = getattr(user, "hospital", None)
     if hospital is not None and hospital.subdomain == settings.TERNAH_BOOKS_HOSPITAL_SUBDOMAIN:
-        logout(request)
-        return redirect("books:login")
+        return redirect("books:dashboard")
 
     sections = _accessible_sections(user)
     if len(sections) <= 1:
@@ -222,8 +212,13 @@ def app_home(request):
     })
 
 
-@login_required
 def home_tile(request, tile):
+    # A tile that finds its user signed out sends the whole page to the login
+    # screen, instead of @login_required putting that screen inside the tile.
+    if not request.user.is_authenticated:
+        response = HttpResponse(status=204)
+        response["HX-Redirect"] = reverse("login")
+        return response
     spec = TILES.get(tile)
     hospital = getattr(request.user, "hospital", None)
     if spec is None or not spec["live"] or hospital is None:

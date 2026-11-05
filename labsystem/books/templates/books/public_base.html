@@ -1,0 +1,37 @@
+{% load static %}<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex, nofollow">
+    <title>{% block title %}{{ company.legal_name }}{% endblock %}</title>
+    <link rel="icon" href="{% static 'images/ternah_logo.svg' %}" type="image/svg+xml">
+    <style>
+        :root { --nav: #14233A; --ink: #15202E; --muted: #5B6472; --border: #E4E2DB; --bg: #F4F3EF; --link: #2f4cff; --good: #146c3f; --bad: #a12b2b; }
+        * { box-sizing: border-box; }
+        body { margin: 0; background: var(--bg); color: var(--ink); font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; font-size: 15px; line-height: 1.5; font-variant-numeric: tabular-nums; }
+        .wrap { max-width: 820px; margin: 0 auto; padding: 24px 16px 48px; }
+        .top { display: flex; align-items: center; gap: 12px; margin-bottom: 24px; }
+        .top img { height: 34px; width: auto; }
+        .top strong { font-size: 18px; }
+        .card { background: #fff; border: 1px solid var(--border); border-radius: 12px; padding: 20px; margin-bottom: 16px; overflow-x: auto; }
+        h1 { font-size: 20px; margin: 0 0 4px; }
+        h2 { font-size: 15px; margin: 0 0 10px; }
+        .muted { color: var(--muted); font-size: 13px; }
+        .big { font-size: 26px; font-weight: 700; }
+        table { width: 100%; border-collapse: collapse; font-size: 14px; }
+        th, td { padding: 9px 8px; border-bottom: 1px solid var(--border); text-align: left; }
+        th { color: var(--muted); font-weight: 400; font-size: 13px; }
+        .num { text-align: right; white-space: nowrap; }
+        a { color: var(--link); }
+        .ok { color: var(--good); font-weight: 700; }
+        .no { color: var(--bad); font-weight: 700; }
+    </style>
+</head>
+<body>
+<div class="wrap">
+    <div class="top"><img src="{% static 'images/ternah_logo.svg' %}" alt=""><strong>{{ company.legal_name|default:company.trading_name }}</strong></div>
+    {% block content %}{% endblock %}
+</div>
+</body>
+</html>

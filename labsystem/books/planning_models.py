@@ -8,6 +8,22 @@ from .document_models import Client, Invoice, InvoiceLine
 from .ledger_models import Account
 
 
+class ReminderLog(models.Model):
+    """One row per reminder emailed, so a daily job never sends the same one twice."""
+
+    invoice = models.ForeignKey(Invoice, on_delete=models.CASCADE, related_name="reminders")
+    stage = models.CharField(max_length=20)
+    sent_to = models.EmailField()
+    sent_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-sent_at"]
+        unique_together = ("invoice", "stage")
+
+    def __str__(self):
+        return f"{self.invoice} {self.stage}"
+
+
 class RecurringInvoice(models.Model):
     """A monthly charge (e.g. hosting at UGX 350,000/month) that Books turns
     into an issued invoice on each due date."""

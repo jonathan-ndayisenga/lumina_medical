@@ -22,6 +22,7 @@ from accounts.forms import HospitalSubscriptionPaymentForm, SubscriptionPlanForm
 from accounts.models import Hospital, HospitalInvoice, HospitalModuleSubscription, HospitalSubscriptionPayment, InternalNotification, Module, PlatformSettings, SubscriptionPlan, SupportToken, SupportTokenMessage, SystemNotification, User
 from lab.models import LabReport
 from reception.models import Patient, Payment, QueueEntry, Service, Visit
+from reception.workflow import lab_queue_entries_with_work
 from .forms import (
     BankAccountForm,
     BankReconciliationForm,
@@ -833,10 +834,7 @@ def hospital_dashboard(request):
         "visit_count": visits.count(),
         "completed_visit_count": visits.filter(status=Visit.STATUS_COMPLETED).count(),
         "open_queue_count": queue_entries.filter(processed=False).count(),
-        "lab_queue_count": queue_entries.filter(
-            queue_type__in=[QueueEntry.TYPE_LAB_RECEPTION, QueueEntry.TYPE_LAB_DOCTOR],
-            processed=False,
-        ).count(),
+        "lab_queue_count": lab_queue_entries_with_work(hospital).count() if hospital else 0,
         "doctor_queue_count": queue_entries.filter(queue_type=QueueEntry.TYPE_DOCTOR, processed=False).count(),
         "nurse_queue_count": queue_entries.filter(queue_type=QueueEntry.TYPE_NURSE, processed=False).count(),
         "report_count": reports.count(),

@@ -4,7 +4,8 @@
 {% block content %}
 <h1 class="page-title">Quotation {{ quotation.number }} <span class="badge badge-{{ quotation.status }}">{{ quotation.get_status_display }}</span></h1>
 <p style="display:flex; flex-wrap:wrap; gap:0.5rem;">
-    <a href="{% url 'books:quotation_pdf' quotation.pk %}" target="_blank" rel="noopener" class="btn">Print / PDF</a>
+    <a href="{% url 'books:quotation_pdf' quotation.pk %}" target="_blank" rel="noopener" class="btn">Print</a>
+    <a href="{% url 'books:quotation_download' quotation.pk %}" class="btn btn-secondary">Download PDF</a>
     {% if quotation.is_editable %}<a href="{% url 'books:quotation_edit' quotation.pk %}" class="btn btn-secondary">Edit</a>{% endif %}
     {% if quotation.status != 'converted' %}
         {% for value, label in quotation.STATUS_CHOICES %}

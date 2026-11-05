@@ -1,57 +1,48 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Statement - {{ client.name }}</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<style>
-    :root { --navy: #0f1a42; --brand: #2f4cff; --muted: #667085; --border: #e4e7ee; }
-    @page { size: A4 portrait; margin: 14mm; }
-    * { box-sizing: border-box; }
-    body { font-family: 'Inter', -apple-system, 'Segoe UI', Roboto, sans-serif; font-size: 13px; color: #1f2733; margin: 0; }
-    .sheet { max-width: 780px; margin: 0 auto; }
-    .accent-bar { height: 6px; background: var(--brand); border-radius: 4px 4px 0 0; margin-bottom: 1.5rem; }
-    .header { display: flex; align-items: center; gap: 0.9rem; margin-bottom: 1.5rem; flex-wrap: wrap; }
-    .header img { max-height: 56px; max-width: 180px; object-fit: contain; }
-    .company-name { font-weight: 800; color: var(--navy); font-size: 1rem; }
-    h1 { font-size: 1.4rem; color: var(--navy); font-weight: 800; margin: 0 0 0.5rem; }
-    table { width: 100%; border-collapse: collapse; }
-    th, td { padding: 0.6rem 0.7rem; text-align: left; }
-    thead th { background: var(--navy); color: #fff; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; }
-    tbody tr { border-bottom: 1px solid var(--border); }
-    tbody tr:nth-child(even) { background: #f7f8fc; }
-    tfoot td { border-top: 2px solid var(--navy); padding-top: 0.75rem; }
-    @media screen and (max-width: 640px) {
-        body { font-size: 12px; }
-        .sheet { max-width: 100%; padding: 0 0.75rem; }
-        table { display: block; overflow-x: auto; white-space: nowrap; }
-    }
-</style>
-</head>
-<body>
-<div class="sheet">
-<div class="accent-bar"></div>
-<div class="header">
-    {% if company.logo %}<img src="{{ company.logo.url }}" alt="{{ company.legal_name }}">{% endif %}
-    <div class="company-name">{{ company.legal_name }}</div>
+{% extends "books/print/_document_base.html" %}
+{% load books_extras %}
+
+{% block body %}
+<div class="meta">
+    <div class="party">
+        <div class="label">Statement for</div>
+        <div class="who">{{ client.name }}{% if client.trading_name %} ({{ client.trading_name }}){% endif %}</div>
+        {% if client.address %}<div>{{ client.address|linebreaksbr }}</div>{% endif %}
+        {% if client.email %}<div>{{ client.email }}</div>{% endif %}
+        {% if client.phone %}<div>{{ client.phone }}</div>{% endif %}
+        {% if client.tin %}<div>TIN {{ client.tin }}</div>{% endif %}
+    </div>
+    <div class="dates">
+        <table>
+            {% if start %}<tr><td>From</td><td>{{ start|date:"j F Y" }}</td></tr>{% endif %}
+            <tr><td>To</td><td>{% firstof end|date:"j F Y" today|date:"j F Y" %}</td></tr>
+            {% if company.tin %}<tr><td>Our TIN</td><td>{{ company.tin }}</td></tr>{% endif %}
+        </table>
+    </div>
 </div>
-<h1>Statement of account</h1>
-<p><strong>{{ client.name }}</strong>{% if start %} &middot; {{ start }} to {{ end }}{% endif %}</p>
-<table>
-    <thead><tr><th>Date</th><th>Event</th><th>Debit</th><th>Credit</th><th>Balance</th></tr></thead>
+
+<div class="table-scroll">
+<table class="lines">
+    <thead><tr><th>Date</th><th>Details</th><th class="num">Charges</th><th class="num">Payments</th><th class="num">Balance</th></tr></thead>
     <tbody>
         {% for event in events %}
-        <tr><td>{{ event.date }}</td><td>{{ event.label }}</td><td>{% if event.debit %}UGX {{ event.debit|floatformat:0 }}{% endif %}</td><td>{% if event.credit %}UGX {{ event.credit|floatformat:0 }}{% endif %}</td><td>UGX {{ event.running_balance|floatformat:0 }}</td></tr>
+        <tr>
+            <td style="white-space:nowrap;">{{ event.date|date:"j M Y" }}</td>
+            <td><div class="desc">{{ event.label }}</div></td>
+            <td class="num">{% if event.debit %}{{ event.debit|money_in:currency }}{% endif %}</td>
+            <td class="num">{% if event.credit %}{{ event.credit|money_in:currency }}{% endif %}</td>
+            <td class="num">{{ event.running_balance|money_in:currency }}</td>
+        </tr>
         {% empty %}
         <tr><td colspan="5">Nothing recorded.</td></tr>
         {% endfor %}
     </tbody>
-    <tfoot><tr><td colspan="4"><strong>Closing balance</strong></td><td><strong>UGX {{ closing_balance|floatformat:0 }}</strong></td></tr></tfoot>
 </table>
 </div>
-<script>window.addEventListener('load', () => window.print());</script>
-</body>
-</html>
+
+<div class="due{% if is_settled %} settled{% endif %}">
+    <div class="box">
+        <div class="duelabel">{% if is_settled %}Nothing outstanding{% else %}Balance due{% endif %}</div>
+        <div class="dueamount"><span class="cur">{{ currency }}</span>{{ closing_balance|money_in:currency }}</div>
+    </div>
+</div>
+{% endblock %}

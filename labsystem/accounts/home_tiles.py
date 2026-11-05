@@ -118,7 +118,8 @@ def _doctor(hospital):
 
 def _lab(hospital):
     from lab.models import LabOrder, OrderStage
-    from reception.models import QueueEntry
+    from reception.models import QueueEntry, VisitService
+    from reception.workflow import AWAITING_RECEPTION_APPROVAL
     # Same definition as the Lab Queue page: tests awaiting a sample or a
     # result on a visit that is still open in the lab queue. Orders left at
     # "pending" after their queue entry was closed (visit terminated, patient
@@ -131,6 +132,7 @@ def _lab(hospital):
         hospital=hospital,
         stage__in=[OrderStage.PENDING, OrderStage.SAMPLE_COLLECTED],
         visit_service__visit_id__in=open_visits,
+        visit_service__in=VisitService.objects.exclude(AWAITING_RECEPTION_APPROVAL),
     )
     count = qs.count()
     oldest = qs.aggregate(oldest=Min("created_at"))["oldest"]

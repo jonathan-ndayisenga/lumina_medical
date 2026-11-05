@@ -1,4 +1,5 @@
 import hashlib
+import secrets
 from decimal import ROUND_HALF_UP, Decimal
 
 from django.conf import settings
@@ -49,6 +50,11 @@ class CompanySettings(models.Model):
 
     default_payment_terms_days = models.PositiveIntegerField(default=14)
     vat_rate = models.DecimalField(max_digits=5, decimal_places=2, default=Decimal("18.00"))
+
+    reminders_enabled = models.BooleanField(
+        default=False,
+        help_text="Email clients automatically before and after an invoice's due date. Off until you turn it on.",
+    )
 
     invoice_footer_notes = models.TextField(blank=True)
     receipt_footer_notes = models.TextField(blank=True)
@@ -120,12 +126,22 @@ class Client(models.Model):
     payment_terms_days = models.PositiveIntegerField(null=True, blank=True)
     notes = models.TextField(blank=True)
     active = models.BooleanField(default=True)
+    portal_token = models.CharField(max_length=64, null=True, blank=True, unique=True, editable=False, default=None)
 
     class Meta:
         ordering = ["name"]
 
     def __str__(self):
         return self.name
+
+    def enable_portal(self):
+        """A new token also kills any link handed out before."""
+        self.portal_token = secrets.token_urlsafe(32)
+        self.save(update_fields=["portal_token"])
+
+    def disable_portal(self):
+        self.portal_token = None
+        self.save(update_fields=["portal_token"])
 
     @property
     def total_invoiced(self) -> Decimal:
@@ -261,7 +277,12 @@ class Invoice(models.Model):
     def balance(self) -> Decimal:
         if self.status == self.STATUS_VOID:
             return Decimal("0")
-        return self.total - self.amount_paid - self.wht_credited
+        return self.total - self.amount_paid - self.wht_credited - self.credited
+
+    @property
+    def credited(self) -> Decimal:
+        agg = self.credit_notes.filter(voided_at__isnull=True).aggregate(t=models.Sum("amount"))
+        return agg["t"] or Decimal("0")
 
     @property
     def is_settled(self) -> bool:
@@ -349,6 +370,8 @@ class Invoice(models.Model):
                 "This invoice has payments allocated against it. Reallocate or void the "
                 "payment first, or issue a credit note instead."
             )
+        if self.credit_notes.filter(voided_at__isnull=True).exists():
+            raise ValidationError("This invoice has credit notes against it. Void those first.")
         if self.journal_entry_id:
             self.journal_entry.reverse(timezone.localdate(), f"Void invoice {self.number}: {reason}", user)
         self.status = self.STATUS_VOID
@@ -571,6 +594,70 @@ class WithholdingCredit(models.Model):
         return self
 
 
+class CreditNote(models.Model):
+    """Reduces what a client owes on an issued invoice, with its own number and
+    journal entry. Reversing the ledger lines of the invoice would rewrite
+    history; a credit note records the correction as what it is."""
+
+    client = models.ForeignKey(Client, on_delete=models.PROTECT, related_name="credit_notes")
+    invoice = models.ForeignKey(Invoice, on_delete=models.PROTECT, related_name="credit_notes")
+    number = models.CharField(max_length=30, unique=True, null=True, blank=True, default=None)
+    date = models.DateField(default=timezone.localdate)
+    reason = models.CharField(max_length=255)
+    amount = models.DecimalField(max_digits=14, decimal_places=2, help_text="Includes any VAT.")
+    tax_amount = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal("0"))
+    journal_entry = models.OneToOneField(
+        JournalEntry, on_delete=models.SET_NULL, null=True, blank=True, related_name="credit_note"
+    )
+    voided_at = models.DateTimeField(null=True, blank=True)
+    void_reason = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-date", "-id"]
+
+    def __str__(self):
+        return self.number or f"Credit note #{self.pk}"
+
+    @property
+    def net_amount(self) -> Decimal:
+        return self.amount - self.tax_amount
+
+    @transaction.atomic
+    def record(self, user=None):
+        invoice = self.invoice
+        if invoice.status not in (Invoice.STATUS_OPEN, Invoice.STATUS_PAID):
+            raise ValidationError("A credit note can only be raised against an issued invoice.")
+        if self.amount <= 0:
+            raise ValidationError("A credit note must be for more than zero.")
+        if self.amount > invoice.balance:
+            raise ValidationError(
+                f"This is more than the invoice's balance of {invoice.balance:,.2f}. If the client has already "
+                "paid, void or reallocate the payment first."
+            )
+        self.client = invoice.client
+        self.tax_amount = _q(self.amount * invoice.tax_amount / invoice.total) if invoice.tax_amount else Decimal("0")
+        from .ledger_models import Sequence
+        self.number = Sequence.next("credit_note", self.date.year, CompanySettings.load().credit_note_prefix)
+        self.save()
+        from . import posting
+        posting.post_credit_note(self, user)
+        invoice.refresh_status()
+        return self
+
+    @transaction.atomic
+    def void(self, reason: str, user=None):
+        if self.voided_at:
+            raise ValidationError("This credit note is already void.")
+        if self.journal_entry_id:
+            self.journal_entry.reverse(timezone.localdate(), f"Void credit note {self.number}: {reason}", user)
+        self.voided_at = timezone.now()
+        self.void_reason = reason
+        self.save(update_fields=["voided_at", "void_reason"])
+        self.invoice.refresh_status()
+        return self
+
+
 class Expense(models.Model):
     METHOD_CASH = "cash"
     METHOD_BANK = "bank"
@@ -650,7 +737,8 @@ class Expense(models.Model):
 
     def save(self, *args, **kwargs):
         is_new = self._state.adding
-        if self.receipt and hasattr(self.receipt, "file"):
+        # Only a fresh upload: opening a stored file here crashes the save if it's gone.
+        if self.receipt and not self.receipt._committed:
             self.receipt.seek(0)
             self.receipt_hash = hashlib.sha256(self.receipt.read()).hexdigest()
             self.receipt.seek(0)

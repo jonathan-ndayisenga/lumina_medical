@@ -33,6 +33,8 @@
                 <td>
                     {% if not payment.voided_at %}
                     <a href="{% url 'books:receipt_pdf' payment.pk %}" target="_blank">Print</a>
+                    &middot; <a href="{% url 'books:receipt_download' payment.pk %}">PDF</a>
+                    {% if email_ready and payment.client.email %}&middot; <form method="post" action="{% url 'books:receipt_email' payment.pk %}" style="display:inline;">{% csrf_token %}<button type="submit" style="all:unset;cursor:pointer;color:var(--link);text-decoration:underline;">Email</button></form>{% endif %}
                     &middot; <a href="{% url 'books:payment_void' payment.pk %}">Void</a>
                     {% endif %}
                 </td>

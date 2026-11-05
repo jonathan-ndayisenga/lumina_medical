@@ -1,4 +1,4 @@
-{% load books_extras %}
+{% load books_extras static %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -7,28 +7,35 @@
     <title>{% block title %}Ternah Books{% endblock %}</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="icon" href="{% static 'images/ternah_logo.svg' %}" type="image/svg+xml">
     <style>
         :root {
-            --navy: #0f1a42;
-            --brand: #2f4cff;
-            --ink: #1f2733;
-            --muted: #667085;
-            --border: #e4e7ee;
-            --bg: #f6f7fb;
+            --navy: #14233A;
+            --nav-active: #22385A;
+            --nav-text: #C9D2DE;
+            --brand: #14233A;
+            --link: #2f4cff;
+            --ink: #15202E;
+            --muted: #5B6472;
+            --border: #E4E2DB;
+            --bg: #F4F3EF;
         }
         * { box-sizing: border-box; }
-        body { margin: 0; font-family: 'Inter', -apple-system, 'Segoe UI', Roboto, sans-serif; color: var(--ink); background: var(--bg); }
+        body { margin: 0; font-family: 'Hanken Grotesk', -apple-system, 'Segoe UI', Roboto, sans-serif; color: var(--ink); background: var(--bg); }
+        a { color: var(--link); }
+        .btn, .btn:hover { text-decoration: none; }
         .shell { display: flex; min-height: 100vh; }
         .sidebar { width: 240px; background: var(--navy); color: #fff; display: flex; flex-direction: column; flex-shrink: 0; }
-        .sidebar .brand { padding: 1.4rem 1.2rem; font-weight: 700; font-size: 1.05rem; border-bottom: 1px solid rgba(255,255,255,0.1); }
+        .sidebar .brand { display: flex; align-items: center; gap: 0.65rem; padding: 1.2rem; font-weight: 700; font-size: 1.05rem; border-bottom: 1px solid rgba(255,255,255,0.1); }
+        .sidebar .brand img { height: 26px; width: auto; flex: none; }
         .sidebar nav { flex: 1; padding: 1rem 0.75rem; display: flex; flex-direction: column; gap: 0.2rem; }
         .sidebar nav a {
-            display: block; padding: 0.6rem 0.85rem; border-radius: 0.5rem; color: rgba(255,255,255,0.75);
+            display: block; padding: 0.6rem 0.85rem; border-radius: 0.5rem; color: var(--nav-text);
             text-decoration: none; font-size: 0.92rem;
         }
         .sidebar nav a:hover { background: rgba(255,255,255,0.08); color: #fff; }
-        .sidebar nav a.on { background: var(--brand); color: #fff; }
+        .sidebar nav a.on { background: var(--nav-active); color: #fff; }
         .sidebar .footer { padding: 1rem 1.2rem; border-top: 1px solid rgba(255,255,255,0.1); font-size: 0.85rem; }
         .sidebar .footer .user { color: rgba(255,255,255,0.85); margin-bottom: 0.5rem; }
         .sidebar .footer button {
@@ -47,9 +54,9 @@
             background: var(--brand); color: #fff; text-decoration: none; font-size: 0.88rem; font-weight: 600;
             border: none; cursor: pointer;
         }
-        .btn:hover { background: #2540d9; }
+        .btn:hover { background: var(--nav-active); }
         .btn-secondary { background: #fff; color: var(--navy); border: 1px solid var(--border); }
-        .btn-secondary:hover { background: var(--bg); }
+        .btn-secondary:hover { background: var(--bg); color: var(--navy); }
         .btn-danger { background: #b42318; }
         .btn-danger:hover { background: #912018; }
         .badge { display: inline-block; padding: 0.2rem 0.55rem; border-radius: 999px; font-size: 0.75rem; font-weight: 600; }
@@ -87,7 +94,7 @@
 <body>
 <div class="shell">
     <aside class="sidebar">
-        <div class="brand">Ternah Books</div>
+        <div class="brand"><img src="{% static 'images/ternah_logo_white.svg' %}" alt="">Ternah Books</div>
         <nav>
             <a href="{% url 'books:dashboard' %}" class="{% if request.path == '/books/' or request.path == '/books/dashboard/' %}on{% endif %}">Dashboard</a>
             <a href="{% url 'books:client_list' %}" class="{% if request.path|startswith:'/books/clients' %}on{% endif %}">Clients</a>
@@ -97,6 +104,7 @@
             <a href="{% url 'books:payment_create' %}" class="{% if request.path|startswith:'/books/payments' %}on{% endif %}">Payments</a>
             <a href="{% url 'books:receipt_list' %}" class="{% if request.path|startswith:'/books/receipts' %}on{% endif %}">Receipts</a>
             <a href="{% url 'books:expense_list' %}" class="{% if request.path|startswith:'/books/expenses' %}on{% endif %}">Expenses</a>
+            <a href="{% url 'books:reconcile' %}" class="{% if request.path|startswith:'/books/reconcile' %}on{% endif %}">Match statements</a>
             <a href="{% url 'books:report_trial_balance' %}" class="{% if request.path|startswith:'/books/reports' %}on{% endif %}">Reports</a>
             <a href="{% url 'books:journal_list' %}" class="{% if request.path|startswith:'/books/journal' %}on{% endif %}">Journal</a>
             {% if is_books_admin %}

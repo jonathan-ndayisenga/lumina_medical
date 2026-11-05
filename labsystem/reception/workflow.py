@@ -2,12 +2,12 @@ import calendar
 from datetime import timedelta
 
 from django.core.exceptions import PermissionDenied
-from django.db.models import Count
+from django.db.models import Count, Exists, OuterRef, Q
 from django.utils import timezone
 
 from accounts.models import AuditLog
 
-from reception.models import QueueEntry, Service, Visit
+from reception.models import QueueEntry, Service, Visit, VisitService
 
 
 def add_months(base_date, months):
@@ -28,6 +28,70 @@ def package_expiry_for(service, purchase_date):
     return add_months(purchase_date, service.validity_months)
 
 
+# A doctor's test or scan waits for reception's approval: until then the lab
+# must neither see it nor be able to act on it.
+AWAITING_RECEPTION_APPROVAL = Q(is_approved=False, requested_by_type=VisitService.REQUESTED_BY_INTERNAL_DOCTOR)
+LAB_QUEUE_TYPES = [QueueEntry.TYPE_LAB_RECEPTION, QueueEntry.TYPE_LAB_DOCTOR]
+
+
+def lab_queue_has_work_q():
+    """True for lab queue entries the Lab Queue page actually lists: a sample
+    or result is still owed, or a test has no order yet. Every lab count must
+    use this, or the badge shows people nobody can find on the page."""
+    from lab.models import LabOrder, OrderStage
+
+    waiting_orders = LabOrder.objects.filter(
+        visit_service__visit=OuterRef("visit_id"),
+        stage__in=[OrderStage.PENDING, OrderStage.SAMPLE_COLLECTED],
+        visit_service__in=VisitService.objects.exclude(AWAITING_RECEPTION_APPROVAL),
+    )
+    tests_without_orders = VisitService.objects.filter(
+        visit=OuterRef("visit_id"),
+        service__category=Service.CATEGORY_LAB,
+        performed=False,
+        lab_orders_next__isnull=True,
+    ).exclude(AWAITING_RECEPTION_APPROVAL)
+    return Q(Exists(waiting_orders)) | Q(Exists(tests_without_orders))
+
+
+def lab_queue_entries_with_work(hospital):
+    return QueueEntry.objects.filter(
+        lab_queue_has_work_q(), hospital=hospital, queue_type__in=LAB_QUEUE_TYPES, processed=False,
+    )
+
+
+def close_orphaned_lab_queue_entries(hospital) -> int:
+    """Close lab queue entries left open with nothing behind them, such as when
+    the doctor removed the only test. Results awaiting review stay open (they
+    close when released), as do visits on the older LabReport flow."""
+    from lab.models import LabOrder, LabReport, OrderStage
+
+    in_review = LabOrder.objects.filter(
+        visit_service__visit=OuterRef("visit_id"),
+        stage__in=[OrderStage.IN_PROGRESS, OrderStage.ENTERED, OrderStage.REVIEWED],
+    )
+    older_report = LabReport.objects.filter(visit=OuterRef("visit_id"))
+    orphans = (
+        QueueEntry.objects.filter(hospital=hospital, queue_type__in=LAB_QUEUE_TYPES, processed=False)
+        .exclude(lab_queue_has_work_q())
+        .exclude(Exists(in_review))
+        .exclude(Exists(older_report))
+        .select_related("visit")
+    )
+    closed = 0
+    for entry in orphans:
+        entry.processed = True
+        entry.processed_at = timezone.now()
+        entry.save(update_fields=["processed", "processed_at"])
+        AuditLog.objects.create(
+            hospital=hospital, action="lab_queue_orphan_closed", model_name="QueueEntry", object_id=str(entry.pk),
+            details={"visit_id": entry.visit_id, "reason": entry.reason},
+        )
+        sync_visit_status(entry.visit)
+        closed += 1
+    return closed
+
+
 def queue_counts_for_hospital(hospital) -> dict:
     """Pending (unprocessed) entry counts per operational queue, keyed to
     match the NAV_SECTIONS tile keys in accounts/views.py — used for the
@@ -46,7 +110,7 @@ def queue_counts_for_hospital(hospital) -> dict:
         "doctor": by_type.get(QueueEntry.TYPE_DOCTOR, 0),
         "nurse": by_type.get(QueueEntry.TYPE_NURSE, 0),
         "sonographer": by_type.get(QueueEntry.TYPE_SONOGRAPHER, 0),
-        "lab": by_type.get(QueueEntry.TYPE_LAB_RECEPTION, 0) + by_type.get(QueueEntry.TYPE_LAB_DOCTOR, 0),
+        "lab": lab_queue_entries_with_work(hospital).count(),
         "phlebotomy": by_type.get(QueueEntry.TYPE_PHLEBOTOMY, 0),
     }
 

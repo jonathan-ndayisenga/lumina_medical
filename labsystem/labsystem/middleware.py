@@ -3,6 +3,7 @@ from datetime import date as _date
 from django.conf import settings
 from django.contrib.auth import logout
 from django.http import HttpResponse
+from django.shortcuts import redirect
 from django.utils import timezone
 
 from accounts.models import Hospital
@@ -75,6 +76,10 @@ def _hospital_subscription_expired(hospital) -> bool:
     return end is not None and end < _date.today()
 
 
+def _is_books_tenant(hospital) -> bool:
+    return getattr(hospital, "subdomain", "") == settings.TERNAH_BOOKS_HOSPITAL_SUBDOMAIN
+
+
 class HospitalMiddleware:
     """
     Attach the current hospital context to the request and enforce subscription expiry.
@@ -122,6 +127,9 @@ class HospitalMiddleware:
             if getattr(user, "hospital_id", None):
                 hospital = user.hospital
                 request.hospital = hospital
+                # Ternah's own books aren't a customer: no subscription to expire.
+                if _is_books_tenant(hospital):
+                    return self.get_response(request)
                 if not getattr(hospital, "is_active", True):
                     return HttpResponse(SUBSCRIPTION_EXPIRED_HTML, status=402)
                 if _hospital_subscription_expired(hospital):
@@ -142,6 +150,43 @@ class HospitalMiddleware:
         return self.get_response(request)
 
 
+class BooksBoundaryMiddleware:
+    """Keep Ternah Books accounts inside Books. They live on a Hospital row only
+    so that access can be scoped to it, so anything outside /books/ (the login
+    page, the home tiles, /platform/, /reception/...) is the wrong place for them."""
+
+    ALLOWED_PREFIXES = ("/books/", "/static/", "/media/", "/accounts/logout/", "/sw.js", "/manifest.webmanifest", "/offline/", "/welcome/")
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        user = getattr(request, "user", None)
+        if (
+            getattr(user, "is_authenticated", False)
+            and not user.is_superadmin
+            and _is_books_tenant(getattr(user, "hospital", None))
+            and not request.path.startswith(self.ALLOWED_PREFIXES)
+        ):
+            return redirect("books:dashboard")
+        return self.get_response(request)
+
+
+class PrivatePagesMiddleware:
+    """Signed-in pages must not stay in the browser: otherwise Back, after the
+    next person sits down at a shared computer, shows the last patient."""
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        was_signed_in = getattr(getattr(request, "user", None), "is_authenticated", False)
+        response = self.get_response(request)
+        if was_signed_in and not request.path.startswith(("/static/", "/media/")):
+            response["Cache-Control"] = "private, no-store"
+        return response
+
+
 class SessionIdleTimeoutMiddleware:
     """Log authenticated users out after a configurable period of inactivity."""
 
@@ -150,17 +195,19 @@ class SessionIdleTimeoutMiddleware:
 
     def __call__(self, request):
         timeout_seconds = getattr(settings, "SESSION_IDLE_TIMEOUT_SECONDS", None)
+        # A page checking for updates on its own isn't the person being active.
+        background_poll = request.headers.get("X-Background-Poll") == "1"
         if timeout_seconds and getattr(request, "user", None) and request.user.is_authenticated:
             now_ts = int(timezone.now().timestamp())
             last_activity = request.session.get(SESSION_ACTIVITY_KEY)
             if last_activity is not None and now_ts - int(last_activity) > int(timeout_seconds):
                 logout(request)
-            else:
+            elif not background_poll:
                 request.session[SESSION_ACTIVITY_KEY] = now_ts
 
         response = self.get_response(request)
 
-        if getattr(request, "user", None) and request.user.is_authenticated and timeout_seconds:
+        if getattr(request, "user", None) and request.user.is_authenticated and timeout_seconds and not background_poll:
             request.session[SESSION_ACTIVITY_KEY] = int(timezone.now().timestamp())
 
         return response

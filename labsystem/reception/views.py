@@ -184,6 +184,21 @@ def get_or_create_walk_in_patient(hospital):
     return patient
 
 
+def reception_queue_signature(hospital):
+    """Changes whenever the queue does, including a doctor adding a request
+    for a patient already on it."""
+    entries = QueueEntry.objects.filter(hospital=hospital, queue_type=QueueEntry.TYPE_RECEPTION, processed=False)
+    entry_ids = sorted(entries.values_list("pk", flat=True))
+    awaiting = VisitService.objects.filter(visit__in=entries.values("visit_id"), is_approved=False).count()
+    return f"{entry_ids}:{awaiting}"
+
+
+@reception_role_required
+def reception_queue_status(request):
+    hospital = get_active_hospital(request)
+    return JsonResponse({"signature": reception_queue_signature(hospital) if hospital else ""})
+
+
 def reception_queue_queryset(hospital):
     return (
         QueueEntry.objects.filter(
@@ -473,6 +488,7 @@ def receptionist_queue(request):
             "dashboard_intro": "Receive patients back from lab, doctor, and nurse, then decide the final billing, dispensing, or doctor-review step.",
             "hospital": hospital,
             "queue_rows": queue_rows,
+            "queue_signature": reception_queue_signature(hospital) if hospital else "",
             "queue_count": len(queue_rows),
             "pending_dispense_count": sum(row["pending_dispense_count"] for row in queue_rows),
             "consultation_services": consultation_services,
@@ -481,6 +497,21 @@ def receptionist_queue(request):
             "phlebotomy_enabled": _phlebotomy_enabled_for(hospital),
         },
     )
+
+
+def close_entry_unless_more_to_approve(visit, queue_entry):
+    """Approving tests must not take the patient off reception's queue while
+    the doctor's scan (or the reverse) is still waiting for its own approval."""
+    if not queue_entry or visit.visit_services.filter(
+        Q(service__category=Service.CATEGORY_LAB) | Q(service__category__iexact=Service.CATEGORY_SCAN)
+        | Q(service__category__iexact="sonographer") | Q(service__category__iexact="ultrasound")
+        | Q(service__category__iexact="scan / ultrasound"),
+        is_approved=False,
+    ).exists():
+        return
+    queue_entry.processed = True
+    queue_entry.processed_at = timezone.now()
+    queue_entry.save(update_fields=["processed", "processed_at"])
 
 
 def approve_pending_lab_services(visit, queue_entry, actor):
@@ -535,10 +566,7 @@ def approve_pending_lab_services(visit, queue_entry, actor):
         notes=f"Lab services approved by reception. Source: {source}",
     )
 
-    if queue_entry:
-        queue_entry.processed = True
-        queue_entry.processed_at = timezone.now()
-        queue_entry.save(update_fields=["processed", "processed_at"])
+    close_entry_unless_more_to_approve(visit, queue_entry)
 
     sync_visit_status(visit)
     return "approved"
@@ -606,10 +634,7 @@ def approve_pending_scan_services(visit, queue_entry, actor):
         notes=f"Scan services approved by reception. Source: {source}",
     )
 
-    if queue_entry:
-        queue_entry.processed = True
-        queue_entry.processed_at = timezone.now()
-        queue_entry.save(update_fields=["processed", "processed_at"])
+    close_entry_unless_more_to_approve(visit, queue_entry)
 
     sync_visit_status(visit)
     return "approved"

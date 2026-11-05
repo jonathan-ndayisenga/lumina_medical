@@ -9,13 +9,21 @@
     <a href="{% url 'books:invoice_edit' invoice.pk %}" class="btn">Edit</a>
     <a href="{% url 'books:invoice_delete' invoice.pk %}" class="btn btn-danger">Delete</a>
     {% else %}
-    <a href="{% url 'books:invoice_pdf' invoice.pk %}" class="btn btn-secondary" target="_blank">Print / PDF</a>
+    <a href="{% url 'books:invoice_pdf' invoice.pk %}" class="btn btn-secondary" target="_blank">Print</a>
+    <a href="{% url 'books:invoice_download' invoice.pk %}" class="btn btn-secondary">Download PDF</a>
+    {% if invoice.status != 'void' %}
+    {% if email_ready and invoice.client.email %}<form method="post" action="{% url 'books:invoice_email' invoice.pk %}" style="display:inline;">{% csrf_token %}<button type="submit" class="btn btn-secondary">Email to client</button></form>{% endif %}
+    {% if share_url %}<a href="{{ share_url }}" class="btn btn-secondary" target="_blank" rel="noopener">Send on WhatsApp</a>{% endif %}
+    {% endif %}
     {% if invoice.status == 'open' and invoice.balance > 0 %}
     <a href="{% url 'books:invoice_payment_create' invoice.pk %}" class="btn">Record payment</a>
     {% if remind_url %}<a href="{{ remind_url }}" class="btn btn-secondary" target="_blank" rel="noopener">Remind on WhatsApp</a>{% endif %}
     {% endif %}
     {% if invoice.client.is_withholding_agent and invoice.balance > 0 %}
     <a href="{% url 'books:wht_credit_create' invoice.pk %}" class="btn btn-secondary">Record WHT credit</a>
+    {% endif %}
+    {% if invoice.status != 'void' and invoice.balance > 0 %}
+    <a href="{% url 'books:credit_note_create' invoice.pk %}" class="btn btn-secondary">Credit note</a>
     {% endif %}
     {% if invoice.status != 'void' %}
     <a href="{% url 'books:invoice_void' invoice.pk %}" class="btn btn-danger">Void</a>
@@ -30,7 +38,7 @@
     <p><strong>Client:</strong> {{ invoice.client.name }}</p>
     <p><strong>Issue date:</strong> {{ invoice.issue_date }} &nbsp; <strong>Due date:</strong> {{ invoice.due_date|default:"-" }}</p>
     <p><strong>Subtotal:</strong> UGX {{ invoice.subtotal|money }} &nbsp; <strong>Tax:</strong> UGX {{ invoice.tax_amount|money }} &nbsp; <strong>Total:</strong> UGX {{ invoice.total|money }}</p>
-    <p><strong>Paid:</strong> UGX {{ invoice.amount_paid|money }} &nbsp; <strong>WHT credited:</strong> UGX {{ invoice.wht_credited|money }} &nbsp; <strong>Balance:</strong> UGX {{ invoice.balance|money }}</p>
+    <p><strong>Paid:</strong> UGX {{ invoice.amount_paid|money }} &nbsp; <strong>WHT credited:</strong> UGX {{ invoice.wht_credited|money }} &nbsp; {% if invoice.credited %}<strong>Credit notes:</strong> UGX {{ invoice.credited|money }} &nbsp; {% endif %}<strong>Balance:</strong> UGX {{ invoice.balance|money }}</p>
 </div>
 
 <div class="card">
@@ -68,6 +76,40 @@
     <p style="margin-top:0.75rem;font-size:0.85rem;color:var(--muted);">Plus UGX {{ invoice.wht_credited|money }} covered by withholding tax credit.</p>
     {% endif %}
 </div>
+
+{% if credit_notes %}
+<div class="card">
+    <h3>Credit notes</h3>
+    <table>
+        <thead><tr><th>Number</th><th>Date</th><th>Reason</th><th>Amount</th><th></th></tr></thead>
+        <tbody>
+            {% for note in credit_notes %}
+            <tr>
+                <td><a href="{% url 'books:credit_note_print' note.pk %}" target="_blank">{{ note.number }}</a>{% if note.voided_at %} <span class="badge badge-void">Voided</span>{% endif %}</td>
+                <td>{{ note.date }}</td>
+                <td>{{ note.reason }}</td>
+                <td>UGX {{ note.amount|money }}</td>
+                <td><a href="{% url 'books:credit_note_download' note.pk %}">PDF</a>{% if not note.voided_at %} &middot; <a href="{% url 'books:credit_note_void' note.pk %}">Void</a>{% endif %}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+
+{% if wht_credits %}
+<div class="card">
+    <h3>Withholding tax certificates</h3>
+    <table>
+        <thead><tr><th>Certificate</th><th>Date</th><th>Amount</th><th></th></tr></thead>
+        <tbody>
+            {% for credit in wht_credits %}
+            <tr><td>{{ credit.certificate_number|default:"-" }}</td><td>{{ credit.date }}</td><td>UGX {{ credit.amount|money }}</td><td>{% if credit.certificate %}<a href="{{ credit.certificate.url }}" target="_blank" rel="noopener">View file</a>{% endif %}</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
 
 <div class="card">
     <h3>Journal entry</h3>

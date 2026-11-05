@@ -125,6 +125,9 @@ def lab_visit_services(visit, *, performed=None):
     return services
 
 
+SCAN_CATEGORIES = {Service.CATEGORY_SCAN, "sonographer", "ultrasound", "scan / ultrasound"}
+
+
 def wants_free_follow_up(request, visit):
     """On a follow-up visit the doctor (or lab) may give a service free
     instead of billing it. Prescriptions are always billed, so they never
@@ -140,6 +143,7 @@ def requested_lab_service_payload(visit_service):
         "service_name": visit_service.service.name,
         "price": str(visit_service.price_at_time),
         "free_follow_up": visit_service.free_follow_up,
+        "is_approved": visit_service.is_approved,
         "performed": visit_service.performed,
         "test_profile_id": test_profile.pk if test_profile else None,
         "test_profile_name": test_profile.name if test_profile else "",
@@ -546,9 +550,12 @@ def send_lab_request_api(request, visit_id):
     ]
 
     if len(added_names) == 1:
-        message = f"{added_names[0]} sent to lab."
+        message = f"{added_names[0]} sent to reception for approval. The lab receives it once reception approves."
     else:
-        message = f"{len(added_names)} lab requests sent to lab: {', '.join(added_names)}."
+        message = (
+            f"{len(added_names)} lab requests sent to reception for approval: {', '.join(added_names)}. "
+            "The lab receives them once reception approves."
+        )
 
     skipped_notes = []
     if skipped_pending:
@@ -626,6 +633,22 @@ def add_billable_service_api(request, visit_id):
         visit.total_amount += total_price
         visit.save(update_fields=["total_amount"])
 
+    # A scan goes through reception first, exactly like a lab request.
+    is_scan = service.category.lower() in SCAN_CATEGORIES
+    if is_scan:
+        visit_service.requested_by_type = VisitService.REQUESTED_BY_INTERNAL_DOCTOR
+        visit_service.requested_by_user = request.user
+        visit_service.save(update_fields=["requested_by_type", "requested_by_user"])
+        send_to_reception_queue(
+            visit=visit,
+            hospital=visit.hospital,
+            source="Doctor",
+            detail="Scan approval required",
+            notes=f"Doctor {request.user.get_full_name() or request.user.username} requested: {service.name}",
+            requested_by=request.user,
+        )
+        sync_visit_status(visit)
+
     display_name = f"{service.name} ({days} day{'s' if days != 1 else ''})" if service.is_per_day else service.name
     if covering_package:
         message = f"{display_name} added — covered by {covering_package.service.name}."
@@ -633,6 +656,8 @@ def add_billable_service_api(request, visit_id):
         message = f"{display_name} added free as part of this follow-up (not billed)."
     else:
         message = f"{display_name} added to the visit bill."
+    if is_scan:
+        message += " Sent to reception for approval; the sonographer receives it once reception approves."
 
     return JsonResponse(
         {
@@ -1151,14 +1176,14 @@ def consultation(request, visit_id):
                 # button is the one path that skips this gate, since that's
                 # reception acting directly, not a doctor referral.
                 # (send_to_reception_queue is already imported at module level.)
-                scan_service = Service.objects.filter(
+                added_scan = visit.visit_services.filter(service__category=Service.CATEGORY_SCAN).select_related("service").first()
+                scan_service = added_scan.service if added_scan else Service.objects.filter(
                     hospital=visit.hospital,
                     category=Service.CATEGORY_SCAN,
                     is_active=True,
                 ).first()
                 if scan_service:
-                    already_billed = visit.visit_services.filter(service=scan_service).exists()
-                    if not already_billed:
+                    if not added_scan:
                         scan_free = visit.is_follow_up_visit and request.POST.get("scan_free_follow_up") == "1"
                         VisitService.objects.create(
                             visit=visit,
@@ -1166,6 +1191,8 @@ def consultation(request, visit_id):
                             price_at_time=scan_service.price,
                             is_approved=False,
                             free_follow_up=scan_free,
+                            requested_by_type=VisitService.REQUESTED_BY_INTERNAL_DOCTOR,
+                            requested_by_user=request.user,
                             notes="Added automatically when doctor referred patient to sonographer.",
                         )
                         if not scan_free:

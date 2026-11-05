@@ -8,6 +8,7 @@ from django.db.models import ProtectedError, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse, reverse_lazy
 from django.utils import timezone
+from django.utils.safestring import mark_safe
 from django.utils.decorators import method_decorator
 
 from . import documents, reports
@@ -29,6 +30,8 @@ from .forms import (
 )
 from .ledger_models import Account, FinancialYear, JournalEntry
 from accounts.login_throttle import ThrottledAuthenticationForm
+from .delivery import email_is_configured, invoice_whatsapp_url, receipt_verify_url
+from .pdf import qr_svg
 from .permissions import _is_books_user, books_admin_required, books_staff_required
 
 
@@ -36,6 +39,11 @@ class BooksLoginView(LoginView):
     template_name = "books/login.html"
     form_class = ThrottledAuthenticationForm
     redirect_authenticated_user = False
+
+    def dispatch(self, request, *args, **kwargs):
+        if _is_books_user(request.user):
+            return redirect("books:dashboard")
+        return super().dispatch(request, *args, **kwargs)
 
     def get_success_url(self):
         return reverse("books:dashboard")
@@ -100,6 +108,7 @@ def dashboard(request):
         "budgets": insights.budget_status(today),
         "recurring_due": [plan for plan in RecurringInvoice.objects.filter(active=True).select_related("client") if plan.is_due],
         "overdue_rows": [{"invoice": inv, "remind_url": insights.payment_reminder_url(inv)} for inv in overdue_invoices],
+        "ageing_chart": {"labels": list(ageing["buckets"]), "values": [float(ageing["grand_totals"][b]) for b in ageing["buckets"]]},
     })
     return render(request, "books/dashboard.html", context)
 
@@ -264,7 +273,8 @@ def client_create(request):
 def client_detail(request, pk):
     client = get_object_or_404(Client, pk=pk)
     statement = reports.client_statement(client)
-    return render(request, "books/client_detail.html", {"client": client, "statement": statement})
+    portal_url = request.build_absolute_uri(reverse("books:portal_home", args=[client.portal_token])) if client.portal_token else ""
+    return render(request, "books/client_detail.html", {"client": client, "statement": statement, "portal_url": portal_url})
 
 
 @books_staff_required
@@ -397,7 +407,13 @@ def invoice_detail(request, pk):
     journal_lines = invoice.journal_entry.lines.select_related("account").all() if invoice.journal_entry_id else []
     from .insights import payment_reminder_url
     remind_url = payment_reminder_url(invoice) if invoice.status == Invoice.STATUS_OPEN and invoice.balance > 0 else ""
-    return render(request, "books/invoice_detail.html", {"invoice": invoice, "journal_lines": journal_lines, "remind_url": remind_url})
+    return render(request, "books/invoice_detail.html", {
+        "invoice": invoice, "journal_lines": journal_lines, "remind_url": remind_url,
+        "share_url": invoice_whatsapp_url(invoice) if invoice.client.phone else "",
+        "email_ready": email_is_configured(),
+        "credit_notes": invoice.credit_notes.all(),
+        "wht_credits": invoice.withholding_credits.all(),
+    })
 
 
 @books_staff_required
@@ -506,7 +522,7 @@ def receipt_list(request):
         payments = payments.filter(
             Q(receipt_number__icontains=q) | Q(client__name__icontains=q) | Q(reference__icontains=q)
         )
-    return render(request, "books/receipt_list.html", {"payments": payments, "status": status, "q": q})
+    return render(request, "books/receipt_list.html", {"payments": payments, "status": status, "q": q, "email_ready": email_is_configured()})
 
 
 @books_staff_required
@@ -515,6 +531,7 @@ def receipt_pdf(request, pk):
     if not payment.receipt_number or payment.voided_at:
         raise PermissionDenied("This payment does not have a valid receipt to print.")
     context = documents.receipt_context(payment)
+    context["qr_svg"] = mark_safe(qr_svg(receipt_verify_url(request, payment)))
     return render(request, "books/print/receipt.html", context)
 
 

@@ -3,6 +3,8 @@ touch model instances directly, only this contract — so swapping the render
 step (currently browser print via window.print(), see views.py) for
 WeasyPrint-generated PDFs later is a rendering-layer change only."""
 
+from django.utils import timezone
+
 from . import reports
 from .document_models import CompanySettings
 
@@ -53,6 +55,16 @@ def format_money(value, currency="UGX") -> str:
     return f"{float(value):,.2f}"
 
 
+def _invoice_stamp(invoice) -> str:
+    if invoice.status == invoice.STATUS_VOID:
+        return "VOID"
+    if invoice.status == invoice.STATUS_DRAFT:
+        return "DRAFT"
+    if invoice.is_settled:
+        return "PAID"
+    return "OVERDUE" if invoice.is_overdue else ""
+
+
 def invoice_context(invoice) -> dict:
     settings_row = CompanySettings.load()
     hospital = getattr(invoice.client, "hospital", None)
@@ -81,8 +93,11 @@ def invoice_context(invoice) -> dict:
         "total": invoice.total,
         "amount_paid": invoice.amount_paid,
         "wht_credited": invoice.wht_credited,
+        "credited": invoice.credited,
+        "stamp": _invoice_stamp(invoice),
         "balance": invoice.balance,
         "is_settled": invoice.is_settled,
+        "is_void": invoice.status == invoice.STATUS_VOID,
         "installments": [
             {"sequence": i.sequence, "due_date": i.due_date, "amount": i.amount}
             for i in invoice.installments.all()
@@ -98,7 +113,9 @@ def receipt_context(payment) -> dict:
     return {
         "company": _company_block(hospital),
         "client": _client_block(payment.client),
-        "receipt_number": payment.receipt_number,
+        "heading": "RECEIPT",
+        "number": payment.receipt_number,
+        "currency": "UGX",
         "date": payment.date,
         "amount": payment.amount,
         "method": payment.get_method_display(),
@@ -106,12 +123,16 @@ def receipt_context(payment) -> dict:
         "allocations": [
             {
                 "invoice_number": a.invoice.number,
+                "kind": a.invoice.get_kind_display(),
+                "invoice_total": a.invoice.total,
                 "amount": a.amount,
                 "invoice_balance_after": a.invoice.balance,
             }
             for a in payment.allocations.select_related("invoice").all()
         ],
         "unallocated": payment.unallocated,
+        "client_balance": payment.client.balance,
+        "is_settled": payment.client.balance <= 0,
         "footer_notes": settings_row.receipt_footer_notes,
     }
 
@@ -119,13 +140,39 @@ def receipt_context(payment) -> dict:
 def statement_context(client, start=None, end=None) -> dict:
     statement = reports.client_statement(client, start, end)
     hospital = getattr(client, "hospital", None)
+    today = timezone.localdate()
     return {
         "company": _company_block(hospital),
         "client": _client_block(client),
+        "heading": "STATEMENT",
+        "number": f"{(end or today):%B %Y}",
+        "currency": "UGX",
+        "today": today,
         "start": start,
         "end": end,
         "events": statement["events"],
         "closing_balance": statement["closing_balance"],
+        "is_settled": statement["closing_balance"] <= 0,
+    }
+
+
+def credit_note_context(note) -> dict:
+    settings_row = CompanySettings.load()
+    return {
+        "company": _company_block(),
+        "client": _client_block(note.client),
+        "heading": "CREDIT NOTE",
+        "number": note.number,
+        "date": note.date,
+        "currency": note.invoice.currency,
+        "invoice_number": note.invoice.number,
+        "reason": note.reason,
+        "amount": note.amount,
+        "net_amount": note.net_amount,
+        "tax_amount": note.tax_amount,
+        "tax_label": f"VAT {settings_row.vat_rate}%",
+        "invoice_balance": note.invoice.balance,
+        "stamp": "VOID" if note.voided_at else "",
     }
 
 
@@ -172,6 +219,7 @@ def quotation_context(quotation) -> dict:
     brand_name = settings_row.trading_name or settings_row.legal_name
     brand_sub = settings_row.legal_name.replace(settings_row.trading_name, "", 1).strip() if settings_row.trading_name else ""
     return {
+        "heading": "QUOTATION",
         "company": company,
         "brand_name": brand_name,
         "brand_sub": brand_sub or settings_row.tagline,

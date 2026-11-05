@@ -1,0 +1,42 @@
+{% extends "books/print/_document_base.html" %}
+{% load books_extras %}
+
+{% block body %}
+<div class="meta">
+    <div class="party">
+        <div class="label">Credited to</div>
+        <div class="who">{{ client.name }}{% if client.trading_name %} ({{ client.trading_name }}){% endif %}</div>
+        {% if client.address %}<div>{{ client.address|linebreaksbr }}</div>{% endif %}
+        {% if client.email %}<div>{{ client.email }}</div>{% endif %}
+        {% if client.phone %}<div>{{ client.phone }}</div>{% endif %}
+        {% if client.tin %}<div>TIN {{ client.tin }}</div>{% endif %}
+    </div>
+    <div class="dates">
+        <table>
+            <tr><td>Date</td><td>{{ date|date:"j F Y" }}</td></tr>
+            <tr><td>Against invoice</td><td>{{ invoice_number }}</td></tr>
+            {% if company.tin %}<tr><td>Our TIN</td><td>{{ company.tin }}</td></tr>{% endif %}
+        </table>
+    </div>
+</div>
+
+<div class="due">
+    <div class="box">
+        <div class="duelabel">Amount credited</div>
+        <div class="dueamount"><span class="cur">{{ currency }}</span>{{ amount|money_in:currency }}</div>
+    </div>
+</div>
+
+<table class="lines">
+    <thead><tr><th>Reason</th></tr></thead>
+    <tbody><tr><td><div class="desc">{{ reason }}</div></td></tr></tbody>
+</table>
+
+<div class="totals">
+    <table>
+        <tr><td>Net</td><td>{{ net_amount|money_in:currency }}</td></tr>
+        {% if tax_amount %}<tr><td>{{ tax_label }}</td><td>{{ tax_amount|money_in:currency }}</td></tr>{% endif %}
+        <tr class="rule"><td>Invoice balance now</td><td>{{ invoice_balance|money_in:currency }}</td></tr>
+    </table>
+</div>
+{% endblock %}

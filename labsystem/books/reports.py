@@ -7,7 +7,7 @@ from decimal import Decimal
 from django.db import models
 from django.utils import timezone
 
-from .document_models import Client, Invoice, WithholdingCredit
+from .document_models import Client, CreditNote, Invoice, WithholdingCredit
 from .ledger_models import Account, JournalLine
 
 
@@ -260,6 +260,22 @@ def client_statement(client, start=None, end=None) -> dict:
             "reference": credit,
             "debit": Decimal("0"),
             "credit": credit.amount,
+        })
+
+    credit_notes = CreditNote.objects.filter(client=client, voided_at__isnull=True)
+    if start is not None:
+        credit_notes = credit_notes.filter(date__gte=start)
+    if end is not None:
+        credit_notes = credit_notes.filter(date__lte=end)
+    for note in credit_notes:
+        events.append({
+            "sort_key": (note.date, 1, note.pk),
+            "date": note.date,
+            "type": "credit_note",
+            "label": f"Credit note {note.number}",
+            "reference": note,
+            "debit": Decimal("0"),
+            "credit": note.amount,
         })
 
     events.sort(key=lambda e: e["sort_key"])
