@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import collection_views, planning_views, quotation_views, views
+from . import collection_views, planning_views, quotation_views, views, voucher_views
 
 app_name = "books"
 
@@ -28,6 +28,8 @@ urlpatterns = [
     path("clients/<int:pk>/", views.client_detail, name="client_detail"),
     path("clients/<int:pk>/statement.pdf", views.client_statement_pdf, name="client_statement_pdf"),
     path("clients/<int:client_pk>/payments/new/", views.payment_create, name="client_payment_create"),
+    path("clients/<int:client_pk>/products/new/", views.client_product_add, name="client_product_add"),
+    path("client-products/<int:pk>/edit/", views.client_product_edit, name="client_product_edit"),
     path("clients/<int:pk>/statement/download/", collection_views.statement_download, name="statement_download"),
     path("clients/<int:pk>/portal/", collection_views.client_portal_toggle, name="client_portal_toggle"),
 
@@ -60,6 +62,9 @@ urlpatterns = [
     path("recurring/", planning_views.recurring_list, name="recurring_list"),
     path("recurring/generate/", planning_views.recurring_generate, name="recurring_generate"),
     path("recurring/<int:pk>/toggle/", planning_views.recurring_toggle, name="recurring_toggle"),
+    path("recurring/<int:pk>/edit/", planning_views.recurring_edit, name="recurring_edit"),
+    path("invoices/<int:pk>/repeat/", planning_views.invoice_repeat, name="invoice_repeat"),
+    path("invoices/<int:pk>/make-plan/", planning_views.invoice_make_plan, name="invoice_make_plan"),
     path("settings/budgets/", planning_views.budgets, name="budgets"),
 
     path("payments/new/", views.payment_create, name="payment_create"),
@@ -78,12 +83,30 @@ urlpatterns = [
     path("portal/<str:token>/credit-notes/<int:pk>/", collection_views.portal_credit_note, name="portal_credit_note"),
 
     path("reconcile/", collection_views.reconcile, name="reconcile"),
+    path("assistant/", views.assistant_ask, name="assistant"),
+    path("settings/assistant/", views.assistant_questions, name="assistant_questions"),
     path("reconcile/<int:pk>/", collection_views.reconcile_action, name="reconcile_action"),
 
     path("expenses/", views.expense_list, name="expense_list"),
     path("expenses/new/", views.expense_create, name="expense_create"),
     path("expenses/<int:pk>/edit/", views.expense_edit, name="expense_edit"),
     path("expenses/<int:pk>/void/", views.expense_void, name="expense_void"),
+
+    path("expenses/<int:pk>/voucher/", voucher_views.voucher_for_expense, name="voucher_for_expense"),
+
+    path("payees/", voucher_views.payee_list, name="payee_list"),
+    path("payees/new/", voucher_views.payee_create, name="payee_create"),
+    path("payees/<int:pk>/", voucher_views.payee_detail, name="payee_detail"),
+    path("payees/<int:pk>/edit/", voucher_views.payee_edit, name="payee_edit"),
+    path("payees/<int:pk>/statement/download/", voucher_views.payee_statement_download, name="payee_statement_download"),
+    path("vouchers/", voucher_views.voucher_list, name="voucher_list"),
+    path("vouchers/new/", voucher_views.voucher_create, name="voucher_create"),
+    path("vouchers/<int:pk>/", voucher_views.voucher_detail, name="voucher_detail"),
+    path("vouchers/<int:pk>/print/", voucher_views.voucher_print, name="voucher_print"),
+    path("vouchers/<int:pk>/download/", voucher_views.voucher_download, name="voucher_download"),
+    path("vouchers/<int:pk>/email/", voucher_views.voucher_email, name="voucher_email"),
+    path("vouchers/<int:pk>/void/", voucher_views.voucher_void, name="voucher_void"),
+    path("check-voucher/<str:token>/", voucher_views.voucher_verify, name="voucher_verify"),
 
     path("reports/trial-balance/", views.report_trial_balance, name="report_trial_balance"),
     path("reports/profit-loss/", views.report_profit_loss, name="report_profit_loss"),

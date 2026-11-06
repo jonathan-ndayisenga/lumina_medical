@@ -1,0 +1,31 @@
+{% extends "books/base.html" %}
+{% load books_extras %}
+{% block title %}{{ voucher.number }} - Ternah Books{% endblock %}
+{% block content %}
+<h1 class="page-title">Payment voucher {{ voucher.number }}{% if voucher.is_void %} <span class="badge badge-void">Voided</span>{% endif %}</h1>
+<p style="display:flex;gap:0.5rem;flex-wrap:wrap;">
+    <a href="{% url 'books:voucher_print' voucher.pk %}" class="btn" target="_blank">Print</a>
+    <a href="{% url 'books:voucher_download' voucher.pk %}" class="btn btn-secondary">Download PDF</a>
+    {% if not voucher.is_void %}
+    {% if email_ready %}<form method="post" action="{% url 'books:voucher_email' voucher.pk %}" style="display:inline;">{% csrf_token %}<button type="submit" class="btn btn-secondary">Email to {{ voucher.payee.email }}</button></form>{% endif %}
+    {% if whatsapp_url %}<a href="{{ whatsapp_url }}" class="btn btn-secondary" target="_blank" rel="noopener">Send on WhatsApp</a>{% endif %}
+    <a href="{% url 'books:voucher_void' voucher.pk %}" class="btn btn-danger">Void</a>
+    {% endif %}
+</p>
+{% if voucher.is_void %}<div class="banner-danger">Voided: {{ voucher.expense.void_reason }}</div>{% endif %}
+<div class="card" style="max-width:640px;">
+    <table>
+        <tbody>
+            <tr><td>Paid to</td><td><a href="{% url 'books:payee_detail' voucher.payee_id %}">{{ voucher.payee.name }}</a></td></tr>
+            <tr><td>Date</td><td>{{ voucher.expense.date }}</td></tr>
+            <tr><td>What for</td><td>{{ voucher.expense.description }}</td></tr>
+            <tr><td>Category</td><td>{{ voucher.expense.account.name }}</td></tr>
+            <tr><td>Amount</td><td><strong>UGX {{ voucher.expense.amount_ugx|money }}</strong></td></tr>
+            <tr><td>Paid by</td><td>{{ voucher.expense.get_method_display }}{% if voucher.expense.reference %} &middot; {{ voucher.expense.reference }}{% endif %}</td></tr>
+            {% if voucher.received_by %}<tr><td>Collected by</td><td>{{ voucher.received_by }}</td></tr>{% endif %}
+            <tr><td>Issued by</td><td>{% if voucher.issued_by %}{{ voucher.issued_by.get_full_name|default:voucher.issued_by.username }}{% else %}-{% endif %} on {{ voucher.created_at|date:"j M Y, H:i" }}</td></tr>
+            {% if voucher.expense.receipt %}<tr><td>Their document</td><td><a href="{{ voucher.expense.receipt.url }}" target="_blank" rel="noopener">Open</a></td></tr>{% endif %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

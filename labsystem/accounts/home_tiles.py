@@ -38,7 +38,7 @@ TILES = {
         "actions": [("Scan queue", "scan_queue")],
     },
     "inventory": {
-        "label": "Inventory", "check": "can_access_inventory", "live": True,
+        "label": "Pharmacy", "check": "can_access_inventory", "live": True,
         "icon": "M21 8 12 3 3 8m18 0v8l-9 5-9-5V8m18 0-9 5m-9-5 9 5m0 0v8",
         "actions": [("Restock list", "inventory_insights"), ("Stock levels", "manage_inventory")],
     },

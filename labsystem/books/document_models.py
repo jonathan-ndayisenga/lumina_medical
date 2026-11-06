@@ -47,6 +47,7 @@ class CompanySettings(models.Model):
     invoice_prefix = models.CharField(max_length=10, default="INV")
     receipt_prefix = models.CharField(max_length=10, default="RCT")
     credit_note_prefix = models.CharField(max_length=10, default="CN")
+    voucher_prefix = models.CharField(max_length=10, default="PV", verbose_name="Payment voucher prefix")
 
     default_payment_terms_days = models.PositiveIntegerField(default=14)
     vat_rate = models.DecimalField(max_digits=5, decimal_places=2, default=Decimal("18.00"))
@@ -186,6 +187,10 @@ class Product(models.Model):
     name = models.CharField(max_length=150)
     code = models.SlugField(max_length=50, unique=True)
     revenue_account = models.ForeignKey(Account, on_delete=models.PROTECT, related_name="products")
+    default_price = models.DecimalField(
+        max_digits=14, decimal_places=2, default=Decimal("0"),
+        help_text="The usual price in UGX. Each client can have their own.",
+    )
     description = models.TextField(blank=True)
     active = models.BooleanField(default=True)
 
@@ -198,6 +203,35 @@ class Product(models.Model):
     def clean(self):
         if self.revenue_account_id and self.revenue_account.type != Account.TYPE_INCOME:
             raise ValidationError("A product's revenue account must be an income account.")
+
+
+class ClientProduct(models.Model):
+    """A product this client is using, at the price agreed with them."""
+
+    client = models.ForeignKey(Client, on_delete=models.CASCADE, related_name="client_products")
+    product = models.ForeignKey(Product, on_delete=models.PROTECT, related_name="client_products")
+    price = models.DecimalField(max_digits=14, decimal_places=2, help_text="Their agreed price in UGX.")
+    quantity = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("1"))
+    start_date = models.DateField(default=timezone.localdate)
+    end_date = models.DateField(null=True, blank=True)
+    active = models.BooleanField(default=True)
+    notes = models.CharField(max_length=255, blank=True)
+
+    class Meta:
+        ordering = ["product__name"]
+        unique_together = ("client", "product")
+
+    def __str__(self):
+        return f"{self.client} - {self.product}"
+
+    @classmethod
+    def invoice_lines_for(cls, client) -> list:
+        """What a new invoice for this client starts with."""
+        rows = cls.objects.filter(client=client, active=True, product__active=True).select_related("product")
+        return [
+            {"product": row.product_id, "description": row.product.name, "quantity": row.quantity, "unit_price": row.price}
+            for row in rows
+        ]
 
 
 class Invoice(models.Model):

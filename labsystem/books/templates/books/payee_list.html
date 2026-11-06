@@ -1,0 +1,37 @@
+{% extends "books/base.html" %}
+{% load books_extras %}
+{% block title %}Payees - Ternah Books{% endblock %}
+{% block content %}
+<h1 class="page-title">Payees</h1>
+<p style="color:var(--muted);font-size:0.9rem;max-width:640px;">The people and companies Ternah pays: contractors, suppliers, staff on allowances. Pay any of them to issue a payment voucher.</p>
+<p>
+    <a href="{% url 'books:payee_create' %}" class="btn">New payee</a>
+    <a href="{% url 'books:voucher_create' %}" class="btn btn-secondary">Pay someone</a>
+</p>
+<form method="get" style="margin-bottom:1rem;display:flex;gap:0.5rem;flex-wrap:wrap;">
+    <input type="text" name="q" value="{{ query }}" placeholder="Search name or phone" class="form-control" style="width:auto;flex:1;min-width:180px;">
+    <select name="show" class="form-control" style="width:auto;">
+        <option value="">Active</option>
+        <option value="all" {% if show == 'all' %}selected{% endif %}>All</option>
+    </select>
+    <button type="submit" class="btn btn-secondary">Filter</button>
+</form>
+<div class="card">
+    <table>
+        <thead><tr><th>Name</th><th>Phone</th><th>Usual category</th><th>Paid this year</th><th></th></tr></thead>
+        <tbody>
+            {% for payee in payees %}
+            <tr>
+                <td><a href="{% url 'books:payee_detail' payee.pk %}">{{ payee.name }}</a>{% if not payee.active %} <span class="badge badge-draft">Inactive</span>{% endif %}{% if payee.client_id %} <span class="badge badge-paid">Also a client</span>{% endif %}</td>
+                <td>{{ payee.phone|default:"-" }}</td>
+                <td>{{ payee.default_account.name|default:"-" }}</td>
+                <td>UGX {{ payee.paid_year|default:0|money }}</td>
+                <td>{% if payee.active %}<a href="{% url 'books:voucher_create' %}?payee={{ payee.pk }}">Pay</a>{% endif %}</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="5">No payees yet. Add the first person you pay.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

@@ -675,10 +675,13 @@ class InventoryItemForm(forms.ModelForm):
             "days_covered_per_pack": forms.NumberInput(attrs={"step": "0.01", "min": "0", "class": "form-control"}),
         }
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, can_set_prices=True, **kwargs):
         super().__init__(*args, **kwargs)
         for name, field in self.fields.items():
             field.widget.attrs.setdefault("class", "form-control")
+        if not can_set_prices:
+            self.fields["selling_price"].disabled = True
+            self.fields["selling_price"].help_text = "Only admins set selling prices."
         self.fields["name"].label = "Drug / Item Name"
         self.fields["category"].label = "Form / Category"
         self.fields["unit"].label = "Pack Type"

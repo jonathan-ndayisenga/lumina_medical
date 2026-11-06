@@ -1,0 +1,25 @@
+{% extends "books/base.html" %}
+{% block title %}{% if payee %}Edit {{ payee.name }}{% else %}New payee{% endif %} - Ternah Books{% endblock %}
+{% block content %}
+<h1 class="page-title">{% if payee %}Edit {{ payee.name }}{% else %}New payee{% endif %}</h1>
+{% if next_expense %}<p style="color:var(--muted);font-size:0.9rem;">After saving you'll go straight back to issuing the voucher.</p>{% endif %}
+<div class="card" style="max-width:600px;">
+    <form method="post">
+        {% csrf_token %}
+        {% for field in form %}
+        <div style="margin-bottom:1rem;">
+            {% if field.field.widget.input_type == 'checkbox' %}
+            <label style="display:flex;gap:0.5rem;align-items:center;font-size:0.9rem;">{{ field }} {{ field.label }}</label>
+            {% else %}
+            <label for="{{ field.id_for_label }}" style="display:block;font-size:0.85rem;font-weight:600;margin-bottom:0.3rem;">{{ field.label }}</label>
+            {{ field }}
+            {% endif %}
+            {% if field.help_text %}<p style="font-size:0.78rem;color:var(--muted);margin:0.3rem 0 0;">{{ field.help_text }}</p>{% endif %}
+            {% for error in field.errors %}<p style="color:#a12b2b;font-size:0.8rem;">{{ error }}</p>{% endfor %}
+        </div>
+        {% endfor %}
+        <button type="submit" class="btn">Save</button>
+        <a href="{% if payee %}{% url 'books:payee_detail' payee.pk %}{% else %}{% url 'books:payee_list' %}{% endif %}" class="btn btn-secondary">Cancel</a>
+    </form>
+</div>
+{% endblock %}

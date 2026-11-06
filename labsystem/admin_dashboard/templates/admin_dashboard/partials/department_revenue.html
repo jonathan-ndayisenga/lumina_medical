@@ -1,0 +1,39 @@
+{# Revenue by department for the same dates on every report. Needs `department_revenue` and optionally `show_finance_link`. #}
+<div class="card overflow-hidden">
+    <div class="flex items-center justify-between gap-3 flex-wrap mb-4">
+        <div>
+            <h3 class="text-lg font-bold text-text-main">Revenue by department, {{ department_revenue.start|date:"j M Y" }} to {{ department_revenue.end|date:"j M Y" }}</h3>
+            <p class="text-xs text-text-muted">Collected splits each payment across the departments on that bill, in proportion to their charges.</p>
+        </div>
+        {% if show_finance_link %}<a href="{% url 'financial_report' %}?start_date={{ department_revenue.start|date:'Y-m-d' }}&end_date={{ department_revenue.end|date:'Y-m-d' }}" class="btn btn-secondary btn-sm">Open the finance report for these dates</a>{% endif %}
+    </div>
+    <div class="overflow-x-auto">
+        <table class="w-full">
+            <thead class="bg-gray-50 border-b border-gray-200">
+                <tr>
+                    <th class="text-left px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-widest">Department</th>
+                    <th class="text-right px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-widest">Billed</th>
+                    <th class="text-right px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-widest">Collected</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-200">
+                {% for row in department_revenue.rows %}
+                <tr class="{% if row.key == 'pharmacy' %}bg-purple-50{% endif %}">
+                    <td class="px-4 py-3 text-sm font-medium text-text-main">{{ row.label }}</td>
+                    <td class="px-4 py-3 text-sm text-right text-text-muted">UGX {{ row.billed|floatformat:"0g" }}</td>
+                    <td class="px-4 py-3 text-sm text-right font-semibold text-text-main">UGX {{ row.collected|floatformat:"0g" }}</td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="3" class="px-4 py-8 text-center text-sm text-text-muted">Nothing billed or collected in these dates.</td></tr>
+                {% endfor %}
+            </tbody>
+            <tfoot class="border-t-2 border-gray-300">
+                <tr>
+                    <td class="px-4 py-3 text-sm font-bold text-text-main">Total</td>
+                    <td class="px-4 py-3 text-sm text-right font-bold text-text-main">UGX {{ department_revenue.total_billed|floatformat:"0g" }}</td>
+                    <td class="px-4 py-3 text-sm text-right font-bold text-text-main">UGX {{ department_revenue.total_collected|floatformat:"0g" }}</td>
+                </tr>
+            </tfoot>
+        </table>
+    </div>
+</div>

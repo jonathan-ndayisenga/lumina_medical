@@ -68,6 +68,14 @@ class Hospital(models.Model):
     email = models.EmailField(blank=True)
     logo = models.ImageField(upload_to="hospital_logos/", blank=True, null=True)
     tagline = models.CharField(max_length=120, blank=True)
+    DISPENSING_STANDARD = "standard"
+    DISPENSING_PHARMACY = "pharmacy"
+    DISPENSING_CHOICES = [
+        (DISPENSING_STANDARD, "Nurses and reception give out medicine (as before)"),
+        (DISPENSING_PHARMACY, "A separate pharmacy gives out medicine"),
+    ]
+    dispensing_mode = models.CharField(max_length=20, choices=DISPENSING_CHOICES, default=DISPENSING_STANDARD, db_default=DISPENSING_STANDARD)
+    pharmacy_mode_since = models.DateTimeField(null=True, blank=True)
     report_code = models.CharField(
         max_length=12,
         blank=True,
@@ -757,3 +765,23 @@ class LoginThrottle(models.Model):
 
     def __str__(self):
         return f"{self.key} ({self.failures} failures)"
+
+
+class AssistantQuestion(models.Model):
+    """Every question asked of the Ternah Assistant, so the ones it couldn't
+    answer show what to teach it next."""
+
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name="+")
+    app = models.CharField(max_length=20)
+    hospital = models.ForeignKey("accounts.Hospital", on_delete=models.CASCADE, null=True, blank=True, related_name="+")
+    text = models.CharField(max_length=300)
+    topic = models.CharField(max_length=40, blank=True)
+    answered = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [models.Index(fields=["app", "answered", "-created_at"])]
+
+    def __str__(self):
+        return self.text

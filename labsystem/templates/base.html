@@ -561,13 +561,28 @@
 
                     {% if user.can_access_inventory %}
                         <div data-section="inventory">
-                            <div class="text-xs font-bold uppercase tracking-widest text-white/60 mb-2">Inventory</div>
+                            <div class="text-xs font-bold uppercase tracking-widest text-white/60 mb-2">Pharmacy</div>
                             <div class="space-y-1">
+                                <a href="{% url 'pharmacy_queue' %}" class="sidebar-link {% if active_nav == 'pharmacy_queue' %}active{% endif %}">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-5 h-5">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M10.5 20.5 3.5 13.5a4.95 4.95 0 1 1 7-7l7 7a4.95 4.95 0 1 1-7 7Z M8.5 8.5l7 7" />
+                                    </svg>
+                                    Pharmacy Queue
+                                    {% if queue_counts.pharmacy %}
+                                    <span class="ml-auto inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold text-white bg-red-500 rounded-full">{{ queue_counts.pharmacy }}</span>
+                                    {% endif %}
+                                </a>
+                                <a href="{% url 'pharmacy_walk_in' %}" class="sidebar-link {% if active_nav == 'pharmacy_walk_in' %}active{% endif %}">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-5 h-5">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 5v14M5 12h14" />
+                                    </svg>
+                                    Walk-in Sale
+                                </a>
                                 <a href="{% url 'manage_inventory' %}" class="sidebar-link {% if active_nav == 'hospital_inventory' %}active{% endif %}">
                                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-5 h-5">
                                         <path stroke-linecap="round" stroke-linejoin="round" d="M20 7 12 3 4 7m16 0v10l-8 4-8-4V7m16 0-8 4m-8-4 8 4m0 0v10" />
                                     </svg>
-                                    Inventory Stock
+                                    Drug Stock
                                 </a>
                                 <a href="{% url 'inventory_insights' %}" class="sidebar-link {% if active_nav == 'hospital_inventory_insights' %}active{% endif %}">
                                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-5 h-5">
@@ -911,5 +926,6 @@
         </div>
     {% endif %}
     {% block extra_js %}{% endblock %}
+{% if user.is_authenticated and request.hospital %}{% url 'assistant_ask' as assistant_url %}{% include "partials/assistant_widget.html" with assistant_url=assistant_url %}{% endif %}
 </body>
 </html>

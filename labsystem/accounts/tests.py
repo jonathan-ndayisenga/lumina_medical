@@ -135,7 +135,7 @@ class HomeStatusBoardTests(TestCase):
         keys = [tile["key"] for tile in response.context["tiles"]]
         self.assertEqual(keys, ["reception", "doctor", "inventory", "finance", "hospital_admin"])
         self.assertEqual([item["label"] for item in response.context["home_nav"]],
-                         ["Reception", "Doctor", "Inventory", "Finance", "Hospital admin"])
+                         ["Reception", "Doctor", "Pharmacy", "Finance", "Hospital admin"])
         self.assertContains(response, reverse("enter_nav_section", args=["doctor"]))
         self.assertNotContains(response, "Laboratory")
 

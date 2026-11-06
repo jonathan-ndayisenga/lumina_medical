@@ -425,10 +425,9 @@ class NurseWorkflowTests(TestCase):
         # Check error message in response
         messages_list = list(response.wsgi_request._messages)
         self.assertEqual(len(messages_list), 1)
-        self.assertIn("Cannot dispense", str(messages_list[0]))
-        self.assertIn("insufficient stock", str(messages_list[0]))
-        self.assertIn("Current stock:", str(messages_list[0]))
-        self.assertIn("prescription requires: 6 tablet(s)", str(messages_list[0]))
+        self.assertIn("Not enough Paracetamol in stock", str(messages_list[0]))
+        self.assertIn("on hand", str(messages_list[0]))
+        self.assertIn("this needs 6 tablet(s)", str(messages_list[0]))
 
         # Prescription should not be dispensed
         self.prescription.refresh_from_db()

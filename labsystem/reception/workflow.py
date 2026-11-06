@@ -96,7 +96,7 @@ def queue_counts_for_hospital(hospital) -> dict:
     """Pending (unprocessed) entry counts per operational queue, keyed to
     match the NAV_SECTIONS tile keys in accounts/views.py — used for the
     red count badges on the home tiles and sidebar queue links."""
-    empty = {"reception": 0, "doctor": 0, "nurse": 0, "sonographer": 0, "lab": 0, "phlebotomy": 0}
+    empty = {"reception": 0, "doctor": 0, "nurse": 0, "sonographer": 0, "lab": 0, "phlebotomy": 0, "pharmacy": 0}
     if not hospital:
         return empty
     rows = (
@@ -112,7 +112,13 @@ def queue_counts_for_hospital(hospital) -> dict:
         "sonographer": by_type.get(QueueEntry.TYPE_SONOGRAPHER, 0),
         "lab": lab_queue_entries_with_work(hospital).count(),
         "phlebotomy": by_type.get(QueueEntry.TYPE_PHLEBOTOMY, 0),
+        "pharmacy": _pharmacy_waiting(hospital),
     }
+
+
+def _pharmacy_waiting(hospital) -> int:
+    from pharmacy.services import pharmacy_queue, uses_pharmacy
+    return pharmacy_queue(hospital).count() if uses_pharmacy(hospital) else 0
 
 
 RECEPTION_SOURCE_PREFIX = "Source: "

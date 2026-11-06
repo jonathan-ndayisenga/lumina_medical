@@ -5,4 +5,5 @@
     <a href="{% url 'books:financial_year_list' %}" class="btn {% if request.resolver_match.url_name|slice:':14' == 'financial_year' %}{% else %}btn-secondary{% endif %}">Financial years</a>
     <a href="{% url 'books:quotation_settings' %}" class="btn {% if request.resolver_match.url_name == 'quotation_settings' %}{% else %}btn-secondary{% endif %}">Quotations</a>
     <a href="{% url 'books:budgets' %}" class="btn {% if request.resolver_match.url_name == 'budgets' %}{% else %}btn-secondary{% endif %}">Budgets</a>
+    <a href="{% url 'books:assistant_questions' %}" class="btn {% if request.resolver_match.url_name == 'assistant_questions' %}{% else %}btn-secondary{% endif %}">Assistant</a>
 </p>

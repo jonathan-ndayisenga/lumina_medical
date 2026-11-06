@@ -387,6 +387,60 @@ def credit_note_pdf(ctx) -> bytes:
     return _build(ctx, story + _footer_notes(ctx))
 
 
+def _signatures(cells):
+    """Signature lines: (role, name already known) pairs, side by side."""
+    data = [[Paragraph(f"<b>{_text(role)}</b>", SMALL) for role, _ in cells],
+            [Spacer(1, 12 * mm) for _ in cells],
+            [Paragraph(_text(name or ""), NORMAL) for _, name in cells],
+            [Paragraph("Name, signature and date", SMALL) for _ in cells]]
+    width = PAGE_WIDTH / len(cells)
+    table = Table(data, colWidths=[width] * len(cells))
+    table.setStyle(TableStyle([
+        ("LEFTPADDING", (0, 0), (-1, -1), 0), ("RIGHTPADDING", (0, 0), (-1, -1), 6 * mm),
+        ("LINEBELOW", (0, 1), (-1, 1), 0.6, INK), ("VALIGN", (0, 0), (-1, -1), "TOP"),
+    ]))
+    return KeepTogether(table)
+
+
+def voucher_pdf(ctx) -> bytes:
+    currency = ctx["currency"]
+    money = lambda value: format_money(value, currency)
+    rows = [("Date", _date(ctx["date"])), ("Paid by", ctx["method"]), ("Reference", ctx.get("reference")), ("Our TIN", ctx["company"].get("tin"))]
+    payee = ctx["client"]
+    label = "Void: nothing paid" if ctx.get("is_void") else "Amount paid"
+    story = [
+        _header(ctx), Spacer(1, 8 * mm), _meta(_party_block("Paid to", payee, payee.get("payment_lines", ())), rows), Spacer(1, 6 * mm),
+        _amount_box(label, currency, ctx["amount"]), Spacer(1, 3 * mm),
+        Paragraph(_text(ctx["amount_in_words"]), _style("words", fontSize=8.5, textColor=MUTED, alignment=TA_RIGHT)), Spacer(1, 6 * mm),
+        _lines(["Being payment for", "Category", "Amount"], [[_description(ctx["description"]), ctx["category"], money(ctx["amount"])]],
+               [PAGE_WIDTH - 82 * mm, 46 * mm, 36 * mm], numeric_from=2),
+        Spacer(1, 14 * mm),
+        _signatures([("Prepared by", ctx.get("prepared_by")), ("Approved by", ""), ("Received by", ctx.get("received_by") or payee["name"])]),
+    ]
+    if ctx.get("verify_url"):
+        story += [Spacer(1, 8 * mm), Table(
+            [[QrCode(ctx["verify_url"]), Paragraph("Scan to confirm this voucher is genuine.", SMALL)]],
+            colWidths=[26 * mm, 70 * mm], hAlign="LEFT", style=[("VALIGN", (0, 0), (-1, -1), "MIDDLE"), ("LEFTPADDING", (0, 0), (-1, -1), 0)],
+        )]
+    return _build(ctx, story)
+
+
+def payee_statement_pdf(ctx) -> bytes:
+    currency = ctx["currency"]
+    money = lambda value: format_money(value, currency)
+    rows = [("From", _date(ctx.get("start"))), ("To", _date(ctx.get("end")) or _date(ctx.get("today"))), ("Our TIN", ctx["company"].get("tin"))]
+    line_rows = [
+        [_date(r["date"], short=True), _description(r["description"], f"{r['number']} · {r['method']}"), money(r["amount"])]
+        for r in ctx["rows"]
+    ] or [["", Paragraph("No payments in this period.", NORMAL), ""]]
+    story = [
+        _header(ctx), Spacer(1, 8 * mm), _meta(_party_block("Payments to", ctx["client"]), rows), Spacer(1, 7 * mm),
+        _lines(["Date", "Details", "Amount"], line_rows, [24 * mm, PAGE_WIDTH - 60 * mm, 36 * mm], numeric_from=2),
+        Spacer(1, 6 * mm), _amount_box("Total paid", currency, ctx["total"]),
+    ]
+    return _build(ctx, story)
+
+
 def quotation_pdf(ctx) -> bytes:
     currency = ctx["currency"]
     money = lambda value: format_money(value, currency)

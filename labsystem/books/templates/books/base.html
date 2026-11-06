@@ -24,6 +24,7 @@
         * { box-sizing: border-box; }
         body { margin: 0; font-family: 'Hanken Grotesk', -apple-system, 'Segoe UI', Roboto, sans-serif; color: var(--ink); background: var(--bg); }
         a { color: var(--link); }
+        input, select, textarea, button { font-family: inherit; }
         .btn, .btn:hover { text-decoration: none; }
         .shell { display: flex; min-height: 100vh; }
         .sidebar { width: 240px; background: var(--navy); color: #fff; display: flex; flex-direction: column; flex-shrink: 0; }
@@ -78,37 +79,110 @@
         @media (max-width: 1024px) {
             table { display: block; overflow-x: auto; white-space: nowrap; }
         }
+        .mobile-bar, .nav-close, .nav-backdrop { display: none; }
         @media (max-width: 760px) {
-            .shell { flex-direction: column; }
-            .sidebar { width: 100%; }
-            .sidebar nav { flex-direction: row; overflow-x: auto; }
+            .shell { display: block; }
+            .mobile-bar {
+                display: flex; align-items: center; gap: 0.6rem; position: sticky; top: 0; z-index: 30;
+                height: 56px; padding: 0 0.5rem; background: var(--navy); color: #fff; font-weight: 700;
+            }
+            .mobile-bar img { height: 22px; width: auto; }
+            .nav-toggle, .nav-close {
+                display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; flex: none;
+                background: none; border: 0; border-radius: 0.5rem; color: #fff; cursor: pointer;
+            }
+            .sidebar {
+                position: fixed; top: 0; bottom: 0; left: 0; z-index: 50; width: 75vw; height: 100dvh; overflow-y: auto;
+                transform: translateX(-100%); visibility: hidden;
+                transition: transform 0.25s ease, visibility 0s linear 0.25s;
+                box-shadow: 8px 0 30px rgba(13, 24, 40, 0.3);
+            }
+            .sidebar .brand { padding: 0.5rem 0.5rem 0.5rem 1rem; }
+            .nav-close { margin-left: auto; }
+            .sidebar nav a { padding: 0.8rem 0.85rem; font-size: 1rem; }
+            .nav-backdrop {
+                display: block; position: fixed; inset: 0; z-index: 40; opacity: 0; pointer-events: none;
+                background: rgba(20, 35, 58, 0.35); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+                transition: opacity 0.25s ease;
+            }
+            body.nav-open { overflow: hidden; }
+            body.nav-open .sidebar { transform: none; visibility: visible; transition: transform 0.25s ease; }
+            body.nav-open .nav-backdrop { opacity: 1; pointer-events: auto; }
+
             .main { padding: 1rem; }
-            .card { padding: 1rem; }
+            .card { padding: 1rem; border-radius: 0.75rem; }
             h1.page-title { font-size: 1.2rem; }
-            .btn { width: 100%; justify-content: center; }
-            .btn + .btn { margin-top: 0.5rem; }
+            h3 { font-size: 1rem; }
+            /* Action buttons sit side by side and wrap, instead of a tall stack. */
+            .btn { min-height: 44px; justify-content: center; }
+            .stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.6rem; }
+            .stat-label { font-size: 0.68rem; }
+            .stat-value { font-size: 1.05rem; overflow-wrap: anywhere; }
+            /* 16px stops iPhones zooming the page when a field is tapped. */
+            .form-control, input, select, textarea { font-size: 16px; max-width: 100%; }
+            th, td { padding: 0.6rem 0.5rem; font-size: 0.85rem; }
+
+            /* A table's columns won't fit a phone, so each row becomes a small card. */
+            table.stack, table.stack tbody, table.stack tfoot { display: block; overflow: visible; white-space: normal; }
+            table.stack thead { display: none; }
+            table.stack tr { display: block; padding: 0.7rem 0; border-bottom: 1px solid var(--border); }
+            table.stack tr:first-child { padding-top: 0; }
+            table.stack tr:last-child { padding-bottom: 0; border-bottom: 0; }
+            table.stack td {
+                display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 0.15rem 1rem;
+                padding: 0.2rem 0; border: 0; text-align: right !important; overflow-wrap: anywhere;
+            }
+            table.stack td::before { content: attr(data-label); color: var(--muted); font-size: 0.78rem; text-align: left; }
+            table.stack td.cell-title { display: block; text-align: left !important; font-size: 0.95rem; font-weight: 600; }
+            table.stack td.cell-title::before, table.stack td[colspan]::before { content: none; }
+            table.stack td[colspan] { display: block; text-align: left !important; }
+            table.stack td.cell-empty { display: none; }
+            table.stack td form { justify-content: flex-end; }
+            table.stack td > div { flex-basis: 100%; }
+            table.stack td[data-label=""] { justify-content: flex-end; gap: 0.75rem; }
+            table.stack tfoot tr { margin-top: 0.7rem; padding-top: 0.7rem; border-top: 2px solid var(--border); }
+            textarea.form-control { height: 6.5rem; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            .sidebar, .nav-backdrop { transition: none !important; }
         }
     </style>
     {% block extra_css %}{% endblock %}
 </head>
 <body>
+<header class="mobile-bar">
+    <button type="button" class="nav-toggle" aria-label="Open menu" aria-expanded="false" aria-controls="books-nav">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+    </button>
+    <img src="{% static 'images/ternah_logo_white.svg' %}" alt="">
+    <span>Ternah Books</span>
+</header>
+<div class="nav-backdrop"></div>
 <div class="shell">
-    <aside class="sidebar">
-        <div class="brand"><img src="{% static 'images/ternah_logo_white.svg' %}" alt="">Ternah Books</div>
+    <aside class="sidebar" id="books-nav">
+        <div class="brand">
+            <img src="{% static 'images/ternah_logo_white.svg' %}" alt="">Ternah Books
+            <button type="button" class="nav-close" aria-label="Close menu">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+            </button>
+        </div>
         <nav>
             <a href="{% url 'books:dashboard' %}" class="{% if request.path == '/books/' or request.path == '/books/dashboard/' %}on{% endif %}">Dashboard</a>
             <a href="{% url 'books:client_list' %}" class="{% if request.path|startswith:'/books/clients' %}on{% endif %}">Clients</a>
+            <a href="{% url 'books:product_list' %}" class="{% if request.path|startswith:'/books/settings/products' %}on{% endif %}">Products</a>
             <a href="{% url 'books:quotation_list' %}" class="{% if request.path|startswith:'/books/quotations' %}on{% endif %}">Quotations</a>
             <a href="{% url 'books:invoice_list' %}" class="{% if request.path|startswith:'/books/invoices' %}on{% endif %}">Invoices</a>
             <a href="{% url 'books:recurring_list' %}" class="{% if request.path|startswith:'/books/recurring' %}on{% endif %}">Recurring</a>
             <a href="{% url 'books:payment_create' %}" class="{% if request.path|startswith:'/books/payments' %}on{% endif %}">Payments</a>
             <a href="{% url 'books:receipt_list' %}" class="{% if request.path|startswith:'/books/receipts' %}on{% endif %}">Receipts</a>
             <a href="{% url 'books:expense_list' %}" class="{% if request.path|startswith:'/books/expenses' %}on{% endif %}">Expenses</a>
+            <a href="{% url 'books:voucher_list' %}" class="{% if request.path|startswith:'/books/vouchers' %}on{% endif %}">Payment vouchers</a>
+            <a href="{% url 'books:payee_list' %}" class="{% if request.path|startswith:'/books/payees' %}on{% endif %}">Payees</a>
             <a href="{% url 'books:reconcile' %}" class="{% if request.path|startswith:'/books/reconcile' %}on{% endif %}">Match statements</a>
             <a href="{% url 'books:report_trial_balance' %}" class="{% if request.path|startswith:'/books/reports' %}on{% endif %}">Reports</a>
             <a href="{% url 'books:journal_list' %}" class="{% if request.path|startswith:'/books/journal' %}on{% endif %}">Journal</a>
             {% if is_books_admin %}
-            <a href="{% url 'books:company_settings' %}" class="{% if request.path|startswith:'/books/settings' %}on{% endif %}">Settings</a>
+            <a href="{% url 'books:company_settings' %}" class="{% if request.path|startswith:'/books/settings' %}{% if not request.path|startswith:'/books/settings/products' %}on{% endif %}{% endif %}">Settings</a>
             {% endif %}
         </nav>
         <div class="footer">
@@ -134,5 +208,48 @@
     </main>
 </div>
 {% block extra_js %}{% endblock %}
+{% url 'books:assistant' as assistant_url %}{% include "partials/assistant_widget.html" with assistant_url=assistant_url %}
+<script>
+(function () {
+    // Labels for the phone layout, taken from each table's own headings.
+    document.querySelectorAll('.main table').forEach(function (table) {
+        const headings = Array.from(table.querySelectorAll('thead th')).map(function (th) { return th.textContent.trim(); });
+        if (!headings.length) return;
+        table.classList.add('stack');
+        table.querySelectorAll('tbody tr, tfoot tr').forEach(function (row) {
+            let column = 0;
+            Array.from(row.cells).forEach(function (cell, index) {
+                cell.setAttribute('data-label', headings[column] || '');
+                if (index === 0 && cell.colSpan === 1) cell.classList.add('cell-title');
+                if (!cell.textContent.trim() && !cell.querySelector('img, svg, input, button, form')) cell.classList.add('cell-empty');
+                column += cell.colSpan;
+            });
+        });
+    });
+})();
+(function () {
+    const body = document.body;
+    const toggle = document.querySelector('.nav-toggle');
+    const closeButton = document.querySelector('.nav-close');
+
+    function setOpen(open) {
+        body.classList.toggle('nav-open', open);
+        toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+        (open ? closeButton : toggle).focus({ preventScroll: true });
+    }
+
+    toggle.addEventListener('click', function () { setOpen(true); });
+    closeButton.addEventListener('click', function () { setOpen(false); });
+    document.querySelector('.nav-backdrop').addEventListener('click', function () { setOpen(false); });
+    document.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape' && body.classList.contains('nav-open')) setOpen(false);
+    });
+    // Back from a page opened in the menu must not find the menu still open.
+    window.addEventListener('pageshow', function () { body.classList.remove('nav-open'); });
+    window.matchMedia('(min-width: 761px)').addEventListener('change', function (event) {
+        if (event.matches) body.classList.remove('nav-open');
+    });
+})();
+</script>
 </body>
 </html>

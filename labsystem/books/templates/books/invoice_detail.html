@@ -22,6 +22,10 @@
     {% if invoice.client.is_withholding_agent and invoice.balance > 0 %}
     <a href="{% url 'books:wht_credit_create' invoice.pk %}" class="btn btn-secondary">Record WHT credit</a>
     {% endif %}
+    {% if invoice.status == 'open' or invoice.status == 'paid' %}
+    <form method="post" action="{% url 'books:invoice_repeat' invoice.pk %}" style="display:inline;">{% csrf_token %}<button type="submit" class="btn btn-secondary">Repeat this invoice</button></form>
+    <a href="{% url 'books:invoice_make_plan' invoice.pk %}" class="btn btn-secondary">Make monthly plan</a>
+    {% endif %}
     {% if invoice.status != 'void' and invoice.balance > 0 %}
     <a href="{% url 'books:credit_note_create' invoice.pk %}" class="btn btn-secondary">Credit note</a>
     {% endif %}
@@ -33,6 +37,13 @@
 {% if invoice.status == 'draft' %}
 <p style="color:var(--muted);font-size:0.85rem;margin-top:-0.75rem;">This invoice never made it to "Open" — fix it and re-issue, or delete it.</p>
 {% endif %}
+
+{% for plan in plans_from_here %}
+<p style="font-size:0.88rem;background:#fff;border:1px solid var(--border);border-radius:0.6rem;padding:0.6rem 0.9rem;">
+    Monthly plan made from this invoice: {% if plan.is_finished %}finished{% elif plan.active %}next invoice {{ plan.next_run_date|date:"j M Y" }}{% else %}paused{% endif %}.
+    <a href="{% url 'books:recurring_edit' plan.pk %}">View plan</a>
+</p>
+{% endfor %}
 
 <div class="card">
     <p><strong>Client:</strong> {{ invoice.client.name }}</p>

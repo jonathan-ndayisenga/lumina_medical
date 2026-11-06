@@ -5,7 +5,7 @@
 <h1 class="page-title">{{ client.name }}</h1>
 <p>
     <a href="{% url 'books:client_payment_create' client.pk %}" class="btn">Record payment</a>
-    <a href="{% url 'books:invoice_create' %}" class="btn btn-secondary">New invoice</a>
+    <a href="{% url 'books:invoice_create' %}?client={{ client.pk }}" class="btn btn-secondary">New invoice</a>
     <a href="{% url 'books:client_statement_pdf' client.pk %}" class="btn btn-secondary" target="_blank">Print statement</a>
     <a href="{% url 'books:statement_download' client.pk %}" class="btn btn-secondary">Download statement</a>
 </p>
@@ -43,11 +43,43 @@
 </div>
 {% endif %}
 
+{% if client.payee %}
+<div class="card">
+    <h3>We also pay them</h3>
+    <p>Paid to {{ client.payee.name }} this year: <strong>UGX {{ client.payee.paid_this_year|money }}</strong>. <a href="{% url 'books:payee_detail' client.payee.pk %}">Open payee</a></p>
+</div>
+{% endif %}
+
 <div class="stat-grid">
     <div class="card"><div class="stat-label">Balance</div><div class="stat-value">UGX {{ client.balance|money }}</div></div>
     <div class="card"><div class="stat-label">Unallocated credit</div><div class="stat-value">UGX {{ client.unallocated_credit|money }}</div></div>
     <div class="card"><div class="stat-label">Total invoiced</div><div class="stat-value">UGX {{ client.total_invoiced|money }}</div></div>
     <div class="card"><div class="stat-label">Total received</div><div class="stat-value">UGX {{ client.total_received|money }}</div></div>
+</div>
+
+<div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap;margin-bottom:0.5rem;">
+        <h3 style="margin:0;">Products in use</h3>
+        <a href="{% url 'books:client_product_add' client.pk %}" class="btn btn-secondary">Add product</a>
+    </div>
+    <p style="font-size:0.85rem;color:var(--muted);margin-top:0;">The ones marked Using are filled in automatically on new invoices for this client.</p>
+    <table>
+        <thead><tr><th>Product</th><th>Price (UGX)</th><th>Qty</th><th>Since</th><th>Status</th><th></th></tr></thead>
+        <tbody>
+            {% for row in products_in_use %}
+            <tr>
+                <td>{{ row.product.name }}{% if row.notes %}<div style="color:var(--muted);font-size:0.8rem;">{{ row.notes }}</div>{% endif %}</td>
+                <td>{{ row.price|money }}</td>
+                <td>{{ row.quantity|floatformat:"-2" }}</td>
+                <td>{{ row.start_date|date:"j M Y" }}</td>
+                <td>{% if row.active %}<span class="badge badge-paid">Using</span>{% else %}<span class="badge badge-draft">Stopped{% if row.end_date %} {{ row.end_date|date:"j M Y" }}{% endif %}</span>{% endif %}</td>
+                <td><a href="{% url 'books:client_product_edit' row.pk %}">Edit</a></td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="6">No products yet.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
 </div>
 
 <div class="card">

@@ -259,3 +259,71 @@ def quotation_context(quotation) -> dict:
         "prepared_by_name": (preparer.get_full_name() or preparer.username) if preparer else "",
         "footer_tagline": QuotationSettings.load().footer_tagline,
     }
+
+
+def _payee_block(payee):
+    payment_lines = []
+    if payee.momo_number:
+        payment_lines.append(f"Mobile money {payee.momo_number}")
+    if payee.bank_account_number:
+        bank = " · ".join(part for part in (payee.bank_name, payee.bank_account_name, payee.bank_account_number) if part)
+        payment_lines.append(f"Bank {bank}")
+    return {
+        "name": payee.name,
+        "trading_name": "",
+        "tin": payee.tin,
+        "address": payee.address,
+        "phone": payee.phone,
+        "email": payee.email,
+        "contact_person": payee.contact_person,
+        "payment_lines": payment_lines,
+    }
+
+
+def voucher_context(voucher) -> dict:
+    expense = voucher.expense
+    issuer = voucher.issued_by
+    return {
+        "company": _company_block(),
+        "client": _payee_block(voucher.payee),
+        "heading": "PAYMENT VOUCHER",
+        "number": voucher.number,
+        "date": expense.date,
+        "currency": "UGX",
+        "amount": expense.amount_ugx,
+        "amount_in_words": amount_in_words(expense.amount_ugx),
+        "description": expense.description,
+        "category": expense.account.name,
+        "method": expense.get_method_display(),
+        "reference": expense.reference,
+        "received_by": voucher.received_by,
+        "prepared_by": (issuer.get_full_name() or issuer.username) if issuer else "",
+        "stamp": "VOID" if expense.voided_at else "PAID",
+        "is_void": bool(expense.voided_at),
+    }
+
+
+def payee_statement_context(payee, start=None, end=None) -> dict:
+    vouchers = payee.live_vouchers().select_related("expense", "expense__account").order_by("expense__date", "id")
+    if start:
+        vouchers = vouchers.filter(expense__date__gte=start)
+    if end:
+        vouchers = vouchers.filter(expense__date__lte=end)
+    rows = [
+        {"date": v.expense.date, "number": v.number, "description": v.expense.description,
+         "method": v.expense.get_method_display(), "amount": v.expense.amount_ugx}
+        for v in vouchers
+    ]
+    today = timezone.localdate()
+    return {
+        "company": _company_block(),
+        "client": _payee_block(payee),
+        "heading": "PAYMENTS STATEMENT",
+        "number": f"{(end or today):%B %Y}",
+        "currency": "UGX",
+        "today": today,
+        "start": start,
+        "end": end,
+        "rows": rows,
+        "total": sum((row["amount"] for row in rows), 0),
+    }

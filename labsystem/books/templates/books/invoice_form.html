@@ -3,7 +3,7 @@
 {% block content %}
 <h1 class="page-title">{% if edit_mode %}Edit draft invoice{% else %}New invoice{% endif %}</h1>
 <div class="card" style="max-width:800px;">
-    <form method="post">
+    <form method="post" id="invoice-form">
         {% csrf_token %}
         <h3>Invoice</h3>
         {% for field in form %}
@@ -15,6 +15,7 @@
         {% endfor %}
 
         <h3>Lines</h3>
+        {% if client_products_loaded %}<p style="font-size:0.85rem;background:var(--bg);border-radius:0.5rem;padding:0.6rem 0.8rem;">{{ client_products_loaded }} product{{ client_products_loaded|pluralize }} filled in from {{ selected_client.name }}'s list. Change them, or tick Delete on any they shouldn't pay for this time.</p>{% endif %}
         <p style="font-size:0.8rem;color:var(--muted);margin-top:-0.5rem;">Each line needs a product or revenue account, plus a quantity and unit price greater than zero — that's what makes up the invoice total.</p>
         {{ formset.management_form }}
         {% for error in formset.non_form_errors %}<p style="color:#a12b2b;font-size:0.85rem;">{{ error }}</p>{% endfor %}
@@ -49,4 +50,38 @@
         {% endif %}
     </form>
 </div>
+{{ product_prices|json_script:"product-prices" }}
+<script>
+(function () {
+    const prices = JSON.parse(document.getElementById('product-prices').textContent);
+    const form = document.getElementById('invoice-form');
+    let linesChanged = false;
+
+    form.addEventListener('input', function (event) {
+        if (/^lines-|^invoiceline_set-|-(description|unit_price|quantity)$/.test(event.target.name || '')) linesChanged = true;
+    });
+
+    form.addEventListener('change', function (event) {
+        const select = event.target;
+        if (!/-product$/.test(select.name || '')) return;
+        const product = prices[select.value];
+        if (!product) return;
+        const prefix = select.name.slice(0, -'product'.length);
+        const description = form.elements[prefix + 'description'];
+        const unitPrice = form.elements[prefix + 'unit_price'];
+        if (description && !description.value) description.value = product.name;
+        if (unitPrice && !Number(unitPrice.value)) unitPrice.value = product.price;
+    });
+
+    {% if not edit_mode %}
+    // Picking the client loads their products into the lines.
+    const client = form.elements.client;
+    if (client) client.addEventListener('change', function () {
+        if (!client.value) return;
+        if (linesChanged && !confirm('Load this client\'s products? Lines you have typed will be replaced.')) return;
+        window.location.search = '?client=' + encodeURIComponent(client.value);
+    });
+    {% endif %}
+})();
+</script>
 {% endblock %}

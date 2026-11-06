@@ -19,6 +19,13 @@
     <div class="card"><div class="stat-label">Missing receipts</div><div class="stat-value">{{ missing_receipt_count }}</div></div>
 </div>
 
+{% if recurring_drafts %}
+<div class="banner-danger" style="background:#fff3cd;color:#8a6100;border-color:#f1d68a;">
+    <strong>{{ recurring_drafts }} monthly invoice{{ recurring_drafts|pluralize }} prepared and waiting for you.</strong>
+    <a href="{% url 'books:invoice_list' %}?status=draft">Check and issue them</a>.
+</div>
+{% endif %}
+
 {% if recurring_due %}
 <form method="post" action="{% url 'books:recurring_generate' %}" class="banner-danger" style="display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap;">
     {% csrf_token %}<input type="hidden" name="next" value="{% url 'books:dashboard' %}">

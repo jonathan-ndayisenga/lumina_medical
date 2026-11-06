@@ -3,7 +3,7 @@
 {% block title %}Expenses - Ternah Books{% endblock %}
 {% block content %}
 <h1 class="page-title">Expenses</h1>
-<p><a href="{% url 'books:expense_create' %}" class="btn">New expense</a></p>
+<p><a href="{% url 'books:expense_create' %}" class="btn">New expense</a> <a href="{% url 'books:voucher_create' %}" class="btn btn-secondary">Pay someone (with voucher)</a></p>
 
 <div class="stat-grid">
     <div class="card"><div class="stat-label">Total</div><div class="stat-value">UGX {{ summary.total|money }}</div></div>
@@ -22,7 +22,7 @@
                 <td>{{ expense.account.name }}</td>
                 <td>UGX {{ expense.total_cost_ugx|money }}</td>
                 <td>{{ expense.is_deductible|yesno:"Yes,No" }}</td>
-                <td>{% if expense.receipt %}<a href="{{ expense.receipt.url }}" target="_blank" rel="noopener">Receipt</a> &middot; {% endif %}{% if not expense.voided_at %}<a href="{% url 'books:expense_edit' expense.pk %}">Edit</a> &middot; <a href="{% url 'books:expense_void' expense.pk %}">Void</a>{% endif %}</td>
+                <td>{% if expense.receipt %}<a href="{{ expense.receipt.url }}" target="_blank" rel="noopener">Receipt</a> &middot; {% endif %}{% if expense.voucher %}<a href="{% url 'books:voucher_detail' expense.voucher.pk %}">{{ expense.voucher.number }}</a>{% elif not expense.voided_at %}<a href="{% url 'books:voucher_for_expense' expense.pk %}">Issue voucher</a> &middot; <a href="{% url 'books:expense_edit' expense.pk %}">Edit</a> &middot; <a href="{% url 'books:expense_void' expense.pk %}">Void</a>{% endif %}</td>
             </tr>
             {% empty %}
             <tr><td colspan="6">No expenses yet.</td></tr>

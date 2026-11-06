@@ -65,3 +65,13 @@ class HospitalSubscriptionPaymentAdmin(admin.ModelAdmin):
     search_fields = ("hospital__name",)
     readonly_fields = ("paid_at",)
 
+
+
+from .models import AssistantQuestion  # noqa: E402
+
+
+@admin.register(AssistantQuestion)
+class AssistantQuestionAdmin(admin.ModelAdmin):
+    list_display = ("created_at", "app", "hospital", "text", "topic", "answered")
+    list_filter = ("app", "answered")
+    search_fields = ("text",)

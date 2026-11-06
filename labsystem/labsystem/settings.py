@@ -123,6 +123,7 @@ INSTALLED_APPS = [
     "accounts",
     "admin_dashboard",
     "books",
+    "pharmacy",
     "doctor",
     "finance",
     "homecare",

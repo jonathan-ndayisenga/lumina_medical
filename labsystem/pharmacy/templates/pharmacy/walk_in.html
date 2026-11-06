@@ -1,0 +1,25 @@
+{% extends 'base.html' %}
+
+{% block title %}Walk-in sale - Pharmacy{% endblock %}
+{% block page_title %}New walk-in sale{% endblock %}
+{% block page_subtitle %}For someone buying medicine without seeing a doctor.{% endblock %}
+
+{% block content %}
+<div class="card max-w-xl">
+    <form method="post" class="space-y-4">
+        {% csrf_token %}
+        {% for error in form.non_field_errors %}<p class="text-sm text-red-700">{{ error }}</p>{% endfor %}
+        {% for field in form %}
+        <div>
+            <label for="{{ field.id_for_label }}" class="block text-sm font-medium mb-1">{% if field.name == 'client_type' %}Who is buying?{% elif field.name == 'patient' %}Existing patient{% else %}{{ field.label }}{% endif %}</label>
+            {{ field }}
+            {% for error in field.errors %}<p class="text-xs text-red-700 mt-1">{{ error }}</p>{% endfor %}
+        </div>
+        {% endfor %}
+        <div class="flex gap-3">
+            <button type="submit" class="btn btn-primary">Start sale</button>
+            <a href="{% url 'pharmacy_queue' %}" class="btn btn-secondary">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

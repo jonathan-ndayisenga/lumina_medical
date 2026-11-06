@@ -1,0 +1,49 @@
+{% extends "books/base.html" %}
+{% load books_extras %}
+{% block title %}Monthly plan from {{ invoice.number }} - Ternah Books{% endblock %}
+{% block content %}
+<h1 class="page-title">Make a monthly plan from {{ invoice.number }}</h1>
+
+<div class="card" style="max-width:720px;">
+    <h3>Each month, {{ invoice.client.name }} gets</h3>
+    <table>
+        <thead><tr><th>Description</th><th>Qty</th><th>Price</th><th>Amount</th></tr></thead>
+        <tbody>
+            {% for line in invoice.lines.all %}
+            <tr><td>{{ line.description }}</td><td>{{ line.quantity|floatformat:"-2" }}</td><td>{{ line.unit_price|money_in:invoice.currency }}</td><td>{{ line.amount|money_in:invoice.currency }}</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    <p style="font-size:0.85rem;color:var(--muted);">The plan keeps these prices. Change them on the plan whenever they change. Invoices already made never change.</p>
+</div>
+
+<div class="card" style="max-width:720px;">
+    <p style="margin-top:0;">
+        <strong>This invoice:</strong> {{ invoice.number }}, {{ invoice.issue_date|date:"j M Y" }}<br>
+        <strong>Latest invoice to {{ invoice.client.name }}:</strong> {% if latest %}{{ latest.number }}, {{ latest.issue_date|date:"j M Y" }}{% else %}none{% endif %}
+    </p>
+    {% if latest and latest.pk != invoice.pk %}
+    <p class="banner-danger" style="margin:0 0 1rem;">{{ latest.number }} is newer than this one. If you've been billing monthly by hand, start the plan from {{ latest.number }} instead, so no month is billed twice.</p>
+    {% endif %}
+    {% if existing_plans %}
+    <p class="banner-danger" style="margin:0 0 1rem;">{{ invoice.client.name }} already has {{ existing_plans|length }} active monthly plan{{ existing_plans|pluralize }}: {% for plan in existing_plans %}{{ plan.description }} (next {{ plan.next_run_date|date:"j M Y" }}){% if not forloop.last %}, {% endif %}{% endfor %}. Make sure this isn't the same charge.</p>
+    {% endif %}
+
+    <form method="post">
+        {% csrf_token %}
+        {% for field in form %}
+        <div style="margin-bottom:1rem;">
+            {% if field.name == 'confirm_month' %}
+            {% if form.next_run_date.errors %}<label style="display:flex;gap:0.5rem;align-items:flex-start;font-size:0.88rem;">{{ field }} {{ field.label }}</label>{% endif %}
+            {% else %}
+            <label for="{{ field.id_for_label }}" style="display:block;font-size:0.85rem;font-weight:600;margin-bottom:0.3rem;">{{ field.label }}</label>
+            {{ field }}
+            {% for error in field.errors %}<p style="color:#a12b2b;font-size:0.8rem;">{{ error }}</p>{% endfor %}
+            {% endif %}
+        </div>
+        {% endfor %}
+        <button type="submit" class="btn">Make monthly plan</button>
+        <a href="{% url 'books:invoice_detail' invoice.pk %}" class="btn btn-secondary">Cancel</a>
+    </form>
+</div>
+{% endblock %}

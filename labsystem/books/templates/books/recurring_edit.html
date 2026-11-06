@@ -1,0 +1,40 @@
+{% extends "books/base.html" %}
+{% load books_extras %}
+{% block title %}Monthly plan - Ternah Books{% endblock %}
+{% block content %}
+<h1 class="page-title">Monthly plan for {{ plan.client.name }}</h1>
+<p style="color:var(--muted);font-size:0.9rem;max-width:720px;">Changes apply to invoices made from now on. Invoices already made stay exactly as they were.{% if plan.source_invoice %} Copied from <a href="{% url 'books:invoice_detail' plan.source_invoice_id %}">{{ plan.source_invoice.number }}</a>.{% endif %}</p>
+<div class="card" style="max-width:720px;">
+    <form method="post">
+        {% csrf_token %}
+        {% if formset %}
+        <h3>Each month</h3>
+        {{ formset.management_form }}
+        {% for line in formset %}
+        <div style="display:grid;grid-template-columns:minmax(0,3fr) minmax(0,1fr) minmax(0,2fr);gap:0.5rem;margin-bottom:0.75rem;">
+            {% for hidden in line.hidden_fields %}{{ hidden }}{% endfor %}
+            {% for field in line.visible_fields %}
+            <div>
+                <label for="{{ field.id_for_label }}" style="display:block;font-size:0.8rem;font-weight:600;margin-bottom:0.25rem;">{{ field.label }}</label>
+                {{ field }}
+                {% for error in field.errors %}<p style="color:#a12b2b;font-size:0.78rem;">{{ error }}</p>{% endfor %}
+            </div>
+            {% endfor %}
+        </div>
+        {% endfor %}
+        {% else %}
+        <p><strong>{{ plan.description }}</strong>: UGX {{ plan.amount|money }} a month</p>
+        {% endif %}
+        <h3>When</h3>
+        {% for field in form %}
+        <div style="margin-bottom:1rem;">
+            <label for="{{ field.id_for_label }}" style="display:block;font-size:0.85rem;font-weight:600;margin-bottom:0.3rem;">{{ field.label }}</label>
+            {{ field }}
+            {% for error in field.errors %}<p style="color:#a12b2b;font-size:0.8rem;">{{ error }}</p>{% endfor %}
+        </div>
+        {% endfor %}
+        <button type="submit" class="btn">Save plan</button>
+        <a href="{% url 'books:recurring_list' %}" class="btn btn-secondary">Cancel</a>
+    </form>
+</div>
+{% endblock %}

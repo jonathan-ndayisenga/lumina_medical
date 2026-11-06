@@ -1,0 +1,60 @@
+{% extends "books/base.html" %}
+{% load books_extras %}
+{% block title %}{{ payee.name }} - Ternah Books{% endblock %}
+{% block content %}
+<h1 class="page-title">{{ payee.name }}{% if not payee.active %} <span class="badge badge-draft">Inactive</span>{% endif %}</h1>
+<p>
+    {% if payee.active %}<a href="{% url 'books:voucher_create' %}?payee={{ payee.pk }}" class="btn">Pay {{ payee.name }}</a>{% endif %}
+    <a href="{% url 'books:payee_statement_download' payee.pk %}{% if start or end %}?start={{ start|date:'Y-m-d' }}&end={{ end|date:'Y-m-d' }}{% endif %}" class="btn btn-secondary">Download payments statement</a>
+    <a href="{% url 'books:payee_edit' payee.pk %}" class="btn btn-secondary">Edit</a>
+</p>
+
+<div class="stat-grid">
+    <div class="card"><div class="stat-label">Paid this year</div><div class="stat-value">UGX {{ paid_this_year|money }}</div></div>
+    <div class="card"><div class="stat-label">{% if start or end %}Paid in this period{% else %}Paid in total{% endif %}</div><div class="stat-value">UGX {{ period_total|money }}</div></div>
+    {% if payee.client %}<div class="card"><div class="stat-label">They owe us</div><div class="stat-value">UGX {{ payee.client.balance|money }}</div><a href="{% url 'books:client_detail' payee.client_id %}" style="font-size:0.85rem;">Open client</a></div>{% endif %}
+</div>
+
+<div class="card">
+    <h3>Details</h3>
+    <table>
+        <tbody>
+            {% if payee.contact_person %}<tr><td>Contact</td><td>{{ payee.contact_person }}</td></tr>{% endif %}
+            <tr><td>Phone</td><td>{{ payee.phone|default:"-" }}</td></tr>
+            <tr><td>Email</td><td>{{ payee.email|default:"-" }}</td></tr>
+            {% if payee.tin %}<tr><td>TIN</td><td>{{ payee.tin }}</td></tr>{% endif %}
+            {% if payee.momo_number %}<tr><td>Mobile money</td><td>{{ payee.momo_number }}</td></tr>{% endif %}
+            {% if payee.bank_account_number %}<tr><td>Bank</td><td>{{ payee.bank_name }} {{ payee.bank_account_name }} {{ payee.bank_account_number }}</td></tr>{% endif %}
+            <tr><td>Usual category</td><td>{{ payee.default_account.name|default:"-" }}</td></tr>
+            {% if payee.notes %}<tr><td>Notes</td><td>{{ payee.notes|linebreaksbr }}</td></tr>{% endif %}
+        </tbody>
+    </table>
+</div>
+
+<div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap;margin-bottom:0.5rem;">
+        <h3 style="margin:0;">Payments</h3>
+        <form method="get" style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center;">
+            <input type="date" name="start" value="{{ start|date:'Y-m-d' }}" class="form-control" style="width:auto;" aria-label="From">
+            <input type="date" name="end" value="{{ end|date:'Y-m-d' }}" class="form-control" style="width:auto;" aria-label="To">
+            <button type="submit" class="btn btn-secondary">Filter</button>
+        </form>
+    </div>
+    <table>
+        <thead><tr><th>Voucher</th><th>Date</th><th>What for</th><th>Paid by</th><th>Amount</th></tr></thead>
+        <tbody>
+            {% for voucher in vouchers %}
+            <tr>
+                <td><a href="{% url 'books:voucher_detail' voucher.pk %}">{{ voucher.number }}</a>{% if voucher.is_void %} <span class="badge badge-void">Voided</span>{% endif %}</td>
+                <td>{{ voucher.expense.date }}</td>
+                <td>{{ voucher.expense.description }}</td>
+                <td>{{ voucher.expense.get_method_display }}</td>
+                <td>UGX {{ voucher.expense.amount_ugx|money }}</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="5">No payments to {{ payee.name }} yet.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

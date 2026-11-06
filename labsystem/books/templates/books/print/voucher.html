@@ -1,0 +1,63 @@
+{% extends "books/print/_document_base.html" %}
+{% load books_extras %}
+
+{% block body %}
+<style>
+    .words { margin-top: 2mm; text-align: right; color: var(--muted); font-size: 8.5pt; }
+    .signatures { display: flex; gap: 8mm; margin-top: 16mm; break-inside: avoid; }
+    .signatures > div { flex: 1; }
+    .signatures .role { font-weight: 700; font-size: 8.5pt; }
+    .signatures .line { height: 12mm; border-bottom: 0.75pt solid var(--ink); }
+    .signatures .name { margin-top: 3px; min-height: 1.4em; }
+    .signatures .hint { color: var(--muted); font-size: 8pt; }
+    @media screen and (max-width: 720px) { .signatures { flex-direction: column; gap: 6mm; } }
+</style>
+<div class="meta">
+    <div class="party">
+        <div class="label">Paid to</div>
+        <div class="who">{{ client.name }}</div>
+        {% if client.address %}<div>{{ client.address|linebreaksbr }}</div>{% endif %}
+        {% if client.email %}<div>{{ client.email }}</div>{% endif %}
+        {% if client.phone %}<div>{{ client.phone }}</div>{% endif %}
+        {% if client.tin %}<div>TIN {{ client.tin }}</div>{% endif %}
+        {% for line in client.payment_lines %}<div>{{ line }}</div>{% endfor %}
+    </div>
+    <div class="dates">
+        <table>
+            <tr><td>Date</td><td>{{ date|date:"j F Y" }}</td></tr>
+            <tr><td>Paid by</td><td>{{ method }}</td></tr>
+            {% if reference %}<tr><td>Reference</td><td>{{ reference }}</td></tr>{% endif %}
+            {% if company.tin %}<tr><td>Our TIN</td><td>{{ company.tin }}</td></tr>{% endif %}
+        </table>
+    </div>
+</div>
+
+<div class="due{% if not is_void %} settled{% endif %}">
+    <div class="box">
+        <div class="duelabel">{% if is_void %}Void: nothing paid{% else %}Amount paid{% endif %}</div>
+        <div class="dueamount"><span class="cur">{{ currency }}</span>{{ amount|money_in:currency }}</div>
+    </div>
+</div>
+<div class="words">{{ amount_in_words }}</div>
+
+<div class="table-scroll">
+<table class="lines">
+    <thead><tr><th>Being payment for</th><th>Category</th><th class="num">Amount</th></tr></thead>
+    <tbody>
+        <tr>
+            <td><div class="desc">{{ description }}</div></td>
+            <td>{{ category }}</td>
+            <td class="num">{{ amount|money_in:currency }}</td>
+        </tr>
+    </tbody>
+</table>
+</div>
+
+<div class="signatures">
+    <div><div class="role">Prepared by</div><div class="line"></div><div class="name">{{ prepared_by }}</div><div class="hint">Name, signature and date</div></div>
+    <div><div class="role">Approved by</div><div class="line"></div><div class="name"></div><div class="hint">Name, signature and date</div></div>
+    <div><div class="role">Received by</div><div class="line"></div><div class="name">{{ received_by|default:client.name }}</div><div class="hint">Name, signature and date</div></div>
+</div>
+
+{% if qr_svg %}<div class="verify">{{ qr_svg }}<span>Scan to confirm this voucher is genuine.</span></div>{% endif %}
+{% endblock %}

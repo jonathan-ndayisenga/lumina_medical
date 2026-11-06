@@ -4,7 +4,8 @@ from django.contrib import messages
 from django.contrib.auth.views import LoginView, LogoutView, PasswordChangeDoneView, PasswordChangeView
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
-from django.db.models import ProtectedError, Q
+from django.db.models import Prefetch, ProtectedError, Q
+from django.forms import inlineformset_factory
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse, reverse_lazy
 from django.utils import timezone
@@ -12,14 +13,16 @@ from django.utils.safestring import mark_safe
 from django.utils.decorators import method_decorator
 
 from . import documents, reports
-from .document_models import Client, CompanySettings, Expense, Invoice, Payment, Product, WithholdingCredit
+from .document_models import Client, ClientProduct, CompanySettings, Expense, Invoice, InvoiceLine, Payment, Product, WithholdingCredit
 from .forms import (
     AccountForm,
     ClientForm,
+    ClientProductForm,
     CompanySettingsForm,
     ExpenseForm,
     FinancialYearForm,
     InvoiceForm,
+    InvoiceLineForm,
     InvoiceLineFormSet,
     ManualEntryForm,
     ManualJournalLineFormSet,
@@ -85,6 +88,7 @@ def dashboard(request):
     ]
     recent_payments = Payment.objects.filter(voided_at__isnull=True).select_related("client").order_by("-date", "-id")[:10]
     missing_receipt_count = Expense.objects.filter(receipt="", voided_at__isnull=True).count()
+    recurring_drafts = Invoice.objects.filter(status=Invoice.STATUS_DRAFT, reference__startswith="Recurring:").count()
 
     context = {
         "settings_row": settings_row,
@@ -97,6 +101,7 @@ def dashboard(request):
         "overdue_invoices": overdue_invoices,
         "recent_payments": recent_payments,
         "missing_receipt_count": missing_receipt_count,
+        "recurring_drafts": recurring_drafts,
     }
     from . import insights
     from .planning_models import RecurringInvoice
@@ -182,10 +187,52 @@ def account_delete(request, pk):
     })
 
 
-@books_admin_required
+@books_staff_required
 def product_list(request):
-    products = Product.objects.select_related("revenue_account").all()
+    products = Product.objects.select_related("revenue_account").prefetch_related(
+        Prefetch("client_products", ClientProduct.objects.filter(active=True).select_related("client").order_by("client__name"), to_attr="current_clients"),
+    )
     return render(request, "books/product_list.html", {"products": products})
+
+
+@books_staff_required
+def client_product_add(request, client_pk):
+    client = get_object_or_404(Client, pk=client_pk)
+    form = ClientProductForm(request.POST or None, client=client, initial={"start_date": date.today(), "active": True, "quantity": 1})
+    if request.method == "POST" and form.is_valid():
+        row = form.save(commit=False)
+        row.client = client
+        row.save()
+        messages.success(request, f"{row.product.name} added to {client.name}.")
+        return redirect("books:client_detail", pk=client.pk)
+    return render(request, "books/client_product_form.html", {"form": form, "client": client})
+
+
+@books_staff_required
+def client_product_edit(request, pk):
+    row = get_object_or_404(ClientProduct.objects.select_related("client", "product"), pk=pk)
+    form = ClientProductForm(request.POST or None, instance=row, client=row.client)
+    if request.method == "POST" and form.is_valid():
+        row = form.save(commit=False)
+        # Stopping records when; starting again clears it.
+        row.end_date = None if row.active else (row.end_date or date.today())
+        row.save()
+        messages.success(request, f"{row.product.name} updated for {row.client.name}.")
+        return redirect("books:client_detail", pk=row.client_id)
+    return render(request, "books/client_product_form.html", {"form": form, "client": row.client, "row": row})
+
+
+def _product_prices(client=None) -> dict:
+    """Fills in a line when a product is picked on the invoice form."""
+    prices = {
+        str(product.pk): {"name": product.name, "price": str(product.default_price)}
+        for product in Product.objects.filter(active=True)
+    }
+    if client:
+        for row in client.client_products.filter(active=True):
+            if str(row.product_id) in prices:
+                prices[str(row.product_id)]["price"] = str(row.price)
+    return prices
 
 
 @books_admin_required
@@ -274,7 +321,10 @@ def client_detail(request, pk):
     client = get_object_or_404(Client, pk=pk)
     statement = reports.client_statement(client)
     portal_url = request.build_absolute_uri(reverse("books:portal_home", args=[client.portal_token])) if client.portal_token else ""
-    return render(request, "books/client_detail.html", {"client": client, "statement": statement, "portal_url": portal_url})
+    return render(request, "books/client_detail.html", {
+        "client": client, "statement": statement, "portal_url": portal_url,
+        "products_in_use": client.client_products.select_related("product").order_by("-active", "product__name"),
+    })
 
 
 @books_staff_required
@@ -323,10 +373,17 @@ def invoice_create(request):
         else:
             messages.error(request, "Fix the errors below before issuing this invoice.")
     else:
-        form = InvoiceForm(initial={"issue_date": date.today()})
-        formset = InvoiceLineFormSet()
+        client = Client.objects.filter(pk=request.GET.get("client"), active=True).first() if request.GET.get("client", "").isdigit() else None
+        lines = ClientProduct.invoice_lines_for(client) if client else []
+        form = InvoiceForm(initial={"issue_date": date.today(), "client": client})
+        # One empty line is left after the client's products, for anything extra.
+        formset = inlineformset_factory(Invoice, InvoiceLine, form=InvoiceLineForm, extra=len(lines) + 1, can_delete=True)(initial=lines)
         schedule_form = ScheduleForm()
-    return render(request, "books/invoice_form.html", {"form": form, "formset": formset, "schedule_form": schedule_form})
+        return render(request, "books/invoice_form.html", {
+            "form": form, "formset": formset, "schedule_form": schedule_form,
+            "client_products_loaded": len(lines), "selected_client": client, "product_prices": _product_prices(client),
+        })
+    return render(request, "books/invoice_form.html", {"form": form, "formset": formset, "schedule_form": schedule_form, "product_prices": _product_prices(form.cleaned_data.get("client") if form.is_bound and form.is_valid() else None)})
 
 
 @books_staff_required
@@ -373,7 +430,7 @@ def invoice_edit(request, pk):
         formset = InvoiceLineFormSet(instance=invoice)
         schedule_form = ScheduleForm()
     return render(request, "books/invoice_form.html", {
-        "form": form, "formset": formset, "schedule_form": schedule_form, "invoice": invoice, "edit_mode": True,
+        "form": form, "formset": formset, "schedule_form": schedule_form, "invoice": invoice, "edit_mode": True, "product_prices": _product_prices(invoice.client),
     })
 
 
@@ -412,6 +469,7 @@ def invoice_detail(request, pk):
         "share_url": invoice_whatsapp_url(invoice) if invoice.client.phone else "",
         "email_ready": email_is_configured(),
         "credit_notes": invoice.credit_notes.all(),
+        "plans_from_here": invoice.plans_made_from.all(),
         "wht_credits": invoice.withholding_credits.all(),
     })
 
@@ -537,7 +595,7 @@ def receipt_pdf(request, pk):
 
 @books_staff_required
 def expense_list(request):
-    expenses = Expense.objects.select_related("account").all()
+    expenses = Expense.objects.select_related("account", "voucher").all()
     account_id = request.GET.get("account")
     if account_id:
         expenses = expenses.filter(account_id=account_id)
@@ -593,6 +651,14 @@ def expense_edit(request, pk):
     if expense.voided_at:
         messages.error(request, "A void expense cannot be edited.")
         return redirect("books:expense_list")
+    voucher = getattr(expense, "voucher", None)
+    if voucher:
+        messages.error(
+            request,
+            f"This payment has voucher {voucher.number}, which the payee may already hold. "
+            "To correct it, void the voucher and record the payment again.",
+        )
+        return redirect("books:voucher_detail", pk=voucher.pk)
     form = ExpenseForm(request.POST or None, request.FILES or None, instance=expense)
     if request.method == "POST" and form.is_valid():
         try:
@@ -702,4 +768,22 @@ def journal_list(request):
         "source": source,
         "manual_form": manual_form,
         "manual_formset": manual_formset,
+    })
+
+
+@books_staff_required
+def assistant_ask(request):
+    from labsystem.assistant_views import run
+    from .assistant_topics import assistant
+    return run(request, assistant, "books")
+
+
+@books_admin_required
+def assistant_questions(request):
+    from accounts.models import AssistantQuestion
+    asked = AssistantQuestion.objects.filter(app="books")
+    return render(request, "books/assistant_questions.html", {
+        "unanswered": asked.filter(answered=False)[:200],
+        "answered_count": asked.filter(answered=True).count(),
+        "unanswered_count": asked.filter(answered=False).count(),
     })

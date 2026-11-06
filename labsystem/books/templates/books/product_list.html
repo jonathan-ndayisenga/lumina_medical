@@ -1,23 +1,26 @@
 {% extends "books/base.html" %}
+{% load books_extras %}
 {% block title %}Products - Ternah Books{% endblock %}
 {% block content %}
-<h1 class="page-title">Settings</h1>
-{% include "books/_settings_nav.html" %}
-<p><a href="{% url 'books:product_create' %}" class="btn">New product</a></p>
+<h1 class="page-title">Products</h1>
+{% if is_books_admin %}<p><a href="{% url 'books:product_create' %}" class="btn">New product</a></p>{% endif %}
 <div class="card">
     <table>
-        <thead><tr><th>Name</th><th>Code</th><th>Revenue account</th><th>Active</th><th></th></tr></thead>
+        <thead><tr><th>Product</th><th>Usual price (UGX)</th><th>Clients using it</th><th>Income account</th><th>Active</th>{% if is_books_admin %}<th></th>{% endif %}</tr></thead>
         <tbody>
             {% for product in products %}
             <tr>
-                <td>{{ product.name }}</td>
-                <td>{{ product.code }}</td>
+                <td>{{ product.name }}{% if product.description %}<div style="color:var(--muted);font-size:0.8rem;">{{ product.description|truncatewords:14 }}</div>{% endif %}</td>
+                <td>{{ product.default_price|money }}</td>
+                <td>
+                    {% for row in product.current_clients %}<a href="{% url 'books:client_detail' row.client_id %}">{{ row.client.name }}</a>{% if not forloop.last %}, {% endif %}{% empty %}<span style="color:var(--muted);">None yet</span>{% endfor %}
+                </td>
                 <td>{{ product.revenue_account.name }}</td>
                 <td>{{ product.active|yesno:"Yes,No" }}</td>
-                <td><a href="{% url 'books:product_edit' product.pk %}">Edit</a></td>
+                {% if is_books_admin %}<td><a href="{% url 'books:product_edit' product.pk %}">Edit</a></td>{% endif %}
             </tr>
             {% empty %}
-            <tr><td colspan="5">No products yet.</td></tr>
+            <tr><td colspan="6">No products yet.</td></tr>
             {% endfor %}
         </tbody>
     </table>

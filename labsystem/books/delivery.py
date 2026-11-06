@@ -20,6 +20,7 @@ REMINDER_DAYS_BEFORE = 3
 # Stage name -> days past the due date it starts. Latest first: one email per run.
 OVERDUE_STAGES = (("overdue_30", 30), ("overdue_14", 14), ("overdue_3", 3))
 RECEIPT_SIGNER = Signer(salt="books.receipt.verify")
+VOUCHER_SIGNER = Signer(salt="books.voucher.verify")
 
 
 def receipt_verify_token(payment) -> str:
@@ -39,6 +40,25 @@ def receipt_verify_url(request, payment) -> str:
     return request.build_absolute_uri(reverse("books:receipt_verify", args=[receipt_verify_token(payment)]))
 
 
+def voucher_verify_token(voucher) -> str:
+    return VOUCHER_SIGNER.sign(str(voucher.pk)).replace(":", "-")
+
+
+def voucher_from_verify_token(token: str):
+    from .payee_models import PaymentVoucher
+
+    pk, separator, signature = token.partition("-")
+    try:
+        VOUCHER_SIGNER.unsign(f"{pk}:{signature}")
+    except BadSignature:
+        return None
+    return PaymentVoucher.objects.select_related("payee", "expense").filter(pk=pk).first()
+
+
+def voucher_verify_url(request, voucher) -> str:
+    return request.build_absolute_uri(reverse("books:voucher_verify", args=[voucher_verify_token(voucher)]))
+
+
 def email_is_configured() -> bool:
     return bool(settings.EMAIL_HOST_CONFIGURED)
 
@@ -47,7 +67,7 @@ def _send(subject: str, body: str, to: str, filename: str, content: bytes):
     if not email_is_configured():
         raise ValidationError("Email isn't set up on this server yet, so nothing was sent.")
     if not to:
-        raise ValidationError("This client has no email address on file.")
+        raise ValidationError("There is no email address on file for them.")
     company = CompanySettings.load()
     message = EmailMessage(subject, body, settings.DEFAULT_FROM_EMAIL, [to], reply_to=[company.email] if company.email else None)
     message.attach(filename, content, "application/pdf")
@@ -78,6 +98,29 @@ def send_receipt(payment, verify_url=""):
     context["verify_url"] = verify_url
     body = f"{_greeting(payment.client)}\n\nWe have received UGX {payment.amount:,.0f}. Your receipt {payment.receipt_number} is attached.\n\n{_sign_off()}"
     _send(f"Receipt {payment.receipt_number}", body, payment.client.email, f"{payment.receipt_number}.pdf", pdf.receipt_pdf(context))
+
+
+def send_voucher(voucher, verify_url=""):
+    if voucher.is_void:
+        raise ValidationError("A void voucher can't be sent.")
+    context = documents.voucher_context(voucher)
+    context["verify_url"] = verify_url
+    body = (
+        f"{_greeting(voucher.payee)}\n\nWe have paid you UGX {voucher.amount:,.0f} for {voucher.expense.description}. "
+        f"Payment voucher {voucher.number} is attached.\n\n{_sign_off()}"
+    )
+    _send(f"Payment voucher {voucher.number}", body, voucher.payee.email, f"{voucher.number}.pdf", pdf.voucher_pdf(context))
+
+
+def voucher_whatsapp_url(voucher, verify_url="") -> str:
+    company = CompanySettings.load()
+    text = (
+        f"{_greeting(voucher.payee)}\n{company.trading_name or company.legal_name} has paid you UGX {voucher.amount:,.0f} "
+        f"for {voucher.expense.description}. Payment voucher number {voucher.number}."
+    )
+    if verify_url:
+        text += f"\nConfirm it here: {verify_url}"
+    return whatsapp_url(voucher.payee, text)
 
 
 def whatsapp_url(client, text: str) -> str:

@@ -1,8 +1,10 @@
 from django import forms
 from django.forms import inlineformset_factory
+from django.utils.text import slugify
 
 from .document_models import (
     Client,
+    ClientProduct,
     CompanySettings,
     CreditNote,
     Expense,
@@ -13,6 +15,7 @@ from .document_models import (
     WithholdingCredit,
 )
 from .ledger_models import Account, FinancialYear
+from .payee_models import Payee
 
 
 WIDGET_CLASS = "form-control"
@@ -246,12 +249,56 @@ class AccountForm(forms.ModelForm):
 class ProductForm(forms.ModelForm):
     class Meta:
         model = Product
-        fields = ["name", "code", "revenue_account", "description", "active"]
+        fields = ["name", "default_price", "revenue_account", "description", "code", "active"]
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields["revenue_account"].queryset = Account.objects.filter(active=True, type=Account.TYPE_INCOME)
+        self.fields["code"].required = False
+        self.fields["code"].help_text = "Short name with no spaces. Leave blank to make one from the name."
         _style(self.fields)
+
+    def clean_code(self):
+        code = self.cleaned_data.get("code") or slugify(self.cleaned_data.get("name") or "")[:45] or "product"
+        taken = Product.objects.exclude(pk=self.instance.pk)
+        if self.cleaned_data.get("code"):
+            if taken.filter(code=code).exists():
+                raise forms.ValidationError("Another product already uses this code.")
+            return code
+        unique, number = code, 2
+        while taken.filter(code=unique).exists():
+            unique, number = f"{code}-{number}", number + 1
+        return unique
+
+
+class ClientProductForm(forms.ModelForm):
+    price = forms.DecimalField(
+        max_digits=14, decimal_places=2, required=False, min_value=0,
+        help_text="Their agreed price in UGX. Leave blank to use the product's usual price.",
+    )
+
+    class Meta:
+        model = ClientProduct
+        fields = ["product", "price", "quantity", "start_date", "notes", "active"]
+        widgets = {"start_date": forms.DateInput(attrs={"type": "date"})}
+
+    def __init__(self, *args, client=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.client = client
+        products = Product.objects.filter(active=True)
+        if self.instance.pk:
+            products = Product.objects.filter(pk=self.instance.product_id)
+        self.fields["product"].queryset = products
+        _style(self.fields)
+
+    def clean(self):
+        cleaned = super().clean()
+        product = cleaned.get("product")
+        if product and cleaned.get("price") is None:
+            cleaned["price"] = product.default_price
+        if product and not self.instance.pk and ClientProduct.objects.filter(client=self.client, product=product).exists():
+            self.add_error("product", f"{self.client.name} already has this product. Edit it in their list instead.")
+        return cleaned
 
 
 class FinancialYearForm(forms.ModelForm):
@@ -360,4 +407,84 @@ class QuotationConvertForm(forms.Form):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields["revenue_account"].queryset = Account.objects.filter(active=True, type=Account.TYPE_INCOME)
+        _style(self.fields)
+
+
+class PayeeForm(forms.ModelForm):
+    class Meta:
+        model = Payee
+        fields = [
+            "name", "kind", "contact_person", "phone", "email", "tin", "address",
+            "momo_number", "bank_name", "bank_account_name", "bank_account_number",
+            "client", "default_account", "notes", "active",
+        ]
+        widgets = {"address": forms.Textarea(attrs={"rows": 2}), "notes": forms.Textarea(attrs={"rows": 2})}
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        taken = Payee.objects.exclude(pk=self.instance.pk).exclude(client=None).values("client_id")
+        self.fields["client"].queryset = Client.objects.filter(active=True).exclude(pk__in=taken)
+        self.fields["client"].required = False
+        self.fields["client"].label = "Also our client"
+        self.fields["default_account"].queryset = Account.objects.filter(active=True, type=Account.TYPE_EXPENSE)
+        _style(self.fields)
+
+
+class PaymentVoucherForm(forms.Form):
+    """Paying someone: records the expense and issues the voucher together."""
+
+    payee = forms.ModelChoiceField(queryset=None, label="Pay to")
+    date = forms.DateField(widget=forms.DateInput(attrs={"type": "date"}))
+    description = forms.CharField(max_length=255, label="What for", help_text="This is printed on the voucher.")
+    account = forms.ModelChoiceField(queryset=None, label="Expense category")
+    amount = forms.DecimalField(max_digits=14, decimal_places=2, min_value=1, label="Amount paid (UGX)")
+    method = forms.ChoiceField(choices=Expense.METHOD_CHOICES, initial=Expense.METHOD_CASH, label="Paid by")
+    paid_from = forms.ModelChoiceField(
+        queryset=None, required=False, label="Paid from account",
+        help_text="Leave blank to use the usual account for that method.",
+    )
+    reference = forms.CharField(max_length=100, required=False, help_text="Bank or mobile money transaction ID, cheque number…")
+    transaction_charge = forms.DecimalField(
+        max_digits=12, decimal_places=2, min_value=0, required=False, initial=0,
+        help_text="What the bank or network charged us. Not shown on the voucher.",
+    )
+    received_by = forms.CharField(
+        max_length=150, required=False, label="Collected by",
+        help_text="Only if someone else picked it up for them.",
+    )
+    attachment = forms.FileField(
+        required=False, label="Their invoice or receipt",
+        help_text="Optional. Attach it if they gave you one.",
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["payee"].queryset = Payee.objects.filter(active=True)
+        self.fields["account"].queryset = Account.objects.filter(active=True, type=Account.TYPE_EXPENSE)
+        self.fields["paid_from"].queryset = Account.objects.filter(active=True, is_payment_account=True)
+        _style(self.fields)
+
+    def expense_fields(self) -> dict:
+        data = self.cleaned_data
+        return {
+            "date": data["date"],
+            "description": data["description"],
+            "account": data["account"],
+            "amount": data["amount"],
+            "method": data["method"],
+            "paid_from": data.get("paid_from"),
+            "reference": data.get("reference", ""),
+            "transaction_charge": data.get("transaction_charge") or 0,
+        }
+
+
+class VoucherForExpenseForm(forms.Form):
+    """Issuing a voucher for a payment already recorded as an expense."""
+
+    payee = forms.ModelChoiceField(queryset=None, label="Paid to")
+    received_by = forms.CharField(max_length=150, required=False, label="Collected by", help_text="Only if someone else picked it up for them.")
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["payee"].queryset = Payee.objects.filter(active=True)
         _style(self.fields)

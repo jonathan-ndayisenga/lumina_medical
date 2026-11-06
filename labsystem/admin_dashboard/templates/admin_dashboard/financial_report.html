@@ -187,6 +187,8 @@
     </div>
     {% endif %}
 
+    {% if department_revenue %}{% include "admin_dashboard/partials/department_revenue.html" %}{% endif %}
+
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         <div class="card">
             <h3 class="text-sm text-text-muted mb-2">Total Collected (Period)</h3>

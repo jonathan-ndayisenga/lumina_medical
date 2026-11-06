@@ -1,0 +1,21 @@
+{% extends "books/base.html" %}
+{% block title %}{{ client.name }} products - Ternah Books{% endblock %}
+{% block content %}
+<h1 class="page-title">{% if row %}{{ row.product.name }} for {{ client.name }}{% else %}Add a product to {{ client.name }}{% endif %}</h1>
+<div class="card" style="max-width:520px;">
+    <form method="post">
+        {% csrf_token %}
+        {% for error in form.non_field_errors %}<p style="color:#a12b2b;font-size:0.85rem;">{{ error }}</p>{% endfor %}
+        {% for field in form %}
+        <div style="margin-bottom:1rem;">
+            <label for="{{ field.id_for_label }}" style="display:block;font-size:0.85rem;font-weight:600;margin-bottom:0.3rem;">{% if field.name == 'active' %}Still using this product{% else %}{{ field.label }}{% endif %}</label>
+            {{ field }}
+            {% if field.help_text %}<p style="font-size:0.78rem;color:var(--muted);margin:0.3rem 0 0;">{{ field.help_text }}</p>{% endif %}
+            {% for error in field.errors %}<p style="color:#a12b2b;font-size:0.8rem;">{{ error }}</p>{% endfor %}
+        </div>
+        {% endfor %}
+        <button type="submit" class="btn">Save</button>
+        <a href="{% url 'books:client_detail' client.pk %}" class="btn btn-secondary">Cancel</a>
+    </form>
+</div>
+{% endblock %}

@@ -1,0 +1,24 @@
+{% extends "books/base.html" %}
+{% block title %}Assistant - Ternah Books{% endblock %}
+{% block content %}
+<h1 class="page-title">Settings</h1>
+{% include "books/_settings_nav.html" %}
+<div class="stat-grid">
+    <div class="card"><div class="stat-label">Questions answered</div><div class="stat-value">{{ answered_count }}</div></div>
+    <div class="card"><div class="stat-label">Couldn't answer</div><div class="stat-value">{{ unanswered_count }}</div></div>
+</div>
+<div class="card">
+    <h3>Questions the assistant couldn't answer</h3>
+    <p style="font-size:0.85rem;color:var(--muted);">Send these to Ternah when you'd like the assistant taught to answer them.</p>
+    <table>
+        <thead><tr><th>Asked</th><th>Question</th><th>By</th></tr></thead>
+        <tbody>
+            {% for row in unanswered %}
+            <tr><td>{{ row.created_at|date:"j M Y, H:i" }}</td><td>{{ row.text }}</td><td>{{ row.user.get_username|default:"-" }}</td></tr>
+            {% empty %}
+            <tr><td colspan="3">Nothing yet. Every question so far had an answer.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

@@ -1,0 +1,69 @@
+{% extends 'base.html' %}
+
+{% block title %}Pharmacy - Hospital EMR{% endblock %}
+{% block page_title %}Pharmacy{% endblock %}
+{% block page_subtitle %}Patients waiting for medicine, and walk-in sales.{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <div class="flex flex-col sm:flex-row gap-3 justify-end">
+        <a href="{% url 'manage_inventory' %}" class="btn btn-secondary">Drug stock</a>
+        <a href="{% url 'pharmacy_walk_in' %}" class="btn btn-primary">New walk-in sale</a>
+    </div>
+
+    <div class="card">
+        <div class="flex items-center justify-between gap-3 flex-wrap mb-4">
+            <h2 class="text-lg font-semibold text-text-main">Waiting for medicine</h2>
+            <span class="text-sm text-text-muted">{{ visits|length }} patient{{ visits|length|pluralize }}</span>
+        </div>
+        {% if not pharmacy_mode %}
+        <p class="text-sm text-text-muted mb-4">Nurses and reception give out medicine at this facility, so this list shows the last two days of prescriptions still waiting. You can hand any of them over here too.</p>
+        {% endif %}
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead>
+                    <tr class="text-left text-text-muted border-b">
+                        <th class="py-2 pr-3">Patient</th>
+                        <th class="py-2 pr-3">Waiting since</th>
+                        <th class="py-2 pr-3">Medicines</th>
+                        <th class="py-2 pr-3">Bill</th>
+                        <th class="py-2 pr-3">Paid</th>
+                        <th class="py-2"></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in visits %}
+                    <tr class="border-b last:border-0">
+                        <td class="py-3 pr-3 font-medium text-text-main">{{ row.patient.name }}</td>
+                        <td class="py-3 pr-3">{{ row.first_prescribed|date:"j M, H:i" }}</td>
+                        <td class="py-3 pr-3">{{ row.waiting_count }}</td>
+                        <td class="py-3 pr-3">UGX {{ row.total_amount|floatformat:"0g" }}</td>
+                        <td class="py-3 pr-3">UGX {{ row.total_paid|floatformat:"0g" }}</td>
+                        <td class="py-3 text-right"><a href="{% url 'pharmacy_visit' row.pk %}" class="btn btn-primary btn-sm">Open</a></td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="6" class="py-6 text-center text-text-muted">Nobody is waiting for medicine.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    {% if can_change_mode %}
+    <div class="card">
+        <h2 class="text-lg font-semibold text-text-main mb-1">Who gives out medicine here?</h2>
+        <p class="text-sm text-text-muted mb-4">Admins only. Doctors prescribe either way, and nurses always give IV and injection doses on the ward.</p>
+        <form method="post" action="{% url 'pharmacy_set_mode' %}" class="space-y-2">
+            {% csrf_token %}
+            {% for value, label in modes %}
+            <label class="flex items-start gap-2 text-sm">
+                <input type="radio" name="mode" value="{{ value }}" {% if value == request.hospital.dispensing_mode %}checked{% endif %} class="mt-1">
+                <span>{{ label }}</span>
+            </label>
+            {% endfor %}
+            <button type="submit" class="btn btn-secondary mt-2">Save</button>
+        </form>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

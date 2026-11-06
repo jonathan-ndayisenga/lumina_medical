@@ -1,0 +1,106 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ visit.patient.name }} - Pharmacy{% endblock %}
+{% block page_title %}{{ visit.patient.name }}{% endblock %}
+{% block page_subtitle %}Hand over the medicine, or add some by quantity. Reception takes payment.{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <div class="flex flex-col sm:flex-row gap-3 justify-between">
+        <a href="{% url 'pharmacy_queue' %}" class="btn btn-secondary">Back to the queue</a>
+    </div>
+
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div class="card"><p class="text-text-muted text-sm font-medium mb-1">Bill</p><p class="text-2xl font-bold text-brand-dark">UGX {{ visit.total_amount|floatformat:"0g" }}</p></div>
+        <div class="card"><p class="text-text-muted text-sm font-medium mb-1">Paid so far</p><p class="text-2xl font-bold text-brand-dark">UGX {{ visit.total_paid|floatformat:"0g" }}</p></div>
+        <div class="card"><p class="text-text-muted text-sm font-medium mb-1">Still owed</p><p class="text-2xl font-bold {% if balance %}text-amber-700{% else %}text-green-700{% endif %}">UGX {{ balance|floatformat:"0g" }}</p></div>
+    </div>
+    {% if balance %}
+    <p class="text-sm text-text-muted">Medicine can be handed over before the bill is fully paid. The amount paid at that moment is recorded.</p>
+    {% endif %}
+
+    <div class="card">
+        <h2 class="text-lg font-semibold text-text-main mb-4">Medicine</h2>
+        <div class="space-y-3">
+            {% for rx in prescriptions %}
+            <div class="rounded-xl border {% if rx.dispensed %}border-green-200 bg-green-50{% else %}border-blue-200 bg-blue-50{% endif %} p-3">
+                <div class="flex items-start justify-between gap-3 flex-wrap">
+                    <div>
+                        <p class="font-semibold text-text-main">{{ rx.drug.name }}</p>
+                        <p class="text-xs text-text-muted mt-1">{{ rx.regimen_display }}</p>
+                        <p class="text-xs text-text-muted mt-1">Give {{ rx.quantity_display }} · Stock: {{ rx.drug.quantity_label }}</p>
+                        <p class="text-xs text-text-muted mt-1">Added by {{ rx.get_added_from_display|lower }}{% if rx.prescribed_by %} ({{ rx.prescribed_by.get_full_name|default:rx.prescribed_by.username }}){% endif %}</p>
+                        {% if rx.notes %}<p class="mt-1 text-xs text-text-muted italic border-l-2 border-blue-300 pl-2">{{ rx.notes }}</p>{% endif %}
+                    </div>
+                    <div class="text-right">
+                        <p class="text-xs font-semibold text-text-muted">{{ rx.billing_label }}</p>
+                        {% if rx.dispensed %}
+                        <span class="inline-flex items-center rounded-full bg-green-100 px-2 py-1 text-xs font-semibold text-green-700 mt-2">Dispensed</span>
+                        <p class="text-xs text-text-muted mt-1">{{ rx.dispensed_at|date:"j M, H:i" }}{% if rx.dispensed_by %} by {{ rx.dispensed_by.get_full_name|default:rx.dispensed_by.username }}{% endif %}</p>
+                        {% if rx.paid_at_dispense is not None %}<p class="text-xs text-text-muted">Paid then: UGX {{ rx.paid_at_dispense|floatformat:"0g" }} of {{ rx.bill_at_dispense|floatformat:"0g" }}</p>{% endif %}
+                        {% elif rx.nursing_managed %}
+                        <span class="inline-flex items-center rounded-full bg-indigo-100 px-2 py-1 text-xs font-semibold text-indigo-700 mt-2">Given by nurses</span>
+                        {% else %}
+                        <form method="post" class="mt-2 space-y-2">
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="dispense">
+                            <input type="hidden" name="prescription" value="{{ rx.pk }}">
+                            {% with batches=rx.drug.available_batches %}
+                            {% if batches.count > 1 %}
+                            <select name="batch_id" class="w-full text-xs border-gray-300 rounded-md py-1" aria-label="Batch">
+                                <option value="">Expiring first (automatic)</option>
+                                {% for batch in batches %}<option value="{{ batch.id }}">{{ batch.batch_number }} ({{ batch.quantity }} left){% if batch.expiry_date %} · exp {{ batch.expiry_date }}{% endif %}</option>{% endfor %}
+                            </select>
+                            {% endif %}
+                            {% endwith %}
+                            <button type="submit" class="btn btn-primary btn-sm">Dispense</button>
+                        </form>
+                        <form method="post" class="mt-2" onsubmit="return confirm('Remove {{ rx.drug.name|escapejs }} and take it off the bill?');">
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="remove">
+                            <input type="hidden" name="prescription" value="{{ rx.pk }}">
+                            <button type="submit" class="inline-flex items-center rounded-full border border-red-200 bg-white px-2 py-1 text-xs font-semibold text-red-700 hover:bg-red-50">Not giving this</button>
+                        </form>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            {% empty %}
+            <p class="text-sm text-text-muted">No medicine on this visit yet. Add some below.</p>
+            {% endfor %}
+        </div>
+    </div>
+
+    <div class="card">
+        <h2 class="text-lg font-semibold text-text-main mb-1">Add medicine by quantity</h2>
+        <p class="text-sm text-text-muted mb-4">For walk-ins, or anything extra. It's added to the bill at the drug's selling price.</p>
+        <form method="post" class="grid grid-cols-1 sm:grid-cols-4 gap-3 items-end">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="add">
+            <div class="sm:col-span-2">
+                <label for="pharmacy-drug" class="block text-sm font-medium mb-1">Drug</label>
+                <select id="pharmacy-drug" name="drug" class="form-control" required>
+                    <option value="">Choose a drug…</option>
+                    {% for drug in drugs %}<option value="{{ drug.pk }}">{{ drug.name }} · {{ drug.quantity_label }}{% if drug.selling_price %} · UGX {{ drug.selling_price|floatformat:"0g" }}/{{ drug.unit }}{% else %} · no price set{% endif %}</option>{% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="pharmacy-qty" class="block text-sm font-medium mb-1">Quantity</label>
+                <input id="pharmacy-qty" type="number" name="quantity" min="1" step="1" value="1" class="form-control" required>
+            </div>
+            <div>
+                <label for="pharmacy-unit" class="block text-sm font-medium mb-1">Counted in</label>
+                <select id="pharmacy-unit" name="counted_in" class="form-control">
+                    <option value="unit">Single units (tablets, ml)</option>
+                    <option value="pack">Whole packs, bottles or tubes</option>
+                </select>
+            </div>
+            <div class="sm:col-span-3">
+                <label for="pharmacy-notes" class="block text-sm font-medium mb-1">Note (optional)</label>
+                <input id="pharmacy-notes" type="text" name="notes" maxlength="200" class="form-control" placeholder="e.g. how to take it">
+            </div>
+            <div><button type="submit" class="btn btn-primary w-full">Add to bill</button></div>
+        </form>
+    </div>
+</div>
+{% endblock %}

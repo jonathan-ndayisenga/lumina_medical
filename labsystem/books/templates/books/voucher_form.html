@@ -1,0 +1,38 @@
+{% extends "books/base.html" %}
+{% block title %}Pay someone - Ternah Books{% endblock %}
+{% block content %}
+<h1 class="page-title">Pay someone</h1>
+<p style="color:var(--muted);font-size:0.9rem;max-width:600px;">This records the payment as an expense and issues a numbered payment voucher you can print, download or send. Not on the list? <a href="{% url 'books:payee_create' %}">Add a payee</a> first.</p>
+<div class="card" style="max-width:600px;">
+    <form method="post" enctype="multipart/form-data" id="voucher-form">
+        {% csrf_token %}
+        {% for error in form.non_field_errors %}<p style="color:#a12b2b;font-size:0.85rem;">{{ error }}</p>{% endfor %}
+        {% for field in form %}
+        <div style="margin-bottom:1rem;">
+            <label for="{{ field.id_for_label }}" style="display:block;font-size:0.85rem;font-weight:600;margin-bottom:0.3rem;">{{ field.label }}</label>
+            {{ field }}
+            {% if field.help_text %}<p style="font-size:0.78rem;color:var(--muted);margin:0.3rem 0 0;">{{ field.help_text }}</p>{% endif %}
+            {% for error in field.errors %}<p style="color:#a12b2b;font-size:0.8rem;">{{ error }}</p>{% endfor %}
+        </div>
+        {% endfor %}
+        <button type="submit" class="btn">Record payment and issue voucher</button>
+        <a href="{% url 'books:voucher_list' %}" class="btn btn-secondary">Cancel</a>
+    </form>
+</div>
+{{ account_defaults|json_script:"account-defaults" }}
+{% endblock %}
+{% block extra_js %}
+<script>
+(function () {
+    // Picking a payee fills in their usual expense category.
+    const defaults = JSON.parse(document.getElementById('account-defaults').textContent);
+    const form = document.getElementById('voucher-form');
+    const payee = form.querySelector('[name="payee"]');
+    const account = form.querySelector('[name="account"]');
+    payee.addEventListener('change', function () {
+        const usual = defaults[payee.value];
+        if (usual) account.value = String(usual);
+    });
+})();
+</script>
+{% endblock %}

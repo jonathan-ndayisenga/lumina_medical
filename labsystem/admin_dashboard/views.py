@@ -133,6 +133,17 @@ def inventory_access_required(view_func):
     return wrapped
 
 
+def can_set_drug_prices(user) -> bool:
+    return bool(getattr(user, "is_superadmin", False) or getattr(user, "is_hospital_admin", False))
+
+
+def _department_revenue(hospital, start, end):
+    if not hospital or not start or not end:
+        return None
+    from .revenue import by_department
+    return by_department(hospital, start, end)
+
+
 def finance_access_required(view_func):
     """Requires the user's role/group to be eligible AND the hospital to have the Finance module."""
     @login_required
@@ -877,10 +888,8 @@ def financial_report(request):
 
     # Single source of truth: the Payment (receipts) table.
     # A receipt exists when paid_at is set and amount_paid > 0. Waived payments are excluded.
-    receipts = (
-        Payment.objects.filter(visit__hospital=hospital, paid_at__isnull=False, amount_paid__gt=0)
-        .exclude(status=Payment.STATUS_WAIVED)
-    ) if hospital else Payment.objects.none()
+    from .revenue import receipts as receipts_for
+    receipts = receipts_for(hospital) if hospital else Payment.objects.none()
 
     paid_income = receipts.aggregate(total=Sum("amount_paid"))["total"] or 0
     expense_total = Expense.objects.filter(hospital=hospital).aggregate(total=Sum("amount"))["total"] or 0 if hospital else 0
@@ -1224,6 +1233,7 @@ def financial_report(request):
         "period_start": period_start,
         "period_end": period_end,
         "income_period": income_period,
+        "department_revenue": _department_revenue(hospital, period_start, period_end),
         "expenses_period": expenses_period,
         "salaries_period": salaries_period,
         "net_profit_period": income_period - (expenses_period + salaries_period),
@@ -1836,7 +1846,7 @@ def manage_inventory(request):
     filter_query.pop("page", None)
 
     if request.method == "POST":
-        form = InventoryItemForm(request.POST)
+        form = InventoryItemForm(request.POST, can_set_prices=can_set_drug_prices(request.user))
         if form.is_valid():
             item = form.save(commit=False)
             item.hospital = hospital
@@ -1851,7 +1861,7 @@ def manage_inventory(request):
             return redirect("manage_inventory")
         messages.error(request, "Please fix the inventory details below.")
     else:
-        form = InventoryItemForm()
+        form = InventoryItemForm(can_set_prices=can_set_drug_prices(request.user))
 
     context = hospital_admin_context(
         request,
@@ -2026,6 +2036,8 @@ def download_inventory_import_template(request):
 def upload_inventory_bulk(request):
     if request.method != "POST":
         return redirect("manage_inventory")
+    if not can_set_drug_prices(request.user):
+        return HttpResponseForbidden("Only admins can bulk upload, because the file sets selling prices.")
 
     hospital = active_hospital(request)
     form = InventoryBulkUploadForm(request.POST, request.FILES)
@@ -2156,7 +2168,7 @@ def upload_inventory_bulk(request):
 @inventory_access_required
 def edit_inventory_item(request, item_id):
     item = hospital_owned_or_404(InventoryItem, request, pk=item_id)
-    form = InventoryItemForm(request.POST or None, instance=item)
+    form = InventoryItemForm(request.POST or None, instance=item, can_set_prices=can_set_drug_prices(request.user))
     if request.method == "POST":
         if form.is_valid():
             form.save()
@@ -2176,6 +2188,8 @@ def edit_inventory_item(request, item_id):
 
 @inventory_access_required
 def delete_inventory_item(request, item_id):
+    if not can_set_drug_prices(request.user):
+        return HttpResponseForbidden("Only admins can delete drugs.")
     item = hospital_owned_or_404(InventoryItem, request, pk=item_id)
     if request.method == "POST":
         item_name = item.name
@@ -2472,6 +2486,8 @@ def report_consultations(request):
         "doctor_rows": doctor_rows,
         "top_services": top_services,
         "hospital": hospital,
+        "department_revenue": _department_revenue(hospital, date_start, date_end),
+        "show_finance_link": request.user.can_access_finance,
         "chart_json": json.dumps({
             "labels": [d["name"] for d in doctor_rows],
             "billed": [float(d["billed"]) for d in doctor_rows],
@@ -2630,6 +2646,8 @@ def patient_demographic_report(request):
         "sex_rows": sex_rows,
         "address_rows": address_rows,
         "total_patients": patients.count(),
+        "department_revenue": _department_revenue(hospital, start, end),
+        "show_finance_link": request.user.can_access_finance,
     })
     return render(request, "admin_dashboard/patient_demographic_report.html", context)
 

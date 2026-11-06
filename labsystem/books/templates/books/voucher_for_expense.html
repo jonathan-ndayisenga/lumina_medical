@@ -1,0 +1,37 @@
+{% extends "books/base.html" %}
+{% load books_extras %}
+{% block title %}Issue voucher - Ternah Books{% endblock %}
+{% block content %}
+<h1 class="page-title">Issue a voucher for an earlier payment</h1>
+<div class="card" style="max-width:600px;">
+    <table>
+        <tbody>
+            <tr><td>Date</td><td>{{ expense.date }}</td></tr>
+            <tr><td>What for</td><td>{{ expense.description }}</td></tr>
+            {% if expense.supplier %}<tr><td>Supplier typed</td><td>{{ expense.supplier }}</td></tr>{% endif %}
+            <tr><td>Category</td><td>{{ expense.account.name }}</td></tr>
+            <tr><td>Amount</td><td>UGX {{ expense.amount_ugx|money }}</td></tr>
+            <tr><td>Paid by</td><td>{{ expense.get_method_display }}</td></tr>
+        </tbody>
+    </table>
+</div>
+<div class="card" style="max-width:600px;">
+    {% if expense.supplier and not suggested %}
+    <p style="font-size:0.88rem;color:var(--muted);">No payee is called "{{ expense.supplier }}" yet. <a href="{% url 'books:payee_create' %}?name={{ expense.supplier|urlencode }}&amp;expense={{ expense.pk }}">Add them as a payee</a>, or pick someone below.</p>
+    {% endif %}
+    <form method="post">
+        {% csrf_token %}
+        {% for field in form %}
+        <div style="margin-bottom:1rem;">
+            <label for="{{ field.id_for_label }}" style="display:block;font-size:0.85rem;font-weight:600;margin-bottom:0.3rem;">{{ field.label }}</label>
+            {{ field }}
+            {% if field.help_text %}<p style="font-size:0.78rem;color:var(--muted);margin:0.3rem 0 0;">{{ field.help_text }}</p>{% endif %}
+            {% for error in field.errors %}<p style="color:#a12b2b;font-size:0.8rem;">{{ error }}</p>{% endfor %}
+        </div>
+        {% endfor %}
+        <p style="font-size:0.8rem;color:var(--muted);">The voucher carries this expense's date and amount. Once it has a voucher the expense can't be edited, only voided, so the payee's copy always matches your books.</p>
+        <button type="submit" class="btn">Issue voucher</button>
+        <a href="{% url 'books:expense_list' %}" class="btn btn-secondary">Cancel</a>
+    </form>
+</div>
+{% endblock %}

@@ -204,6 +204,17 @@ class Prescription(models.Model):
         default=False,
         help_text="If True, this prescription is dispensed dose-by-dose by nurses, not all at once by pharmacy.",
     )
+    sold_quantity = models.DecimalField(
+        max_digits=10, decimal_places=2, null=True, blank=True,
+        help_text="Set for a straight sale by quantity (units, or packs for liquids and tubes) instead of a dose regimen.",
+    )
+    ADDED_FROM_DOCTOR = "doctor"
+    ADDED_FROM_RECEPTION = "reception"
+    ADDED_FROM_PHARMACY = "pharmacy"
+    ADDED_FROM_CHOICES = [(ADDED_FROM_DOCTOR, "Doctor"), (ADDED_FROM_RECEPTION, "Reception"), (ADDED_FROM_PHARMACY, "Pharmacy")]
+    added_from = models.CharField(max_length=20, choices=ADDED_FROM_CHOICES, default=ADDED_FROM_DOCTOR, db_default=ADDED_FROM_DOCTOR)
+    paid_at_dispense = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    bill_at_dispense = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
 
     class Meta:
         ordering = ["-prescribed_at", "-id"]
@@ -222,7 +233,8 @@ class Prescription(models.Model):
         }
 
     def save(self, *args, **kwargs):
-        if self.drug_id is not None:
+        # A straight sale is handed over whole at the pharmacy, never dose by dose.
+        if self.drug_id is not None and self.sold_quantity is None:
             self.nursing_managed = self.should_manage_by_nurse(self.drug)
         else:
             self.nursing_managed = False
@@ -247,6 +259,10 @@ class Prescription(models.Model):
 
     @property
     def quantity_display(self):
+        if self.sold_quantity is not None:
+            if self.is_liquid or self.is_tube:
+                return f"{self.number_of_packs} {self.drug.unit}(s)"
+            return f"{self._display_quantity(self.total_quantity)} {self.drug.base_unit}(s)"
         if self.is_liquid and self.number_of_packs:
             total_ml = (Decimal(self.dosage_mg or 0) * Decimal(self.frequency_per_day or 0) * Decimal(self.duration_days or 0)).quantize(Decimal("0.01"))
             return f"{self.number_of_packs} {self.drug.unit}(s) covering {self._display_quantity(total_ml)} ml"
@@ -256,6 +272,8 @@ class Prescription(models.Model):
 
     @property
     def regimen_display(self):
+        if self.sold_quantity is not None:
+            return "Sold by quantity"
         dose_unit = "mg"
         if self.is_liquid:
             dose_unit = "ml"
@@ -278,6 +296,16 @@ class Prescription(models.Model):
         duration = Decimal(self.duration_days or 0)
         dosage = Decimal(self.dosage_mg or 0)
         selling_price = Decimal(self.drug.selling_price or 0)
+
+        if self.sold_quantity is not None:
+            sold = Decimal(self.sold_quantity).quantize(Decimal("1"), rounding=ROUND_CEILING)
+            self.total_quantity = sold.quantize(Decimal("0.01"))
+            self.number_of_packs = int(sold)
+            if self.is_liquid or self.is_tube:
+                self.total_price = (sold * selling_price).quantize(Decimal("0.01"))
+            else:
+                self.total_price = (sold * self.drug.price_per_base_unit).quantize(Decimal("0.01"))
+            return
 
         if self.is_liquid:
             units_per_pack = Decimal(self.drug.units_per_pack or 0)

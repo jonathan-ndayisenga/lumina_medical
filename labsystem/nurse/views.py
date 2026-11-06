@@ -1,6 +1,6 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.core.exceptions import PermissionDenied
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
 from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
@@ -271,46 +271,19 @@ def dispense_prescription(request, queue_entry_id, prescription_id):
     if queue_entry.visit.status == Visit.STATUS_CANCELLED:
         raise PermissionDenied("Cancelled visits cannot dispense medication.")
 
-    if prescription.dispensed:
+    from pharmacy.services import dispense, dispensed_at_pharmacy
+    if dispensed_at_pharmacy(prescription):
+        messages.info(request, f"{prescription.drug.name} is handed over at the pharmacy.")
+        return redirect("perform_nursing", queue_entry_id=queue_entry.pk)
+    try:
+        prescription, done = dispense(prescription, request.user)
+    except ValidationError as exc:
+        messages.error(request, "; ".join(exc.messages))
+        return redirect("perform_nursing", queue_entry_id=queue_entry.pk)
+    if done:
+        messages.success(request, f"Dispensed {prescription.quantity_display} of {prescription.drug.name}.")
+    else:
         messages.info(request, f"{prescription.drug.name} was already dispensed for this visit.")
-        return redirect("perform_nursing", queue_entry_id=queue_entry.pk)
-
-    drug = prescription.drug
-    quantity_to_deduct = prescription.total_quantity
-    stock_quantity_to_deduct = drug.to_stock_quantity(quantity_to_deduct)
-    available_dispense_quantity = drug.available_dispense_quantity
-    if available_dispense_quantity < quantity_to_deduct:
-        messages.error(
-            request,
-            f"Cannot dispense {drug.name} - insufficient stock available. Current stock: {drug.quantity_label}, but prescription requires: {prescription.quantity_display}. Please restock the inventory or adjust the prescription.",
-        )
-        return redirect("perform_nursing", queue_entry_id=queue_entry.pk)
-
-    drug.consume_stock(stock_quantity_to_deduct)
-
-    InventoryTransaction.objects.create(
-        hospital=queue_entry.visit.hospital,
-        item=drug,
-        transaction_type=InventoryTransaction.TYPE_CONSUME,
-        quantity=quantity_to_deduct,
-        unit_cost=drug.unit_cost,
-        visit=queue_entry.visit,
-        prescription=prescription,
-        performed_by=request.user,
-        notes=f"Dispensed via nurse workflow for prescription {prescription.pk}",
-    )
-
-    prescription.dispensed = True
-    prescription.dispensed_at = timezone.now()
-    prescription.dispensed_by = request.user
-    prescription.save(update_fields=["dispensed", "dispensed_at", "dispensed_by"])
-
-    if prescription.billing_visit_service_id:
-        prescription.billing_visit_service.performed = True
-        prescription.billing_visit_service.performed_at = timezone.now()
-        prescription.billing_visit_service.save(update_fields=["performed", "performed_at"])
-
-    messages.success(request, f"Dispensed {prescription.quantity_display} of {drug.name}.")
     return redirect("perform_nursing", queue_entry_id=queue_entry.pk)
 
 

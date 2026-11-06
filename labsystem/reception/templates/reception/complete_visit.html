@@ -87,7 +87,7 @@
             <div id="service-removal-message" class="hidden mt-3 rounded-lg border px-3 py-2 text-sm"></div>
         </div>
 
-        <div class="card" data-add-prescription-url="{% url 'add_prescription_api' visit.pk %}" data-remove-prescription-url-template="/doctor/visit/{{ visit.pk }}/api/prescriptions/__PRESCRIPTION_ID__/remove/" data-dispense-url-template="/reception/complete/{{ visit.pk }}/prescriptions/__PRESCRIPTION_ID__/dispense/" data-csrf-token="{{ csrf_token }}" data-default-duration="{{ visit.adjustment_remaining_days|default:1 }}" data-is-adjustment-visit="{% if visit.is_adjustment_visit %}true{% else %}false{% endif %}">
+        <div class="card" data-add-prescription-url="{% url 'add_prescription_api' visit.pk %}" data-remove-prescription-url-template="/doctor/visit/{{ visit.pk }}/api/prescriptions/__PRESCRIPTION_ID__/remove/" data-dispense-url-template="/reception/complete/{{ visit.pk }}/prescriptions/__PRESCRIPTION_ID__/dispense/" data-csrf-token="{{ csrf_token }}" data-default-duration="{{ visit.adjustment_remaining_days|default:1 }}" data-is-adjustment-visit="{% if visit.is_adjustment_visit %}true{% else %}false{% endif %}" data-pharmacy-mode="{% if visit.hospital.dispensing_mode == 'pharmacy' %}true{% else %}false{% endif %}">
             <h3 class="text-sm font-semibold text-text-main mb-4">Reception Pharmacy</h3>
             <p class="text-sm text-text-muted mb-4">
                 {% if allow_reception_prescribing %}
@@ -196,6 +196,8 @@
                                 {% if prescription.dispensed %}
                                     <span class="inline-flex items-center rounded-full bg-green-100 px-2 py-1 text-xs font-semibold text-green-700 mt-2">Dispensed</span>
                                     <button type="button" class="mt-2 inline-flex items-center rounded-full border border-red-200 bg-white px-2 py-1 text-xs font-semibold text-red-700 hover:bg-red-50" data-remove-prescription="{{ prescription.pk }}">Undo &amp; Remove</button>
+                                {% elif visit.hospital.dispensing_mode == 'pharmacy' and not prescription.nursing_managed %}
+                                    <span class="inline-flex items-center rounded-full bg-purple-100 px-2 py-1 text-xs font-semibold text-purple-700 mt-2">Waiting at pharmacy</span>
                                 {% else %}
                                     <form method="post" action="{% url 'reception_dispense_prescription' visit.pk prescription.pk %}" class="mt-2">
                                         {% csrf_token %}
@@ -430,6 +432,8 @@
     const removePrescriptionUrlTemplate = wrapper.dataset.removePrescriptionUrlTemplate || '';
     const csrfToken = wrapper.dataset.csrfToken || document.querySelector('input[name="csrfmiddlewaretoken"]')?.value || '';
     const dispenseUrlTemplate = wrapper.dataset.dispenseUrlTemplate || '';
+    // In pharmacy mode reception adds drugs and the pharmacy hands them over.
+    const pharmacyMode = wrapper.dataset.pharmacyMode === 'true';
     const drugSearchInput = wrapper.querySelector('#drug-search-input');
     const drugSearchResults = wrapper.querySelector('#drug-search-results');
     const drugSelect = wrapper.querySelector('#drug-select');
@@ -661,6 +665,9 @@
     }
 
     function createDispenseForm(prescription) {
+        if (pharmacyMode && !prescription.nursing_managed) {
+            return '<span class="inline-flex items-center rounded-full bg-purple-100 px-2 py-1 text-xs font-semibold text-purple-700 mt-2">Waiting at pharmacy</span>';
+        }
         const actionUrl = dispenseUrlTemplate.replace('__PRESCRIPTION_ID__', String(prescription.id));
         const batches = prescription.batches || [];
         let batchHtml = '';

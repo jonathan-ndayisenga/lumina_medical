@@ -15,17 +15,19 @@
 
 <div class="card">
     <table>
-        <thead><tr><th>Client</th><th>Description</th><th>Monthly amount</th><th>Next invoice</th><th>Ends</th><th>Status</th><th></th></tr></thead>
+        <thead><tr><th>Client</th><th>Description</th><th>Monthly amount</th><th>Next invoice</th><th>Each month</th><th>Ends</th><th>Status</th><th></th></tr></thead>
         <tbody>
             {% for plan in plans %}
             <tr>
                 <td>{{ plan.client.name }}</td>
-                <td>{{ plan.description }}</td>
-                <td>UGX {{ plan.amount|money }}</td>
+                <td>{{ plan.description }}{% if plan.source_invoice %}<div style="color:var(--muted);font-size:0.8rem;">From <a href="{% url 'books:invoice_detail' plan.source_invoice_id %}">{{ plan.source_invoice.number }}</a></div>{% endif %}</td>
+                <td>UGX {{ plan.monthly_total|money }}</td>
                 <td>{{ plan.next_run_date }}{% if plan.is_due %} <span class="badge badge-open">Due</span>{% endif %}</td>
+                <td>{% if plan.issue_mode == 'draft' %}Draft to check{% else %}Issued{% endif %}</td>
                 <td>{{ plan.end_date|default:"—" }}</td>
                 <td>{% if plan.is_finished %}Finished{% elif plan.active %}Active{% else %}Paused{% endif %}</td>
                 <td>
+                    <a href="{% url 'books:recurring_edit' plan.pk %}" class="btn btn-secondary">Edit</a>
                     {% if not plan.is_finished %}
                     <form method="post" action="{% url 'books:recurring_toggle' plan.pk %}" style="display:inline;">
                         {% csrf_token %}<button type="submit" class="btn btn-secondary">{% if plan.active %}Pause{% else %}Resume{% endif %}</button>
@@ -34,7 +36,7 @@
                 </td>
             </tr>
             {% empty %}
-            <tr><td colspan="7">No recurring invoices yet. Add one below.</td></tr>
+            <tr><td colspan="8">No recurring invoices yet. Add one below, or open an invoice and click Make monthly plan.</td></tr>
             {% endfor %}
         </tbody>
     </table>

@@ -1,0 +1,42 @@
+{% extends "books/base.html" %}
+{% load books_extras %}
+{% block title %}Payment vouchers - Ternah Books{% endblock %}
+{% block content %}
+<h1 class="page-title">Payment vouchers</h1>
+<p style="color:var(--muted);font-size:0.9rem;max-width:640px;">Every payment here is also an expense, so it shows in spending and the reports. Voiding a voucher reverses the payment.</p>
+<p>
+    <a href="{% url 'books:voucher_create' %}" class="btn">Pay someone</a>
+    <a href="{% url 'books:payee_list' %}" class="btn btn-secondary">Payees</a>
+</p>
+{% if without_voucher %}
+<p style="font-size:0.88rem;color:var(--muted);">{{ without_voucher }} expense{{ without_voucher|pluralize }} recorded without a voucher. To issue one for an older payment, open <a href="{% url 'books:expense_list' %}">Expenses</a> and choose Issue voucher.</p>
+{% endif %}
+<form method="get" style="margin-bottom:1rem;display:flex;gap:0.5rem;flex-wrap:wrap;">
+    <input type="text" name="q" value="{{ query }}" placeholder="Search number, payee, what for" class="form-control" style="width:auto;flex:1;min-width:180px;">
+    <input type="date" name="start" value="{{ start|date:'Y-m-d' }}" class="form-control" style="width:auto;" aria-label="From">
+    <input type="date" name="end" value="{{ end|date:'Y-m-d' }}" class="form-control" style="width:auto;" aria-label="To">
+    <button type="submit" class="btn btn-secondary">Filter</button>
+</form>
+<div class="stat-grid">
+    <div class="card"><div class="stat-label">Paid out{% if start or end or query %} (filtered){% endif %}</div><div class="stat-value">UGX {{ total|money }}</div></div>
+</div>
+<div class="card">
+    <table>
+        <thead><tr><th>Voucher</th><th>Paid to</th><th>Date</th><th>What for</th><th>Amount</th><th></th></tr></thead>
+        <tbody>
+            {% for voucher in vouchers %}
+            <tr>
+                <td><a href="{% url 'books:voucher_detail' voucher.pk %}">{{ voucher.number }}</a>{% if voucher.is_void %} <span class="badge badge-void">Voided</span>{% endif %}</td>
+                <td><a href="{% url 'books:payee_detail' voucher.payee_id %}">{{ voucher.payee.name }}</a></td>
+                <td>{{ voucher.expense.date }}</td>
+                <td>{{ voucher.expense.description }}</td>
+                <td>UGX {{ voucher.expense.amount_ugx|money }}</td>
+                <td><a href="{% url 'books:voucher_print' voucher.pk %}" target="_blank">Print</a> &middot; <a href="{% url 'books:voucher_download' voucher.pk %}">PDF</a></td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="6">No payment vouchers yet.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

@@ -1,0 +1,22 @@
+{% extends "books/public_base.html" %}
+{% load books_extras %}
+{% block title %}Check a payment voucher{% endblock %}
+{% block content %}
+<div class="card">
+    {% if voucher is None %}
+    <h1 class="no">This voucher could not be confirmed</h1>
+    <p>This code doesn't match any payment voucher we issued. Please contact us before relying on it.</p>
+    {% elif voucher.is_void %}
+    <h1 class="no">Voucher {{ voucher.number }} was cancelled</h1>
+    <p>This voucher was issued by us but has since been voided, so it is no longer valid.</p>
+    {% else %}
+    <h1 class="ok">Genuine payment voucher</h1>
+    <table>
+        <tr><th>Voucher</th><td class="num">{{ voucher.number }}</td></tr>
+        <tr><th>Date</th><td class="num">{{ voucher.expense.date|date:"j F Y" }}</td></tr>
+        <tr><th>Paid to</th><td class="num">{{ voucher.payee.name }}</td></tr>
+        <tr><th>Amount</th><td class="num"><strong>UGX {{ voucher.expense.amount_ugx|money }}</strong></td></tr>
+    </table>
+    {% endif %}
+</div>
+{% endblock %}

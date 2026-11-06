@@ -72,11 +72,11 @@ NAV_SECTIONS = [
     },
     {
         "key": "inventory",
-        "label": "Inventory",
-        "description": "Stock levels, restock insights",
+        "label": "Pharmacy",
+        "description": "Dispensing, walk-in sales, stock and restocking",
         "icon": "M20 7 12 3 4 7m16 0v10l-8 4-8-4V7m16 0-8 4m-8-4 8 4m0 0v10",
         "check": "can_access_inventory",
-        "url": "manage_inventory",
+        "url": "pharmacy_queue",
     },
     {
         "key": "reception",
@@ -675,3 +675,13 @@ def notification_mark_all_read(request):
 
 def csrf_failure(request, reason="", template_name="errors/csrf_failure.html"):
     return render(request, template_name, {"csrf_failure_reason": reason}, status=403)
+
+
+@login_required
+def assistant_ask(request):
+    from labsystem.assistant_views import run
+    from .assistant_topics import assistant
+    hospital = getattr(request, "hospital", None)
+    if hospital is None:
+        return JsonResponse({"text": "Open a hospital first, then ask me about it.", "facts": [], "suggestions": [], "clarify": []})
+    return run(request, assistant, "health", log_hospital=hospital, hospital=hospital, user=request.user)
