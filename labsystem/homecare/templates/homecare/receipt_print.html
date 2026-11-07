@@ -14,10 +14,11 @@
     .btn { display: block; width: 100%; margin-top: 5px; padding: 3px 0; font-family: 'Courier New', monospace; font-size: 11px; text-align: center; cursor: pointer; border: 1px solid #000; background: #fff; color: #000; }
     @media print { .btn { display: none !important; } }
 </style>
+<link rel="stylesheet" href="{% static 'css/thermal-receipt.css' %}">
 </head>
 <body data-paper-size="80mm" data-receipt>
 
-<div class="c">{{ receipt.placement.hospital.name }}</div>
+<div class="c tr-title">{{ receipt.placement.hospital.name }}</div>
 <div class="c" style="font-size:9px; font-weight:normal;">{{ receipt.placement.hospital.location }}</div>
 <div class="c" style="font-size:9px; font-weight:normal;">{{ receipt.placement.hospital.phone_number }}</div>
 <div class="sep"></div>
@@ -30,8 +31,8 @@
 <div><b>Service:</b> {{ receipt.placement.get_service_type_display }}</div>
 {% if receipt.period_covered %}<div><b>Period :</b> {{ receipt.period_covered }}</div>{% endif %}
 <div class="sep"></div>
-<div class="row"><span><b>Amount Paid</b></span><span>{{ receipt.amount_paid }}</span></div>
-<div class="row"><span><b>Balance Due</b></span><span>{{ receipt.placement.balance_due }}</span></div>
+<div class="row tr-big"><span>Amount Paid</span><span>UGX {{ receipt.amount_paid|floatformat:"-2g" }}</span></div>
+<div class="row"><span>Balance Due</span><span>UGX {{ receipt.placement.balance_due|floatformat:"-2g" }}</span></div>
 <div class="sep"></div>
 <div><b>Issued by:</b> {% if receipt.recorded_by %}{{ receipt.recorded_by.get_full_name|default:receipt.recorded_by.username|default:"—" }}{% else %}—{% endif %}</div>
 {% if receipt.notes %}<div style="font-size:9px; font-weight:normal; margin-top:2px;">{{ receipt.notes }}</div>{% endif %}

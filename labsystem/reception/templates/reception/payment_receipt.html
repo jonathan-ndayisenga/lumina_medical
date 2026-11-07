@@ -64,6 +64,7 @@
         .receipt div { break-inside: avoid; }
     }
 </style>
+<link rel="stylesheet" href="{% static 'css/thermal-receipt.css' %}">
 </head>
 <body data-paper-size="80mm">
 <div class="sheet">
@@ -86,7 +87,7 @@
         </div>
 
         <div class="receipt" data-receipt>
-            <div><b>{{ hospital.name|default:"LUMINA MEDICAL SERVICES"|upper }}</b></div>
+            <div class="tr-title">{{ hospital.name|default:"LUMINA MEDICAL SERVICES"|upper }}</div>
             {% if hospital.location %}<div>{{ hospital.location }}</div>{% endif %}
             {% if hospital.phone_number %}<div>Tel: {{ hospital.phone_number }}</div>{% endif %}
             <div class="rule"></div>
@@ -100,19 +101,19 @@
             <div>Received by : {% if payment.recorded_by %}{{ payment.recorded_by.get_full_name|default:payment.recorded_by.username }}{% else %}-{% endif %}</div>
             <div class="rule"></div>
             {% for item in service_items %}
-            <div class="row"><span>{{ item.name }}</span><span>{% if item.label %}{{ item.label }}{% else %}{{ item.price|floatformat:"2g" }}{% endif %}</span></div>
+            <div class="row"><span>{{ item.name }}</span><span>{% if item.label %}{{ item.label }}{% else %}{{ item.price|floatformat:"-2g" }}{% endif %}</span></div>
             {% endfor %}
             {% if drug_items %}
             {% if service_items %}<div class="rule"></div>{% endif %}
             {% for item in drug_items %}
-            <div class="row"><span>{{ item.name }}</span><span>{{ item.price|floatformat:"2g" }}</span></div>
+            <div class="row"><span>{{ item.name }}</span><span>{{ item.price|floatformat:"-2g" }}</span></div>
             {% endfor %}
             {% endif %}
             {% if not service_items and not drug_items %}<div>(no items)</div>{% endif %}
             <div class="rule"></div>
-            <div class="row"><span>Total</span><span>UGX {{ visit.total_amount|floatformat:"2g" }}</span></div>
-            <div class="row"><span><b>Amount Paid</b></span><span><b>UGX {{ payment.amount_paid|floatformat:"2g" }}</b></span></div>
-            <div class="row"><span>Balance</span><span>UGX {{ balance_due|floatformat:"2g" }}</span></div>
+            <div class="row"><span>Total</span><span>UGX {{ visit.total_amount|floatformat:"-2g" }}</span></div>
+            <div class="row tr-big"><span>Amount Paid</span><span>UGX {{ payment.amount_paid|floatformat:"-2g" }}</span></div>
+            <div class="row"><span>Balance</span><span>UGX {{ balance_due|floatformat:"-2g" }}</span></div>
             <div class="row"><span>Mode</span><span>{{ payment.get_mode_display }}</span></div>
             {% if payment.notes %}<div>Note : {{ payment.notes|truncatechars:80 }}</div>{% endif %}
             <div class="rule"></div>

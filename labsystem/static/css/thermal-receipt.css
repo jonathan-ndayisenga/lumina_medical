@@ -1,0 +1,73 @@
+/* One legible look for every receipt printed on a thermal roll (58mm / 80mm).
+   Loaded after each receipt's own styles; applies to the [data-receipt]
+   element whenever the paper size isn't A4.
+
+   Why it looks like this:
+   - Thermal heads print thin strokes faintly, so the text is a bold sans-serif
+     (Arial) instead of Courier, whose strokes are hairlines even when bold.
+   - An 80mm printer prints 72mm across (48mm on a 58mm roll). The receipt fills
+     exactly that, with no padding, so text runs edge to edge and nothing is cut.
+   - Sizes are fixed per roll and everything inside uses them, so no line drops
+     to the 7pt that came out unreadable. Only the hospital name and the amount
+     paid are bigger. Pure black throughout, no greys. */
+
+body:not([data-paper-size="a4"]) [data-receipt],
+body[data-receipt] {
+    font-family: Arial, Helvetica, "Liberation Sans", sans-serif !important;
+    font-weight: 700 !important;
+    color: #000 !important;
+    line-height: 1.3 !important;
+    letter-spacing: 0 !important;
+    word-spacing: normal !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+}
+
+body[data-paper-size="80mm"] [data-receipt],
+body[data-paper-size="80mm"][data-receipt] {
+    width: 72mm !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+    font-size: 11pt !important;
+}
+
+body[data-paper-size="58mm"] [data-receipt],
+body[data-paper-size="58mm"][data-receipt] {
+    width: 48mm !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+    font-size: 9pt !important;
+}
+
+body:not([data-paper-size="a4"]) [data-receipt] *,
+body[data-receipt] * {
+    font-family: inherit !important;
+    font-size: inherit !important;
+    font-weight: inherit !important;
+    line-height: inherit !important;
+    letter-spacing: 0 !important;
+    word-spacing: normal !important;
+    color: #000 !important;
+    border-color: #000 !important;
+}
+
+/* The hospital name and the money that changed hands stand out. */
+body:not([data-paper-size="a4"]) [data-receipt] .tr-title,
+body[data-receipt] .tr-title { font-size: 1.25em !important; line-height: 1.2 !important; }
+body:not([data-paper-size="a4"]) [data-receipt] .tr-big,
+body[data-receipt] .tr-big { font-size: 1.2em !important; }
+
+/* Lines between sections: solid and thick enough to print. */
+body:not([data-paper-size="a4"]) [data-receipt] .rule,
+body:not([data-paper-size="a4"]) [data-receipt] .receipt-separator,
+body:not([data-paper-size="a4"]) [data-receipt] .receipt-items-separator,
+body[data-receipt] .sep {
+    border-top: 1.5px solid #000 !important;
+    border-bottom: 0 !important;
+    margin: 1.5mm 0 !important;
+}
+
+/* Long service names wrap instead of being squeezed into a narrow column. */
+body:not([data-paper-size="a4"]) [data-receipt] .item-name { max-width: none !important; }
+body:not([data-paper-size="a4"]) [data-receipt] table td { padding: 0.4mm 0 !important; vertical-align: top; }
+body:not([data-paper-size="a4"]) [data-receipt] .item-price { padding-left: 2mm !important; }
