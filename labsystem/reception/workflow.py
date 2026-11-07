@@ -321,6 +321,32 @@ def ensure_pending_queue_entry(
     )
 
 
+def flag_results_ready_for_reception(entry):
+    """Put a doctor-queue entry made for returned lab results on the reception
+    dashboard, so reception tells the waiting patient to go to the doctor."""
+    if entry is None or entry.queue_type != QueueEntry.TYPE_DOCTOR or entry.processed:
+        return entry
+    if not entry.results_ready or entry.reception_told_at:
+        entry.results_ready = True
+        entry.reception_told_at = None
+        entry.reception_told_by = None
+        entry.save(update_fields=["results_ready", "reception_told_at", "reception_told_by"])
+    return entry
+
+
+def results_ready_for_reception(hospital):
+    """Patients whose lab results are back with a doctor and who haven't been told yet."""
+    return (
+        QueueEntry.objects.filter(
+            hospital=hospital, queue_type=QueueEntry.TYPE_DOCTOR, processed=False,
+            results_ready=True, reception_told_at__isnull=True,
+        )
+        .exclude(visit__status__in=[Visit.STATUS_COMPLETED, Visit.STATUS_CANCELLED])
+        .select_related("visit__patient", "requested_by")
+        .order_by("created_at", "id")
+    )
+
+
 def build_reception_queue_notes(source: str, notes: str = "") -> str:
     prefix = f"{RECEPTION_SOURCE_PREFIX}{source}"
     return f"{prefix}\n{notes}".strip() if notes else prefix

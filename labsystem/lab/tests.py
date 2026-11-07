@@ -584,6 +584,10 @@ class LabEngineOrderToReleaseTests(LabEngineTestBase):
         self.assertFalse(
             QueueEntry.objects.filter(visit=visit, queue_type=QueueEntry.TYPE_RECEPTION).exists()
         )
+        # Reception is told too, so the waiting patient is sent in.
+        self.assertTrue(
+            QueueEntry.objects.get(visit=visit, queue_type=QueueEntry.TYPE_DOCTOR, processed=False).results_ready
+        )
 
 
 class LabEngineReviewAndPaymentGateTests(LabEngineTestBase):
@@ -1634,3 +1638,61 @@ class LabTestVolumeReportTests(LabEngineTestBase):
     def test_csv_export_includes_technicians(self):
         response = self.client.get(reverse("lab_test_volume_report"), {"export": "csv"})
         self.assertIn("Results Entered", response.content.decode())
+
+
+class ReceptionResultsReadyTests(LabDoctorHandoffTests):
+    """When results go back to a doctor, reception sees the patient on its
+    dashboard and queue so it can send them in."""
+
+    def setUp(self):
+        super().setUp()
+        _enable_modules(self.hospital, "reception")
+        self.receptionist = self.User.objects.create_user(
+            username="frontdesk", password="StrongPass123!", role=self.User.ROLE_RECEPTIONIST, hospital=self.hospital,
+        )
+        self.client.force_login(self.receptionist)
+
+    def _entry(self):
+        return QueueEntry.objects.get(visit=self.visit, queue_type=QueueEntry.TYPE_DOCTOR, processed=False)
+
+    def test_results_sent_to_the_doctor_show_on_reception_pages(self):
+        send_report_results_to_doctor(self.report)
+        self.assertTrue(self._entry().results_ready)
+        for name in ("reception_dashboard", "reception_queue", "reception_results_ready"):
+            page = self.client.get(reverse(name))
+            self.assertContains(page, "Lab results ready", msg_prefix=name)
+            self.assertContains(page, "Handoff Patient", msg_prefix=name)
+            self.assertContains(page, "CBC", msg_prefix=name)
+
+    def test_patient_told_takes_them_off_the_card(self):
+        send_report_results_to_doctor(self.report)
+        entry = self._entry()
+        response = self.client.post(reverse("reception_results_told", args=[entry.pk]), {"next": reverse("reception_queue")})
+        self.assertRedirects(response, reverse("reception_queue"), fetch_redirect_response=False)
+        entry.refresh_from_db()
+        self.assertEqual(entry.reception_told_by, self.receptionist)
+        self.assertFalse(entry.processed, "the patient is still in the doctor's queue")
+        self.assertNotContains(self.client.get(reverse("reception_results_ready")), "Handoff Patient")
+
+    def test_seen_by_the_doctor_also_takes_them_off(self):
+        send_report_results_to_doctor(self.report)
+        QueueEntry.objects.filter(pk=self._entry().pk).update(processed=True)
+        self.assertNotContains(self.client.get(reverse("reception_dashboard")), "Lab results ready")
+
+    def test_ordinary_doctor_queue_entries_are_not_shown(self):
+        QueueEntry.objects.create(hospital=self.hospital, visit=self.visit, queue_type=QueueEntry.TYPE_DOCTOR, reason="Consultation")
+        self.assertNotContains(self.client.get(reverse("reception_dashboard")), "Lab results ready")
+
+    def test_only_this_hospitals_reception_can_see_or_clear_it(self):
+        send_report_results_to_doctor(self.report)
+        entry = self._entry()
+        other = Hospital.objects.create(name="Other", subdomain="other-results")
+        _enable_modules(other, "reception")
+        outsider = self.User.objects.create_user(username="outsider", password="x", role=self.User.ROLE_RECEPTIONIST, hospital=other)
+        self.client.force_login(outsider)
+        self.assertNotContains(self.client.get(reverse("reception_results_ready")), "Handoff Patient")
+        self.assertEqual(self.client.post(reverse("reception_results_told", args=[entry.pk])).status_code, 404)
+        self.client.force_login(self.doctor)
+        self.client.post(reverse("reception_results_told", args=[entry.pk]))
+        entry.refresh_from_db()
+        self.assertIsNone(entry.reception_told_at)

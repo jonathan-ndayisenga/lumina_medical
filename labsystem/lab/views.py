@@ -21,6 +21,7 @@ from reception.workflow import (
     AWAITING_RECEPTION_APPROVAL,
     close_orphaned_lab_queue_entries,
     ensure_pending_queue_entry,
+    flag_results_ready_for_reception,
     mark_queue_entries_processed,
     record_admin_override,
     require_admin_override,
@@ -277,14 +278,14 @@ def send_report_results_to_doctor(report: LabReport) -> bool:
         report.sent_to_doctor_at = timezone.now()
         report.save(update_fields=["sent_to_doctor", "sent_to_doctor_at"])
 
-    ensure_pending_queue_entry(
+    flag_results_ready_for_reception(ensure_pending_queue_entry(
         visit=report.visit,
         hospital=report.visit.hospital,
         queue_type=QueueEntry.TYPE_DOCTOR,
         reason=f"Lab results ready for review: {report_test_summary(report)}",
         requested_by=requested_by,
         notes="Laboratory results are ready for clinical review.",
-    )
+    ))
 
     if requested_by:
         Notification.objects.create(
@@ -937,14 +938,14 @@ def route_lab_report(request, report_id):
         # requested_by unset so it lands in every doctor's shared pool
         # instead of being addressed to whichever lab attendant clicked this
         # button, which no doctor would ever match (see doctor_queue()).
-        ensure_pending_queue_entry(
+        flag_results_ready_for_reception(ensure_pending_queue_entry(
             visit=report.visit,
             hospital=report.visit.hospital,
             queue_type=QueueEntry.TYPE_DOCTOR,
             reason=f"Lab results ready for review: {report_test_summary(report)}",
             requested_by=None,
             notes="Lab routed this patient to doctor review after completing direct lab work.",
-        )
+        ))
         if not report.sent_to_doctor:
             report.sent_to_doctor = True
             report.sent_to_doctor_at = timezone.now()
@@ -1504,12 +1505,12 @@ def visit_report(request, visit_id):
             test_names = ", ".join(o.test.name for o in orders[:4])
 
             if doctor_entry:
-                ensure_pending_queue_entry(
+                flag_results_ready_for_reception(ensure_pending_queue_entry(
                     visit=visit, hospital=visit.hospital, queue_type=QueueEntry.TYPE_DOCTOR,
                     reason=f"Lab results ready for review: {test_names}",
                     requested_by=doctor_entry.requested_by,
                     notes="Laboratory results are ready for clinical review.",
-                )
+                ))
                 if doctor_entry.requested_by:
                     Notification.objects.create(
                         user=doctor_entry.requested_by,

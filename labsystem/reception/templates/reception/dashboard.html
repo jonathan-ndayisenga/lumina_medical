@@ -13,6 +13,8 @@
         <a href="{% url 'quick_dispense_start' %}" class="btn btn-primary">Dispense</a>
     </div>
 
+    {% include "reception/_results_ready.html" with next_url=request.path %}
+
     <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-7 gap-4">
         <div class="card">
             <p class="text-text-muted text-sm font-medium mb-2">Patients Registered</p>

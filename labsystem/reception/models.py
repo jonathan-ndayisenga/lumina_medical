@@ -650,6 +650,18 @@ class QueueEntry(models.Model):
         blank=True,
         related_name="requested_queue_entries",
     )
+    # A doctor-queue entry made because lab results are back. Reception sees it
+    # on its dashboard so the patient in the waiting area is told to go to the
+    # doctor, until reception marks them told or the doctor sees them.
+    results_ready = models.BooleanField(default=False)
+    reception_told_at = models.DateTimeField(null=True, blank=True)
+    reception_told_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+    )
 
     class Meta:
         ordering = ["processed", "created_at", "id"]

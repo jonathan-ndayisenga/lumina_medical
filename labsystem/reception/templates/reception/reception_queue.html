@@ -10,6 +10,7 @@
         <p class="text-sm font-semibold text-amber-800">The queue has changed: a patient or request has arrived.</p>
         <a href="{% url 'reception_queue' %}" class="btn btn-primary btn-sm">Refresh</a>
     </div>
+    {% include "reception/_results_ready.html" with next_url=request.path %}
     <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div class="card">
             <p class="text-text-muted text-sm font-medium mb-2">Patients Waiting</p>

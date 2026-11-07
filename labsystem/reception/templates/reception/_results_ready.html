@@ -1,0 +1,32 @@
+{% comment %}
+Lab results that went back to a doctor, so reception can tell the waiting
+patient to go in. Reloads itself every 30 seconds; empty when nobody is waiting.
+{% endcomment %}
+<div id="results-ready" hx-get="{% url 'reception_results_ready' %}?next={{ next_url|urlencode }}" hx-trigger="every 30s" hx-select="#results-ready" hx-swap="outerHTML" hx-push-url="false">
+{% if results_ready %}
+    <section class="card border-l-4 border-emerald-500 bg-emerald-50" role="status" aria-live="polite">
+        <div class="flex items-center justify-between gap-3 flex-wrap mb-3">
+            <h4 class="text-sm font-semibold text-emerald-900">Lab results ready: send {% if results_ready|length == 1 %}this patient{% else %}these {{ results_ready|length }} patients{% endif %} to the doctor</h4>
+            <span class="inline-flex items-center justify-center min-w-[1.75rem] h-7 px-2 rounded-full bg-emerald-600 text-white text-sm font-bold">{{ results_ready|length }}</span>
+        </div>
+        <ul class="space-y-2">
+            {% for row in results_ready %}
+            <li class="flex items-center justify-between gap-3 flex-wrap rounded-lg bg-white border border-emerald-200 p-3 text-sm">
+                <div class="min-w-0">
+                    <p class="font-semibold text-text-main">{{ row.patient.name }}</p>
+                    <p class="text-xs text-text-muted">
+                        {% if row.tests %}{{ row.tests }} &middot; {% endif %}{% if row.doctor %}for {{ row.doctor }}{% else %}any doctor{% endif %}
+                        &middot; waiting {{ row.entry.created_at|timesince }}
+                    </p>
+                </div>
+                <form method="post" action="{% url 'reception_results_told' row.entry.pk %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="next" value="{{ next_url }}">
+                    <button type="submit" class="btn btn-primary btn-sm">Patient told</button>
+                </form>
+            </li>
+            {% endfor %}
+        </ul>
+    </section>
+{% endif %}
+</div>

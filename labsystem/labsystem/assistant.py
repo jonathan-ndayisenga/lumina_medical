@@ -41,6 +41,26 @@ SYNONYMS = {
     "vouchers": "voucher", "payees": "payee", "supplier": "payee", "suppliers": "payee",
     "contractor": "payee", "contractors": "payee",
     "collections": "collected", "collect": "collected", "came": "collected", "received": "collected",
+    "consultations": "consultation", "consulted": "consultation", "consults": "consultation", "consult": "consultation",
+    "see": "seen", "saw": "seen", "treated": "seen",
+    "diagnoses": "diagnosis", "diagnosed": "diagnosis", "conditions": "diagnosis", "condition": "diagnosis",
+    "diseases": "diagnosis", "disease": "diagnosis", "illnesses": "diagnosis", "illness": "diagnosis", "cases": "diagnosis",
+    "outcomes": "outcome", "referrals": "referred", "referral": "referred", "refer": "referred", "deaths": "died", "death": "died",
+    "admissions": "admitted", "admission": "admitted", "admit": "admitted", "ward": "admitted", "wards": "admitted",
+    "inpatients": "admitted", "inpatient": "admitted", "beds": "admitted", "bed": "admitted",
+    "discharges": "discharged", "discharge": "discharged",
+    "prescriptions": "prescription", "prescribed": "prescription", "prescribe": "prescription",
+    "doses": "dose", "administered": "given", "gave": "given",
+    "vitals": "triage", "vital": "triage", "triaged": "triage",
+    "results": "result", "samples": "sample", "specimens": "sample", "specimen": "sample", "releases": "release",
+    "follow-up": "follow", "follow-ups": "follow", "followup": "follow", "followups": "follow",
+    "appointments": "appointment", "reviews": "appointment",
+    "salaries": "salary", "wages": "salary", "payroll": "salary",
+    "departments": "department", "dept": "department",
+    "employees": "staff", "workers": "staff", "users": "staff",
+    "consumables": "consumable", "reagents": "consumable", "reagent": "consumable", "supplies": "consumable",
+    "tat": "turnaround",
+    "pending": "pending", "ready": "ready", "done": "done", "awaiting": "awaiting", "urgent": "urgent",
 }
 STOP_WORDS = {
     "the", "a", "an", "of", "for", "in", "on", "to", "is", "are", "was", "were", "did", "do", "does", "we", "our", "us",
@@ -48,7 +68,7 @@ STOP_WORDS = {
     "had", "and", "or", "by", "from", "this", "that", "it", "its", "with", "at", "so", "far", "total", "all", "any",
     "about", "can", "you", "i", "my", "there", "be", "been", "get", "got", "now", "currently", "right",
 }
-PERIOD_WORDS = {"today", "yesterday", "this", "last", "past", "previous", "week", "weeks", "month", "months", "year", "years",
+PERIOD_WORDS = {"today", "yesterday", "tomorrow", "next", "this", "last", "past", "previous", "week", "weeks", "month", "months", "year", "years",
                 "days", "day", "since", "ago", "so", "far", "date", "until", "till", "before", "after", "then", "compare", "change", "why"}
 NAME_NOISE = {"ltd", "limited", "company", "co", "the", "and", "of", "uganda", "u", "inc", "plc", "group", "services"}
 
@@ -71,7 +91,7 @@ class Period:
     @property
     def phrase(self) -> str:
         """'in October 2026' but 'this month', 'today', 'since May 2026'."""
-        relative = ("today", "yesterday", "this ", "last ", "the last", "since ")
+        relative = ("today", "yesterday", "tomorrow", "this ", "next ", "last ", "the last", "since ")
         return self.label if self.label.startswith(relative) else f"in {self.label}"
 
     def previous(self) -> "Period":
@@ -129,6 +149,12 @@ def parse_period(text: str, today: date):
     if " yesterday " in t:
         day = today - timedelta(days=1)
         return Period(day, day, "yesterday")
+    if " tomorrow " in t:
+        day = today + timedelta(days=1)
+        return Period(day, day, "tomorrow")
+    if " next week " in t:
+        start = today + timedelta(days=7 - today.weekday())
+        return Period(start, start + timedelta(days=6), "next week")
     match = re.search(r"\b(?:last|past) (\d{1,3}) (day|days|week|weeks|month|months)\b", t)
     if match:
         count, unit = int(match.group(1)), match.group(2)
@@ -175,6 +201,8 @@ def parse_period(text: str, today: date):
 def default_period(kind: str, today: date) -> Period:
     if kind == "today":
         return Period(today, today, "today")
+    if kind == "week":
+        return Period(today - timedelta(days=today.weekday()), today, "this week")
     if kind == "year":
         return Period(date(today.year, 1, 1), today, f"this year ({today.year})")
     return Period(today.replace(day=1), today, "this month")

@@ -204,7 +204,7 @@ class AssistantRoleScopeTests(HealthAssistantTests):
         self.assertIn("3 patients waiting in the Doctor queue", self.ask(self.doctor, "doctor queue")["text"])
         hello = self.ask(self.doctor, "")
         self.assertNotIn("money", hello["text"])
-        self.assertIn("tests", hello["text"])
+        self.assertIn("lab work", hello["text"])
         self.assertNotIn("How much did we collect today?", hello["suggestions"])
         self.assertIn("money", self.ask(self.admin, "")["text"])
 
@@ -233,3 +233,118 @@ class AssistantRoleScopeTests(HealthAssistantTests):
         self.assertIn("Pharmacy collected", result["text"])
         self.assertIn(["Drugs at or below their minimum stock", "0"], result["facts"])
         self.assertNotIn("collected", self.ask(self.receptionist, "pharmacy sales today")["text"])
+
+
+class RoleQuestionsTests(HealthAssistantTests):
+    """Every role gets answers to its own questions and is turned away from the rest."""
+
+    def setUp(self):
+        super().setUp()
+        from doctor.models import Consultation, VisitOutcome
+        from nurse.models import NursingAdmission
+        from reception.models import Triage, Visit
+        for code in ("nurse", "sonographer", "inventory"):
+            module, _ = Module.objects.get_or_create(code=code, defaults={"name": code.title()})
+            HospitalModuleSubscription.objects.get_or_create(hospital=self.mine, module=module, defaults={"is_active": True})
+
+        def staff(username, role):
+            return User.objects.create_user(username=username, password="x", role=role, hospital=self.mine, is_active=True)
+
+        self.doctor = staff("doc", User.ROLE_DOCTOR)
+        self.other_doctor = staff("doc2", User.ROLE_DOCTOR)
+        self.nurse = staff("nurse1", User.ROLE_NURSE)
+        self.lab = staff("lab1", User.ROLE_LAB_ATTENDANT)
+        self.sono = staff("sono1", User.ROLE_SONOGRAPHER)
+        self.accountant = staff("acc", User.ROLE_ACCOUNTANT)
+        self.roles = {
+            "admin": self.admin, "doctor": self.doctor, "nurse": self.nurse, "lab": self.lab,
+            "sonographer": self.sono, "receptionist": self.receptionist, "accountant": self.accountant,
+        }
+        visits = list(Visit.objects.filter(hospital=self.mine).order_by("pk"))
+        for visit, (doctor, diagnosis, outcome) in zip(visits, (
+            (self.doctor, "Malaria", VisitOutcome.DISCHARGED), (self.doctor, " malaria ", VisitOutcome.REFERRED),
+            (self.other_doctor, "Typhoid", VisitOutcome.ADMITTED),
+        )):
+            Consultation.objects.create(visit=visit, created_by=doctor, signs_symptoms="x", diagnosis=diagnosis, treatment="x",
+                                        outcome=outcome, follow_up_date=self.today)
+        NursingAdmission.objects.create(visit=visits[2], hospital=self.mine, admitted_by=self.nurse)
+        Triage.objects.create(visit=visits[0], recorded_by=self.nurse, pulse=80)
+        # Visit 3 is billed 10,000 and paid 10,000; make visit 1 owe 5,000.
+        Visit.objects.filter(pk=visits[0].pk).update(total_amount=Decimal("15000"))
+
+    @property
+    def today(self):
+        return timezone.localdate()
+
+    def ask_as(self, user, question):
+        from accounts.assistant_topics import assistant
+        result, _, topic = assistant.ask(question, {}, self.today, hospital=self.mine, user=user)
+        return result, topic
+
+    def test_every_example_is_answered_for_its_roles_and_refused_for_the_rest(self):
+        from accounts.assistant_topics import allowed_areas, assistant
+        for name, user in self.roles.items():
+            areas = allowed_areas(self.mine, user)
+            for area, question in assistant.examples:
+                result, topic = self.ask_as(user, question)
+                allowed = areas is None or not area or area in areas
+                self.assertEqual(topic == "restricted", not allowed, f"{name}: {question!r} -> {topic}: {result['text']}")
+                if not allowed:
+                    self.assertNotIn("UGX", json.dumps(result), f"{name}: {question}")
+            hello, _ = self.ask_as(user, "")
+            self.assertTrue(hello["suggestions"], name)
+            for suggestion in hello["suggestions"]:
+                self.assertNotEqual(self.ask_as(user, suggestion)[1], "restricted", f"{name} was offered {suggestion!r}")
+
+    def test_each_role_sees_its_own_questions_first(self):
+        hello = lambda user: self.ask_as(user, "")[0]
+        self.assertIn("How many patients did I see today?", hello(self.doctor)["suggestions"])
+        self.assertIn("How many patients are admitted?", hello(self.nurse)["suggestions"])
+        self.assertIn("Lab tests pending", hello(self.lab)["suggestions"])
+        self.assertIn("How many scans this week?", hello(self.sono)["suggestions"])
+        self.assertIn("Unpaid bills today", hello(self.receptionist)["suggestions"])
+        self.assertIn("How much did we collect today?", hello(self.accountant)["suggestions"])
+        self.assertNotIn("money", hello(self.lab)["text"])
+
+    def test_doctor_questions(self):
+        self.assertIn("You saw 2 patients today", self.ask_as(self.doctor, "how many patients did I see today")[0]["text"])
+        self.assertIn("3 consultations today", self.ask_as(self.doctor, "how many consultations today")[0]["text"])
+        result, topic = self.ask_as(self.doctor, "most common diagnoses this month")
+        self.assertEqual(topic, "diagnoses")
+        self.assertEqual(result["facts"][0], ["Malaria", "2"])
+        self.assertIn(["Referred", "1"], self.ask_as(self.doctor, "referrals and outcomes this month")[0]["facts"])
+        self.assertIn("3 follow-up appointments due", self.ask_as(self.doctor, "follow-ups due this week")[0]["text"])
+        self.assertNotIn("Secret Person", json.dumps([self.ask_as(self.doctor, q)[0] for q, in (("diagnoses this month",), ("my patients today",))]))
+
+    def test_nurse_questions(self):
+        self.assertIn("1 patient admitted right now", self.ask_as(self.nurse, "how many patients are admitted")[0]["text"])
+        self.assertIn("You recorded vitals for 1 patient", self.ask_as(self.nurse, "vitals I took today")[0]["text"])
+        self.assertEqual(self.ask_as(self.nurse, "doses given today")[1], "doses")
+        self.assertEqual(self.ask_as(self.nurse, "how much did we collect today")[1], "restricted")
+
+    def test_lab_questions(self):
+        self.assertEqual(self.ask_as(self.lab, "pending lab tests")[1], "lab_work")
+        self.assertEqual(self.ask_as(self.lab, "how long do results take this week")[1], "turnaround")
+        self.assertEqual(self.ask_as(self.lab, "reagents running low")[1], "consumables")
+        self.assertEqual(self.ask_as(self.lab, "most common diagnoses this month")[1], "restricted")
+        self.assertEqual(self.ask_as(self.doctor, "reagents running low")[1], "restricted")
+
+    def test_bills_are_counts_for_reception_and_money_for_finance(self):
+        reception, _ = self.ask_as(self.receptionist, "unpaid bills today")
+        self.assertIn("1 visit today still has a balance to pay", reception["text"])
+        self.assertNotIn("UGX", json.dumps(reception))
+        finance, _ = self.ask_as(self.accountant, "unpaid bills today")
+        self.assertIn(["Owed on these visits", "UGX 5,000"], finance["facts"])
+        self.assertEqual(self.ask_as(self.doctor, "who owes us")[1], "restricted")
+
+    def test_finance_questions(self):
+        from admin_dashboard.models import Expense, Salary
+        Expense.objects.create(hospital=self.mine, description="Power", amount=Decimal("5000"), category=Expense.CATEGORY_UTILITIES, date=self.today)
+        Salary.objects.create(hospital=self.mine, employee=self.nurse, month=self.today.replace(day=1), amount=Decimal("8000"), paid=True)
+        result, topic = self.ask_as(self.accountant, "profit this month")
+        self.assertEqual(topic, "profit")
+        self.assertIn("Profit this month: UGX 17,000", result["text"])
+        self.assertIn("UGX 8,000", self.ask_as(self.accountant, "salaries this month")[0]["text"])
+        self.assertEqual(self.ask_as(self.accountant, "revenue by department this month")[1], "departments")
+        self.assertEqual(self.ask_as(self.accountant, "staff by role")[1], "restricted")
+        self.assertIn("active staff", self.ask_as(self.admin, "staff by role")[0]["text"])

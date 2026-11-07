@@ -22,6 +22,7 @@ from lab.models import LabOrder, LabReport, LabSettings
 from .forms import CompleteVisitForm, PatientForm, QuickDispenseStartForm, VisitCreateForm
 from .models import Patient, Payment, QueueEntry, Service, Triage, Visit, VisitService
 from .workflow import (
+    results_ready_for_reception,
     active_package_visit_service,
     debtor_move_available,
     package_expiry_for,
@@ -191,6 +192,38 @@ def reception_queue_signature(hospital):
     entry_ids = sorted(entries.values_list("pk", flat=True))
     awaiting = VisitService.objects.filter(visit__in=entries.values("visit_id"), is_approved=False).count()
     return f"{entry_ids}:{awaiting}"
+
+
+RESULTS_READY_PREFIX = "Lab results ready for review:"
+
+
+def results_ready_rows(hospital):
+    rows = []
+    for entry in results_ready_for_reception(hospital) if hospital else []:
+        tests = entry.reason[len(RESULTS_READY_PREFIX):].strip() if entry.reason.startswith(RESULTS_READY_PREFIX) else ""
+        doctor = (entry.requested_by.get_full_name() or entry.requested_by.username) if entry.requested_by else ""
+        rows.append({"entry": entry, "patient": entry.visit.patient, "tests": tests, "doctor": doctor})
+    return rows
+
+
+@reception_role_required
+def reception_results_ready(request):
+    """The "lab results ready" card on its own, so pages can refresh it in place."""
+    return render(request, "reception/_results_ready.html", {"results_ready": results_ready_rows(get_active_hospital(request)), "next_url": request.GET.get("next", "")})
+
+
+@reception_role_required
+@require_http_methods(["POST"])
+def reception_results_told(request, queue_entry_id):
+    """Reception has told the patient to go to the doctor; take them off the card."""
+    hospital = get_active_hospital(request)
+    entry = get_object_or_404(QueueEntry, pk=queue_entry_id, hospital=hospital, queue_type=QueueEntry.TYPE_DOCTOR, results_ready=True)
+    if entry.reception_told_at is None:
+        entry.reception_told_at = timezone.now()
+        entry.reception_told_by = request.user
+        entry.save(update_fields=["reception_told_at", "reception_told_by"])
+        messages.success(request, f"{entry.visit.patient.name} has been told to go to the doctor.")
+    return redirect(resolve_next_url(request, reverse("reception_dashboard")))
 
 
 @reception_role_required
@@ -371,6 +404,7 @@ def reception_dashboard(request):
         "recent_visits": visits,
         "ready_for_billing_visits": ready_for_billing,
         "ready_for_dispense_visits": ready_for_dispense,
+        "results_ready": results_ready_rows(hospital),
     }
     return render(request, "reception/dashboard.html", context)
 
@@ -489,6 +523,7 @@ def receptionist_queue(request):
             "hospital": hospital,
             "queue_rows": queue_rows,
             "queue_signature": reception_queue_signature(hospital) if hospital else "",
+            "results_ready": results_ready_rows(hospital),
             "queue_count": len(queue_rows),
             "pending_dispense_count": sum(row["pending_dispense_count"] for row in queue_rows),
             "consultation_services": consultation_services,
