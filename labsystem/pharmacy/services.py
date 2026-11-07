@@ -34,7 +34,9 @@ def dispense(prescription, actor, batch_id=None):
     from doctor.models import Prescription
     from reception.models import Visit
 
-    rx = Prescription.objects.select_for_update().select_related("visit", "billing_visit_service").get(pk=prescription.pk)
+    # of=("self",): lock only the prescription row. The billing line is a
+    # nullable (outer) join, and PostgreSQL refuses FOR UPDATE on that side.
+    rx = Prescription.objects.select_for_update(of=("self",)).select_related("visit", "billing_visit_service").get(pk=prescription.pk)
     if rx.dispensed:
         return rx, False
     visit = rx.visit

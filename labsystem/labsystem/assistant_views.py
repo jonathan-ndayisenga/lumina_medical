@@ -31,6 +31,6 @@ def run(request, assistant, app, log_hospital=None, **scope):
     request.session[session_key] = context
     if text.strip():
         AssistantQuestion.objects.create(
-            user=request.user, app=app, hospital=log_hospital, text=text, topic=topic, answered=bool(topic) and topic != "clarify",
+            user=request.user, app=app, hospital=log_hospital, text=text, topic=topic, answered=bool(topic) and topic not in ("clarify", "restricted"),
         )
     return JsonResponse(result)

@@ -82,6 +82,38 @@ class DispenseTests(PharmacyCase):
         self.assertEqual(rx.paid_at_dispense, Decimal("600"))
         self.assertEqual(rx.bill_at_dispense, Decimal("1200"))
 
+    def test_the_dispense_lock_is_valid_on_postgresql(self):
+        """Tests run on SQLite, which ignores FOR UPDATE, so build the query the
+        way production's PostgreSQL would. Locking the outer-joined billing line
+        was refused there ("FOR UPDATE cannot be applied to the nullable side of
+        an outer join") and dispensing crashed."""
+        from unittest import mock
+        from django.db.backends.postgresql.base import DatabaseWrapper
+        from django.db.models.query import QuerySet
+
+        pg = DatabaseWrapper({
+            "ENGINE": "django.db.backends.postgresql", "NAME": "x", "USER": "", "PASSWORD": "", "HOST": "", "PORT": "",
+            "OPTIONS": {}, "TIME_ZONE": None, "CONN_MAX_AGE": 0, "CONN_HEALTH_CHECKS": False, "AUTOCOMMIT": True,
+            "ATOMIC_REQUESTS": False, "TEST": {},
+        })
+        pg.__dict__["pg_version"] = 160000  # No connection is ever opened.
+        pg.get_autocommit = lambda: False  # As inside dispense's transaction.
+        seen = []
+        real_get = QuerySet.get
+
+        def record(qs, *args, **kwargs):
+            if qs.model is Prescription and qs.query.select_for_update:
+                sql, _ = qs.filter(*args, **kwargs).query.get_compiler(connection=pg).as_sql()
+                seen.append(sql)
+            return real_get(qs, *args, **kwargs)
+
+        with mock.patch.object(QuerySet, "get", record):
+            services.dispense(self.prescribe(), self.nurse)
+        self.assertTrue(seen, "dispense locks the prescription")
+        for sql in seen:
+            self.assertIn("LEFT OUTER JOIN", sql)
+            self.assertRegex(sql, r'FOR UPDATE OF "doctor_prescription"$')
+
     def test_not_enough_stock_is_refused_and_nothing_changes(self):
         rx = self.prescribe(per_day="10", days="20")
         with self.assertRaisesMessage(Exception, "Not enough Paracetamol"):

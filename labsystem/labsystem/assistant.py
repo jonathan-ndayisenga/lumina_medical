@@ -196,6 +196,9 @@ class Topic:
     default_period: str = "month"
     # A topic needing a name ("client") only wins when one was found.
     needs: str = ""
+    # Which part of the work this answers ("money", "lab"...). Who may ask is
+    # decided per person by the app's allowed_areas; "" is open to everyone.
+    area: str = ""
 
 
 @dataclass
@@ -227,12 +230,15 @@ def answer(text, facts=None, link=None, understood="", suggestions=None, clarify
 class Assistant:
     """One per app: its topics, how to find names in a question, and its examples."""
 
-    def __init__(self, topics, find_entities, examples, greeting, restore_entities=None):
+    def __init__(self, topics, find_entities, examples, greeting, restore_entities=None, allowed_areas=None, area_labels=None):
         self.topics = topics
         self.find_entities = find_entities
         self.restore_entities = restore_entities
-        self.examples = examples
+        # Examples are plain questions, or (area, question) so each person only sees what they may ask.
+        self.examples = [example if isinstance(example, tuple) else ("", example) for example in examples]
         self.greeting = greeting
+        self.allowed_areas = allowed_areas
+        self.area_labels = area_labels or {}
         self.vocabulary = sorted({w for topic in topics for w in topic.keywords} | set(SYNONYMS) | set(SYNONYMS.values()) | set(MONTHS)
                                  | PERIOD_WORDS | STOP_WORDS)
 
@@ -245,6 +251,18 @@ class Assistant:
                     word = close[0]
             tokens.append(SYNONYMS.get(word, word))
         return tokens
+
+    def _areas(self, **scope):
+        """The areas this person may ask about, or None for everything."""
+        return self.allowed_areas(**scope) if self.allowed_areas else None
+
+    def may_ask(self, topic, **scope) -> bool:
+        areas = self._areas(**scope)
+        return not topic.area or areas is None or topic.area in areas
+
+    def examples_for(self, **scope) -> list:
+        areas = self._areas(**scope)
+        return [text for area, text in self.examples if not area or areas is None or area in areas]
 
     def _is_follow_up(self, text, tokens, question) -> bool:
         """Only short questions made of periods and names carry on the last
@@ -308,8 +326,17 @@ class Assistant:
         if topic is None:
             return answer(
                 "I can't answer that one yet. I've noted it so it can be added. Here are things I can answer:",
-                suggestions=self.examples[:6],
+                suggestions=self.examples_for(**scope)[:6],
             ), context, ""
+        if not self.may_ask(topic, **scope):
+            # Refused before the handler runs, so none of it is ever worked out
+            # for this person. The last topic is forgotten so "and last month?"
+            # can't carry on into it either.
+            label = self.area_labels.get(topic.area, "that")
+            return answer(
+                f"Questions about {label} aren't part of what I answer for your role. Here's what I can help you with:",
+                suggestions=self.examples_for(**scope)[:6],
+            ), {}, "restricted"
 
         if not question.period_given:
             question.period = default_period(topic.default_period, today)

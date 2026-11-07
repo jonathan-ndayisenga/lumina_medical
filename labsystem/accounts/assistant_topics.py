@@ -1,6 +1,8 @@
 """What the Ternah Assistant can answer inside Ternah Health. Counts and totals
-only, always for the signed-in person's own hospital; money needs finance access.
-No patient names or clinical details are ever given out."""
+only, always for the signed-in person's own hospital, and only for the parts of
+the work the person's role covers (see allowed_areas): a doctor asking about
+money is turned away, not answered. No patient names or clinical details are
+ever given out."""
 from collections import Counter
 
 from django.db.models import Count, Sum
@@ -29,6 +31,30 @@ def _link(name, label, **query):
 
 def _can_see_money(user) -> bool:
     return bool(getattr(user, "is_hospital_admin", False) or getattr(user, "is_owner", False) or getattr(user, "can_access_finance", False))
+
+
+AREA_LABELS = {"money": "money and finance", "pharmacy": "the pharmacy and stock", "lab": "lab tests", "scans": "scans"}
+
+
+def allowed_areas(hospital, user):
+    """What this person may ask about. Admins, owners and superadmins: everything.
+    Everyone else: patient numbers and queues, plus the areas their role works in.
+    Uses the same access checks as the menus, so a doctor given the Finance group
+    can ask about money, and a role without the module can't."""
+    if user.is_superadmin or user.is_hospital_admin or user.is_owner:
+        return None
+    areas = {"patients", "queue"}
+    clinical = user.can_access_doctor or user.can_access_nurse
+    finance = _can_see_money(user)
+    if finance:
+        areas.add("money")
+    if clinical or finance or user.can_access_inventory:
+        areas.add("pharmacy")
+    if clinical or user.can_access_lab or user.can_access_reception:
+        areas.add("lab")
+    if clinical or user.can_access_sonographer or user.can_access_reception:
+        areas.add("scans")
+    return areas
 
 
 def _no_money():
@@ -158,6 +184,8 @@ def pharmacy(q, hospital, user):
         from admin_dashboard.revenue import by_department
         revenue = by_department(hospital, q.period.start, q.period.end)
         text = f"Pharmacy collected {money(revenue['pharmacy_collected'])} {q.period.phrase} (billed {money(revenue['pharmacy_billed'])})."
+    elif q.has("revenue", "cash", "payment", "paid", "collected"):
+        text = "Pharmacy money isn't part of what I answer for your role. Here's the pharmacy right now:"
     link = _link("pharmacy_queue", "Open the pharmacy") if getattr(user, "can_access_inventory", False) else None
     return answer(text, facts, link, f"Pharmacy · {q.period.label}")
 
@@ -167,16 +195,17 @@ def hello(q, hospital, user):
 
 
 TOPICS = [
-    Topic("queue", {"queue": 3}, queue, default_period="today"),
-    Topic("new_patients", {"new": 3}, new_patients, default_period="today"),
-    Topic("collected", {"collected": 3, "revenue": 3, "payment": 2, "paid": 1, "cash": 2}, collected, default_period="today"),
-    Topic("spent", {"spent": 3}, spent),
-    Topic("lab_tests", {"test": 3, "lab": 1}, lab_tests, default_period="today"),
-    Topic("scans", {"scan": 3}, scans, default_period="today"),
-    Topic("pharmacy", {"pharmacy": 4, "drugs": 2, "drug": 2, "medicine": 2, "medicines": 2, "stock": 2, "expiring": 2, "expire": 2}, pharmacy, default_period="today"),
-    Topic("top_services", {"services": 3, "service": 3}, top_services),
-    Topic("sex", {"sex": 3, "male": 2, "female": 2}, sex_split),
-    Topic("visits", {"visits": 3, "visit": 3, "patients": 2, "seen": 2, "clients": 2, "attended": 2}, visits, default_period="today"),
+    Topic("queue", {"queue": 3}, queue, default_period="today", area="queue"),
+    Topic("new_patients", {"new": 3}, new_patients, default_period="today", area="patients"),
+    Topic("collected", {"collected": 3, "revenue": 3, "payment": 2, "paid": 1, "cash": 2}, collected, default_period="today", area="money"),
+    Topic("spent", {"spent": 3}, spent, area="money"),
+    Topic("lab_tests", {"test": 3, "lab": 1}, lab_tests, default_period="today", area="lab"),
+    Topic("scans", {"scan": 3}, scans, default_period="today", area="scans"),
+    Topic("pharmacy", {"pharmacy": 4, "drugs": 2, "drug": 2, "medicine": 2, "medicines": 2, "stock": 2, "expiring": 2, "expire": 2}, pharmacy,
+          default_period="today", area="pharmacy"),
+    Topic("top_services", {"services": 3, "service": 3}, top_services, area="patients"),
+    Topic("sex", {"sex": 3, "male": 2, "female": 2}, sex_split, area="patients"),
+    Topic("visits", {"visits": 3, "visit": 3, "patients": 2, "seen": 2, "clients": 2, "attended": 2}, visits, default_period="today", area="patients"),
     Topic("hello", {"hello": 2, "help": 3, "thanks": 2, "thank": 2}, hello),
 ]
 
@@ -204,19 +233,25 @@ def greeting(today, hospital, user):
     seen = Visit.objects.filter(hospital=hospital, visit_date__date=today).count()
     waiting = sum(queue_counts_for_hospital(hospital).values())
     facts = [("Patient visits today", str(seen)), ("Waiting in queues now", str(waiting))]
-    return answer("Hello. Here's today so far. Ask me about patients, queues, tests or money.", facts, suggestions=EXAMPLES[:4])
+    areas = allowed_areas(hospital, user)
+    subjects = ["patients", "queues"] + [word for area, word in (("lab", "tests"), ("scans", "scans"), ("pharmacy", "the pharmacy"), ("money", "money"))
+                                         if areas is None or area in areas]
+    return answer(f"Hello. Here's today so far. Ask me about {', '.join(subjects[:-1])} or {subjects[-1]}.", facts,
+                  suggestions=assistant.examples_for(hospital=hospital, user=user)[:4])
 
 
 EXAMPLES = [
-    "How many patients today?",
-    "Who is waiting in the lab queue?",
-    "How much did we collect today?",
-    "New patients this month",
-    "How many lab tests this week?",
-    "Top services this month",
-    "Male and female patients this month",
-    "Expenses this month",
-    "Pharmacy sales today",
+    ("patients", "How many patients today?"),
+    ("queue", "Who is waiting in the lab queue?"),
+    ("money", "How much did we collect today?"),
+    ("patients", "New patients this month"),
+    ("lab", "How many lab tests this week?"),
+    ("scans", "How many scans this week?"),
+    ("pharmacy", "Drugs running low"),
+    ("patients", "Top services this month"),
+    ("patients", "Male and female patients this month"),
+    ("money", "Expenses this month"),
+    ("money", "Pharmacy sales today"),
 ]
 
-assistant = Assistant(TOPICS, find_entities, EXAMPLES, greeting, restore_entities)
+assistant = Assistant(TOPICS, find_entities, EXAMPLES, greeting, restore_entities, allowed_areas, AREA_LABELS)

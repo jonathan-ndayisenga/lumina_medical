@@ -175,7 +175,51 @@ class HealthAssistantTests(TestCase):
 
     def test_money_is_for_admins_and_finance_only(self):
         self.assertIn("UGX 30,000", self.ask(self.admin, "how much did we collect today")["text"])
-        self.assertIn("only shown to admins and finance", self.ask(self.receptionist, "how much did we collect today")["text"])
+        self.assertIn("aren't part of what I answer for your role", self.ask(self.receptionist, "how much did we collect today")["text"])
+
+
+class AssistantRoleScopeTests(HealthAssistantTests):
+    """Each person only gets answers about the work their role covers."""
+
+    def setUp(self):
+        super().setUp()
+        self.doctor = User.objects.create_user(username="doc", password="x", role=User.ROLE_DOCTOR, hospital=self.mine, is_active=True)
+        self.accountant = User.objects.create_user(username="acc", password="x", role=User.ROLE_ACCOUNTANT, hospital=self.mine, is_active=True)
+
+    def test_a_doctor_is_not_told_about_money(self):
+        for question in ("how much did we collect today", "expenses this month", "revenue this month", "how much cash came in today"):
+            result = self.ask(self.doctor, question)
+            self.assertIn("aren't part of what I answer for your role", result["text"], question)
+            self.assertNotIn("UGX", json.dumps(result), question)
+            self.assertFalse(any("collect" in s.lower() or "expense" in s.lower() or "sales" in s.lower() for s in result["suggestions"]), question)
+        logged = AssistantQuestion.objects.filter(user=self.doctor).first()
+        self.assertEqual((logged.topic, logged.answered), ("restricted", False))
+        pharmacy = self.ask(self.doctor, "pharmacy sales today")
+        self.assertNotIn("UGX", json.dumps(pharmacy))
+        self.assertIn("isn't part of what I answer", pharmacy["text"])
+
+    def test_a_doctor_still_gets_the_clinical_numbers(self):
+        self.assertIn("3 patient visits today", self.ask(self.doctor, "how many patients today")["text"])
+        self.assertIn("3 lab tests", self.ask(self.doctor, "lab tests today")["text"])
+        self.assertIn("3 patients waiting in the Doctor queue", self.ask(self.doctor, "doctor queue")["text"])
+        hello = self.ask(self.doctor, "")
+        self.assertNotIn("money", hello["text"])
+        self.assertIn("tests", hello["text"])
+        self.assertNotIn("How much did we collect today?", hello["suggestions"])
+        self.assertIn("money", self.ask(self.admin, "")["text"])
+
+    def test_access_follows_the_finance_permission_not_just_the_role(self):
+        from django.contrib.auth.models import Group
+        self.assertIn("UGX 30,000", self.ask(self.accountant, "how much did we collect today")["text"])
+        self.assertIn("aren't part of what I answer", self.ask(self.accountant, "lab tests today")["text"])
+        self.doctor.groups.add(Group.objects.get_or_create(name="Finance")[0])
+        self.doctor = User.objects.get(pk=self.doctor.pk)
+        self.assertIn("UGX 30,000", self.ask(self.doctor, "how much did we collect today")["text"])
+
+    def test_a_refusal_does_not_leave_a_topic_to_follow_up_on(self):
+        self.ask(self.doctor, "how much did we collect today")
+        self.assertEqual(self.client.session["assistant:health"], {})
+        self.assertNotIn("UGX", json.dumps(self.ask(self.doctor, "and last month?")))
 
     def test_widget_is_on_hospital_pages_and_answers_are_split_by_sex(self):
         self.client.force_login(self.admin)
