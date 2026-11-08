@@ -142,8 +142,18 @@ INSTALLED_APPS = [
 # into Ternah's own internal books.
 TERNAH_BOOKS_HOSPITAL_SUBDOMAIN = "ternah-books"
 
+# Each product on its own address, e.g. books.ternahworks.com and
+# health.ternahworks.com. Empty means off: everything stays on one address.
+# Old addresses (the DigitalOcean one) redirect to the new ones, so links and
+# printed QR codes keep working. Every host here must also be in
+# DJANGO_ALLOWED_HOSTS, with https:// in DJANGO_CSRF_TRUSTED_ORIGINS.
+TERNAH_BOOKS_HOST = env("TERNAH_BOOKS_HOST", "").strip().lower()
+TERNAH_HEALTH_HOST = env("TERNAH_HEALTH_HOST", "").strip().lower()
+TERNAH_LEGACY_HOSTS = [host.lower() for host in env_list("TERNAH_LEGACY_HOSTS", "")]
+
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "labsystem.middleware.ProductHostMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",

@@ -2,7 +2,7 @@ from datetime import date as _date
 
 from django.conf import settings
 from django.contrib.auth import logout
-from django.http import HttpResponse
+from django.http import HttpResponse, HttpResponseRedirect
 from django.shortcuts import redirect
 from django.utils import timezone
 
@@ -80,6 +80,59 @@ def _is_books_tenant(hospital) -> bool:
     return getattr(hospital, "subdomain", "") == settings.TERNAH_BOOKS_HOSPITAL_SUBDOMAIN
 
 
+BOOKS_PATH = "/books/"
+# Shared files every address serves as-is.
+SHARED_PREFIXES = ("/static/", "/media/", "/sw.js", "/manifest.webmanifest", "/favicon.ico", "/robots.txt")
+
+
+def _request_host(request) -> str:
+    return request.get_host().split(":", 1)[0].lower()
+
+
+class ProductHostMiddleware:
+    """Ternah Books and Ternah Health each on their own address.
+
+    - On the Books address, "/" opens Books, and anything that isn't Books goes
+      to the Health address.
+    - On the Health address or an old address, any /books/ link goes to the
+      Books address, path and query kept, so emailed links and printed QR codes
+      still open.
+    - An old address (TERNAH_LEGACY_HOSTS) sends everything else to Health.
+
+    Only page loads (GET/HEAD) are redirected; a form posted to an old address
+    still goes through rather than losing what was typed. Nothing happens until
+    the addresses are set in settings, so local work and tests are unaffected.
+    Each address keeps its own sign-in."""
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    # Temporary redirects: browsers remember permanent ones for good, so a
+    # mistake while setting the addresses up would stick.
+    def _to(self, host, request):
+        return HttpResponseRedirect(f"https://{host}{request.get_full_path()}")
+
+    def __call__(self, request):
+        books, health = settings.TERNAH_BOOKS_HOST, settings.TERNAH_HEALTH_HOST
+        if not (books or health) or request.method not in ("GET", "HEAD") or request.path.startswith(SHARED_PREFIXES):
+            return self.get_response(request)
+        host = _request_host(request)
+        is_books_path = request.path == "/books" or request.path.startswith(BOOKS_PATH)
+        legacy = host in settings.TERNAH_LEGACY_HOSTS
+
+        if books and host == books:
+            if request.path == "/":
+                return redirect(BOOKS_PATH)
+            # Pages Books accounts use outside /books/ (first sign-in, logout, offline) stay here.
+            if not is_books_path and health and not request.path.startswith(BooksBoundaryMiddleware.ALLOWED_PREFIXES):
+                return self._to(health, request)
+        elif books and is_books_path and (host == health or legacy):
+            return self._to(books, request)
+        elif health and legacy:
+            return self._to(health, request)
+        return self.get_response(request)
+
+
 class HospitalMiddleware:
     """
     Attach the current hospital context to the request and enforce subscription expiry.
@@ -140,7 +193,8 @@ class HospitalMiddleware:
                 return self.get_response(request)
 
         host = request.get_host().split(":", 1)[0]
-        if "." in host and host not in {"127.0.0.1", "localhost"}:
+        product_hosts = {settings.TERNAH_BOOKS_HOST, settings.TERNAH_HEALTH_HOST, *settings.TERNAH_LEGACY_HOSTS}
+        if "." in host and host not in {"127.0.0.1", "localhost"} and host.lower() not in product_hosts:
             subdomain = host.split(".", 1)[0]
             request.hospital = Hospital.objects.filter(
                 subdomain__iexact=subdomain,
