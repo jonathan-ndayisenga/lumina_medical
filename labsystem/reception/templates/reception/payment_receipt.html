@@ -96,8 +96,7 @@
             <div>Receipt No : {{ payment.receipt_number }}</div>
             <div>Date : {{ payment.paid_at|date:"M j, Y, g:i A" }}</div>
             <div>Patient : {{ visit.patient.name }}</div>
-            <div>Age/Sex : {{ visit.patient|age_at:visit.visit_date }} / {{ visit.patient.get_sex_display|slice:":1" }}</div>
-            <div>Visit : #{{ visit.id }}</div>
+            <div>Age/Sex : {{ visit.patient|age_at:visit.visit_date }} / {{ visit.patient.get_sex_display|slice:":1" }} | Visit : #{{ visit.id }}</div>
             <div>Received by : {% if payment.recorded_by %}{{ payment.recorded_by.get_full_name|default:payment.recorded_by.username }}{% else %}-{% endif %}</div>
             <div class="rule"></div>
             {% for item in service_items %}
