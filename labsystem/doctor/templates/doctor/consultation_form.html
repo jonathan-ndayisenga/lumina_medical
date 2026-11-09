@@ -589,7 +589,30 @@
                     Nurse and doctor share the same triage record for this visit. If you tick "Send to Nurse", you can leave these blank and the nurse will complete them.
                 </p>
             </div>
+            <p id="triage-live" data-url="{% url 'consultation_triage' visit.pk %}" class="hidden mb-3 text-sm font-semibold text-emerald-700" role="status">The nurse has just recorded vital signs. They are filled in below.</p>
             {% include "partials/triage_form.html" with triage_form=form %}
+            <script>
+            // The nurse may save vitals while this page is open. Only empty boxes are filled, so nothing the doctor typed is replaced.
+            (function () {
+                const notice = document.getElementById('triage-live');
+                if (!notice) return;
+                const timer = setInterval(function () {
+                    if (!document.body.contains(notice)) { clearInterval(timer); return; }
+                    if (document.hidden) return;
+                    fetch(notice.dataset.url, { credentials: 'same-origin' }).then(function (r) { return r.json(); }).then(function (vitals) {
+                        let filled = 0;
+                        Object.keys(vitals).forEach(function (name) {
+                            const input = document.getElementById('id_' + name);
+                            if (input && vitals[name] !== null && !input.value && document.activeElement !== input) {
+                                input.value = vitals[name];
+                                filled += 1;
+                            }
+                        });
+                        if (filled) notice.classList.remove('hidden');
+                    }).catch(function () {});
+                }, 15000);
+            })();
+            </script>
         </div>
 
         {% if is_eye_visit %}

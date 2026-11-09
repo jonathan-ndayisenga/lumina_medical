@@ -530,3 +530,72 @@ class SonographerScanReportBillingTests(TestCase):
         billing_button_index = content.index("Send to Reception for Billing")
         between = content[findings_index:billing_button_index]
         self.assertEqual(between.count("<form"), 1)
+
+
+class TriageReachesTheDoctorTests(TestCase):
+    """What the nurse records must be on the doctor's consultation page."""
+
+    def setUp(self):
+        from accounts.models import Hospital, HospitalModuleSubscription, Module, User
+        from reception.models import Patient, QueueEntry, Visit
+        self.hospital = Hospital.objects.create(name="Triage Clinic", subdomain="triage-clinic")
+        for code in ("reception", "doctor", "nurse", "lab"):
+            module, _ = Module.objects.get_or_create(code=code, defaults={"name": code.title()})
+            HospitalModuleSubscription.objects.get_or_create(hospital=self.hospital, module=module, defaults={"is_active": True})
+        self.nurse = User.objects.create_user(username="triage_nurse", password="x", role=User.ROLE_NURSE, hospital=self.hospital)
+        self.doctor = User.objects.create_user(username="triage_doc", password="x", role=User.ROLE_DOCTOR, hospital=self.hospital)
+        patient = Patient.objects.create(hospital=self.hospital, name="Triage Patient", age="30YRS", sex="F")
+        self.visit = Visit.objects.create(patient=patient, hospital=self.hospital, total_amount="0")
+        self.QueueEntry = QueueEntry
+        self.vitals = {"weight_kg": "61.5", "bp_systolic": "128", "bp_diastolic": "82", "pulse": "77", "respiratory_rate": "19",
+                       "temperature_celsius": "37.2", "oxygen_saturation": "98", "glucose_mg_dl": "101.5"}
+
+    def _nurse_saves(self, reason, action, **extra):
+        from django.urls import reverse
+        entry = self.QueueEntry.objects.create(hospital=self.hospital, visit=self.visit, queue_type=self.QueueEntry.TYPE_NURSE, reason=reason)
+        self.client.force_login(self.nurse)
+        return self.client.post(reverse("perform_nursing", args=[entry.pk]), {**self.vitals, "action": action, **extra})
+
+    def _doctor_page(self):
+        from django.urls import reverse
+        self.client.force_login(self.doctor)
+        return self.client.get(reverse("consultation", args=[self.visit.pk]))
+
+    def assertVitalsShown(self, page):
+        form = page.context["form"]
+        for name, value in self.vitals.items():
+            self.assertEqual(Decimal(str(form[name].value())), Decimal(value), name)
+
+    def test_triage_sent_to_the_doctor_is_on_the_consultation_page(self):
+        self._nurse_saves("Triage requested", "triage_to_doctor")
+        self.assertVitalsShown(self._doctor_page())
+
+    def test_nursing_care_sent_back_with_a_note(self):
+        self._nurse_saves("IV fluids", "back_to_doctor", notes="Given fluids")
+        self.assertVitalsShown(self._doctor_page())
+
+    def test_vitals_are_kept_when_sent_back_without_a_note(self):
+        response = self._nurse_saves("IV fluids", "back_to_doctor")
+        self.assertEqual(response.status_code, 200, "the nurse stays on the page to add the note")
+        self.assertContains(response, "The vital signs are saved")
+        self.assertTrue(self.QueueEntry.objects.filter(visit=self.visit, queue_type=self.QueueEntry.TYPE_NURSE, processed=False).exists())
+        self.assertVitalsShown(self._doctor_page())
+
+    def test_an_open_doctor_page_can_fetch_new_vitals(self):
+        url = reverse("consultation_triage", args=[self.visit.pk])
+        self.client.force_login(self.doctor)
+        self.assertIsNone(self.client.get(url).json()["pulse"])
+        self._nurse_saves("Triage requested", "triage_to_doctor")
+        self.client.force_login(self.doctor)
+        self.assertEqual(self.client.get(url).json()["pulse"], "77")
+        self.assertContains(self._doctor_page(), 'id="triage-live"')
+
+    def test_vitals_cannot_be_fetched_from_another_hospital_or_by_a_nurse(self):
+        url = reverse("consultation_triage", args=[self.visit.pk])
+        other = Hospital.objects.create(name="Other Clinic", subdomain="other-triage")
+        _enable_modules(other, "doctor")
+        outsider = get_user_model().objects.create_user(username="other_doc", password="x", role="doctor", hospital=other)
+        self.client.force_login(outsider)
+        self.assertEqual(self.client.get(url).status_code, 404)
+        self.client.force_login(self.nurse)
+        self.assertEqual(self.client.get(url).status_code, 302)

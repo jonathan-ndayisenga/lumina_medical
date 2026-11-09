@@ -100,7 +100,9 @@ def perform_nursing(request, queue_entry_id):
         # Triage-only actions should not require a nursing note.
         triage_only_action = action in {"triage_to_doctor", "triage_to_reception"}
 
-        if triage_form.is_valid() and (triage_only_action or note_form.is_valid()):
+        # Vitals are saved even if the note below is missing: the doctor reads
+        # them straight away, and a forgotten note must not lose what was measured.
+        if triage_form.is_valid():
             for field_name in triage_form.Meta.fields:
                 value = triage_form.cleaned_data.get(field_name)
                 if value is not None:
@@ -110,6 +112,7 @@ def perform_nursing(request, queue_entry_id):
             triage_obj.updated_by = request.user
             triage_obj.save()
 
+        if triage_form.is_valid() and (triage_only_action or note_form.is_valid()):
             nurse_note = None
             if note_text:
                 nurse_note = note_form.save(commit=False)
@@ -193,7 +196,7 @@ def perform_nursing(request, queue_entry_id):
         elif triage_only_action:
             messages.error(request, "Please complete the triage fields before saving.")
         else:
-            messages.error(request, "Please complete the nursing note before saving.")
+            messages.error(request, "The vital signs are saved and the doctor can see them. Add the care note to finish and send the patient on.")
     else:
         triage_form = TriageForm(instance=triage_obj)
         note_form = NurseNoteForm()

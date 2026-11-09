@@ -5,6 +5,7 @@ from . import views
 urlpatterns = [
     path("", views.doctor_queue, name="doctor_queue"),
     path("visit/<int:visit_id>/consultation/", views.consultation, name="consultation"),
+    path("visit/<int:visit_id>/triage.json", views.consultation_triage, name="consultation_triage"),
     path("visit/<int:visit_id>/consultation/detail/", views.consultation_detail, name="consultation_detail"),
     path("visit/<int:visit_id>/consultation/delete/", views.consultation_delete, name="consultation_delete"),
     path("lab-requests/", views.doctor_lab_requests, name="doctor_lab_requests"),

@@ -1027,6 +1027,23 @@ def _eye_exam_context(is_eye_visit, base_refraction, eye_exam, post=None):
     }
 
 
+TRIAGE_FIELDS = ("weight_kg", "bp_systolic", "bp_diastolic", "pulse", "respiratory_rate", "temperature_celsius", "oxygen_saturation", "glucose_mg_dl")
+
+
+@doctor_role_required
+def consultation_triage(request, visit_id):
+    """The visit's current vitals, so an open consultation page picks up what the nurse saves."""
+    hospital = get_active_hospital(request)
+    visits = Visit.objects.all()
+    if hospital and getattr(request.user, "role", "") != User.ROLE_SUPERADMIN:
+        visits = visits.filter(hospital=hospital)
+    visit = get_object_or_404(visits, pk=visit_id)
+    triage = Triage.objects.filter(visit=visit).first()
+    return JsonResponse({
+        name: (None if getattr(triage, name, None) is None else str(getattr(triage, name))) for name in TRIAGE_FIELDS
+    })
+
+
 @doctor_role_required
 @transaction.atomic
 def consultation(request, visit_id):

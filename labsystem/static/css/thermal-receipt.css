@@ -71,3 +71,25 @@ body[data-receipt] .sep {
 body:not([data-paper-size="a4"]) [data-receipt] .item-name { max-width: none !important; }
 body:not([data-paper-size="a4"]) [data-receipt] table td { padding: 0.4mm 0 !important; vertical-align: top; }
 body:not([data-paper-size="a4"]) [data-receipt] .item-price { padding-left: 2mm !important; }
+
+/* Printers don't all give the page the size we ask for: a Windows driver can
+   hand the browser a page narrower than 72mm, and a fixed-width receipt then
+   loses its right-hand side, which is where the amounts are. When printing,
+   fit whatever page we get (up to the printable width), keep clear of the edge,
+   and let text wrap instead of running off. */
+@media print {
+    body[data-paper-size="80mm"] [data-receipt],
+    body[data-paper-size="80mm"][data-receipt] { width: 100% !important; max-width: 72mm !important; }
+    body[data-paper-size="58mm"] [data-receipt],
+    body[data-paper-size="58mm"][data-receipt] { width: 100% !important; max-width: 48mm !important; }
+}
+
+/* On screen too, so the preview matches the paper and thermal-print.js, which
+   measures the on-screen receipt, gets the right height. */
+body:not([data-paper-size="a4"]) [data-receipt],
+body[data-receipt] {
+    box-sizing: border-box !important;
+    padding-left: 1.5mm !important;
+    padding-right: 2.5mm !important;
+    overflow-wrap: anywhere;
+}
