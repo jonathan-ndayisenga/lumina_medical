@@ -272,7 +272,7 @@ class Prescription(models.Model):
 
     @property
     def regimen_display(self):
-        if self.sold_quantity is not None:
+        if self.sold_quantity is not None and self.added_from == self.ADDED_FROM_PHARMACY:
             return "Sold by quantity"
         dose_unit = "mg"
         if self.is_liquid:

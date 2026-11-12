@@ -257,3 +257,87 @@ class ReviewFixTests(PharmacyCase):
         services.add_by_quantity(self.visit, self.drug, 1, "pack", self.pharmacist)
         self.visit.refresh_from_db()
         self.assertEqual(self.visit.status, Visit.STATUS_READY_FOR_BILLING)
+
+
+class ChangeQuantityTests(PharmacyCase):
+    """The pharmacy can change how much is given before handing it over."""
+
+    def change(self, rx, quantity, user=None):
+        self.client.force_login(user or self.pharmacist)
+        return self.client.post(reverse("pharmacy_visit", args=[self.visit.pk]), {"action": "quantity", "prescription": rx.pk, "quantity": quantity})
+
+    def test_a_doctors_prescription_can_be_changed_and_the_bill_follows(self):
+        rx = self.prescribe()  # 500mg x 3 x 2 days = 6 tablets at 200 = 1,200
+        self.visit.refresh_from_db()
+        self.assertEqual((rx.total_quantity, self.visit.total_amount), (Decimal("6.00"), Decimal("1200.00")))
+        self.change(rx, "10")
+        rx.refresh_from_db()
+        self.visit.refresh_from_db()
+        self.assertEqual((rx.total_quantity, rx.total_price), (Decimal("10.00"), Decimal("2000.00")))
+        self.assertEqual(rx.billing_visit_service.price_at_time, Decimal("2000.00"))
+        self.assertEqual(self.visit.total_amount, Decimal("2000.00"))
+        self.assertIn("500.00 mg", rx.regimen_display, "the doctor's dose is still shown")
+        self.assertIn("Quantity changed from 6 tablet(s) to 10 tablet(s)", rx.notes)
+        page = self.client.get(reverse("pharmacy_visit", args=[self.visit.pk]))
+        self.assertContains(page, 'value="10"')
+
+    def test_reducing_it_lowers_the_bill_and_dispensing_takes_the_new_amount(self):
+        rx = self.prescribe()
+        self.change(rx, "4")
+        self.visit.refresh_from_db()
+        self.assertEqual(self.visit.total_amount, Decimal("800.00"))
+        self.client.post(reverse("pharmacy_visit", args=[self.visit.pk]), {"action": "dispense", "prescription": rx.pk})
+        self.assertEqual(InventoryTransaction.objects.get(prescription=rx).quantity, Decimal("4.00"))
+        self.drug.refresh_from_db()
+        self.assertEqual(self.drug.current_quantity, Decimal("9.60"), "stock is kept in strips of 10")
+
+    def test_syrup_is_changed_in_bottles(self):
+        rx = self.prescribe(drug=self.syrup, dose="5", per_day="3", days="5")  # 75 ml = 1 bottle
+        self.assertEqual(rx.number_of_packs, 1)
+        self.change(rx, "2")
+        rx.refresh_from_db()
+        self.visit.refresh_from_db()
+        self.assertEqual((rx.number_of_packs, rx.total_price, self.visit.total_amount), (2, Decimal("12000.00"), Decimal("12000.00")))
+
+    def test_pharmacy_sales_can_be_changed_too(self):
+        self.client.force_login(self.pharmacist)
+        self.client.post(reverse("pharmacy_visit", args=[self.visit.pk]), {"action": "add", "drug": self.drug.pk, "quantity": "5", "counted_in": "unit"})
+        rx = Prescription.objects.get(visit=self.visit)
+        self.change(rx, "3")
+        rx.refresh_from_db()
+        self.visit.refresh_from_db()
+        self.assertEqual((rx.total_quantity, self.visit.total_amount), (Decimal("3.00"), Decimal("600.00")))
+        self.assertEqual(rx.regimen_display, "Sold by quantity")
+
+    def test_a_finished_visit_that_now_owes_more_goes_back_to_reception(self):
+        rx = self.prescribe()
+        Visit.objects.filter(pk=self.visit.pk).update(status=Visit.STATUS_COMPLETED)
+        Payment.objects.create(visit=self.visit, amount=Decimal("1200"), amount_paid=Decimal("1200"), mode=Payment.MODE_CASH)
+        self.change(rx, "8")
+        self.visit.refresh_from_db()
+        self.assertEqual(self.visit.status, Visit.STATUS_READY_FOR_BILLING)
+
+    def test_handed_over_covered_and_bad_amounts_are_refused(self):
+        rx = self.prescribe()
+        for bad in ("0", "-2", "2.5", "abc"):
+            self.change(rx, bad)
+            rx.refresh_from_db()
+            self.assertEqual(rx.total_quantity, Decimal("6.00"), bad)
+        Prescription.objects.filter(pk=rx.pk).update(covered_by_package=True)
+        self.change(rx, "9")
+        rx.refresh_from_db()
+        self.assertEqual(rx.total_quantity, Decimal("6.00"))
+        Prescription.objects.filter(pk=rx.pk).update(covered_by_package=False)
+        services.dispense(rx, self.pharmacist)
+        self.change(rx, "9")
+        rx.refresh_from_db()
+        self.assertEqual(rx.total_quantity, Decimal("6.00"))
+
+    def test_only_this_facility_can_change_it(self):
+        rx = self.prescribe()
+        other = Hospital.objects.create(name="Other", subdomain="other-pharm")
+        _enable(other, "inventory")
+        outsider = User.objects.create_user(username="other-pharm", password="x", role=User.ROLE_HOSPITAL_ADMIN, hospital=other, is_active=True)
+        self.change(rx, "20", user=outsider)
+        rx.refresh_from_db()
+        self.assertEqual(rx.total_quantity, Decimal("6.00"))

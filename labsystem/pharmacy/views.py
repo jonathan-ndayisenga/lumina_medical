@@ -89,6 +89,14 @@ def visit(request, visit_id):
                     raise ValidationError("Enter a number for the quantity.")
                 rx = services.add_by_quantity(current, drug, quantity, request.POST.get("counted_in", "unit"), request.user, request.POST.get("notes", "").strip())
                 messages.success(request, f"Added {rx.quantity_display} of {drug.name} for UGX {rx.total_price:,.0f}.")
+            elif action == "quantity":
+                rx = get_object_or_404(Prescription, pk=request.POST.get("prescription"), visit=current)
+                old = rx.quantity_display
+                changed = services.change_quantity(rx, request.POST.get("quantity"), request.user)
+                if changed:
+                    messages.success(request, f"{changed.drug.name}: {old} changed to {changed.quantity_display}. The bill is now UGX {changed.visit.total_amount:,.0f}.")
+                else:
+                    messages.info(request, f"{rx.drug.name} is already {old}.")
             elif action == "remove":
                 from doctor.views import remove_prescription_workflow
                 rx = get_object_or_404(Prescription, pk=request.POST.get("prescription"), visit=current)

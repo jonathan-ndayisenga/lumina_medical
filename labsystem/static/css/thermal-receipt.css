@@ -28,7 +28,7 @@ body[data-paper-size="80mm"][data-receipt] {
     width: 72mm !important;
     padding-left: 0 !important;
     padding-right: 0 !important;
-    font-size: 11pt !important;
+    font-size: 10pt !important;
 }
 
 body[data-paper-size="58mm"] [data-receipt],
@@ -53,9 +53,9 @@ body[data-receipt] * {
 
 /* The hospital name and the money that changed hands stand out. */
 body:not([data-paper-size="a4"]) [data-receipt] .tr-title,
-body[data-receipt] .tr-title { font-size: 1.25em !important; line-height: 1.2 !important; }
+body[data-receipt] .tr-title { font-size: clamp(8.5pt, 6.9cqw, 12.5pt) !important; line-height: 1.2 !important; }
 body:not([data-paper-size="a4"]) [data-receipt] .tr-big,
-body[data-receipt] .tr-big { font-size: 1.2em !important; }
+body[data-receipt] .tr-big { font-size: calc(1.12 * clamp(9pt, 5.2cqw, 10pt)) !important; }
 
 /* Lines between sections: solid and thick enough to print. */
 body:not([data-paper-size="a4"]) [data-receipt] .rule,
@@ -89,10 +89,17 @@ body:not([data-paper-size="a4"]) [data-receipt] .item-price { padding-left: 2mm 
 body:not([data-paper-size="a4"]) [data-receipt],
 body[data-receipt] {
     box-sizing: border-box !important;
-    padding-left: 1.5mm !important;
-    padding-right: 2.5mm !important;
+    padding-left: 1.25mm !important;
+    padding-right: 1.25mm !important;
     overflow-wrap: break-word;
+    /* Lets the sizes below follow the width the printer really gives us. */
+    container-type: inline-size;
 }
+
+/* Text is 10pt with room and 9pt on a narrow page, so fewer lines wrap and less
+   paper is used. The hospital name scales to stay on one line. */
+body:not([data-paper-size="a4"]) [data-receipt] > *,
+body[data-receipt] > * { font-size: clamp(9pt, 5.2cqw, 10pt) !important; }
 
 /* The big amount row on a narrow page: if label and figure don't both fit, the
    figure takes its own line. Never "Amoun / t Paid", never a figure off the edge. */

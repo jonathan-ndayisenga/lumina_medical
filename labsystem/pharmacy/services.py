@@ -140,6 +140,71 @@ def add_by_quantity(visit, drug, quantity, counted_in, actor, notes=""):
     return rx
 
 
+def counts_in_packs(prescription) -> bool:
+    """Liquids and tubes are handed over by the bottle or tube; tablets one by one."""
+    return prescription.is_liquid or prescription.is_tube
+
+
+def handed_over_quantity(prescription) -> Decimal:
+    """The amount to give, in the unit it's counted in at the counter."""
+    return Decimal(prescription.number_of_packs if counts_in_packs(prescription) else prescription.total_quantity)
+
+
+@transaction.atomic
+def change_quantity(prescription, quantity, actor):
+    """Change how much of a medicine is handed over, before it goes out. The
+    price, its bill line and the visit's total follow, and the item keeps a note
+    of who changed it and from what. A doctor's dose instructions stay as written.
+    Returns the prescription, or None when the quantity didn't change."""
+    from doctor.models import Prescription
+    from reception.models import Visit
+
+    rx = Prescription.objects.select_for_update(of=("self",)).select_related("visit", "drug", "billing_visit_service").get(pk=prescription.pk)
+    visit = rx.visit
+    if rx.dispensed:
+        raise ValidationError(f"{rx.drug.name} was already handed over, so its quantity can't be changed.")
+    if rx.nursing_managed:
+        raise ValidationError(f"{rx.drug.name} is given by the nurses on the ward; change it there.")
+    if rx.covered_by_package or rx.covered_by_previous:
+        raise ValidationError(f"{rx.drug.name} is covered by a package or an earlier payment, so its quantity can't be changed here.")
+    if visit.status == Visit.STATUS_CANCELLED:
+        raise ValidationError("This visit was cancelled.")
+    try:
+        quantity = Decimal(quantity)
+    except (TypeError, ArithmeticError, ValueError):
+        raise ValidationError("Enter a number for the quantity.")
+    if quantity <= 0 or quantity != quantity.to_integral_value():
+        raise ValidationError("Enter a whole number greater than zero. To stop giving it, use \"Not giving this\".")
+
+    old_label, old_price = rx.quantity_display, Decimal(rx.total_price or 0)
+    new_sold = sold_quantity_for(rx.drug, quantity, "pack" if counts_in_packs(rx) else "unit")
+    if rx.sold_quantity is not None and Decimal(rx.sold_quantity) == new_sold:
+        return None
+    rx.sold_quantity = new_sold
+    rx.calculate_totals()
+    if rx.quantity_display == old_label and rx.total_price == old_price:
+        return None
+    who = (actor.get_full_name() or actor.username) if actor else "someone"
+    change = f"Quantity changed from {old_label} to {rx.quantity_display} by {who} on {timezone.localtime():%d %b %Y %H:%M}."
+    rx.notes = f"{rx.notes}\n{change}".strip() if rx.notes else change
+    rx.save()
+
+    difference = Decimal(rx.total_price) - old_price
+    line = rx.billing_visit_service
+    if line is not None:
+        line.price_at_time = rx.total_price
+        line.notes = f"Pharmacy: {rx.quantity_display}"
+        line.save(update_fields=["price_at_time", "notes"])
+    visit.total_amount = max(Decimal(visit.total_amount or 0) + difference, Decimal("0"))
+    update_fields = ["total_amount"]
+    # More is owed on a finished visit: it goes back to reception for the difference.
+    if visit.status == Visit.STATUS_COMPLETED and not visit.is_fully_paid:
+        visit.status = Visit.STATUS_READY_FOR_BILLING
+        update_fields.append("status")
+    visit.save(update_fields=update_fields)
+    return rx
+
+
 def waiting_prescriptions(hospital):
     """Medicine waiting to be handed over at the pharmacy. Only recent orders,
     so years of old undispensed history don't fill the queue."""
