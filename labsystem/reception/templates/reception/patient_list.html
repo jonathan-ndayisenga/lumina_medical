@@ -251,14 +251,18 @@
 
 {% block extra_js %}
 <script>
-document.querySelectorAll('.visit-dd').forEach(function (sel) {
-    sel.addEventListener('change', function () {
-        var opt = this.selectedOptions[0];
-        var wrap = this.closest('.visit-dd-wrap');
+// Listens on the page, not on each dropdown, so rows refreshed by search-as-you-type still work.
+if (!window.visitDropdownReady) {
+    window.visitDropdownReady = true;
+    document.addEventListener('change', function (e) {
+        var sel = e.target.closest && e.target.closest('.visit-dd');
+        if (!sel) return;
+        var opt = sel.selectedOptions[0];
+        var wrap = sel.closest('.visit-dd-wrap');
         wrap.querySelector('.dd-date').textContent = opt.dataset.date;
         wrap.querySelector('.dd-status').textContent = opt.dataset.status;
         wrap.querySelector('.dd-bill').textContent = opt.dataset.bill;
     });
-});
+}
 </script>
 {% endblock %}

@@ -655,6 +655,7 @@
                     <label for="{{ form.outcome_notes.id_for_label }}" class="block text-sm font-semibold text-text-main mb-1">Referred / admitted / sent to</label>
                     {{ form.outcome_notes }}
                 </div>
+                <p class="text-xs text-text-muted mt-2">Sending them elsewhere for a CT scan or another service? <a href="{% url 'service_request_create' %}?patient={{ visit.patient.pk }}" target="_blank" rel="noopener" class="font-semibold underline">Write a service request</a> to print for them.</p>
                 <p class="text-xs text-text-muted mt-2">For a Review Appointment, set the review date above; reception books the follow-up visit when the patient returns.</p>
                 <script>
                     (function () {

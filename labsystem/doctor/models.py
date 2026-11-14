@@ -342,3 +342,44 @@ class Prescription(models.Model):
     def save(self, *args, **kwargs):
         self.calculate_totals()
         super().save(*args, **kwargs)
+
+
+class ServiceRequest(models.Model):
+    """A doctor's written request for a service done somewhere else (a CT scan,
+    an MRI, a specialist review). The doctor writes it in their own words; the
+    patient carries the printed request to the other facility."""
+
+    URGENCY_ROUTINE = "routine"
+    URGENCY_URGENT = "urgent"
+    URGENCY_CHOICES = [(URGENCY_ROUTINE, "Routine"), (URGENCY_URGENT, "Urgent")]
+
+    hospital = models.ForeignKey("accounts.Hospital", on_delete=models.CASCADE, related_name="service_requests")
+    patient = models.ForeignKey("reception.Patient", on_delete=models.CASCADE, related_name="service_requests")
+    # The patient's latest visit when it was written, so it shows on that visit too.
+    visit = models.ForeignKey("reception.Visit", on_delete=models.SET_NULL, null=True, blank=True, related_name="service_requests")
+    requested_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="service_requests_made",
+    )
+    # Kept as written, so the request still names its doctor if the account goes.
+    requested_by_name = models.CharField(max_length=200, blank=True)
+    service = models.CharField(max_length=255, help_text="What is being requested, e.g. CT scan of the brain with contrast.")
+    facility = models.CharField(max_length=255, blank=True, help_text="Where it should be done, if the doctor has a place in mind.")
+    clinical_notes = models.TextField(blank=True, help_text="Why it's needed: history, findings, the question to answer.")
+    urgency = models.CharField(max_length=20, choices=URGENCY_CHOICES, default=URGENCY_ROUTINE)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.reference} - {self.patient.name} - {self.service[:40]}"
+
+    @property
+    def reference(self):
+        return f"REQ-{self.pk:05d}" if self.pk else "REQ-NEW"
+
+    @property
+    def doctor_name(self):
+        if self.requested_by_id and self.requested_by:
+            return self.requested_by.get_full_name() or self.requested_by.username
+        return self.requested_by_name or "—"

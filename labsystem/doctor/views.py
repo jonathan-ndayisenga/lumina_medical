@@ -30,7 +30,7 @@ from reception.workflow import (
 )
 
 from .forms import ConsultationForm
-from .models import Consultation, LabRequest, Prescription
+from .models import Consultation, LabRequest, Prescription, ServiceRequest
 
 
 def doctor_role_required(view_func):
@@ -1430,3 +1430,104 @@ def view_lab_request(request, lab_request_id):
         "This older lab-request page is now read-only. Continue the workflow from the consultation page.",
     )
     return redirect("consultation", visit_id=lab_request.visit_id)
+
+
+# ── Requests for services done elsewhere (CT scan, MRI, specialist review) ──
+
+def _request_hospital(request):
+    hospital = get_active_hospital(request)
+    if hospital is None:
+        messages.error(request, "Open a hospital first: service requests belong to one hospital's patients.")
+    return hospital
+
+
+@doctor_role_required
+def service_requests(request):
+    from django.core.paginator import Paginator
+
+    hospital = _request_hospital(request)
+    if hospital is None:
+        return redirect("app_home")
+    rows = ServiceRequest.objects.filter(hospital=hospital).select_related("patient", "requested_by")
+    who = request.GET.get("who", "")
+    if who == "mine":
+        rows = rows.filter(requested_by=request.user)
+    query = (request.GET.get("q") or "").strip()
+    for word in query.split():
+        rows = rows.filter(
+            Q(patient__name__icontains=word)
+            | Q(patient__contact__icontains=word)
+            | Q(service__icontains=word)
+            | Q(facility__icontains=word)
+            | Q(requested_by_name__icontains=word)
+        )
+    page_obj = Paginator(rows, 25).get_page(request.GET.get("page"))
+    return render(request, "doctor/service_requests.html", {
+        "active_nav": "service_requests",
+        "page_obj": page_obj,
+        "query": query,
+        "who": who,
+    })
+
+
+@doctor_role_required
+@require_http_methods(["GET", "POST"])
+def service_request_create(request):
+    from reception.models import Patient
+
+    hospital = _request_hospital(request)
+    if hospital is None:
+        return redirect("app_home")
+    patients = Patient.objects.filter(hospital=hospital)
+    data = request.POST if request.method == "POST" else request.GET
+    patient = None
+    if (data.get("patient") or "").isdigit():
+        patient = patients.filter(pk=data["patient"]).first()
+    values = {
+        "service": (data.get("service") or "").strip(),
+        "facility": (data.get("facility") or "").strip(),
+        "clinical_notes": (data.get("clinical_notes") or "").strip(),
+        "urgency": data.get("urgency") if data.get("urgency") in dict(ServiceRequest.URGENCY_CHOICES) else ServiceRequest.URGENCY_ROUTINE,
+    }
+    errors = {}
+    if request.method == "POST":
+        if patient is None:
+            errors["patient"] = "Search for the patient and pick them from the list. They must be registered here."
+        if not values["service"]:
+            errors["service"] = "Write the service you are requesting."
+        if not errors:
+            made = ServiceRequest.objects.create(
+                hospital=hospital,
+                patient=patient,
+                visit=patient.visits.order_by("-visit_date").first(),
+                requested_by=request.user,
+                requested_by_name=request.user.get_full_name() or request.user.username,
+                **values,
+            )
+            messages.success(request, f"Request {made.reference} saved for {patient.name}. Print it for the patient to take.")
+            return redirect("service_request_detail", request_id=made.pk)
+    return render(request, "doctor/service_request_form.html", {
+        "active_nav": "service_requests",
+        "patient": patient,
+        "values": values,
+        "errors": errors,
+        "urgency_choices": ServiceRequest.URGENCY_CHOICES,
+    })
+
+
+@doctor_role_required
+def service_request_detail(request, request_id):
+    hospital = _request_hospital(request)
+    if hospital is None:
+        return redirect("app_home")
+    made = get_object_or_404(
+        ServiceRequest.objects.select_related("patient", "requested_by", "visit", "hospital"),
+        pk=request_id, hospital=hospital,
+    )
+    return render(request, "doctor/service_request_detail.html", {
+        "active_nav": "service_requests",
+        "req": made,
+        "hospital": hospital,
+        "print_title": "Service Request",
+        "print_subtitle": made.reference,
+    })

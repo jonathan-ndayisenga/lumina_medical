@@ -1,0 +1,69 @@
+{% extends 'base.html' %}
+
+{% block title %}New Service Request - Hospital EMR{% endblock %}
+{% block page_title %}New Service Request{% endblock %}
+{% block page_subtitle %}Request a service for a patient to get somewhere else, such as a CT scan, in your own words.{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl">
+    <form method="post" class="card space-y-6" novalidate>
+        {% csrf_token %}
+
+        <div>
+            <label for="request-patient-search" class="block text-sm font-semibold text-text-main mb-1">Patient <span class="text-red-600">*</span></label>
+            <p class="text-xs text-text-muted mb-2">Type a name, phone number or NIN. Only patients registered here are listed.</p>
+            <div data-patient-picker data-url="{% url 'patient_search_api' %}">
+                <input id="request-patient-search" type="search" class="form-control" placeholder="Start typing the patient's name…"
+                       autocomplete="off" data-picker-input role="combobox" aria-autocomplete="list" aria-expanded="false"
+                       aria-controls="request-patient-results" {% if patient %}hidden{% endif %} {% if not patient %}autofocus{% endif %}>
+                <input type="hidden" name="patient" value="{{ patient.pk|default:'' }}" data-picker-value>
+                <div data-picker-chosen class="flex items-center justify-between gap-3 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3" {% if not patient %}hidden{% endif %}>
+                    <div class="min-w-0">
+                        <div class="font-semibold text-text-main" data-chosen-name>{{ patient.name }}</div>
+                        <div class="text-xs text-text-muted" data-chosen-meta>{% if patient %}{{ patient.current_age }} · {{ patient.get_sex_display }}{% if patient.contact %} · {{ patient.contact }}{% endif %}{% endif %}</div>
+                    </div>
+                    <button type="button" class="btn btn-secondary btn-sm" data-picker-change>Change</button>
+                </div>
+                <ul id="request-patient-results" data-picker-list role="listbox" hidden></ul>
+            </div>
+            {% if errors.patient %}<div class="text-red-600 text-sm mt-1">{{ errors.patient }}</div>{% endif %}
+        </div>
+
+        <div>
+            <label for="request-service" class="block text-sm font-semibold text-text-main mb-1">Service requested <span class="text-red-600">*</span></label>
+            <input id="request-service" type="text" name="service" value="{{ values.service }}" maxlength="255" class="form-control"
+                   placeholder="e.g. CT scan of the brain with contrast">
+            {% if errors.service %}<div class="text-red-600 text-sm mt-1">{{ errors.service }}</div>{% endif %}
+        </div>
+
+        <div>
+            <label for="request-facility" class="block text-sm font-semibold text-text-main mb-1">Where to</label>
+            <input id="request-facility" type="text" name="facility" value="{{ values.facility }}" maxlength="255" class="form-control"
+                   placeholder="Facility, if you have one in mind (optional)">
+        </div>
+
+        <div>
+            <label for="request-notes" class="block text-sm font-semibold text-text-main mb-1">Clinical notes and reason</label>
+            <textarea id="request-notes" name="clinical_notes" rows="5" class="form-control"
+                      placeholder="History, findings, and what you want the result to answer">{{ values.clinical_notes }}</textarea>
+        </div>
+
+        <fieldset>
+            <legend class="block text-sm font-semibold text-text-main mb-2">Urgency</legend>
+            <div class="flex flex-wrap gap-4">
+                {% for value, label in urgency_choices %}
+                <label class="inline-flex items-center gap-2 cursor-pointer text-sm">
+                    <input type="radio" name="urgency" value="{{ value }}" {% if values.urgency == value %}checked{% endif %}>
+                    {{ label }}
+                </label>
+                {% endfor %}
+            </div>
+        </fieldset>
+
+        <div class="flex flex-wrap gap-2 pt-2 border-t border-gray-100">
+            <button type="submit" class="btn btn-primary">Save request</button>
+            <a href="{% url 'service_requests' %}" class="btn btn-secondary">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

@@ -148,6 +148,7 @@
         }
     </style>
     {% block extra_css %}{% endblock %}
+<script src="{% static 'js/live-search.js' %}"></script>
 </head>
 <body>
 <header class="mobile-bar">
@@ -204,7 +205,7 @@
             {% endfor %}
         </ul>
         {% endif %}
-        {% block content %}{% endblock %}
+        <div id="page-content">{% block content %}{% endblock %}</div>
     </main>
 </div>
 {% block extra_js %}{% endblock %}

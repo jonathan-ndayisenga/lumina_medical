@@ -91,6 +91,7 @@
         </div>
     </div>
 
+    <div data-live-results class="space-y-6">
     {% if patients.object_list %}
     <div class="card overflow-hidden">
         <div class="overflow-x-auto">
@@ -178,12 +179,13 @@
         {% endif %}
     </div>
     {% endif %}
+    </div>
 </div>
 {% endblock %}
 
 {% block extra_js %}
 <script>
-function applyFilters() {
+function applyFilters(live) {
     const params = new URLSearchParams();
     const search = document.getElementById('searchInput').value.trim();
     const test = document.getElementById('testFilter').value;
@@ -196,13 +198,16 @@ function applyFilters() {
     if (dateFrom) params.set('date_from', dateFrom);
     if (dateTo) params.set('date_to', dateTo);
     const qs = params.toString();
-    window.location.href = qs ? `?${qs}` : window.location.pathname;
+    const url = qs ? `?${qs}` : window.location.pathname;
+    // While typing, refresh the list in place so the cursor stays in the box.
+    if (live === true && window.liveSearchGo) return window.liveSearchGo(url, document.getElementById('searchInput'));
+    window.location.href = url;
 }
 
 let filterDebounceTimer = null;
 function scheduleFilterApply() {
     clearTimeout(filterDebounceTimer);
-    filterDebounceTimer = setTimeout(applyFilters, 500);
+    filterDebounceTimer = setTimeout(function () { applyFilters(true); }, 220);
 }
 
 document.getElementById('searchInput').addEventListener('input', scheduleFilterApply);

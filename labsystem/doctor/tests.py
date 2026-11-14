@@ -6,7 +6,7 @@ from django.urls import reverse
 
 from accounts.models import AuditLog, Hospital, HospitalModuleSubscription, Module
 from admin_dashboard.models import InventoryBatch, InventoryItem, InventoryTransaction
-from doctor.models import Consultation, Prescription
+from doctor.models import Consultation, Prescription, ServiceRequest
 from reception.models import Patient, QueueEntry, Service, Visit, VisitService
 
 
@@ -936,3 +936,91 @@ class SonographerReceptionApprovalTests(TestCase):
         )
         reception_entry.refresh_from_db()
         self.assertTrue(reception_entry.processed)
+
+
+class ServiceRequestTests(TestCase):
+    """A doctor writes a request for a service done elsewhere (e.g. a CT scan)
+    for a patient registered here, found by searching as they type."""
+
+    def setUp(self):
+        User = get_user_model()
+        self.hospital = Hospital.objects.create(name="Lumina Central", subdomain="lumina-req")
+        _enable_modules(self.hospital, "doctor", "reception", "lab")
+        self.doctor = User.objects.create_user(username="dr-req", password="x", role=User.ROLE_DOCTOR, hospital=self.hospital,
+                                               first_name="Grace", last_name="Okello")
+        self.other_doctor = User.objects.create_user(username="dr-two", password="x", role=User.ROLE_DOCTOR, hospital=self.hospital)
+        self.receptionist = User.objects.create_user(username="rec-req", password="x", role=User.ROLE_RECEPTIONIST, hospital=self.hospital)
+        self.lab = User.objects.create_user(username="lab-req", password="x", role=User.ROLE_LAB_ATTENDANT, hospital=self.hospital)
+        self.patient = Patient.objects.create(hospital=self.hospital, name="John Kato", age="40YRS", sex="M", contact="0772123456")
+        Patient.objects.create(hospital=self.hospital, name="Sarah Johnson", age="30YRS", sex="F")
+        self.visit = Visit.objects.create(patient=self.patient, hospital=self.hospital)
+        other = Hospital.objects.create(name="Elsewhere", subdomain="elsewhere-req")
+        self.outsider = Patient.objects.create(hospital=other, name="John Outsider", age="22YRS", sex="M")
+
+    def search(self, q, user=None):
+        self.client.force_login(user or self.doctor)
+        return self.client.get(reverse("patient_search_api"), {"q": q})
+
+    def test_search_finds_patients_here_as_you_type(self):
+        names = [row["name"] for row in self.search("jo").json()["results"]]
+        self.assertEqual(names, ["John Kato", "Sarah Johnson"], "names starting with what was typed come first")
+        self.assertNotIn("John Outsider", names, "never another hospital's patients")
+        self.assertEqual([r["name"] for r in self.search("john ka").json()["results"]], ["John Kato"])
+        self.assertEqual([r["name"] for r in self.search("0772").json()["results"]], ["John Kato"])
+        self.assertEqual(self.search("").json()["results"], [])
+
+    def test_search_is_for_staff_who_see_patients(self):
+        self.assertEqual(self.search("jo", user=self.receptionist).status_code, 200)
+        self.assertEqual(self.search("jo", user=self.lab).status_code, 403)
+        self.client.logout()
+        self.assertEqual(self.client.get(reverse("patient_search_api"), {"q": "jo"}).status_code, 302)
+
+    def test_doctor_writes_and_prints_a_request(self):
+        self.client.force_login(self.doctor)
+        page = self.client.get(reverse("doctor_queue"))
+        self.assertContains(page, reverse("service_requests"), msg_prefix="the sidebar has the option")
+        response = self.client.post(reverse("service_request_create"), {
+            "patient": self.patient.pk, "service": "CT scan of the brain with contrast",
+            "facility": "Mulago Imaging", "clinical_notes": "Headache for 3 weeks.", "urgency": "urgent",
+        })
+        made = ServiceRequest.objects.get()
+        self.assertRedirects(response, reverse("service_request_detail", args=[made.pk]))
+        self.assertEqual((made.hospital, made.patient, made.visit, made.requested_by), (self.hospital, self.patient, self.visit, self.doctor))
+        self.assertEqual(made.doctor_name, "Dr. Grace Okello")
+        detail = self.client.get(reverse("service_request_detail", args=[made.pk]))
+        for text in ("CT scan of the brain with contrast", "Mulago Imaging", "Grace Okello", "URGENT", made.reference):
+            self.assertContains(detail, text)
+
+    def test_request_needs_a_registered_patient_here_and_a_service(self):
+        self.client.force_login(self.doctor)
+        self.client.post(reverse("service_request_create"), {"patient": self.outsider.pk, "service": "MRI"})
+        response = self.client.post(reverse("service_request_create"), {"patient": self.patient.pk, "service": "  "})
+        self.assertContains(response, "Write the service you are requesting.")
+        response = self.client.post(reverse("service_request_create"), {"service": "MRI"})
+        self.assertContains(response, "registered here")
+        self.assertFalse(ServiceRequest.objects.exists())
+
+    def test_list_shows_which_doctor_and_filters(self):
+        ServiceRequest.objects.create(hospital=self.hospital, patient=self.patient, requested_by=self.doctor, requested_by_name="Grace Okello", service="CT scan")
+        ServiceRequest.objects.create(hospital=self.hospital, patient=self.patient, requested_by=self.other_doctor, requested_by_name="dr-two", service="Echo")
+        self.client.force_login(self.doctor)
+        page = self.client.get(reverse("service_requests"))
+        self.assertContains(page, "Grace Okello")
+        self.assertContains(page, "dr-two")
+        self.assertContains(page, 'id="page-content"')
+        searched = self.client.get(reverse("service_requests"), {"q": "ech"})
+        self.assertContains(searched, "Echo")
+        self.assertNotContains(searched, "CT scan")
+        mine = self.client.get(reverse("service_requests"), {"who": "mine"})
+        self.assertContains(mine, "CT scan")
+        self.assertNotContains(mine, "Echo")
+
+    def test_other_roles_and_hospitals_are_kept_out(self):
+        made = ServiceRequest.objects.create(hospital=self.hospital, patient=self.patient, requested_by=self.doctor, service="CT scan")
+        self.client.force_login(self.receptionist)
+        self.assertEqual(self.client.get(reverse("service_requests")).status_code, 302)
+        other = Hospital.objects.get(subdomain="elsewhere-req")
+        _enable_modules(other, "doctor")
+        stranger = get_user_model().objects.create_user(username="dr-away", password="x", role=get_user_model().ROLE_DOCTOR, hospital=other)
+        self.client.force_login(stranger)
+        self.assertEqual(self.client.get(reverse("service_request_detail", args=[made.pk])).status_code, 404)

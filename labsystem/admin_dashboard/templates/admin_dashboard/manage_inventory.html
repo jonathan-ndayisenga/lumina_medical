@@ -354,6 +354,7 @@
             </div>
         </form>
 
+        <div data-live-results class="space-y-4">
         <div class="hidden xl:block overflow-x-auto">
             <table class="w-full">
                 <thead class="bg-gray-50 border-b">
@@ -519,6 +520,7 @@
                 </div>
             </div>
         {% endif %}
+        </div>
     </div>
 </div>
 {% endblock %}
@@ -746,8 +748,11 @@
       restockBatchSelect.innerHTML = '<option value="">+ New batch</option>';
     }
 
-    document.querySelectorAll('.restock-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
+    // Listens on the page so rows refreshed by search-as-you-type keep their Restock button.
+    document.getElementById('page-content').addEventListener('click', (event) => {
+      const btn = event.target.closest('.restock-btn');
+      if (!btn) return;
+      {
         const itemId   = btn.dataset.itemId;
         const itemName = btn.dataset.itemName;
         let batches = [];
@@ -780,7 +785,7 @@
 
         restockModal.classList.remove('hidden');
         restockForm.querySelector('[name="quantity_received"]').focus();
-      });
+      }
     });
 
     restockBatchSelect.addEventListener('change', () => {

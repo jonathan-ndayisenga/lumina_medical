@@ -10,6 +10,8 @@
     <script src="https://cdn.jsdelivr.net/npm/htmx.org@2.0.4/dist/htmx.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/htmx-ext-head-support@2.0.4/head-support.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+    <script src="{% static 'js/live-search.js' %}"></script>
+    <script src="{% static 'js/patient-picker.js' %}"></script>
     <script>
         // Links load in the background and only the page body is swapped
         // (hx-boost on <body>), so the app never does a full reload. This
@@ -416,6 +418,17 @@
                 max-width: none !important;
             }
         }
+
+        /* Patient search-as-you-type (static/js/patient-picker.js) */
+        [data-patient-picker] { position: relative; }
+        [data-patient-picker] [hidden] { display: none !important; }
+        [data-picker-list] { position: absolute; z-index: 40; left: 0; right: 0; top: calc(100% + 6px); margin: 0; padding: 6px; list-style: none; max-height: 320px; overflow-y: auto; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 12px 32px rgba(21, 32, 46, .14); }
+        [data-picker-list] .picker-option { padding: 8px 10px; border-radius: 8px; cursor: pointer; }
+        [data-picker-list] .picker-option.is-active, [data-picker-list] .picker-option:hover { background: var(--surface-muted, #F4F3EF); }
+        [data-picker-list] .picker-name { font-weight: 600; color: var(--ink); }
+        [data-picker-list] .picker-meta { font-size: 12.5px; color: var(--muted); margin-top: 2px; }
+        [data-picker-list] .picker-note { padding: 10px; font-size: 13.5px; color: var(--muted); }
+        #page-content[aria-busy="true"] { cursor: progress; }
     </style>
     {% block extra_css %}{% endblock %}
 </head>
@@ -636,6 +649,12 @@
                                     {% if queue_counts.doctor %}
                                     <span class="ml-auto inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold text-white bg-red-500 rounded-full">{{ queue_counts.doctor }}</span>
                                     {% endif %}
+                                </a>
+                                <a href="{% url 'service_requests' %}" class="sidebar-link {% if active_nav == 'service_requests' %}active{% endif %}">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-5 h-5">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 5a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2M9 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2m-6 9 2 2 4-4" />
+                                    </svg>
+                                    Service Requests
                                 </a>
                             </div>
                         </div>
@@ -914,7 +933,7 @@
                             </div>
                         {% endblock %}
                         
-                        {% block content %}{% endblock %}
+                        <div id="page-content">{% block content %}{% endblock %}</div>
                     </div>
                 </div>
             </main>

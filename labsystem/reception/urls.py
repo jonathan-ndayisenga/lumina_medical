@@ -19,6 +19,7 @@ urlpatterns = [
     path("queue/<int:queue_entry_id>/send-to-phlebotomy/", views.receptionist_queue_send_to_phlebotomy, name="reception_queue_send_to_phlebotomy"),
     path("dispense/start/", views.quick_dispense_start, name="quick_dispense_start"),
     path("patients/", views.patient_list, name="patient_list"),
+    path("patients/search.json", views.patient_search_api, name="patient_search_api"),
     path("patients/new/", views.patient_create, name="patient_create"),
     path("patients/<int:patient_id>/edit/", views.patient_edit, name="patient_edit"),
     path("patients/<int:patient_id>/delete/", views.patient_delete, name="patient_delete"),

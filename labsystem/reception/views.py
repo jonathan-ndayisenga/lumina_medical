@@ -5,7 +5,7 @@ from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.paginator import Paginator
 from django.db import transaction
-from django.db.models import Count, F, Max, Q, Sum
+from django.db.models import Case, Count, F, IntegerField, Max, Q, Sum, Value, When
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -2685,3 +2685,48 @@ def visit_send_to_module(request, visit_id):
         f"{visit.patient.name} sent for {service.name} — covered by {covering_package.service.name}.",
     )
     return redirect("patient_visits", patient_id=visit.patient_id)
+
+
+PATIENT_SEARCH_LIMIT = 8
+
+
+@login_required
+def patient_search_api(request):
+    """Patients matching what has been typed so far, for search-as-you-type
+    boxes. Only the user's own hospital, and only for staff who see patients."""
+    user = request.user
+    if not (user.can_access_reception or user.can_access_doctor or user.can_access_nurse):
+        return JsonResponse({"results": []}, status=403)
+    hospital = get_active_hospital(request)
+    query = (request.GET.get("q") or "").strip()[:100]
+    if hospital is None or not query:
+        return JsonResponse({"results": []})
+    patients = Patient.objects.filter(hospital=hospital)
+    # Every word has to match, so "john ka" finds "John Kato".
+    for word in query.split():
+        patients = patients.filter(Q(name__icontains=word) | Q(contact__icontains=word) | Q(nin__icontains=word))
+    first_word = query.split()[0]
+    patients = (
+        patients.annotate(
+            last_visit=Max("visits__visit_date"),
+            starts=Case(When(name__istartswith=first_word, then=Value(0)), default=Value(1), output_field=IntegerField()),
+        )
+        # Names that start with what was typed come first, then the most recent visitors.
+        .order_by(
+            "starts",
+            F("last_visit").desc(nulls_last=True),
+            "name",
+        )[:PATIENT_SEARCH_LIMIT]
+    )
+    results = []
+    for patient in patients:
+        last = timezone.localtime(patient.last_visit).strftime("%d %b %Y") if patient.last_visit else ""
+        results.append({
+            "id": patient.pk,
+            "name": patient.name,
+            "age": patient.current_age or "",
+            "sex": patient.get_sex_display(),
+            "contact": patient.contact,
+            "last_visit": last,
+        })
+    return JsonResponse({"results": results})

@@ -1,0 +1,59 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ req.reference }} - {{ req.patient.name }}{% endblock %}
+{% block page_title %}Service Request {{ req.reference }}{% endblock %}
+{% block page_subtitle %}{{ req.patient.name }} &mdash; requested by {{ req.doctor_name }}{% endblock %}
+{% block print_header %}{% endblock %}
+{% block extra_css %}
+{% include "partials/print_report_base.html" %}
+{% endblock %}
+
+{% block content %}
+<div class="no-print mb-4 flex flex-wrap gap-2">
+    <button type="button" class="btn btn-primary" onclick="window.print()">Print request</button>
+    <a href="{% url 'service_request_create' %}?patient={{ req.patient.pk }}" class="btn btn-secondary">Another request for {{ req.patient.name }}</a>
+    <a href="{% url 'service_requests' %}" class="btn btn-secondary">All requests</a>
+</div>
+
+<div class="report-block">
+    {% include "partials/print_header.html" with hospital=hospital print_title="Service Request" print_subtitle=req.reference %}
+
+    <div class="report-head-grid">
+        <div><div class="report-field-label">Patient</div><div class="report-field-value">{{ req.patient.name }}</div></div>
+        <div><div class="report-field-label">Age / Sex</div><div class="report-field-value">{{ req.patient.current_age }} / {{ req.patient.get_sex_display }}</div></div>
+        <div><div class="report-field-label">Contact</div><div class="report-field-value">{{ req.patient.contact|default:"—" }}</div></div>
+        <div><div class="report-field-label">Date</div><div class="report-field-value">{{ req.created_at|date:"d M Y, H:i" }}</div></div>
+        <div><div class="report-field-label">Urgency</div><div class="report-field-value">{% if req.urgency == 'urgent' %}<span style="color:#b91c1c;">URGENT</span>{% else %}Routine{% endif %}</div></div>
+        <div><div class="report-field-label">Reference</div><div class="report-field-value">{{ req.reference }}</div></div>
+    </div>
+
+    <div class="report-section-heading">Service requested</div>
+    <div class="report-note-box" style="font-size:1rem; font-weight:700;">{{ req.service }}</div>
+
+    {% if req.facility %}
+    <div class="report-section-heading">To</div>
+    <div class="report-note-box">{{ req.facility }}</div>
+    {% endif %}
+
+    {% if req.clinical_notes %}
+    <div class="report-section-heading">Clinical notes and reason</div>
+    <div class="report-note-box" style="white-space:pre-line;">{{ req.clinical_notes }}</div>
+    {% endif %}
+
+    <div class="report-footer-area">
+        <div class="sig-block">
+            <div>
+                <div class="report-field-label">Requesting doctor</div>
+                <div class="report-field-value">{{ req.doctor_name }}</div>
+                <div class="sig-line">Signature &amp; stamp</div>
+            </div>
+            <div>
+                <div class="report-field-label">Receiving facility</div>
+                <div class="report-field-value">&nbsp;</div>
+                <div class="sig-line">Received by / date</div>
+            </div>
+        </div>
+        {% include "partials/print_footer.html" with hospital=hospital %}
+    </div>
+</div>
+{% endblock %}
