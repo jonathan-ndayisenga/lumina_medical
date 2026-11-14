@@ -691,6 +691,25 @@ class LabResult(models.Model):
         return f"Result for {self.order}"
 
 
+class LabResultAmendment(models.Model):
+    """A change made to a result after it was released. The released version
+    may already have been read or printed, so the old values are kept as they
+    were, with who changed them, when and why."""
+
+    result = models.ForeignKey(LabResult, on_delete=models.CASCADE, related_name="amendments")
+    amended_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    amended_at = models.DateTimeField(auto_now_add=True)
+    reason = models.TextField()
+    previous_values = models.TextField(blank=True)
+    new_values = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["-amended_at", "-id"]
+
+    def __str__(self):
+        return f"Amendment to {self.result.order} at {self.amended_at:%Y-%m-%d %H:%M}"
+
+
 class ResultValue(models.Model):
     """One measured parameter value (PARAMETER_PANEL) OR one antibiotic
     sensitivity row (CULTURE). Range/unit/flag are FROZEN here at save time —

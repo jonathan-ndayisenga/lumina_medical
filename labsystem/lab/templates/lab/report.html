@@ -101,11 +101,12 @@
   {% for order in combined_orders %}
   <div class="mt-4">
     <div class="flex justify-between items-center mb-1">
-      <h3 class="font-bold text-sm">{{ order.test.name }}{% if order.test.code %} ({{ order.test.code }}){% endif %}</h3>
+      <h3 class="font-bold text-sm">{{ order.test.name }}{% if order.test.code %} ({{ order.test.code }}){% endif %}{% if order.result and order.stage != 'pending' and order.stage != 'sample_collected' %}<a href="{% url 'enter_result' order.pk %}" class="no-print text-xs font-semibold underline ml-2">{% if order.stage == 'released' %}Amend result{% else %}Edit result{% endif %}</a>{% endif %}</h3>
       {% if order.stage != 'released' %}
       <span class="report-status-badge" style="background:var(--warn-bg);color:var(--warn);">{{ order.get_stage_display|upper }}</span>
       {% endif %}
     </div>
+    {% for a in order.result.amendments.all %}<p class="text-xs mb-1" style="color:#a12b2b;"><strong>Amended</strong> {{ a.amended_at|date:"d M Y H:i" }}{% if a.amended_by %} by {{ a.amended_by.get_full_name|default:a.amended_by.username }}{% endif %}: {{ a.reason }}</p>{% endfor %}
     {% if order.visit_service.requested_by_display %}
     <p class="text-xs text-text-muted mb-1">Requested By: {{ order.visit_service.requested_by_display }}</p>
     {% endif %}
@@ -153,11 +154,12 @@
 
   <div class="flex justify-between items-center mb-1">
     <div class="text-xs text-text-muted">Branch Code: {{ visit.hospital.report_code_display }}</div>
+    <span>{% if order.result and order.stage != 'pending' and order.stage != 'sample_collected' %}<a href="{% url 'enter_result' order.pk %}" class="no-print text-xs font-semibold underline ml-2">{% if order.stage == 'released' %}Amend result{% else %}Edit result{% endif %}</a>{% endif %}
     {% if order.stage == 'released' %}
-    <span class="report-status-badge" style="background:#d7f5e3;color:#146c3f;">RELEASED</span>
+    <span class="report-status-badge" style="background:#d7f5e3;color:#146c3f;">{% if order.result.amendments.all %}RELEASED · AMENDED{% else %}RELEASED{% endif %}</span>
     {% else %}
     <span class="report-status-badge" style="background:var(--warn-bg);color:var(--warn);">{{ order.get_stage_display|upper }}</span>
-    {% endif %}
+    {% endif %}</span>
   </div>
 
   <div class="report-head-grid">
@@ -222,6 +224,7 @@
   </div>
 
   <h3 class="font-bold mb-2">Result Values</h3>
+  {% for a in order.result.amendments.all %}<p class="text-xs mb-1" style="color:#a12b2b;"><strong>Amended</strong> {{ a.amended_at|date:"d M Y H:i" }}{% if a.amended_by %} by {{ a.amended_by.get_full_name|default:a.amended_by.username }}{% endif %}: {{ a.reason }}</p>{% endfor %}
   {% if not order.result %}
     <p class="text-sm text-text-muted">No result entered yet.</p>
   {% elif order.result.result_type == 'free_entry' %}

@@ -21,6 +21,16 @@
 {% endblock %}
 {% block content %}
 <div class="card" style="max-width:720px;">
+  {% if amending %}
+  <div class="mb-4 rounded-lg border p-3 text-sm" style="border-color:#f1c27d;background:#fff7e8;">
+    <strong>This result has been released.</strong> The doctor may already have it. Your change is recorded with the reason,
+    the old values are kept, the report shows it was amended, and the requesting doctor is notified.
+  </div>
+  {% elif order.stage == 'reviewed' %}
+  <div class="mb-4 rounded-lg border p-3 text-sm" style="border-color:#bcd3f5;background:#eef4fd;">
+    This result was already reviewed. Saving a change sends it back for review before it can be released.
+  </div>
+  {% endif %}
   <form method="post">
     {% csrf_token %}
 
@@ -117,10 +127,31 @@
       {% endfor %}
     {% endif %}
 
+    {% if amending %}
     <div class="mt-6">
-      <button type="submit" class="btn">Save Results</button>
-      <a href="{% url 'queue' %}" class="btn btn-secondary">Cancel</a>
+      <label for="amend_reason" class="block text-sm font-semibold mb-1">Reason for the change (required)</label>
+      <textarea id="amend_reason" name="amend_reason" class="form-control" rows="2" required placeholder="e.g. Wrong value typed; sample re-run">{{ amend_reason }}</textarea>
+    </div>
+    {% endif %}
+
+    <div class="mt-6">
+      <button type="submit" class="btn">{% if amending %}Save amendment{% else %}Save Results{% endif %}</button>
+      <a href="{% if amending or editing %}{% url 'visit_report' visit.pk %}{% else %}{% url 'queue' %}{% endif %}" class="btn btn-secondary">Cancel</a>
     </div>
   </form>
+
+  {% if amendments %}
+  <div class="mt-8">
+    <h3 class="text-sm font-semibold mb-2">Earlier changes</h3>
+    {% for a in amendments %}
+    <div class="mb-3 rounded-lg border p-3 text-sm" style="border-color:var(--border);">
+      <p class="font-semibold">{{ a.amended_at|date:"d M Y H:i" }}{% if a.amended_by %} by {{ a.amended_by.get_full_name|default:a.amended_by.username }}{% endif %}</p>
+      <p class="text-text-muted">Reason: {{ a.reason }}</p>
+      <p class="mt-1"><strong>Before:</strong></p><p class="whitespace-pre-line text-text-muted">{{ a.previous_values|default:"—" }}</p>
+      <p class="mt-1"><strong>After:</strong></p><p class="whitespace-pre-line text-text-muted">{{ a.new_values|default:"—" }}</p>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
 </div>
 {% endblock %}

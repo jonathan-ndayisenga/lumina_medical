@@ -152,6 +152,51 @@ def _to_decimal(raw):
         return None
 
 
+def result_summary(result) -> str:
+    """A result written out as plain lines, for keeping a record of it."""
+    if result is None:
+        return ""
+    if result.result_type == ResultType.FREE_ENTRY:
+        lines = [result.free_text]
+    elif result.result_type == ResultType.DEFINED_OPTION:
+        lines = [result.chosen_option]
+    else:
+        lines = [f"Organism: {result.organism}"] if result.organism else []
+        for v in result.values.all():
+            value = v.value_code or (f"{v.value_num.normalize():f}" if v.value_num is not None else v.value_text)
+            unit = f" {v.unit}" if v.unit else ""
+            flag = f" ({v.get_flag_display()})" if v.flag and v.flag != "N" else ""
+            lines.append(f"{v.label}: {value}{unit}{flag}")
+    if result.bench_notes:
+        lines.append(f"Notes: {result.bench_notes}")
+    return "\n".join(line for line in lines if line)
+
+
+def amend_result(order, user, payload, reason):
+    """Change a released result. It stays released (the doctor already has it),
+    the old values are kept in an amendment record, and who first entered it is
+    not overwritten. Returns the amendment."""
+    from .models import LabResult, LabResultAmendment
+
+    reason = (reason or "").strip()
+    if not reason:
+        raise ValueError("Give the reason for changing a released result.")
+    if order.stage != OrderStage.RELEASED:
+        raise ValueError("Only released results are amended; edit this one directly.")
+    before = LabResult.objects.get(pk=order.result.pk)
+    previous = result_summary(before)
+    entered_by, entered_at = before.entered_by, before.entered_at
+    result = save_results(order, user, payload)
+    result.entered_by, result.entered_at = entered_by, entered_at
+    result.save(update_fields=["entered_by", "entered_at"])
+    order.stage = OrderStage.RELEASED
+    order.save(update_fields=["stage"])
+    return LabResultAmendment.objects.create(
+        result=result, amended_by=user, reason=reason,
+        previous_values=previous, new_values=result_summary(LabResult.objects.get(pk=result.pk)),
+    )
+
+
 def save_results(order, user, payload):
     """
     Persist entered results and freeze presentation.

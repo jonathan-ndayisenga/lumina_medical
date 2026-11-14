@@ -35,7 +35,7 @@ from .models import LabConsumable, LabReport
 # Merged in from the former `lab_next` app — the reworked engine's models.
 from .models import DefinedOption, LabOrder, LabResult, LabTest, OrderStage, ResultType, Sex
 from .guards import release_visit_service_for_lab
-from .services_next import hydrate_entry_form, save_results
+from .services_next import amend_result, hydrate_entry_form, save_results
 
 def _lab_access_ok(user):
     if not user.is_active:
@@ -1254,9 +1254,30 @@ def enter_result(request, order_id):
         messages.error(request, "Collect the sample before entering results.")
         return redirect("pick_sample", order_id=order.pk)
 
+    amending = order.stage == OrderStage.RELEASED
+    editing = order.stage in (OrderStage.ENTERED, OrderStage.REVIEWED)
     if request.method == "POST":
         payload = _payload_from_post(order.test, request.POST)
+        if amending:
+            # A released result is never overwritten silently: it needs a
+            # reason, keeps the old values, and the doctor is told.
+            reason = request.POST.get("amend_reason", "")
+            try:
+                amendment = amend_result(order, request.user, payload, reason)
+            except ValueError as exc:
+                messages.error(request, str(exc))
+                return render(request, "lab/enter_result.html", {
+                    "order": order, "visit": visit, "hydrated": hydrate_entry_form(order),
+                    "amending": True, "amend_reason": reason, "amendments": order.result.amendments.select_related("amended_by"),
+                })
+            _notify_doctor_of_amendment(order, visit, amendment)
+            messages.success(request, f"{order.test.name} amended. The change and its reason are on the report.")
+            return redirect("visit_report", visit_id=visit.pk)
+        was_reviewed = order.stage == OrderStage.REVIEWED
         save_results(order, request.user, payload)
+        if editing:
+            messages.success(request, f"{order.test.name} updated." + (" It needs reviewing again before release." if was_reviewed else ""))
+            return redirect("visit_report", visit_id=visit.pk)
 
         # A bundled service (e.g. "Malaria Test" -> MRDT + B/S) shares one
         # VisitService across several LabOrders -- only mark it performed
@@ -1290,7 +1311,29 @@ def enter_result(request, order_id):
         return redirect("queue")
 
     hydrated = hydrate_entry_form(order)
-    return render(request, "lab/enter_result.html", {"order": order, "visit": visit, "hydrated": hydrated})
+    return render(request, "lab/enter_result.html", {
+        "order": order, "visit": visit, "hydrated": hydrated, "amending": amending, "editing": editing,
+        "amendments": order.result.amendments.select_related("amended_by") if amending else [],
+    })
+
+
+def _notify_doctor_of_amendment(order, visit, amendment):
+    """Tell the doctor who asked for the test that its released result changed."""
+    doctor = order.visit_service.requested_by_user
+    if doctor is None:
+        entry = (
+            QueueEntry.objects.filter(visit=visit, queue_type__in=[QueueEntry.TYPE_LAB_DOCTOR, QueueEntry.TYPE_DOCTOR], requested_by__isnull=False)
+            .order_by("-created_at").first()
+        )
+        doctor = entry.requested_by if entry else None
+    if doctor is None or getattr(doctor, "role", "") != User.ROLE_DOCTOR:
+        return
+    Notification.objects.create(
+        user=doctor, notification_type=Notification.TYPE_LAB_RESULT,
+        title=f"Lab result amended for {visit.patient.name}",
+        message=f"{order.test.name} was changed after release. Reason: {amendment.reason}",
+        reference_id=visit.pk,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -1430,7 +1473,7 @@ def visit_report(request, visit_id):
     orders = (
         LabOrder.objects.filter(visit_service__visit=visit)
         .select_related("test", "result")
-        .prefetch_related("result__values")
+        .prefetch_related("result__values", "result__amendments__amended_by")
         .order_by("created_at")
     )
     if not orders.exists():

@@ -27,6 +27,8 @@ from lab.models import (
 )
 from lab.templatetags.lab_extras import range_flag
 from lab.views import report_needs_doctor_send, send_report_results_to_doctor
+from lab.models import LabResultAmendment
+from doctor.models import Notification
 from reception.models import Patient, QueueEntry, Service, Visit, VisitService
 
 
@@ -1696,3 +1698,70 @@ class ReceptionResultsReadyTests(LabDoctorHandoffTests):
         self.client.post(reverse("reception_results_told", args=[entry.pk]))
         entry.refresh_from_db()
         self.assertIsNone(entry.reception_told_at)
+
+
+class LabResultEditAndAmendTests(LabEngineTestBase):
+    """Results can be fixed at review; a released result is amended with a reason, never overwritten silently."""
+
+    def _entered(self, hgb="14"):
+        visit = self._make_visit("M", "30YRS")
+        order = self._order_for(visit)
+        self._collect_sample(order)
+        self._enter_results(order, hgb=hgb, abx="S", growth="No Significant Growth", protein="Negative", appearance="Clear")
+        return visit, order
+
+    def _post(self, order, hgb, **extra):
+        return self.client.post(reverse("enter_result", args=[order.pk]), {
+            f"param_{self.p_hgb.pk}": hgb, f"param_{self.p_abx.pk}": "S", f"param_{self.p_growth.pk}": "No Significant Growth",
+            f"param_{self.p_protein.pk}": "Negative", f"param_{self.p_appearance.pk}": "Clear", **extra,
+        })
+
+    def _hgb(self, order):
+        return order.result.values.get(parameter=self.p_hgb).value_num
+
+    def test_a_result_can_be_edited_from_the_review_page_before_release(self):
+        visit, order = self._entered("14")
+        page = self.client.get(reverse("visit_report", args=[visit.pk]))
+        self.assertContains(page, "Edit result")
+        response = self._post(order, "15")
+        self.assertRedirects(response, reverse("visit_report", args=[visit.pk]), fetch_redirect_response=False)
+        order.refresh_from_db()
+        self.assertEqual((order.stage, self._hgb(order)), (OrderStage.ENTERED, Decimal("15.000")))
+
+    def test_editing_a_reviewed_result_sends_it_back_for_review(self):
+        visit, order = self._entered()
+        LabOrder.objects.filter(pk=order.pk).update(stage=OrderStage.REVIEWED)
+        self._post(order, "13.5")
+        order.refresh_from_db()
+        self.assertEqual(order.stage, OrderStage.ENTERED)
+
+    def test_a_released_result_needs_a_reason_and_keeps_the_old_values(self):
+        doctor = self.User.objects.create_user(username="amend_doc", password="x", role=self.User.ROLE_DOCTOR, hospital=self.hospital)
+        visit, order = self._entered("14")
+        VisitService.objects.filter(visit=visit).update(requested_by_user=doctor)
+        self.client.post(reverse("visit_report", args=[visit.pk]), {"action": "release"})
+        order.refresh_from_db()
+        self.assertEqual(order.stage, OrderStage.RELEASED)
+        first_entry = order.result.entered_by
+        self.assertContains(self.client.get(reverse("visit_report", args=[visit.pk])), "Amend result")
+        self.assertContains(self.client.get(reverse("enter_result", args=[order.pk])), "This result has been released")
+
+        self._post(order, "9")
+        order.refresh_from_db()
+        self.assertEqual(self._hgb(order), Decimal("14.000"), "no reason, no change")
+        self.assertFalse(LabResultAmendment.objects.exists())
+
+        self._post(order, "9", amend_reason="Wrong value typed")
+        order.refresh_from_db()
+        self.assertEqual((order.stage, self._hgb(order)), (OrderStage.RELEASED, Decimal("9.000")))
+        self.assertEqual(order.result.entered_by, first_entry)
+        amendment = LabResultAmendment.objects.get()
+        self.assertIn("Hemoglobin: 14 g/dL", amendment.previous_values)
+        self.assertIn("Hemoglobin: 9 g/dL (Low)", amendment.new_values)
+        self.assertEqual((amendment.reason, amendment.amended_by), ("Wrong value typed", self.lab_user))
+        note = Notification.objects.get(user=doctor)
+        self.assertIn("amended", note.title)
+        self.assertIn("Wrong value typed", note.message)
+        report = self.client.get(reverse("visit_report", args=[visit.pk]))
+        self.assertContains(report, "RELEASED · AMENDED")
+        self.assertContains(report, "Wrong value typed")
