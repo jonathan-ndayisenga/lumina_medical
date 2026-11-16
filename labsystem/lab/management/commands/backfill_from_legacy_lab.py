@@ -127,7 +127,7 @@ class Command(BaseCommand):
             test=test,
             hospital=report.visit.hospital,
             patient_sex={"M": Sex.MALE, "F": Sex.FEMALE}.get(patient.sex, Sex.ANY),
-            patient_age_years=_parse_age_years(patient.age),
+            patient_age_years=patient.age_years_at() if patient.age_years_at() is not None else _parse_age_years(patient.age),
             stage=OrderStage.RELEASED if (report.sent_to_doctor or report.printed) else OrderStage.ENTERED,
             collected_at=report.sample_date,
             created_at=report.created_at,

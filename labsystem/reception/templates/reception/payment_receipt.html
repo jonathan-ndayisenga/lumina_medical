@@ -39,7 +39,34 @@
        72mm across and a 58mm one about 48mm. Wider gets the figures cut off. */
     body[data-paper-size="58mm"] .receipt { width: 48mm; padding: 0 1mm; font-size: 10px; page: thermal58; }
     body[data-paper-size="80mm"] .receipt { width: 72mm; padding: 0 1mm; page: thermal80; }
-    body[data-paper-size="a4"] .receipt { width: 100%; font-size: 14px; page: a4page; }
+    /* A4 has its own full-page layout (.a4-receipt); the roll layout is for 58/80mm. */
+    body[data-paper-size="a4"] .receipt { display: none; }
+    body:not([data-paper-size="a4"]) .a4-receipt { display: none; }
+    body[data-paper-size="a4"] .sheet { max-width: 860px; }
+
+    .a4-receipt { margin: 20px auto 0; padding: 14mm 14mm 10mm; background: #fff; border: 1px solid #E4E2DB; border-radius: 8px; color: #15202E; font-family: 'Hanken Grotesk', Arial, sans-serif; font-size: 10.5pt; line-height: 1.45; page: a4page; }
+    .a4-receipt .print-header { border-bottom: 2px solid #15202E; }
+    .a4-info { display: grid; grid-template-columns: 1fr 1fr; gap: 0 10mm; margin: 2mm 0 6mm; }
+    .a4-info dl { display: grid; grid-template-columns: auto 1fr; gap: 1.2mm 4mm; margin: 0; }
+    .a4-info dt { color: #5B6472; font-size: 9pt; text-transform: uppercase; letter-spacing: .04em; padding-top: .4mm; }
+    .a4-info dd { margin: 0; font-weight: 600; }
+    .a4-items { width: 100%; border-collapse: collapse; margin-bottom: 5mm; }
+    .a4-items th { text-align: left; font-size: 9pt; text-transform: uppercase; letter-spacing: .04em; color: #5B6472; border-bottom: 1.5px solid #15202E; padding: 2mm 2mm; }
+    .a4-items td { padding: 2mm 2mm; border-bottom: 1px solid #E4E2DB; vertical-align: top; }
+    .a4-items .num { width: 10mm; color: #5B6472; }
+    .a4-items .amt { text-align: right; white-space: nowrap; width: 38mm; }
+    .a4-items .group td { font-weight: 700; background: #F4F3EF; border-bottom: 0; padding-top: 1.5mm; padding-bottom: 1.5mm; }
+    .a4-bottom { display: flex; justify-content: space-between; align-items: flex-start; gap: 10mm; }
+    .a4-note { flex: 1; font-size: 9.5pt; color: #3A4554; }
+    .a4-totals { width: 82mm; border: 1.5px solid #15202E; border-radius: 4px; }
+    .a4-totals div { display: flex; justify-content: space-between; gap: 4mm; padding: 1.8mm 3mm; border-bottom: 1px solid #E4E2DB; }
+    .a4-totals div:last-child { border-bottom: 0; }
+    .a4-totals .paid { font-size: 13pt; font-weight: 700; background: #F4F3EF; }
+    .a4-totals .due { font-weight: 700; }
+    .a4-sign { display: grid; grid-template-columns: 1fr 1fr; gap: 14mm; margin: 16mm 0 6mm; font-size: 9pt; color: #5B6472; }
+    .a4-sign div { border-top: 1px solid #15202E; padding-top: 1.5mm; }
+    .a4-thanks { text-align: center; font-weight: 600; margin: 4mm 0; }
+    .a4-receipt .report-footer { text-align: center; border-top: 1px solid #E4E2DB; padding-top: 2mm; font-size: 8.5pt; color: #6b7280; }
     .receipt .rule { border-top: 1px solid #E4E2DB; margin: 8px 0; }
     .receipt .row { display: flex; justify-content: space-between; gap: 8px; text-align: left; }
     .receipt .row span:first-child { flex: 1; min-width: 0; }
@@ -58,6 +85,7 @@
         .sheet-head, .field, .sheet-foot { display: none !important; }
         .sheet, .sheet-body { display: block; height: auto; max-width: none; overflow: visible; padding: 0; }
         .receipt { margin: 0 auto; }
+        .a4-receipt { margin: 0; padding: 0; border: 0; border-radius: 0; }
         /* Thermal printers need heavier strokes to stay legible. */
         body:not([data-paper-size="a4"]) .receipt { font-weight: 700; }
         .receipt .rule { border-top-color: #000; }
@@ -79,7 +107,7 @@
     <div class="sheet-body">
         <div class="field">
             <label for="paperSizeSelect">Paper Size</label>
-            <select id="paperSizeSelect" onchange="document.body.setAttribute('data-paper-size', this.value)">
+            <select id="paperSizeSelect" data-paper-select onchange="document.body.setAttribute('data-paper-size', this.value)">
                 <option value="58mm">58mm (Small)</option>
                 <option value="80mm" selected>80mm (Standard)</option>
                 <option value="a4">A4 (Full Page)</option>
@@ -117,6 +145,57 @@
             {% if payment.notes %}<div>Note : {{ payment.notes|truncatechars:80 }}</div>{% endif %}
             <div class="rule"></div>
             <div><b>Thank you. Get well soon.</b></div>
+        </div>
+
+        {# A4: a full-page receipt for an office printer. #}
+        <div class="a4-receipt">
+            {% include "partials/print_header.html" with hospital=hospital print_title="Payment Receipt" print_subtitle=payment.receipt_number %}
+            <div class="a4-info">
+                <dl>
+                    <dt>Receipt No</dt><dd>{{ payment.receipt_number }}</dd>
+                    <dt>Date paid</dt><dd>{{ payment.paid_at|date:"j M Y, g:i A" }}</dd>
+                    <dt>Paid by</dt><dd>{{ payment.get_mode_display }}{% if payment.mode == "card" and payment.bank_account %} · {{ payment.bank_account }}{% elif payment.mode == "mobile_money" and payment.mobile_account %} · {{ payment.mobile_account }}{% endif %}</dd>
+                    <dt>Received by</dt><dd>{% if payment.recorded_by %}{{ payment.recorded_by.get_full_name|default:payment.recorded_by.username }}{% else %}-{% endif %}</dd>
+                </dl>
+                <dl>
+                    <dt>Patient</dt><dd>{{ visit.patient.name }}</dd>
+                    <dt>Age / Sex</dt><dd>{{ visit.patient|age_at:visit.visit_date }} / {{ visit.patient.get_sex_display }}</dd>
+                    <dt>Visit</dt><dd>#{{ visit.id }} · {{ visit.visit_date|date:"j M Y" }}</dd>
+                    {% if visit.patient.contact %}<dt>Contact</dt><dd>{{ visit.patient.contact }}</dd>{% endif %}
+                </dl>
+            </div>
+
+            <table class="a4-items">
+                <thead><tr><th class="num">#</th><th>Description</th><th class="amt">Amount (UGX)</th></tr></thead>
+                <tbody>
+                    {% if service_items and drug_items %}<tr class="group"><td colspan="3">Services</td></tr>{% endif %}
+                    {% for item in service_items %}
+                    <tr><td class="num">{{ forloop.counter }}</td><td>{{ item.name }}</td><td class="amt">{% if item.label %}{{ item.label }}{% else %}{{ item.price|floatformat:"-2g" }}{% endif %}</td></tr>
+                    {% endfor %}
+                    {% if service_items and drug_items %}<tr class="group"><td colspan="3">Medicines</td></tr>{% endif %}
+                    {% for item in drug_items %}
+                    <tr><td class="num">{{ forloop.counter }}</td><td>{{ item.name }}</td><td class="amt">{{ item.price|floatformat:"-2g" }}</td></tr>
+                    {% endfor %}
+                    {% if not service_items and not drug_items %}<tr><td></td><td>(no items)</td><td></td></tr>{% endif %}
+                </tbody>
+            </table>
+
+            <div class="a4-bottom">
+                <div class="a4-note">{% if payment.notes %}<b>Note:</b> {{ payment.notes }}{% endif %}</div>
+                <div class="a4-totals">
+                    <div><span>Total bill</span><span>UGX {{ visit.total_amount|floatformat:"-2g" }}</span></div>
+                    <div class="paid"><span>Amount paid</span><span>UGX {{ payment.amount_paid|floatformat:"-2g" }}</span></div>
+                    <div><span>Total paid so far</span><span>UGX {{ total_paid|floatformat:"-2g" }}</span></div>
+                    <div class="due"><span>Balance</span><span>UGX {{ balance_due|floatformat:"-2g" }}</span></div>
+                </div>
+            </div>
+
+            <div class="a4-sign">
+                <div>Received by (cashier)</div>
+                <div>Patient / payer signature</div>
+            </div>
+            <div class="a4-thanks">Thank you. Get well soon.</div>
+            {% include "partials/print_footer.html" with hospital=hospital %}
         </div>
     </div>
 

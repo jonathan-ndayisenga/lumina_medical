@@ -9,6 +9,53 @@ from django.utils import timezone
 from accounts.models import Hospital
 
 
+AGE_TEXT_RE = re.compile(r"^\s*(\d*\.?\d+)\s*([A-Z]+)?\s*$")
+
+
+def parse_age_text(age_text):
+    """'22YRS' -> (Decimal('22'), 'YRS'); '6 mth' -> (6, 'MTH'). Unknown units
+    read as years. Returns (None, None) when the text has no number."""
+    match = AGE_TEXT_RE.match((age_text or "").strip().upper())
+    if not match:
+        return None, None
+    unit = match.group(2) or "YRS"
+    if unit.startswith("D"):
+        unit = "DAYS"
+    elif unit.startswith("W"):
+        unit = "WKS"
+    elif unit.startswith("M"):
+        unit = "MTH"
+    else:
+        unit = "YRS"
+    return Decimal(match.group(1)), unit
+
+
+def _months_before(day, months):
+    """The same day-of-month `months` earlier, clamped to the month's end."""
+    import calendar
+    total = day.year * 12 + (day.month - 1) - months
+    year, month = divmod(total, 12)
+    month += 1
+    return day.replace(year=year, month=month, day=min(day.day, calendar.monthrange(year, month)[1]))
+
+
+def estimate_birth_date(value, unit, reference):
+    """Date of birth for someone who was `value` `unit` old on `reference`.
+    Keeps the reference's day of the month, so a baby registered at 6 months
+    on the 20th turns 7 months on the 20th, not on the 1st."""
+    from datetime import timedelta
+    if value is None:
+        return None
+    value = Decimal(value)
+    if unit == "DAYS":
+        return reference - timedelta(days=int(value))
+    if unit == "WKS":
+        return reference - timedelta(days=int(value * 7))
+    if unit == "MTH":
+        return _months_before(reference, int(value))
+    return _months_before(reference, int(value * 12))
+
+
 def hospital_initials(name: str, fallback: str = "RCT") -> str:
     """Extract uppercase initials from a hospital name.
     'Lumina Medical Services' -> 'LMS'
@@ -68,12 +115,33 @@ class Patient(models.Model):
 
     # ── Age helpers ───────────────────────────────────────────────────────────
 
+    @property
+    def estimated_date_of_birth(self):
+        """The real date of birth, or one worked out from the age typed at
+        registration and the day it was typed, so the age still moves on."""
+        if self.date_of_birth:
+            return self.date_of_birth
+        value, unit = parse_age_text(self.age)
+        if value is None:
+            return None
+        recorded = timezone.localtime(self.created_at).date() if self.created_at else timezone.localdate()
+        return estimate_birth_date(value, unit, recorded)
+
+    def age_years_at(self, reference_date=None):
+        """Whole years of age on reference_date (today by default), or None."""
+        dob = self.estimated_date_of_birth
+        if not dob:
+            return None
+        ref = reference_date or timezone.localdate()
+        return max(ref.year - dob.year - ((ref.month, ref.day) < (dob.month, dob.day)), 0)
+
     def _age_string(self, reference_date):
-        """Human-readable age from date_of_birth vs reference_date.
-        Falls back to stored `age` CharField when DOB is unavailable."""
-        if not self.date_of_birth:
+        """Human-readable age from the date of birth vs reference_date. Without
+        a date of birth the registered age is carried forward from the day it
+        was recorded (see estimated_date_of_birth)."""
+        dob = self.estimated_date_of_birth
+        if not dob:
             return self.age
-        dob = self.date_of_birth
         years = reference_date.year - dob.year - (
             (reference_date.month, reference_date.day) < (dob.month, dob.day)
         )

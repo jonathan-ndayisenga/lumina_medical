@@ -368,7 +368,10 @@
             text-transform: uppercase;
         }
 
-        @media (max-width: 1024px) {
+        /* Screens only: on paper a table must stay a table and span the page
+           (an A4 sheet is narrower than 1024px, so without "screen" this
+           squeezed every printed table to its content). */
+        @media screen and (max-width: 1024px) {
             table {
                 display: block;
                 overflow-x: auto;

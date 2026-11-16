@@ -22,3 +22,26 @@
 
   window.addEventListener('beforeprint', fitPageToReceipt);
 })();
+
+// The paper-size dropdown: each computer remembers the paper it last printed
+// on, so a desk with an A4 printer doesn't have to pick A4 for every receipt.
+(function () {
+  const KEY = 'ternah.receiptPaperSize';
+  const SIZES = ['58mm', '80mm', 'a4'];
+
+  function setUp() {
+    const select = document.querySelector('[data-paper-select]');
+    if (!select) return;
+    let saved = null;
+    try { saved = window.localStorage.getItem(KEY); } catch (e) { /* storage blocked */ }
+    if (SIZES.indexOf(saved) !== -1) select.value = saved;
+    document.body.setAttribute('data-paper-size', select.value);
+    select.addEventListener('change', function () {
+      document.body.setAttribute('data-paper-size', select.value);
+      try { window.localStorage.setItem(KEY, select.value); } catch (e) { /* storage blocked */ }
+    });
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', setUp);
+  else setUp();
+})();

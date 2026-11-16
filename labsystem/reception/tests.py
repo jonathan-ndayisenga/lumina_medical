@@ -1983,6 +1983,53 @@ class PatientAgeDisplayTests(TestCase):
         self.assertNotIn("1YRS", body)
 
 
+    def _recorded_days_ago(self, patient, days):
+        Patient.objects.filter(pk=patient.pk).update(created_at=timezone.now() - timedelta(days=days))
+        patient.refresh_from_db()
+        return patient
+
+    def test_age_without_dob_moves_on_from_the_day_it_was_recorded(self):
+        """Patients with only a typed age (no DOB) used to show that age for
+        ever. It now counts on from the day the age was recorded."""
+        baby = Patient.objects.create(hospital=self.hospital, name="No DOB Baby", age="5DAYS", sex="F")
+        self.assertEqual(baby.current_age, "5 days")
+        baby = self._recorded_days_ago(baby, 10)
+        self.assertEqual(baby.current_age, "2 wks")
+
+        infant = Patient.objects.create(hospital=self.hospital, name="No DOB Infant", age="3MTH", sex="M")
+        infant = self._recorded_days_ago(infant, 65)
+        self.assertEqual(infant.current_age, "5 mo")
+
+        adult = Patient.objects.create(hospital=self.hospital, name="No DOB Adult", age="30YRS", sex="M")
+        adult = self._recorded_days_ago(adult, 366 * 2)
+        self.assertEqual(adult.current_age, "32 yrs")
+        self.assertEqual(adult.age_years_at(), 32)
+
+    def test_unreadable_age_text_is_shown_as_typed(self):
+        odd = Patient.objects.create(hospital=self.hospital, name="Odd Age", age="unknown", sex="M")
+        self.assertEqual(odd.current_age, "unknown")
+        self.assertIsNone(odd.age_years_at())
+
+    def test_age_entered_in_months_keeps_the_day_of_the_month(self):
+        """A baby registered at 6 months turns 7 months on the same day of the
+        month, not on the 1st (the old estimate jumped early)."""
+        from reception.models import estimate_birth_date
+
+        self.assertEqual(estimate_birth_date(Decimal("6"), "MTH", date(2026, 11, 20)), date(2026, 5, 20))
+        self.assertEqual(estimate_birth_date(Decimal("1"), "MTH", date(2026, 3, 31)), date(2026, 2, 28))
+        self.assertEqual(estimate_birth_date(Decimal("1.5"), "YRS", date(2026, 11, 16)), date(2025, 5, 16))
+        self.assertEqual(estimate_birth_date(Decimal("3"), "WKS", date(2026, 11, 16)), date(2026, 10, 26))
+
+        from reception.forms import PatientForm
+        today = timezone.localdate()
+        form = PatientForm(data={
+            "name": "Month Baby", "registration_date": today.isoformat(),
+            "age_value": "6", "age_unit": "MTH", "sex": "F",
+        })
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertEqual(form.cleaned_data["date_of_birth"], estimate_birth_date(Decimal("6"), "MTH", today))
+
+
 class PatientRegistrationAddressTests(TestCase):
     def setUp(self):
         plan = SubscriptionPlan.objects.create(

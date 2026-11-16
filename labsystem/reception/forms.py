@@ -1,4 +1,3 @@
-from datetime import timedelta
 from decimal import Decimal, InvalidOperation
 import re
 
@@ -7,7 +6,7 @@ from django.utils import timezone
 
 from doctor.models import Prescription
 
-from .models import Patient, Payment, Service, Visit, VisitService
+from .models import Patient, Payment, Service, Visit, VisitService, estimate_birth_date
 
 
 AGE_UNIT_CHOICES = [
@@ -160,27 +159,7 @@ class PatientForm(forms.ModelForm):
                 age_val_decimal = None
                 
             if age_val_decimal is not None:
-                if age_unit == "DAYS":
-                    cleaned["date_of_birth"] = today - timedelta(days=int(age_val_decimal))
-                elif age_unit == "WKS":
-                    cleaned["date_of_birth"] = today - timedelta(days=int(age_val_decimal * 7))
-                elif age_unit == "MTH":
-                    total_months = int(age_val_decimal)
-                    year = today.year
-                    month = today.month - total_months
-                    while month <= 0:
-                        month += 12
-                        year -= 1
-                    cleaned["date_of_birth"] = timezone.datetime(year, month, 1).date()
-                else:
-                    # Handle decimal years (e.g. 1.5 years = 18 months)
-                    total_months = int(age_val_decimal * 12)
-                    year = today.year
-                    month = today.month - total_months
-                    while month <= 0:
-                        month += 12
-                        year -= 1
-                    cleaned["date_of_birth"] = timezone.datetime(year, month, 1).date()
+                cleaned["date_of_birth"] = estimate_birth_date(age_val_decimal, age_unit, today)
 
                 # Store the exact string as entered (e.g. 1.5YRS, 18MTH, 3WKS, 5DAYS)
                 # Remove trailing zeros for clean display if it's a whole number

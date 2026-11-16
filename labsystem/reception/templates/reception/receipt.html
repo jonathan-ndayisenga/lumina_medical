@@ -282,26 +282,25 @@
         line-height: 0.95;
     }
     
-    /* Hide elements not needed for print */
-    .grid {
+    /* The thermal view needs none of the page layout. */
+    body:not([data-paper-size="a4"]) .grid,
+    body:not([data-paper-size="a4"]) .md\:grid-cols-2 {
         display: block !important;
     }
-    .md\:grid-cols-2 {
-        display: block !important;
-    }
-    .gap-6, .space-y-6, .space-y-1, .divide-y {
+    body:not([data-paper-size="a4"]) :is(.gap-6, .space-y-6, .space-y-1, .divide-y) {
         margin: 0 !important;
         padding: 0 !important;
     }
     .overflow-x-auto {
         overflow: visible !important;
     }
-    table thead {
-        display: none;
-    }
-    thead tr {
-        display: none !important;
-    }
+
+    /* A4: white paper, the two detail columns side by side, full-width tables. */
+    html:has(body[data-paper-size="a4"]), body[data-paper-size="a4"],
+    body[data-paper-size="a4"] main, body[data-paper-size="a4"] main * { background: #fff !important; }
+    body[data-paper-size="a4"] .receipt-card .grid { display: grid !important; grid-template-columns: 1fr 1fr !important; }
+    body[data-paper-size="a4"] .receipt-card table { width: 100% !important; }
+    body[data-paper-size="a4"] .receipt-card { padding: 0 !important; border-radius: 0 !important; }
     .uppercase {
         text-transform: uppercase;
     }
@@ -319,7 +318,7 @@
 
     <div class="paper-size-field">
         <label for="receiptPaperSize">Paper Size</label>
-        <select id="receiptPaperSize" class="form-control" onchange="document.body.setAttribute('data-paper-size', this.value)">
+        <select id="receiptPaperSize" class="form-control" data-paper-select onchange="document.body.setAttribute('data-paper-size', this.value)">
             <option value="58mm">58mm (Small)</option>
             <option value="80mm" selected>80mm (Standard)</option>
             <option value="a4">A4 (Full Page)</option>
@@ -345,7 +344,7 @@
 
     <!-- SCREEN VIEW - Normal Card Layout -->
     <div class="card receipt-card space-y-6 no-print">
-        {% include "partials/print_header.html" with hospital=hospital print_title="VISIT BILLING SUMMARY" print_subtitle=visit.id %}
+        {% with visit_ref=visit.id|stringformat:"s" %}{% include "partials/print_header.html" with hospital=hospital print_title="VISIT BILLING SUMMARY" print_subtitle="Visit #"|add:visit_ref %}{% endwith %}
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm">
             <div>
@@ -361,9 +360,9 @@
             <div>
                 <h3 class="font-semibold text-text-main mb-2">Payment Details</h3>
                 <div class="space-y-1 text-text-muted">
-                    <p><strong class="text-text-main">Total Bill:</strong> {{ visit.total_amount }}</p>
-                    <p><strong class="text-text-main">Total Paid:</strong> {{ total_paid|default:"0.00" }}</p>
-                    <p><strong class="text-text-main">Balance:</strong> {{ balance_due|default:visit.total_amount }}</p>
+                    <p><strong class="text-text-main">Total Bill:</strong> UGX {{ visit.total_amount|floatformat:"-2g" }}</p>
+                    <p><strong class="text-text-main">Total Paid:</strong> UGX {{ total_paid|default_if_none:0|floatformat:"-2g" }}</p>
+                    <p><strong class="text-text-main">Balance:</strong> UGX {{ balance_due|default_if_none:visit.total_amount|floatformat:"-2g" }}</p>
                     <p><strong class="text-text-main">Latest Receipt:</strong> {% if payment %}{{ payment.receipt_number }}{% else %}-{% endif %}</p>
                 </div>
             </div>
@@ -388,7 +387,7 @@
                                 <td class="py-3 pr-4 text-text-main font-semibold">{{ p.receipt_number }}</td>
                                 <td class="py-3 pr-4 text-text-muted">{% if p.paid_at %}{{ p.paid_at|date:"Y-m-d H:i" }}{% else %}-{% endif %}</td>
                                 <td class="py-3 pr-4 text-text-muted">{{ p.get_mode_display }}</td>
-                                <td class="py-3 text-right text-text-main">{{ p.amount_paid }}</td>
+                                <td class="py-3 text-right text-text-main">{{ p.amount_paid|floatformat:"-2g" }}</td>
                                 <td class="py-3 pr-4 text-text-muted">
                                     {% if p.mode == "card" %}{{ p.bank_account|default:"-" }}
                                     {% elif p.mode == "mobile_money" %}{{ p.mobile_account|default:"-" }}
@@ -421,7 +420,7 @@
                             <tr>
                                 <td class="py-3 pr-4 text-text-main">{{ item.service.name }}</td>
                                 <td class="py-3 pr-4 text-text-muted">{{ item.service.get_category_display }}</td>
-                                <td class="py-3 text-right text-text-main">{{ item.billing_label }}</td>
+                                <td class="py-3 text-right text-text-main">{% if item.is_charged %}{{ item.price_at_time|floatformat:"-2g" }}{% else %}{{ item.billing_label }}{% endif %}</td>
                             </tr>
                         {% empty %}
                             <tr><td colspan="3" class="py-4 text-center text-text-muted italic">No services billed.</td></tr>
@@ -430,7 +429,7 @@
                     <tfoot>
                         <tr class="border-t border-gray-200">
                             <td colspan="2" class="pt-3 font-semibold text-text-main">Total</td>
-                            <td class="pt-3 text-right font-semibold text-text-main">{{ visit.total_amount }}</td>
+                            <td class="pt-3 text-right font-semibold text-text-main">UGX {{ visit.total_amount|floatformat:"-2g" }}</td>
                         </tr>
                     </tfoot>
                 </table>
@@ -459,7 +458,7 @@
         <div class="receipt-info-row"><span class="receipt-info-label">Age:</span><span class="receipt-info-value">{{ visit.patient|age_at:visit.visit_date }}{{ visit.patient.get_sex_display|slice:":1" }}</span></div>
         <div class="receipt-separator"></div>
         <div class="receipt-section-title">Services</div>
-        <table class="receipt-items-table">{% for item in non_pharmacy_services %}<tr><td class="item-name">{{ item.service.name }}</td><td class="item-price">{{ item.billing_label }}</td></tr>{% endfor %}</table>
+        <table class="receipt-items-table">{% for item in non_pharmacy_services %}<tr><td class="item-name">{{ item.service.name }}</td><td class="item-price">{% if item.is_charged %}{{ item.price_at_time|floatformat:"-2g" }}{% else %}{{ item.billing_label }}{% endif %}</td></tr>{% endfor %}</table>
         <div class="receipt-items-separator"></div>
         <div class="receipt-info-row receipt-total tr-big"><span>TOTAL:</span><span>UGX {{ visit.total_amount|floatformat:"-2g" }}</span></div>
         <div class="receipt-separator"></div>
@@ -471,8 +470,5 @@
 {% endblock %}
 
 {% block extra_js %}
-<script>
-document.body.setAttribute('data-paper-size', '80mm');
-</script>
 <script src="{% static 'js/thermal-print.js' %}"></script>
 {% endblock %}

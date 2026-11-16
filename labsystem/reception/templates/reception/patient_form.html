@@ -30,7 +30,7 @@
                 <div class="flex items-center justify-between gap-3 rounded-lg bg-white border border-red-200 px-3 py-2">
                     <div>
                         <span class="font-semibold text-sm text-text-main">{{ dp.name }}</span>
-                        <span class="ml-2 text-xs text-text-muted">{{ dp.get_sex_display }} · {{ dp.age|default:"age unknown" }}</span>
+                        <span class="ml-2 text-xs text-text-muted">{{ dp.get_sex_display }} · {{ dp.current_age|default:"age unknown" }}</span>
                         {% if dp.contact %}<span class="ml-2 text-xs text-text-muted">{{ dp.contact }}</span>{% endif %}
                         {% if dp.nin %}<span class="ml-2 text-xs text-text-muted">NIN: {{ dp.nin }}</span>{% endif %}
                         <span class="ml-2 text-xs text-text-muted">{{ dp.visit_count }} visit{{ dp.visit_count|pluralize }}</span>
@@ -56,7 +56,7 @@
                 <div class="flex items-center justify-between gap-3 rounded-lg bg-white border border-amber-200 px-3 py-2">
                     <div>
                         <span class="font-semibold text-sm text-text-main">{{ dp.name }}</span>
-                        <span class="ml-2 text-xs text-text-muted">{{ dp.get_sex_display }} · {{ dp.age|default:"age unknown" }}</span>
+                        <span class="ml-2 text-xs text-text-muted">{{ dp.get_sex_display }} · {{ dp.current_age|default:"age unknown" }}</span>
                         {% if dp.contact %}<span class="ml-2 text-xs text-text-muted">{{ dp.contact }}</span>{% endif %}
                         <span class="ml-2 text-xs text-text-muted">{{ dp.visit_count }} visit{{ dp.visit_count|pluralize }}</span>
                     </div>

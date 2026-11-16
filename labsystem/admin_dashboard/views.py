@@ -2432,7 +2432,7 @@ def report_consultations(request):
                 i,
                 c.created_at.strftime("%Y-%m-%d %H:%M"),
                 c.visit.patient.name,
-                c.visit.patient.age,
+                c.visit.patient.age_at(c.created_at),
                 c.visit.patient.get_sex_display(),
                 c.created_by.get_full_name() if c.created_by else "—",
                 c.follow_up_date or "",
@@ -2586,10 +2586,8 @@ def patient_demographic_report(request):
         patients = patients.filter(registration_date__gte=start, registration_date__lte=end)
 
     def age_bucket(patient):
-        dob = patient.date_of_birth
-        if dob:
-            delta = timezone.localdate() - dob
-            years = delta.days // 365
+        years = patient.age_years_at()
+        if years is not None:
             if years < 2:
                 return "Baby"
             if years < 18:

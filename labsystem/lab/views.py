@@ -415,7 +415,7 @@ def report_list(request):
             if order_technician:
                 pd['technician'] = order_technician
         if not pd['age']:
-            pd['age'] = patient.age
+            pd['age'] = patient.age_at(order.created_at)
             pd['sex'] = patient.get_sex_display()
 
     # ---- Merge both sources into one row per patient ----
@@ -1053,6 +1053,14 @@ def _parse_age_years(age_str):
     return value
 
 
+def _patient_age_years(patient):
+    """Age in whole years today, for matching reference ranges -- from the
+    date of birth, so a child registered years ago isn't matched at the age
+    they were then."""
+    years = patient.age_years_at()
+    return years if years is not None else _parse_age_years(patient.age)
+
+
 def _pending_lab_visit_services(visit):
     return (
         VisitService.objects.filter(visit=visit, service__category=Service.CATEGORY_LAB, performed=False)
@@ -1084,7 +1092,7 @@ def _ensure_orders_for_visit(visit):
                 test=test,
                 hospital=visit.hospital,
                 patient_sex={"M": Sex.MALE, "F": Sex.FEMALE}.get(patient.sex, Sex.ANY),
-                patient_age_years=_parse_age_years(patient.age),
+                patient_age_years=_patient_age_years(patient),
             )
     return unmapped
 
