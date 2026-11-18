@@ -382,8 +382,10 @@ class User(AbstractUser):
         elif self.role == self.ROLE_OWNER:
             # Org-scoped, not hospital-scoped — mirrors superadmin's
             # "no single hospital" shape, just bounded to one organization.
+            # is_staff stays off: it opens Django's /admin/ and once let every
+            # role through the lab permission check. Only superadmins have it.
             self.hospital = None
-            self.is_staff = True
+            self.is_staff = False
             self.is_superuser = False
         elif self.role in {
             self.ROLE_HOSPITAL_ADMIN,
@@ -394,7 +396,7 @@ class User(AbstractUser):
             self.ROLE_NURSE,
         }:
             self.organization = None
-            self.is_staff = True
+            self.is_staff = False
             self.is_superuser = False
         super().save(*args, **kwargs)
 
@@ -705,12 +707,12 @@ class HospitalSubscriptionPayment(models.Model):
 
     def save(self, *args, **kwargs):
         if not self.receipt_number:
-            from django.utils.timezone import now as _now
-            stamp = _now().strftime("%Y%m%d")
-            last = HospitalSubscriptionPayment.objects.filter(
-                receipt_number__startswith=f"TH-RCT-{stamp}"
-            ).count()
-            self.receipt_number = f"TH-RCT-{stamp}-{str(last + 1).zfill(4)}"
+            from django.utils.timezone import localdate
+
+            from labsystem.numbering import save_with_number
+
+            prefix = f"TH-RCT-{localdate():%Y%m%d}-"
+            return save_with_number(self, "receipt_number", prefix, lambda: super(HospitalSubscriptionPayment, self).save(*args, **kwargs))
         super().save(*args, **kwargs)
 
 
@@ -742,12 +744,12 @@ class HospitalInvoice(models.Model):
 
     def save(self, *args, **kwargs):
         if not self.invoice_number:
-            from django.utils.timezone import now as _now
-            stamp = _now().strftime("%Y%m%d")
-            last = HospitalInvoice.objects.filter(
-                invoice_number__startswith=f"INV-{stamp}"
-            ).count()
-            self.invoice_number = f"INV-{stamp}-{str(last + 1).zfill(4)}"
+            from django.utils.timezone import localdate
+
+            from labsystem.numbering import save_with_number
+
+            prefix = f"INV-{localdate():%Y%m%d}-"
+            return save_with_number(self, "invoice_number", prefix, lambda: super(HospitalInvoice, self).save(*args, **kwargs))
         super().save(*args, **kwargs)
 
 

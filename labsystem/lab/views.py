@@ -3,9 +3,10 @@ import json
 from datetime import date
 from decimal import Decimal
 
+from labsystem.safe_json import script_json
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, user_passes_test
-from django.core.exceptions import ValidationError as DjangoValidationError
+from django.core.exceptions import PermissionDenied, ValidationError as DjangoValidationError
 from django.core.paginator import Paginator
 from django.db import transaction
 from django.db.models import Count, Q
@@ -36,27 +37,38 @@ from .models import LabConsumable, LabReport
 from .models import DefinedOption, LabOrder, LabResult, LabTest, OrderStage, ResultType, Sex
 from .guards import release_visit_service_for_lab
 from .services_next import amend_result, hydrate_entry_form, save_results
+from labsystem.tenancy import scope_to_hospital
+
 
 def _lab_access_ok(user):
+    """Lab work (samples, results, release, settings). Only lab staff, hospital
+    admins and superadmins. Not `is_staff`: User.save() sets that for every
+    hospital role, which once let receptionists and accountants amend results."""
     if not user.is_active:
         return False
     if user.is_superuser:
         return True
-    # Existing role-based access.
     if getattr(user, "role", "") in {
         User.ROLE_SUPERADMIN,
         User.ROLE_HOSPITAL_ADMIN,
         User.ROLE_LAB_ATTENDANT,
     }:
         return True
-    # Multi-role access via groups.
-    if user.groups.filter(name="Lab").exists():
+    return user.groups.filter(name="Lab").exists()
+
+
+def _lab_report_reader_ok(user):
+    """Reading a finished report: lab staff, plus the doctors who ordered the
+    tests and open the report from the consultation page."""
+    if _lab_access_ok(user):
         return True
-    # Keep supporting staff-flagged users.
-    return user.is_staff
+    if not user.is_active:
+        return False
+    return getattr(user, "role", "") == User.ROLE_DOCTOR or user.groups.filter(name="Doctor").exists()
 
 
 staff_required = user_passes_test(_lab_access_ok)
+report_reader_required = user_passes_test(_lab_report_reader_ok)
 
 
 def get_active_hospital(request):
@@ -77,8 +89,7 @@ def resolve_next_url(request, fallback_url):
 def scoped_reports_queryset(request):
     qs = LabReport.objects.select_related('attendant', 'profile', 'hospital', 'visit').all()
     hospital = get_active_hospital(request)
-    if hospital and getattr(request.user, 'role', '') != 'superadmin':
-        qs = qs.filter(hospital=hospital)
+    qs = scope_to_hospital(qs, request.user, hospital, "hospital")
     return qs
 
 
@@ -383,8 +394,7 @@ def report_list(request):
     next_qs = LabOrder.objects.select_related(
         'test', 'visit_service__visit__patient', 'collected_by', 'result__entered_by',
     )
-    if hospital and getattr(request.user, 'role', '') != 'superadmin':
-        next_qs = next_qs.filter(hospital=hospital)
+    next_qs = scope_to_hospital(next_qs, request.user, hospital, "hospital")
     if search:
         next_qs = next_qs.filter(visit_service__visit__patient__name__icontains=search)
 
@@ -394,7 +404,7 @@ def report_list(request):
         name = patient.name
         group = next_groups.setdefault(name, {'report_count': 0, 'latest_date': None, 'latest_visit_id': None, 'patient_id': patient.pk})
         group['report_count'] += 1
-        order_date = order.created_at.date()
+        order_date = timezone.localdate(order.created_at)
         if group['latest_date'] is None or order_date > group['latest_date']:
             group['latest_date'] = order_date
             group['latest_visit_id'] = order.visit_service.visit_id
@@ -612,9 +622,8 @@ def test_volume_report(request):
 
     scoped_orders = LabOrder.objects.all()
     scoped_results = LabResult.objects.all()
-    if hospital and getattr(request.user, "role", "") != User.ROLE_SUPERADMIN:
-        scoped_orders = scoped_orders.filter(hospital=hospital)
-        scoped_results = scoped_results.filter(order__hospital=hospital)
+    scoped_orders = scope_to_hospital(scoped_orders, request.user, hospital, "hospital")
+    scoped_results = scope_to_hospital(scoped_results, request.user, hospital, "order__hospital")
     orders_qs = scoped_orders.filter(created_at__date__gte=date_start, created_at__date__lte=date_end)
     technician_rows = technician_activity(scoped_orders, scoped_results, date_start, date_end)
     request_source_rows, requesting_doctor_rows = requester_breakdown(orders_qs)
@@ -694,10 +703,10 @@ def test_volume_report(request):
         "top_test": top_test,
         "volume_rows": volume_rows[:50],
         "breakdown_test_names": breakdown_test_names,
-        "chart_labels_json": json.dumps([r["test__name"] for r in volume_rows[:15]]),
-        "chart_values_json": json.dumps([r["count"] for r in volume_rows[:15]]),
-        "breakdown_labels_json": json.dumps(breakdown_test_names),
-        "breakdown_datasets_json": json.dumps([
+        "chart_labels_json": script_json([r["test__name"] for r in volume_rows[:15]]),
+        "chart_values_json": script_json([r["count"] for r in volume_rows[:15]]),
+        "breakdown_labels_json": script_json(breakdown_test_names),
+        "breakdown_datasets_json": script_json([
             {"label": label, "data": [breakdown_by_test[name].get(label, 0) for name in breakdown_test_names]}
             for label in all_option_labels
         ]),
@@ -716,7 +725,7 @@ def test_volume_report(request):
 
 
 @login_required
-@staff_required
+@report_reader_required
 def patient_reports(request, report_id):
     base_qs = scoped_reports_queryset(request)
     anchor = get_object_or_404(base_qs, pk=report_id)
@@ -750,12 +759,11 @@ def _visit_resume_target(orders):
 
 
 @login_required
-@staff_required
+@report_reader_required
 def patient_reports_next(request, patient_id):
     hospital = get_active_hospital(request)
     patients = Patient.objects.all()
-    if hospital and getattr(request.user, 'role', '') != 'superadmin':
-        patients = patients.filter(hospital=hospital)
+    patients = scope_to_hospital(patients, request.user, hospital, "hospital")
     patient = get_object_or_404(patients, pk=patient_id)
 
     orders = (
@@ -792,7 +800,7 @@ def patient_reports_next(request, patient_id):
 
 
 @login_required
-@staff_required
+@report_reader_required
 def report_detail(request, pk):
     report = get_object_or_404(scoped_reports_queryset(request), pk=pk)
     cleanup_stale_lab_queue_entries(visit=report.visit if report.visit_id else None)
@@ -816,7 +824,7 @@ def report_detail(request, pk):
 
 
 @login_required
-@staff_required
+@report_reader_required
 def report_print(request, pk):
     report = get_object_or_404(scoped_reports_queryset(request), pk=pk)
     results = report.results.select_related('test', 'source_profile').all()
@@ -893,8 +901,7 @@ def send_lab_result_to_doctor(request, report_id):
     """Send lab results to requesting doctor and create notification"""
     hospital = get_active_hospital(request)
     reports = LabReport.objects.select_related('lab_request__requested_by', 'visit__patient', 'visit__hospital')
-    if hospital and getattr(request.user, 'role', '') != 'superadmin':
-        reports = reports.filter(hospital=hospital)
+    reports = scope_to_hospital(reports, request.user, hospital, "hospital")
     
     report = get_object_or_404(reports, pk=report_id)
     
@@ -916,8 +923,7 @@ def route_lab_report(request, report_id):
 
     hospital = get_active_hospital(request)
     reports = scoped_reports_queryset(request)
-    if hospital and getattr(request.user, "role", "") != "superadmin":
-        reports = reports.filter(hospital=hospital)
+    reports = scope_to_hospital(reports, request.user, hospital, "hospital")
     report = get_object_or_404(reports, pk=report_id)
     if report.visit and report.visit.status == Visit.STATUS_CANCELLED:
         messages.error(request, "This visit was terminated by an administrator and cannot be routed further.")
@@ -1107,8 +1113,7 @@ def queue(request):
         queue_type__in=[QueueEntry.TYPE_LAB_RECEPTION, QueueEntry.TYPE_LAB_DOCTOR],
         processed=False,
     ).select_related("visit__patient", "hospital")
-    if hospital and getattr(request.user, "role", "") != "superadmin":
-        queue_entries = queue_entries.filter(hospital=hospital)
+    queue_entries = scope_to_hospital(queue_entries, request.user, hospital, "hospital")
 
     rows = []
     for entry in queue_entries.order_by("created_at"):
@@ -1159,8 +1164,7 @@ def reviewing_results(request):
         .select_related("test", "result", "visit_service__visit__patient")
         .order_by("visit_service__visit_id", "created_at")
     )
-    if hospital and getattr(request.user, "role", "") != "superadmin":
-        orders = orders.filter(hospital=hospital)
+    orders = scope_to_hospital(orders, request.user, hospital, "hospital")
 
     settings_row = getattr(hospital, "lab_settings_next", None)
     payment_required_before_release = bool(settings_row and settings_row.payment_required_before_release)
@@ -1221,8 +1225,7 @@ def _payload_from_post(test, post):
 def pick_sample(request, order_id):
     hospital = get_active_hospital(request)
     orders = LabOrder.objects.select_related("test", "visit_service__visit__patient")
-    if hospital and getattr(request.user, "role", "") != "superadmin":
-        orders = orders.filter(hospital=hospital)
+    orders = scope_to_hospital(orders, request.user, hospital, "hospital")
     order = get_object_or_404(orders, pk=order_id)
     visit = order.visit_service.visit
 
@@ -1253,8 +1256,7 @@ def pick_sample(request, order_id):
 def enter_result(request, order_id):
     hospital = get_active_hospital(request)
     orders = LabOrder.objects.select_related("test", "visit_service__visit__patient", "visit_service__service")
-    if hospital and getattr(request.user, "role", "") != "superadmin":
-        orders = orders.filter(hospital=hospital)
+    orders = scope_to_hospital(orders, request.user, hospital, "hospital")
     order = get_object_or_404(orders, pk=order_id)
     visit = order.visit_service.visit
 
@@ -1370,8 +1372,7 @@ def phlebotomy_queue(request):
     queue_entries = QueueEntry.objects.filter(
         queue_type=QueueEntry.TYPE_PHLEBOTOMY, processed=False,
     ).select_related("visit__patient", "hospital")
-    if hospital and getattr(request.user, "role", "") != "superadmin":
-        queue_entries = queue_entries.filter(hospital=hospital)
+    queue_entries = scope_to_hospital(queue_entries, request.user, hospital, "hospital")
     return render(request, "lab/phlebotomy_queue.html", {
         "queue_entries": queue_entries.order_by("created_at"),
         "active_nav": "phlebotomy_queue",
@@ -1385,8 +1386,7 @@ def phlebotomy_intake(request, queue_entry_id):
     entries = QueueEntry.objects.filter(queue_type=QueueEntry.TYPE_PHLEBOTOMY).select_related(
         "visit__patient", "visit__hospital",
     )
-    if hospital and getattr(request.user, "role", "") != "superadmin":
-        entries = entries.filter(hospital=hospital)
+    entries = scope_to_hospital(entries, request.user, hospital, "hospital")
     entry = get_object_or_404(entries, pk=queue_entry_id)
     visit = entry.visit
 
@@ -1414,8 +1414,7 @@ def phlebotomy_intake(request, queue_entry_id):
                     visit=visit, service=service, price_at_time=service.price, free_follow_up=free,
                 )
                 if not free:
-                    visit.total_amount = (visit.total_amount or Decimal("0")) + service.price
-                    visit.save(update_fields=["total_amount"])
+                    visit.adjust_total(service.price)
                 messages.success(request, f"{service.name} added{' free (follow-up)' if free else ''}.")
             return redirect("phlebotomy_intake", queue_entry_id=entry.pk)
 
@@ -1428,9 +1427,12 @@ def phlebotomy_intake(request, queue_entry_id):
             except DjangoValidationError as exc:
                 messages.error(request, "; ".join(exc.messages))
                 return redirect("phlebotomy_intake", queue_entry_id=entry.pk)
+            blocked = visit.removal_blocked_message(vs.price_at_time if vs.is_charged else 0)
+            if blocked:
+                messages.error(request, blocked)
+                return redirect("phlebotomy_intake", queue_entry_id=entry.pk)
             if vs.is_charged:
-                visit.total_amount = max(Decimal("0"), (visit.total_amount or Decimal("0")) - vs.price_at_time)
-                visit.save(update_fields=["total_amount"])
+                visit.adjust_total(-(vs.price_at_time))
             vs.delete()
             return redirect("phlebotomy_intake", queue_entry_id=entry.pk)
 
@@ -1470,12 +1472,14 @@ def phlebotomy_intake(request, queue_entry_id):
 # ---------------------------------------------------------------------------
 
 @login_required
-@staff_required
+@report_reader_required
 def visit_report(request, visit_id):
+    if request.method == "POST" and not _lab_access_ok(request.user):
+        # Doctors may read the report here; reviewing and releasing stay with the lab.
+        raise PermissionDenied("Only lab staff can review or release results.")
     hospital = get_active_hospital(request)
     visits = Visit.objects.select_related("patient", "hospital")
-    if hospital and getattr(request.user, "role", "") != "superadmin":
-        visits = visits.filter(hospital=hospital)
+    visits = scope_to_hospital(visits, request.user, hospital, "hospital")
     visit = get_object_or_404(visits, pk=visit_id)
 
     orders = (

@@ -3,7 +3,9 @@ from decimal import Decimal
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
-from django.db import models
+from django.db import models, transaction
+from django.db.models import F, Value
+from django.db.models.functions import Greatest
 from django.utils import timezone
 
 from accounts.models import Hospital
@@ -263,6 +265,44 @@ class Visit(models.Model):
 
     def __str__(self):
         return f"{self.patient.name} - {self.visit_date:%Y-%m-%d %H:%M}"
+
+    def adjust_total(self, delta):
+        """Add `delta` to the bill (negative to take a charge off), never below 0.
+
+        Done as one UPDATE in the database, not read-add-save: two people adding
+        charges to the same visit at once (doctor and pharmacy, say) used to
+        each save their own sum, so one charge silently fell off the bill. The
+        UPDATE also locks the row until the surrounding transaction ends."""
+        delta = Decimal(str(delta or 0))
+        if not self.pk or delta == 0:
+            return self.total_amount
+        Visit.objects.filter(pk=self.pk).update(
+            total_amount=Greatest(
+                F("total_amount") + Value(delta),
+                Value(Decimal("0")),
+                output_field=models.DecimalField(max_digits=10, decimal_places=2),
+            )
+        )
+        self.total_amount = Visit.objects.values_list("total_amount", flat=True).get(pk=self.pk)
+        return self.total_amount
+
+    def removal_blocked_message(self, reduce_by):
+        """Why the bill can't come down by `reduce_by`, or "" if it can.
+
+        Taking a charge off after money was paid for it used to push the bill
+        below what was paid; the balance showed 0 and the patient's money just
+        vanished from view. The removal is refused until a refund is made."""
+        reduce_by = Decimal(str(reduce_by or 0))
+        if reduce_by <= 0:
+            return ""
+        paid = self.total_paid
+        new_total = max(Decimal(self.total_amount or 0) - reduce_by, Decimal("0"))
+        if new_total >= paid:
+            return ""
+        return (
+            f"UGX {paid:,.0f} has already been paid on this visit, and taking this off would bring the bill to "
+            f"UGX {new_total:,.0f}. Refund the patient UGX {paid - new_total:,.0f} first, then remove it."
+        )
 
     @property
     def total_paid(self):
@@ -792,6 +832,9 @@ class Payment(models.Model):
         related_name="payments",
     )
     notes = models.TextField(blank=True)
+    # Sent with the payment form; the same form submitted twice (a double
+    # click, a retried request) finds this and doesn't record a second payment.
+    idempotency_key = models.CharField(max_length=64, null=True, blank=True, unique=True, editable=False)
 
     class Meta:
         ordering = ["-id"]
@@ -801,7 +844,7 @@ class Payment(models.Model):
 
     @property
     def receipt_number(self):
-        stamp = (self.paid_at or timezone.now()).strftime("%Y%m%d")
+        stamp = timezone.localtime(self.paid_at or timezone.now()).strftime("%Y%m%d")
         suffix = f"{self.pk:06d}" if self.pk else "NEW"
         try:
             prefix = hospital_initials(self.visit.hospital.name)
@@ -834,6 +877,7 @@ class Payment(models.Model):
         if self.mode != self.MODE_MOBILE_MONEY:
             self.mobile_account = None
 
+    @transaction.atomic
     def save(self, *args, **kwargs):
         """
         Per-receipt save logic.
@@ -854,73 +898,34 @@ class Payment(models.Model):
 
         self.full_clean()
         super().save(*args, **kwargs)
-        from admin_dashboard.models import (
-            BankTransaction,
-            CashDrawer,
-            CashTransaction,
-            MobileMoneyTransaction,
-            sync_hospital_account_balance,
-        )
+        from admin_dashboard.models import mirror_cash, sync_hospital_account_balance
 
         sync_hospital_account_balance(self.visit.hospital)
 
-        # If a cash drawer is open, mirror cash receipts as drawer cash-in transactions (idempotent per payment).
-        if self.mode == self.MODE_CASH and self.paid_at and self.amount_paid > 0 and self.status != self.STATUS_WAIVED:
-            paid_date = timezone.localdate(self.paid_at)
-            open_drawer = CashDrawer.objects.filter(hospital=self.visit.hospital, date=paid_date).order_by("-id").first()
-            if not open_drawer:
-                last_with_balance = (
-                    CashDrawer.objects.filter(hospital=self.visit.hospital, closing_balance__isnull=False)
-                    .order_by("-date", "-id")
-                    .first()
-                )
-                opening = (
-                    last_with_balance.closing_balance
-                    if last_with_balance and last_with_balance.closing_balance is not None
-                    else Decimal("0")
-                )
-                open_drawer = CashDrawer.objects.create(
-                    hospital=self.visit.hospital,
-                    date=paid_date,
-                    opening_balance=opening,
-                )
-            if open_drawer:
-                existing = (
-                    CashTransaction.objects.filter(
-                        payment=self,
-                        transaction_type=CashTransaction.TYPE_CASH_IN,
-                    )
-                    .order_by("id")
-                    .first()
-                )
-                description = f"Receipt {self.receipt_number} - {self.visit.patient.name}"
-                if existing:
-                    if existing.cash_drawer_id != open_drawer.id:
-                        existing.cash_drawer = open_drawer
-                    existing.amount = self.amount_paid
-                    existing.description = description
-                    existing.save(update_fields=["cash_drawer", "amount", "description"])
-                else:
-                    CashTransaction.objects.create(
-                        cash_drawer=open_drawer,
-                        payment=self,
-                        amount=self.amount_paid,
-                        transaction_type=CashTransaction.TYPE_CASH_IN,
-                        description=description,
-                    )
-        else:
-            CashTransaction.objects.filter(payment=self).delete()
+        # Cash receipts show as cash in on the drawer (one per payment). Closed
+        # drawers keep what was counted; see admin_dashboard.models.mirror_cash.
+        is_cash = self.mode == self.MODE_CASH and self.paid_at and self.amount_paid > 0 and self.status != self.STATUS_WAIVED
+        mirror_cash(
+            {"payment": self}, self.visit.hospital,
+            timezone.localdate(self.paid_at) if self.paid_at else timezone.localdate(),
+            self.amount_paid if is_cash else Decimal("0"),
+            f"Receipt {self.receipt_number} - {self.visit.patient.name}", inflow=True,
+        )
 
         # Bank/Mobile statements are reconciled against external statement lines (BankTransaction / MobileMoneyTransaction).
         # We do not auto-create those statement lines from internal receipts; instead, reconciliation pages match
         # external credits against these Payment records via receipt references/amount/date.
 
+    @transaction.atomic
     def delete(self, *args, **kwargs):
         hospital = self.visit.hospital
-        from admin_dashboard.models import BankTransaction, MobileMoneyTransaction
+        from admin_dashboard.models import BankTransaction, MobileMoneyTransaction, mirror_cash
 
-        BankTransaction.objects.filter(reconciled_with=self).delete()
-        MobileMoneyTransaction.objects.filter(reconciled_with=self).delete()
+        # Bank and mobile-money statement lines are what the bank reported: they
+        # stay, and just go back to being unmatched. (They used to be deleted.)
+        BankTransaction.objects.filter(reconciled_with=self).update(reconciled_with=None, is_reconciled=False)
+        MobileMoneyTransaction.objects.filter(reconciled_with=self).update(reconciled_with=None, is_reconciled=False)
+        mirror_cash({"payment": self}, hospital, timezone.localdate(), Decimal("0"), f"Deleted receipt {self.receipt_number}", inflow=True)
         super().delete(*args, **kwargs)
         from admin_dashboard.models import sync_hospital_account_balance
 

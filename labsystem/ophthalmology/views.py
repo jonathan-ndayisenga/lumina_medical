@@ -8,14 +8,14 @@ from reception.models import Visit
 
 from .constants import APD_GRADES, DISTANCE_VA, EYES, MOODS, NEAR_VA, PUPIL_REACTIONS, PUPIL_SHAPES, REFRACTION_METHODS
 from .exam import save_base_refraction
+from labsystem.tenancy import scope_to_hospital
 
 
 @doctor_role_required
 def base_refraction(request, visit_id):
     hospital = get_active_hospital(request)
     visits = Visit.objects.select_related("patient", "hospital")
-    if hospital and getattr(request.user, "role", "") != User.ROLE_SUPERADMIN:
-        visits = visits.filter(hospital=hospital)
+    visits = scope_to_hospital(visits, request.user, hospital, "hospital")
     visit = get_object_or_404(visits, pk=visit_id)
     if visit.status == Visit.STATUS_CANCELLED:
         messages.error(request, "This visit was terminated by an administrator and can no longer be edited.")

@@ -17,6 +17,12 @@ from .accounts_seed import provision_chart_of_accounts
 from .models import Account, JournalEntry, JournalLine
 
 
+class LedgerAccountMissing(Exception):
+    """The chart of accounts has no active account this posting needs (one was
+    deactivated, say). Raised rather than skipped, so the failure is recorded
+    and shown to finance instead of the entry silently never being posted."""
+
+
 # ---------------------------------------------------------------------------
 # Account resolution helpers
 # ---------------------------------------------------------------------------
@@ -185,13 +191,13 @@ def post_visit_service(visit_service):
     revenue = _revenue_account(hospital, visit_service.service.category)
 
     if not receivable or not revenue:
-        return  # Chart of Accounts not set up yet for this hospital
+        raise LedgerAccountMissing("No active Accounts Receivable or revenue account for this charge.")
 
     _reverse_existing(hospital, source_visit_service=visit_service)
 
     entry = JournalEntry.objects.create(
         hospital=hospital,
-        date=(visit_service.created_at.date() if visit_service.created_at else timezone.localdate()),
+        date=(timezone.localdate(visit_service.created_at) if visit_service.created_at else timezone.localdate()),
         description=f"Charge: {visit_service.service.name} — {visit_service.visit.patient.name}",
         source_type=JournalEntry.SOURCE_VISIT_CHARGE,
         source_visit_service=visit_service,
@@ -225,13 +231,13 @@ def post_payment(payment):
     receivable = _get_account(hospital, Account.SUB_RECEIVABLE, Account.TYPE_ASSET)
 
     if not cash_acc or not receivable:
-        return
+        raise LedgerAccountMissing(f"No active {payment.get_mode_display()} or Accounts Receivable account for this receipt.")
 
     _reverse_existing(hospital, source_payment=payment)
 
     entry = JournalEntry.objects.create(
         hospital=hospital,
-        date=(payment.paid_at.date() if payment.paid_at else timezone.localdate()),
+        date=(timezone.localdate(payment.paid_at) if payment.paid_at else timezone.localdate()),
         description=f"Receipt {payment.receipt_number} — {payment.visit.patient.name}",
         source_type=JournalEntry.SOURCE_PAYMENT,
         source_payment=payment,
@@ -257,7 +263,7 @@ def post_expense(expense):
     cash_acc = _cash_account_for_expense(hospital, expense)
 
     if not expense_acc or not cash_acc:
-        return
+        raise LedgerAccountMissing("No active expense or cash/bank account for this expense.")
 
     _reverse_existing(hospital, source_expense=expense)
 
@@ -301,7 +307,7 @@ def post_salary(salary):
         cash_acc = _get_account(hospital, Account.SUB_CASH, Account.TYPE_ASSET)
 
     if not salary_acc or not cash_acc:
-        return
+        raise LedgerAccountMissing("No active salary expense or bank/cash account for this salary.")
 
     _reverse_salary(salary)
 
@@ -311,20 +317,28 @@ def post_salary(salary):
         date=salary.paid_at or timezone.localdate(),
         description=f"Salary: {employee_name} — {salary.month.strftime('%B %Y')}",
         source_type=JournalEntry.SOURCE_EXPENSE,
+        source_salary=salary,
     )
     JournalLine.objects.create(entry=entry, account=salary_acc, debit=amount, description=f"Salary — {employee_name}")
     JournalLine.objects.create(entry=entry, account=cash_acc, credit=amount, description="Salary payment")
 
 
 def _reverse_salary(salary):
-    """Reverse all non-reversal journal entries whose description matches this salary record."""
+    """Reverse this salary's live ledger entry, if any.
+
+    Found by the salary it came from. Entries posted before that link existed
+    are matched by their description, as before. Either way only entries not
+    already reversed: reversing one twice broke the one-to-one reversal link,
+    the error was swallowed, and the salary stopped reaching the ledger."""
+    from django.db.models import Q
+
     employee_name = salary.employee.get_full_name() or salary.employee.username
-    month_str = salary.month.strftime("%B %Y")
-    description = f"Salary: {employee_name} — {month_str}"
+    description = f"Salary: {employee_name} — {salary.month.strftime('%B %Y')}"
     old_entries = JournalEntry.objects.filter(
+        Q(source_salary=salary) | Q(source_salary__isnull=True, description=description),
         hospital=salary.hospital,
-        description=description,
         is_reversal=False,
+        reversal_of__isnull=True,
         source_type=JournalEntry.SOURCE_EXPENSE,
     )
     for old_entry in old_entries:
@@ -344,3 +358,51 @@ def _reverse_salary(salary):
             )
         reversal.reversed_entry = old_entry
         reversal.save(update_fields=["reversed_entry"])
+
+
+# ---------------------------------------------------------------------------
+# Retrying failed postings
+# ---------------------------------------------------------------------------
+
+POSTERS = {
+    "reception.visitservice": "post_visit_service",
+    "reception.payment": "post_payment",
+    "admin_dashboard.expense": "post_expense",
+    "admin_dashboard.salary": "post_salary",
+}
+
+
+def retry_posting_failures(hospital=None):
+    """Post again every unresolved PostingFailure (one hospital's, or all).
+    Returns (fixed, still_failing). A failed reversal of a deleted record
+    can't be replayed and stays listed for a manual journal entry."""
+    from django.apps import apps
+
+    from .models import PostingFailure
+    from .signals import _safe_post
+
+    pending = PostingFailure.objects.filter(resolved_at__isnull=True, action=PostingFailure.ACTION_POST)
+    if hospital is not None:
+        pending = pending.filter(hospital=hospital)
+    fixed = still_failing = 0
+    for failure in pending:
+        poster_name = POSTERS.get(failure.source_model)
+        try:
+            model = apps.get_model(failure.source_model)
+        except LookupError:
+            model = None
+        instance = model.objects.filter(pk=failure.source_id).first() if model and poster_name else None
+        if instance is None:
+            # The record is gone (or isn't ours to post): nothing left to post.
+            failure.resolved_at = timezone.now()
+            failure.error = f"{failure.error}\nClosed: the source record no longer exists."
+            failure.save(update_fields=["resolved_at", "error", "last_attempt_at"])
+            fixed += 1
+            continue
+        _safe_post(globals()[poster_name], instance)
+        failure.refresh_from_db()
+        if failure.resolved_at:
+            fixed += 1
+        else:
+            still_failing += 1
+    return fixed, still_failing

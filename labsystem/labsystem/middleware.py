@@ -1,4 +1,3 @@
-from datetime import date as _date
 
 from django.conf import settings
 from django.contrib.auth import logout
@@ -73,7 +72,7 @@ SUBSCRIPTION_EXPIRED_HTML = """
 def _hospital_subscription_expired(hospital) -> bool:
     """Return True if the hospital has a subscription_end_date that has already passed."""
     end = getattr(hospital, "subscription_end_date", None)
-    return end is not None and end < _date.today()
+    return end is not None and end < timezone.localdate()
 
 
 def _is_books_tenant(hospital) -> bool:

@@ -541,8 +541,14 @@ class Payment(models.Model):
 
     @transaction.atomic
     def record(self, allocations=None, user=None):
+        # Lock the client's open invoices before reading their balances, so two
+        # payments recorded at the same moment can't both fill the same balance.
+        list(Invoice.objects.select_for_update().filter(client_id=self.client_id, status=Invoice.STATUS_OPEN).values_list("pk", flat=True))
         if allocations is None:
             allocations = self._auto_allocate()
+        else:
+            for invoice, _ in allocations:
+                invoice.refresh_from_db()
         total_allocated = Decimal("0")
         for invoice, amount in allocations:
             if invoice.client_id != self.client_id:

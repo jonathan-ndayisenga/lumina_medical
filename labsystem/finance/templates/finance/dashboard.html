@@ -8,6 +8,26 @@
 {% block content %}
 <div class="space-y-6">
 
+    {% if posting_failure_count %}
+    <div class="card border-2 border-red-200 bg-red-50">
+        <div class="flex flex-wrap items-start justify-between gap-3">
+            <div>
+                <h3 class="text-sm font-semibold text-red-800">{{ posting_failure_count }} record{{ posting_failure_count|pluralize }} didn't reach the ledger</h3>
+                <p class="text-sm text-red-700 mt-1">These payments, charges or expenses were saved, but their journal entries failed, so the reports below are missing them until they post.</p>
+                <ul class="text-xs text-red-700 mt-2 space-y-1">
+                    {% for failure in posting_failures %}
+                    <li><span class="font-mono">{{ failure.source_model }} #{{ failure.source_id }}</span> ({{ failure.get_action_display|default:failure.action }}, {{ failure.attempts }} attempt{{ failure.attempts|pluralize }}): {{ failure.error|truncatechars:160 }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+            <form method="post" action="{% url 'finance_retry_postings' %}">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-primary btn-sm">Retry postings</button>
+            </form>
+        </div>
+    </div>
+    {% endif %}
+
     <!-- KPI Row -->
     <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
 

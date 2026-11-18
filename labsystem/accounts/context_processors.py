@@ -1,6 +1,7 @@
 from datetime import date
 
 from django.db.models import Q
+from django.utils import timezone
 
 from .models import DirectMessage, InternalNotification, InternalNotificationRead, NotificationRead, PlatformSettings, SupportToken, SupportTokenMessage, SystemNotification
 
@@ -31,7 +32,7 @@ def notifications(request):
     expiry_alert = None
     alert_days = getattr(hospital, "reactivation_alert_days", 7) if hospital else 7
     if hospital and hospital.subscription_end_date and alert_days > 0:
-        days = (hospital.subscription_end_date - date.today()).days
+        days = (hospital.subscription_end_date - timezone.localdate()).days
         if days <= alert_days:
             level = _expiry_level(days)
             dismissed = request.session.get("expiry_dismissed", "")

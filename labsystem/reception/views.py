@@ -1,3 +1,4 @@
+import uuid
 from decimal import Decimal
 
 from django.contrib import messages
@@ -39,6 +40,7 @@ from .workflow import (
     terminate_visit_workflow,
     user_can_admin_override,
 )
+from labsystem.tenancy import scope_to_hospital
 
 
 def reception_role_required(view_func):
@@ -253,6 +255,25 @@ def redirect_to_receipt_overlay(visit, payment=None):
     """
     target = reverse("patient_visits", args=[visit.patient_id])
     return redirect(f"{target}?receipt={payment.pk}" if payment else target)
+
+
+def new_payment_token():
+    """One per payment form shown; sent back with the form so the same
+    submission can't be recorded twice."""
+    return uuid.uuid4().hex
+
+
+def payment_token_from(request):
+    return (request.POST.get("payment_token") or "").strip()[:64] or None
+
+
+def already_recorded_payment(request, visit):
+    """The payment this same form already recorded, if it was submitted twice.
+    Call it with the visit row locked."""
+    token = payment_token_from(request)
+    if not token:
+        return None
+    return visit.payments.filter(idempotency_key=token).first()
 
 
 def resolve_open_reception_entry(request, hospital, queue_entry_id):
@@ -816,8 +837,7 @@ def receptionist_queue_send_to_doctor(request, queue_entry_id):
             price_at_time=consultation_service.price,
             notes=f"Added from receptionist queue after {reception_source_from_entry(queue_entry).lower()} handoff.",
         )
-        visit.total_amount = (visit.total_amount or Decimal("0.00")) + consultation_service.price
-        visit.save(update_fields=["total_amount"])
+        visit.adjust_total(consultation_service.price)
 
     close_reception_queue_for_visit(visit)
     ensure_pending_queue_entry(
@@ -874,8 +894,7 @@ def receptionist_queue_send_to_sonographer(request, queue_entry_id):
             price_at_time=scan_service.price,
             notes=f"Added from receptionist queue — referred to sonographer.",
         )
-        visit.total_amount = (visit.total_amount or Decimal("0.00")) + scan_service.price
-        visit.save(update_fields=["total_amount"])
+        visit.adjust_total(scan_service.price)
 
     close_reception_queue_for_visit(visit)
     ensure_pending_queue_entry(
@@ -958,8 +977,7 @@ def receptionist_queue_send_to_module(request, queue_entry_id):
             visit_service_kwargs["covering_package"] = covering_package
         VisitService.objects.create(**visit_service_kwargs)
         if not covering_package:
-            visit.total_amount = (visit.total_amount or Decimal("0.00")) + service.price
-            visit.save(update_fields=["total_amount"])
+            visit.adjust_total(service.price)
 
     close_reception_queue_for_visit(visit)
     for queue_type in queue_types:
@@ -1550,6 +1568,26 @@ def visit_edit(request, visit_id):
     if visit.queue_entries.filter(processed=True).exists():
         messages.error(request, "This visit already has processed workflow activity and can no longer be edited safely.")
         return redirect("patient_list")
+    # Editing replaces every bill line with the services picked on this form,
+    # so lines another department added (a doctor's tests, medicine) would be
+    # deleted and given free. Those visits are changed line by line instead.
+    added_elsewhere = (
+        visit.prescriptions.exists()
+        or visit.visit_services.filter(
+            Q(requested_by_type=VisitService.REQUESTED_BY_INTERNAL_DOCTOR)
+            | Q(service__category=Service.CATEGORY_PHARMACY)
+        ).exists()
+    )
+    if added_elsewhere:
+        messages.error(
+            request,
+            "The doctor or pharmacy has already added items to this visit, so it can't be re-entered from "
+            "this form. Add or remove single items from the visit page instead.",
+        )
+        return redirect("patient_visits", patient_id=visit.patient_id)
+    if visit.payments.filter(amount_paid__gt=0).exists():
+        messages.error(request, "Money has already been taken for this visit, so its services can't be re-entered from this form.")
+        return redirect("patient_visits", patient_id=visit.patient_id)
 
     if request.method == "POST":
         form = VisitCreateForm(request.POST, instance=visit, hospital=hospital, patient=visit.patient)
@@ -1668,6 +1706,11 @@ def visit_delete(request, visit_id):
     if visit.queue_entries.filter(processed=True).exists():
         messages.error(request, "This visit already has processed workflow activity and can no longer be deleted safely.")
         return redirect("patient_list")
+    if visit.payments.filter(amount_paid__gt=0).exists():
+        # Deleting would take the receipt with it while its cash stayed in the
+        # drawer and ledger. Terminate the visit instead; that keeps the record.
+        messages.error(request, "Money has already been taken for this visit, so it can't be deleted. Terminate it instead.")
+        return redirect("patient_visits", patient_id=visit.patient_id)
 
     if request.method == "POST":
         patient_name = visit.patient.name
@@ -1744,11 +1787,17 @@ def visit_terminate(request, visit_id):
 @transaction.atomic
 def complete_visit(request, visit_id):
     hospital = get_active_hospital(request)
-    visit = get_object_or_404(
-        Visit.objects.select_related("patient", "hospital").prefetch_related("visit_services__service"),
-        pk=visit_id,
-        hospital=hospital,
-    )
+    visit_qs = Visit.objects.select_related("patient", "hospital").prefetch_related("visit_services__service")
+    if request.method == "POST":
+        # Locked until this request commits, so a double-click or a retried
+        # POST waits here and then sees the first payment and the new balance.
+        visit_qs = visit_qs.select_for_update(of=("self",))
+    visit = get_object_or_404(visit_qs, pk=visit_id, hospital=hospital)
+    if request.method == "POST":
+        duplicate = already_recorded_payment(request, visit)
+        if duplicate is not None:
+            messages.info(request, "That payment was already recorded. Here is its receipt.")
+            return redirect_to_receipt_overlay(visit, duplicate)
     if visit.status == Visit.STATUS_CANCELLED:
         messages.error(request, "This visit has been terminated and can no longer be billed or dispensed.")
         return redirect("patient_visits", patient_id=visit.patient_id)
@@ -1824,6 +1873,7 @@ def complete_visit(request, visit_id):
                 mobile_account=form.cleaned_data["mobile_account"],
                 recorded_by=request.user,
                 notes=form.cleaned_data["payment_notes"] or "",
+                idempotency_key=payment_token_from(request),
             )
             payment.save()
 
@@ -1973,6 +2023,7 @@ def complete_visit(request, visit_id):
         request,
         "reception/complete_visit.html",
         {
+            "payment_token": new_payment_token(),
             "active_nav": "reception",
             "dashboard_title": "Record Payment",
             "dashboard_intro": "Record a payment for this visit. Partial payments are supported until the bill is fully settled.",
@@ -2036,11 +2087,13 @@ def remove_visit_service_api(request, visit_id, visit_service_id):
         return JsonResponse({"error": "Enter a reason for removing this service."}, status=400)
 
     removed_price = visit_service.price_at_time
+    blocked = visit.removal_blocked_message(removed_price if visit_service.is_charged else 0)
+    if blocked:
+        return JsonResponse({"error": blocked}, status=409)
     service_name = visit_service.service.name
     visit_service.delete()
 
-    visit.total_amount = max(Decimal("0"), visit.total_amount - removed_price)
-    visit.save(update_fields=["total_amount"])
+    visit.adjust_total(-(removed_price))
 
     record_admin_override(
         actor=request.user,
@@ -2106,7 +2159,7 @@ def void_dispense_visit(request, visit_id):
     # Remove every prescription — restores stock if dispensed, deletes billing_visit_service
     # which fires on_visit_service_delete → journal reversal for each pharmacy charge.
     for prescription in list(visit.prescriptions.select_related("drug", "billing_visit_service").all()):
-        remove_prescription_workflow(prescription=prescription, actor=request.user)
+        remove_prescription_workflow(prescription=prescription, actor=request.user, voiding_visit=True)
 
     # Delete any remaining visit services (consultation, triage, lab, etc.).
     # on_visit_service_delete fires for each one → reversal posted automatically.
@@ -2415,8 +2468,7 @@ def view_visit_report(request, visit_id):
         "visit_services__service",
         "prescriptions__drug",
     )
-    if hospital and getattr(request.user, "role", "") != User.ROLE_SUPERADMIN:
-        visits = visits.filter(hospital=hospital)
+    visits = scope_to_hospital(visits, request.user, hospital, "hospital")
 
     visit = get_object_or_404(visits, pk=visit_id)
 

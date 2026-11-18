@@ -2,6 +2,7 @@ import json
 from datetime import timedelta
 from decimal import Decimal
 
+from labsystem.safe_json import script_json
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
@@ -53,7 +54,7 @@ def get_active_hospital(request):
 @homecare_access_required
 def homecare_dashboard(request):
     hospital = get_active_hospital(request)
-    today = timezone.now().date()
+    today = timezone.localdate()
 
     # ── Stat cards ─────────────────────────────────────────────────────────────
     active_nurses = HomeCareNurse.objects.filter(hospital=hospital, is_active=True).count()
@@ -133,10 +134,10 @@ def homecare_dashboard(request):
         "payout_this_month": payout_this_month,
         "margin_this_month": margin_this_month,
         "recent_placements": recent_placements,
-        "chart_labels_json": json.dumps(month_labels),
-        "income_values_json": json.dumps(income_values),
-        "payout_values_json": json.dumps(payout_values),
-        "margin_values_json": json.dumps(margin_values),
+        "chart_labels_json": script_json(month_labels),
+        "income_values_json": script_json(income_values),
+        "payout_values_json": script_json(payout_values),
+        "margin_values_json": script_json(margin_values),
     })
 
 

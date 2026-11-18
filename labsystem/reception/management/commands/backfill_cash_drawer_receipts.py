@@ -36,7 +36,7 @@ class Command(BaseCommand):
 
         for payment in qs.iterator():
             hospital = payment.visit.hospital
-            paid_date = (payment.paid_at or timezone.now()).date()
+            paid_date = timezone.localdate(payment.paid_at or timezone.now())
 
             drawer = (
                 CashDrawer.objects.filter(hospital=hospital, date=paid_date)

@@ -433,7 +433,7 @@ def messages_inbox(request):
     expiry_alert = None
     alert_days = getattr(hospital, "reactivation_alert_days", 7) if hospital else 7
     if hospital and hospital.subscription_end_date and alert_days > 0:
-        days = (hospital.subscription_end_date - date.today()).days
+        days = (hospital.subscription_end_date - timezone.localdate()).days
         if days <= alert_days:
             expiry_alert = {
                 "days": days,

@@ -15,6 +15,7 @@ superadmin panel and re-enable is_active.
 from datetime import date
 
 from django.core.management.base import BaseCommand
+from django.utils import timezone
 
 from accounts.models import Hospital
 
@@ -30,7 +31,7 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
-        today = date.today()
+        today = timezone.localdate()
         dry_run = options["dry_run"]
 
         expired = Hospital.objects.filter(

@@ -6,6 +6,7 @@ from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 
+from datetime import timedelta
 from decimal import Decimal
 
 from accounts.models import User
@@ -17,6 +18,7 @@ from reception.workflow import close_competing_queue_entries, ensure_pending_que
 
 from .forms import NurseNoteForm, TriageForm
 from .models import NurseNote, NursingAdmission, NursingCareItem, NursingDose, ScanReport
+from labsystem.tenancy import scope_to_hospital
 
 
 def nurse_role_required(view_func):
@@ -39,6 +41,10 @@ def get_active_hospital(request):
     return getattr(request, "hospital", None) or getattr(request.user, "hospital", None)
 
 
+# Two doses of the same item this close together are a double tap, not two doses.
+DUPLICATE_DOSE_WINDOW = timedelta(seconds=60)
+
+
 @nurse_role_required
 def nurse_queue(request):
     hospital = get_active_hospital(request)
@@ -46,8 +52,7 @@ def nurse_queue(request):
         queue_type=QueueEntry.TYPE_NURSE,
         processed=False,
     ).select_related("visit__patient", "hospital", "requested_by", "visit__triage")
-    if hospital and getattr(request.user, "role", "") != User.ROLE_SUPERADMIN:
-        queue_entries = queue_entries.filter(hospital=hospital)
+    queue_entries = scope_to_hospital(queue_entries, request.user, hospital, "hospital")
     return render(
         request,
         "nurse/nurse_queue.html",
@@ -65,8 +70,7 @@ def perform_nursing(request, queue_entry_id):
     queue_entries = QueueEntry.objects.select_related("visit__patient", "visit__hospital").filter(
         queue_type=QueueEntry.TYPE_NURSE
     )
-    if hospital and getattr(request.user, "role", "") != User.ROLE_SUPERADMIN:
-        queue_entries = queue_entries.filter(hospital=hospital)
+    queue_entries = scope_to_hospital(queue_entries, request.user, hospital, "hospital")
     queue_entry = get_object_or_404(queue_entries, pk=queue_entry_id)
     visit = queue_entry.visit
     if visit.status == Visit.STATUS_CANCELLED:
@@ -231,15 +235,13 @@ def remove_prescription_from_nurse(request, queue_entry_id, prescription_id):
 
     hospital = get_active_hospital(request)
     queue_entries = QueueEntry.objects.select_related("visit__hospital").filter(queue_type=QueueEntry.TYPE_NURSE)
-    if hospital and getattr(request.user, "role", "") != User.ROLE_SUPERADMIN:
-        queue_entries = queue_entries.filter(hospital=hospital)
+    queue_entries = scope_to_hospital(queue_entries, request.user, hospital, "hospital")
     queue_entry = get_object_or_404(queue_entries, pk=queue_entry_id)
 
     prescription_qs = Prescription.objects.select_related("drug", "visit", "billing_visit_service").filter(
         visit=queue_entry.visit
     )
-    if hospital and getattr(request.user, "role", "") != User.ROLE_SUPERADMIN:
-        prescription_qs = prescription_qs.filter(visit__hospital=hospital)
+    prescription_qs = scope_to_hospital(prescription_qs, request.user, hospital, "visit__hospital")
     prescription = get_object_or_404(prescription_qs, pk=prescription_id)
 
     if request.method != "POST":
@@ -248,7 +250,11 @@ def remove_prescription_from_nurse(request, queue_entry_id, prescription_id):
         messages.error(request, f"{prescription.drug.name} has already been dispensed and cannot be removed here.")
         return redirect("perform_nursing", queue_entry_id=queue_entry.pk)
 
-    payload = remove_prescription_workflow(prescription=prescription, actor=request.user)
+    try:
+        payload = remove_prescription_workflow(prescription=prescription, actor=request.user)
+    except ValidationError as exc:
+        messages.error(request, "; ".join(exc.messages))
+        return redirect("perform_nursing", queue_entry_id=queue_entry.pk)
     messages.success(request, payload["message"])
     return redirect("perform_nursing", queue_entry_id=queue_entry.pk)
 
@@ -258,15 +264,13 @@ def remove_prescription_from_nurse(request, queue_entry_id, prescription_id):
 def dispense_prescription(request, queue_entry_id, prescription_id):
     hospital = get_active_hospital(request)
     queue_entries = QueueEntry.objects.select_related("visit__hospital").filter(queue_type=QueueEntry.TYPE_NURSE)
-    if hospital and getattr(request.user, "role", "") != User.ROLE_SUPERADMIN:
-        queue_entries = queue_entries.filter(hospital=hospital)
+    queue_entries = scope_to_hospital(queue_entries, request.user, hospital, "hospital")
     queue_entry = get_object_or_404(queue_entries, pk=queue_entry_id)
 
     prescription_qs = Prescription.objects.select_related("drug", "visit__hospital", "billing_visit_service").filter(
         visit=queue_entry.visit
     )
-    if hospital and getattr(request.user, "role", "") != User.ROLE_SUPERADMIN:
-        prescription_qs = prescription_qs.filter(visit__hospital=hospital)
+    prescription_qs = scope_to_hospital(prescription_qs, request.user, hospital, "visit__hospital")
     prescription = get_object_or_404(prescription_qs, pk=prescription_id)
 
     if request.method != "POST":
@@ -406,13 +410,24 @@ def administer_dose(request, care_item_id):
         return redirect("nursing_admissions")
 
     hospital = get_active_hospital(request)
+    # Locked until this dose is saved: a second tap waits here, then sees the
+    # dose the first one recorded instead of recording another.
     care_item = get_object_or_404(
-        NursingCareItem.objects.select_related(
+        NursingCareItem.objects.select_for_update(of=("self",)).select_related(
             "admission__visit__hospital", "prescription__drug"
         ),
         pk=care_item_id,
         admission__hospital=hospital,
     )
+
+    last_dose = care_item.doses.order_by("-administered_at").first()
+    if last_dose and timezone.now() - last_dose.administered_at < DUPLICATE_DOSE_WINDOW:
+        messages.warning(
+            request,
+            f"A dose of this medication was recorded {int((timezone.now() - last_dose.administered_at).total_seconds())} "
+            "seconds ago, so this one wasn't recorded again. If a second dose really was given, record it again in a minute.",
+        )
+        return redirect("nursing_admission_detail", admission_id=care_item.admission_id)
 
     if not care_item.is_active:
         messages.error(request, "This medication has been stopped.")
@@ -422,7 +437,9 @@ def administer_dose(request, care_item_id):
         messages.info(request, "All doses for this medication have already been given.")
         return redirect("nursing_admission_detail", admission_id=care_item.admission_id)
 
-    drug = care_item.prescription.drug
+    # The drug row is locked too, as pharmacy dispensing does, so a dose and a
+    # dispense at the same moment can't both take the same stock.
+    drug = InventoryItem.objects.select_for_update().get(pk=care_item.prescription.drug_id)
     per_dose_qty = care_item.per_dose_quantity
     stock_qty = drug.to_stock_quantity(per_dose_qty)
 
@@ -437,7 +454,12 @@ def administer_dose(request, care_item_id):
     notes = (request.POST.get("notes") or "").strip()
 
     # Deduct inventory
-    drug.consume_stock(stock_qty)
+    try:
+        drug.consume_stock(stock_qty)
+    except ValueError as exc:
+        transaction.set_rollback(True)
+        messages.error(request, str(exc))
+        return redirect("nursing_admission_detail", admission_id=care_item.admission_id)
     InventoryTransaction.objects.create(
         hospital=hospital,
         item=drug,
@@ -551,14 +573,12 @@ def scan_queue(request):
         queue_type=QueueEntry.TYPE_SONOGRAPHER,
         processed=False,
     ).select_related("visit__patient", "hospital", "requested_by").order_by("created_at")
-    if hospital and getattr(request.user, "role", "") != User.ROLE_SUPERADMIN:
-        queue_entries = queue_entries.filter(hospital=hospital)
+    queue_entries = scope_to_hospital(queue_entries, request.user, hospital, "hospital")
 
     recent_reports_qs = ScanReport.objects.select_related(
         "visit__patient", "visit__hospital", "sonographer"
     ).order_by("-created_at")
-    if hospital and getattr(request.user, "role", "") != User.ROLE_SUPERADMIN:
-        recent_reports_qs = recent_reports_qs.filter(visit__hospital=hospital)
+    recent_reports_qs = scope_to_hospital(recent_reports_qs, request.user, hospital, "visit__hospital")
 
     paginator = Paginator(recent_reports_qs, 10)
     page_number = request.GET.get("page")
@@ -578,8 +598,7 @@ def scan_report(request, queue_entry_id):
     queue_entries = QueueEntry.objects.select_related("visit__patient", "visit__hospital").filter(
         queue_type=QueueEntry.TYPE_SONOGRAPHER,
     )
-    if hospital and getattr(request.user, "role", "") != User.ROLE_SUPERADMIN:
-        queue_entries = queue_entries.filter(hospital=hospital)
+    queue_entries = scope_to_hospital(queue_entries, request.user, hospital, "hospital")
     queue_entry = get_object_or_404(queue_entries, pk=queue_entry_id)
     visit = queue_entry.visit
 
@@ -671,8 +690,7 @@ def scan_report(request, queue_entry_id):
 def scan_report_edit(request, report_id):
     hospital = get_active_hospital(request)
     qs = ScanReport.objects.select_related("visit__patient", "visit__hospital")
-    if hospital and getattr(request.user, "role", "") != User.ROLE_SUPERADMIN:
-        qs = qs.filter(visit__hospital=hospital)
+    qs = scope_to_hospital(qs, request.user, hospital, "visit__hospital")
     report = get_object_or_404(qs, pk=report_id)
     visit = report.visit
 
@@ -718,8 +736,7 @@ def scan_report_send_to_billing(request, report_id):
 
     hospital = get_active_hospital(request)
     qs = ScanReport.objects.select_related("visit__hospital", "visit__patient")
-    if hospital and getattr(request.user, "role", "") != User.ROLE_SUPERADMIN:
-        qs = qs.filter(visit__hospital=hospital)
+    qs = scope_to_hospital(qs, request.user, hospital, "visit__hospital")
     report = get_object_or_404(qs, pk=report_id)
     visit = report.visit
 
@@ -741,8 +758,7 @@ def scan_report_send_to_billing(request, report_id):
 def scan_report_print(request, report_id):
     hospital = get_active_hospital(request)
     qs = ScanReport.objects.select_related("visit__patient", "visit__hospital", "sonographer")
-    if hospital and getattr(request.user, "role", "") != User.ROLE_SUPERADMIN:
-        qs = qs.filter(visit__hospital=hospital)
+    qs = scope_to_hospital(qs, request.user, hospital, "visit__hospital")
     report = get_object_or_404(qs, pk=report_id)
     return render(request, "nurse/scan_report_print.html", {
         "report": report,

@@ -131,6 +131,13 @@ class JournalEntry(models.Model):
         blank=True,
         related_name="journal_entries",
     )
+    source_salary = models.ForeignKey(
+        "admin_dashboard.Salary",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="journal_entries",
+    )
     posted_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
@@ -157,22 +164,13 @@ class JournalEntry(models.Model):
     def save(self, *args, **kwargs):
         if self.reference:
             return super().save(*args, **kwargs)
-        # Next number after the highest one used today, not "count + 1": a
-        # deleted entry made the count reuse an existing reference. Two saves
-        # racing for the same number retry with the next one.
+        # Next number after the highest one used today, worked out as a number
+        # (a text sort put "-10000" below "-9999", after which every entry
+        # that day collided). Two saves racing for one number retry.
+        from labsystem.numbering import save_with_number
+
         prefix = f"JNL-{timezone.localdate():%Y%m%d}-"
-        for attempt in range(5):
-            last = (
-                JournalEntry.objects.filter(reference__startswith=prefix)
-                .order_by("-reference").values_list("reference", flat=True).first()
-            )
-            self.reference = f"{prefix}{(int(last.rsplit('-', 1)[1]) + 1) if last else 1:04d}"
-            try:
-                with transaction.atomic():
-                    return super().save(*args, **kwargs)
-            except IntegrityError:
-                if attempt == 4 or not JournalEntry.objects.filter(reference=self.reference).exists():
-                    raise
+        return save_with_number(self, "reference", prefix, lambda: super(JournalEntry, self).save(*args, **kwargs))
 
     def is_balanced(self):
         agg = self.lines.aggregate(d=models.Sum("debit"), c=models.Sum("credit"))
@@ -203,3 +201,34 @@ class JournalLine(models.Model):
             raise ValidationError("A journal line cannot have both debit and credit.")
         if self.debit == 0 and self.credit == 0:
             raise ValidationError("A journal line must have either a debit or a credit.")
+
+
+class PostingFailure(models.Model):
+    """An automatic ledger posting that didn't go through.
+
+    Posting runs beside the clinical work and must never stop a payment or a
+    charge from saving, but a failure used to be only a log line: the books
+    quietly drifted from what reception recorded. Each failure is kept here,
+    shown on the finance dashboard, and retried by "Retry postings" or
+    `manage.py retry_ledger_postings`. A later successful posting of the
+    same record marks it resolved."""
+
+    ACTION_POST = "post"
+    ACTION_REVERSE = "reverse"
+
+    hospital = models.ForeignKey("accounts.Hospital", on_delete=models.CASCADE, null=True, blank=True, related_name="+")
+    source_model = models.CharField(max_length=60)  # e.g. "reception.payment"
+    source_id = models.PositiveBigIntegerField()
+    action = models.CharField(max_length=10, default=ACTION_POST)
+    error = models.TextField()
+    attempts = models.PositiveIntegerField(default=1)
+    created_at = models.DateTimeField(auto_now_add=True)
+    last_attempt_at = models.DateTimeField(auto_now=True)
+    resolved_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [models.Index(fields=["source_model", "source_id", "resolved_at"])]
+
+    def __str__(self):
+        return f"{self.action} {self.source_model}#{self.source_id}: {self.error[:60]}"

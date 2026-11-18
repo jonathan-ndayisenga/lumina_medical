@@ -31,6 +31,7 @@ from reception.workflow import (
 
 from .forms import ConsultationForm
 from .models import Consultation, LabRequest, Prescription, ServiceRequest
+from labsystem.tenancy import scope_to_hospital
 
 
 def doctor_role_required(view_func):
@@ -272,9 +273,13 @@ def reverse_dispensed_stock(prescription, *, actor):
 
 
 @transaction.atomic
-def remove_prescription_workflow(*, prescription, actor):
+def remove_prescription_workflow(*, prescription, actor, voiding_visit=False):
     visit = prescription.visit
     total_price = Decimal(prescription.total_price or 0)
+    if not voiding_visit and not (prescription.covered_by_previous or prescription.covered_by_package):
+        blocked = visit.removal_blocked_message(total_price)
+        if blocked:
+            raise ValidationError(blocked)
     removed_drug_name = prescription.drug.name
     dispensed = prescription.dispensed
     covered_by_previous = prescription.covered_by_previous
@@ -291,12 +296,10 @@ def remove_prescription_workflow(*, prescription, actor):
         billing_line.delete()
 
     if not (covered_by_previous or covered_by_package):
-        visit.total_amount = max(Decimal(visit.total_amount or 0) - total_price, Decimal("0"))
-    update_fields = ["total_amount"]
+        visit.adjust_total(-total_price)
     if visit.status == Visit.STATUS_COMPLETED and not visit.is_fully_paid:
         visit.status = Visit.STATUS_READY_FOR_BILLING
-        update_fields.append("status")
-    visit.save(update_fields=update_fields)
+        visit.save(update_fields=["status"])
     refresh_parent_adjustment_state(parent_prescription)
 
     message = f"{removed_drug_name} removed from the prescription list."
@@ -424,8 +427,7 @@ def add_lab_service_api(request):
 def send_lab_request_api(request, visit_id):
     hospital = get_active_hospital(request)
     visits = Visit.objects.select_related("hospital").all()
-    if hospital and getattr(request.user, "role", "") != User.ROLE_SUPERADMIN:
-        visits = visits.filter(hospital=hospital)
+    visits = scope_to_hospital(visits, request.user, hospital, "hospital")
     visit = get_object_or_404(visits, pk=visit_id)
     if visit.status == Visit.STATUS_CANCELLED:
         return JsonResponse({"error": "This visit was terminated by an administrator."}, status=409)
@@ -525,8 +527,7 @@ def send_lab_request_api(request, visit_id):
         )
 
     if added_total:
-        visit.total_amount += added_total
-        visit.save(update_fields=["total_amount"])
+        visit.adjust_total(added_total)
 
     if consultation and consultation_request_ids != (consultation.lab_requests or []):
         consultation.lab_requests = consultation_request_ids
@@ -583,8 +584,7 @@ def send_lab_request_api(request, visit_id):
 def add_billable_service_api(request, visit_id):
     hospital = get_active_hospital(request)
     visits = Visit.objects.select_related("hospital").all()
-    if hospital and getattr(request.user, "role", "") != User.ROLE_SUPERADMIN:
-        visits = visits.filter(hospital=hospital)
+    visits = scope_to_hospital(visits, request.user, hospital, "hospital")
     visit = get_object_or_404(visits, pk=visit_id)
     if visit.status == Visit.STATUS_CANCELLED:
         return JsonResponse({"error": "This visit was terminated by an administrator."}, status=409)
@@ -631,8 +631,7 @@ def add_billable_service_api(request, visit_id):
         return JsonResponse({"error": f"{service.name} is already on this visit."}, status=400)
 
     if visit_service.is_charged:
-        visit.total_amount += total_price
-        visit.save(update_fields=["total_amount"])
+        visit.adjust_total(total_price)
 
     # A scan goes through reception first, exactly like a lab request.
     is_scan = service.category.lower() in SCAN_CATEGORIES
@@ -682,8 +681,7 @@ def add_billable_service_api(request, visit_id):
 def add_prescription_api(request, visit_id):
     hospital = get_active_hospital(request)
     visits = Visit.objects.select_related("hospital").all()
-    if hospital and getattr(request.user, "role", "") != User.ROLE_SUPERADMIN:
-        visits = visits.filter(hospital=hospital)
+    visits = scope_to_hospital(visits, request.user, hospital, "hospital")
     visit = get_object_or_404(visits, pk=visit_id)
     if visit.status == Visit.STATUS_CANCELLED:
         return JsonResponse({"error": "This visit was terminated by an administrator."}, status=409)
@@ -770,8 +768,7 @@ def add_prescription_api(request, visit_id):
         prescription.billing_visit_service = billing_line
         prescription.save(update_fields=["billing_visit_service"])
 
-        visit.total_amount += prescription.total_price
-        visit.save(update_fields=["total_amount"])
+        visit.adjust_total(prescription.total_price)
 
     if prescription.nursing_managed:
         attach_prescription_to_active_nursing_admission(visit, prescription)
@@ -800,8 +797,7 @@ def add_prescription_api(request, visit_id):
 def remove_lab_service_api(request, visit_id, visit_service_id):
     hospital = get_active_hospital(request)
     visits = Visit.objects.select_related("hospital").all()
-    if hospital and getattr(request.user, "role", "") != User.ROLE_SUPERADMIN:
-        visits = visits.filter(hospital=hospital)
+    visits = scope_to_hospital(visits, request.user, hospital, "hospital")
     visit = get_object_or_404(visits, pk=visit_id)
     if visit.status == Visit.STATUS_CANCELLED:
         return JsonResponse({"error": "This visit was terminated by an administrator."}, status=409)
@@ -842,12 +838,14 @@ def remove_lab_service_api(request, visit_id, visit_service_id):
         return JsonResponse({"error": "; ".join(exc.messages)}, status=400)
 
     removed_price = visit_service.price_at_time if visit_service.is_charged else Decimal("0")
+    blocked = visit.removal_blocked_message(removed_price)
+    if blocked:
+        return JsonResponse({"error": blocked}, status=409)
     service_name = visit_service.service.name
     service_pk = visit_service.service.pk
     visit_service.delete()
 
-    visit.total_amount = max(Decimal("0"), visit.total_amount - removed_price)
-    visit.save(update_fields=["total_amount"])
+    visit.adjust_total(-(removed_price))
 
     consultation = getattr(visit, "consultation", None)
     if consultation and consultation.lab_requests:
@@ -876,8 +874,7 @@ def remove_lab_service_api(request, visit_id, visit_service_id):
 def remove_billable_service_api(request, visit_id, visit_service_id):
     hospital = get_active_hospital(request)
     visits = Visit.objects.select_related("hospital").all()
-    if hospital and getattr(request.user, "role", "") != User.ROLE_SUPERADMIN:
-        visits = visits.filter(hospital=hospital)
+    visits = scope_to_hospital(visits, request.user, hospital, "hospital")
     visit = get_object_or_404(visits, pk=visit_id)
     if visit.status == Visit.STATUS_CANCELLED:
         return JsonResponse({"error": "This visit was terminated by an administrator."}, status=409)
@@ -889,11 +886,13 @@ def remove_billable_service_api(request, visit_id, visit_service_id):
     )
 
     removed_price = visit_service.price_at_time if visit_service.is_charged else Decimal("0")
+    blocked = visit.removal_blocked_message(removed_price)
+    if blocked:
+        return JsonResponse({"error": blocked}, status=409)
     service_name = visit_service.service.name
     visit_service.delete()
 
-    visit.total_amount = max(Decimal("0"), visit.total_amount - removed_price)
-    visit.save(update_fields=["total_amount"])
+    visit.adjust_total(-(removed_price))
 
     return JsonResponse(
         {
@@ -909,8 +908,7 @@ def remove_billable_service_api(request, visit_id, visit_service_id):
 def remove_prescription_api(request, visit_id, prescription_id):
     hospital = get_active_hospital(request)
     visits = Visit.objects.select_related("hospital").all()
-    if hospital and getattr(request.user, "role", "") != User.ROLE_SUPERADMIN:
-        visits = visits.filter(hospital=hospital)
+    visits = scope_to_hospital(visits, request.user, hospital, "hospital")
     visit = get_object_or_404(visits, pk=visit_id)
     if visit.status == Visit.STATUS_CANCELLED:
         return JsonResponse({"error": "This visit was terminated by an administrator."}, status=409)
@@ -920,7 +918,10 @@ def remove_prescription_api(request, visit_id, prescription_id):
         visit=visit,
     )
 
-    payload = remove_prescription_workflow(prescription=prescription, actor=request.user)
+    try:
+        payload = remove_prescription_workflow(prescription=prescription, actor=request.user)
+    except ValidationError as exc:
+        return JsonResponse({"error": "; ".join(exc.messages)}, status=409)
     return JsonResponse(payload)
 
 
@@ -931,8 +932,7 @@ def doctor_queue(request):
         queue_type=QueueEntry.TYPE_DOCTOR,
         processed=False,
     ).select_related("visit__patient", "hospital", "requested_by")
-    if hospital and getattr(request.user, "role", "") != User.ROLE_SUPERADMIN:
-        queue_entries = queue_entries.filter(hospital=hospital)
+    queue_entries = scope_to_hospital(queue_entries, request.user, hospital, "hospital")
 
     # A "lab results ready" entry is addressed to the one doctor who
     # actually ordered that test — another doctor at the same hospital
@@ -972,8 +972,7 @@ def doctor_queue(request):
         "visit__hospital",
         "created_by",
     )
-    if hospital and getattr(request.user, "role", "") != User.ROLE_SUPERADMIN:
-        completed_consultations = completed_consultations.filter(visit__hospital=hospital)
+    completed_consultations = scope_to_hospital(completed_consultations, request.user, hospital, "visit__hospital")
 
     recent_consultations = []
     for consultation in completed_consultations.order_by("-created_at")[:12]:
@@ -1035,8 +1034,7 @@ def consultation_triage(request, visit_id):
     """The visit's current vitals, so an open consultation page picks up what the nurse saves."""
     hospital = get_active_hospital(request)
     visits = Visit.objects.all()
-    if hospital and getattr(request.user, "role", "") != User.ROLE_SUPERADMIN:
-        visits = visits.filter(hospital=hospital)
+    visits = scope_to_hospital(visits, request.user, hospital, "hospital")
     visit = get_object_or_404(visits, pk=visit_id)
     triage = Triage.objects.filter(visit=visit).first()
     return JsonResponse({
@@ -1049,8 +1047,7 @@ def consultation_triage(request, visit_id):
 def consultation(request, visit_id):
     hospital = get_active_hospital(request)
     visits = Visit.objects.select_related("patient", "hospital", "triage").all()
-    if hospital and getattr(request.user, "role", "") != User.ROLE_SUPERADMIN:
-        visits = visits.filter(hospital=hospital)
+    visits = scope_to_hospital(visits, request.user, hospital, "hospital")
     visit = get_object_or_404(visits, pk=visit_id)
     if visit.status == Visit.STATUS_CANCELLED:
         messages.error(request, "This visit was terminated by an administrator and can no longer be edited.")
@@ -1215,8 +1212,7 @@ def consultation(request, visit_id):
                             notes="Added automatically when doctor referred patient to sonographer.",
                         )
                         if not scan_free:
-                            visit.total_amount = (visit.total_amount or 0) + scan_service.price
-                            visit.save(update_fields=["total_amount"])
+                            visit.adjust_total(scan_service.price)
                 send_to_reception_queue(
                     visit=visit,
                     hospital=visit.hospital,
@@ -1310,8 +1306,7 @@ def consultation_detail(request, visit_id):
         "visit__hospital",
         "created_by",
     )
-    if hospital and getattr(request.user, "role", "") != User.ROLE_SUPERADMIN:
-        consultations = consultations.filter(visit__hospital=hospital)
+    consultations = scope_to_hospital(consultations, request.user, hospital, "visit__hospital")
 
     consultation_instance = get_object_or_404(consultations, visit_id=visit_id)
     visit = consultation_instance.visit
@@ -1351,8 +1346,7 @@ def consultation_detail(request, visit_id):
 def consultation_delete(request, visit_id):
     hospital = get_active_hospital(request)
     consultations = Consultation.objects.select_related("visit__patient", "visit__hospital", "created_by")
-    if hospital and getattr(request.user, "role", "") != User.ROLE_SUPERADMIN:
-        consultations = consultations.filter(visit__hospital=hospital)
+    consultations = scope_to_hospital(consultations, request.user, hospital, "visit__hospital")
     consultation_instance = get_object_or_404(consultations, visit_id=visit_id)
     require_admin_override(request.user)
 
@@ -1424,7 +1418,8 @@ def create_lab_request(request):
 
 @doctor_role_required
 def view_lab_request(request, lab_request_id):
-    lab_request = get_object_or_404(LabRequest.objects.select_related("visit"), pk=lab_request_id)
+    lab_requests = scope_to_hospital(LabRequest.objects.select_related("visit"), request.user, get_active_hospital(request), "visit__hospital")
+    lab_request = get_object_or_404(lab_requests, pk=lab_request_id)
     messages.info(
         request,
         "This older lab-request page is now read-only. Continue the workflow from the consultation page.",

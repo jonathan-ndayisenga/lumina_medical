@@ -24,6 +24,7 @@ from django.contrib.auth.decorators import login_required, user_passes_test
 from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
 from django.db import transaction
+from django.db.models import ProtectedError
 from django.db.models import Count
 from django.shortcuts import get_object_or_404, redirect, render
 
@@ -51,6 +52,7 @@ from .models import (
 )
 from .services_next import clone_lab_test
 from .views import get_active_hospital, staff_required
+from labsystem.tenancy import scope_to_hospital
 
 
 RESULT_TYPE_NOTES = {
@@ -187,6 +189,16 @@ def _catalog_admin_ok(user):
 catalog_admin_required = user_passes_test(_catalog_admin_ok)
 
 
+def _platform_catalog_admin_ok(user):
+    """Service categories and specimen types are one list shared by every
+    hospital, so only platform superadmins change them: a hospital admin's
+    rename used to show up in every other hospital's catalog."""
+    return user.is_active and (user.is_superuser or getattr(user, "role", "") == user.ROLE_SUPERADMIN)
+
+
+platform_catalog_admin_required = user_passes_test(_platform_catalog_admin_ok)
+
+
 # ---------------------------------------------------------------------------
 # Service Categories
 # ---------------------------------------------------------------------------
@@ -197,13 +209,13 @@ def category_list(request):
     paginator = Paginator(ServiceCategory.objects.all(), CATALOG_PAGE_SIZE)
     return render(request, "lab/catalog_category_list.html", {
         "categories": paginator.get_page(request.GET.get("page")),
-        "is_admin": _catalog_admin_ok(request.user),
+        "is_admin": _platform_catalog_admin_ok(request.user),
         "active_nav": "lab_categories",
     })
 
 
 @login_required
-@catalog_admin_required
+@platform_catalog_admin_required
 def category_create(request):
     if request.method == "POST":
         form = ServiceCategoryForm(request.POST)
@@ -219,7 +231,7 @@ def category_create(request):
 
 
 @login_required
-@catalog_admin_required
+@platform_catalog_admin_required
 def category_edit(request, pk):
     category = get_object_or_404(ServiceCategory, pk=pk)
     if request.method == "POST":
@@ -245,13 +257,13 @@ def specimen_list(request):
     paginator = Paginator(SpecimenType.objects.all(), CATALOG_PAGE_SIZE)
     return render(request, "lab/catalog_specimen_list.html", {
         "specimens": paginator.get_page(request.GET.get("page")),
-        "is_admin": _catalog_admin_ok(request.user),
+        "is_admin": _platform_catalog_admin_ok(request.user),
         "active_nav": "lab_specimens",
     })
 
 
 @login_required
-@catalog_admin_required
+@platform_catalog_admin_required
 def specimen_create(request):
     if request.method == "POST":
         form = SpecimenTypeForm(request.POST)
@@ -267,7 +279,7 @@ def specimen_create(request):
 
 
 @login_required
-@catalog_admin_required
+@platform_catalog_admin_required
 def specimen_edit(request, pk):
     specimen = get_object_or_404(SpecimenType, pk=pk)
     if specimen.is_default:
@@ -287,14 +299,18 @@ def specimen_edit(request, pk):
 
 
 @login_required
-@catalog_admin_required
+@platform_catalog_admin_required
 def specimen_delete(request, pk):
     specimen = get_object_or_404(SpecimenType, pk=pk)
     if specimen.is_default:
         messages.error(request, "Default specimen types are locked and can't be deleted.")
         return redirect("lab_specimen_list")
     if request.method == "POST":
-        specimen.delete()
+        try:
+            specimen.delete()
+        except ProtectedError:
+            messages.error(request, f"{specimen.name} is used by lab tests or results, so it can't be deleted.")
+            return redirect("lab_specimen_list")
         messages.success(request, "Specimen type deleted.")
         return redirect("lab_specimen_list")
     return render(request, "lab/catalog_specimen_confirm_delete.html", {
@@ -399,8 +415,7 @@ def test_list(request):
                 services_by_test[test.pk] = svc
 
     tests = LabTest.objects.select_related("category").prefetch_related("accepted_specimens")
-    if hospital and getattr(request.user, "role", "") != "superadmin":
-        tests = tests.filter(hospital=hospital)
+    tests = scope_to_hospital(tests, request.user, hospital, "hospital")
     rows = [{"test": t, "service": services_by_test.get(t.pk)} for t in tests]
     paginator = Paginator(rows, CATALOG_PAGE_SIZE)
 
@@ -459,8 +474,7 @@ def test_create(request):
 def test_edit(request, pk):
     hospital = get_active_hospital(request)
     tests = LabTest.objects.all()
-    if hospital and getattr(request.user, "role", "") != "superadmin":
-        tests = tests.filter(hospital=hospital)
+    tests = scope_to_hospital(tests, request.user, hospital, "hospital")
     test = get_object_or_404(tests, pk=pk)
     existing_service = Service.objects.filter(hospital=hospital, lab_tests_next=test).first()
 

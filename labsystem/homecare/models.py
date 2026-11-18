@@ -180,21 +180,21 @@ class HomeCareContract(models.Model):
         return self.contract_number
 
     def save(self, *args, **kwargs):
-        if not self.contract_number:
-            self.contract_number = self._generate_number()
         if not self.terms_snapshot:
             self.terms_snapshot = self._snapshot()
+        if not self.contract_number:
+            from labsystem.numbering import save_with_number
+
+            return save_with_number(self, "contract_number", self._number_prefix(), lambda: super(HomeCareContract, self).save(*args, **kwargs))
         super().save(*args, **kwargs)
 
-    def _generate_number(self):
-        from django.utils.timezone import now as _now
-        stamp = _now().strftime("%Y%m%d")
+    def _number_prefix(self):
+        stamp = timezone.localdate().strftime("%Y%m%d")
         try:
             prefix = hospital_initials(self.placement.hospital.name, fallback="CON")
         except Exception:
             prefix = "CON"
-        last = HomeCareContract.objects.filter(contract_number__startswith=f"{prefix}{stamp}").count()
-        return f"{prefix}{stamp}-{str(last + 1).zfill(4)}"
+        return f"{prefix}{stamp}-"
 
     def _snapshot(self):
         p = self.placement
@@ -236,15 +236,15 @@ class HomeCareReceipt(models.Model):
 
     def save(self, *args, **kwargs):
         if not self.receipt_number:
-            self.receipt_number = self._generate_number()
+            from labsystem.numbering import save_with_number
+
+            return save_with_number(self, "receipt_number", self._number_prefix(), lambda: super(HomeCareReceipt, self).save(*args, **kwargs))
         super().save(*args, **kwargs)
 
-    def _generate_number(self):
-        from django.utils.timezone import now as _now
-        stamp = _now().strftime("%Y%m%d")
+    def _number_prefix(self):
+        stamp = timezone.localdate().strftime("%Y%m%d")
         try:
             prefix = hospital_initials(self.placement.hospital.name, fallback="HCR")
         except Exception:
             prefix = "HCR"
-        last = HomeCareReceipt.objects.filter(receipt_number__startswith=f"{prefix}{stamp}").count()
-        return f"{prefix}{stamp}-{str(last + 1).zfill(4)}"
+        return f"{prefix}{stamp}-"

@@ -7,6 +7,7 @@ import re
 from xml.sax.saxutils import escape
 import zipfile
 
+from labsystem.safe_json import script_json
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
@@ -210,6 +211,19 @@ def superadmin_context(request, active_nav, dashboard_title, dashboard_intro):
     }
 
 
+def _password_problems(password, user):
+    """The same rules as everywhere else (length, too common, all digits, too
+    like the username), not just a length check."""
+    from django.contrib.auth.password_validation import validate_password
+    from django.core.exceptions import ValidationError as _ValidationError
+
+    try:
+        validate_password(password, user)
+    except _ValidationError as exc:
+        return list(exc.messages)
+    return []
+
+
 def hospital_owned_or_404(model, request, **filters):
     hospital = active_hospital(request)
     queryset = model.objects.filter(hospital=hospital, **filters) if hospital else model.objects.none()
@@ -367,9 +381,9 @@ def inventory_dashboard_snapshot(hospital):
         "restock_items": (out_of_stock_items + low_stock_items)[:15],
         "out_of_stock_items": out_of_stock_items,
         "low_stock_items": low_stock_items,
-        "pharma_chart_labels_json": json.dumps(pharma_chart_labels),
-        "pharma_chart_values_json": json.dumps(pharma_chart_values),
-        "net_profit_chart_values_json": json.dumps(net_profit_chart_values),
+        "pharma_chart_labels_json": script_json(pharma_chart_labels),
+        "pharma_chart_values_json": script_json(pharma_chart_values),
+        "net_profit_chart_values_json": script_json(net_profit_chart_values),
     }
 
 
@@ -732,7 +746,7 @@ def developer_dashboard(request):
     )
     expiring_hospitals = hospitals.filter(
         subscription_end_date__isnull=False,
-        subscription_end_date__lte=timezone.now().date() + timedelta(days=7),
+        subscription_end_date__lte=timezone.localdate() + timedelta(days=7),
     )
 
     # --- Pie chart: expected monthly income share per module, platform-wide ---
@@ -749,7 +763,7 @@ def developer_dashboard(request):
             module_expected_total += expected
 
     # --- Line chart: 6-month window, two switchable modes ---
-    today = timezone.now().date()
+    today = timezone.localdate()
     month_starts = []
     cursor = today.replace(day=1)
     for _ in range(6):
@@ -767,7 +781,7 @@ def developer_dashboard(request):
             (m.monthly_price for m in modules if m.code in hospital.active_module_codes),
             Decimal("0"),
         )
-        onboarded_month = hospital.created_at.date().replace(day=1) if hospital.created_at else today.replace(day=1)
+        onboarded_month = timezone.localdate(hospital.created_at).replace(day=1) if hospital.created_at else today.replace(day=1)
         data_points = [
             str(monthly_total) if month >= onboarded_month else "0"
             for month in month_starts
@@ -781,7 +795,7 @@ def developer_dashboard(request):
         next_month = (month + timedelta(days=32)).replace(day=1)
         count = sum(
             1 for h in all_hospitals
-            if h.created_at and month <= h.created_at.date() < next_month
+            if h.created_at and month <= timezone.localdate(h.created_at) < next_month
         )
         onboarding_counts.append(count)
 
@@ -809,11 +823,11 @@ def developer_dashboard(request):
         "active_hospitals": hospitals.filter(is_active=True).count(),
         "total_users": User.objects.count(),
         "module_expected_total": module_expected_total,
-        "pie_labels_json": json.dumps(pie_labels),
-        "pie_values_json": json.dumps(pie_values),
-        "month_labels_json": json.dumps(month_labels),
-        "income_datasets_json": json.dumps(income_datasets),
-        "onboarding_counts_json": json.dumps(onboarding_counts),
+        "pie_labels_json": script_json(pie_labels),
+        "pie_values_json": script_json(pie_values),
+        "month_labels_json": script_json(month_labels),
+        "income_datasets_json": script_json(income_datasets),
+        "onboarding_counts_json": script_json(onboarding_counts),
         "token_notifications": token_notifications,
     }
     return render(request, "admin_dashboard/developer_dashboard.html", context)
@@ -1094,7 +1108,7 @@ def financial_report(request):
 
             grouped = {}
             for payment in receipts_dash.select_related("bank_account", "mobile_account").order_by("-paid_at", "-id")[:800]:
-                day = payment.paid_at.date()
+                day = timezone.localdate(payment.paid_at)
                 if payment.mode == Payment.MODE_CARD:
                     account_label = str(payment.bank_account) if payment.bank_account_id else "-"
                 elif payment.mode == Payment.MODE_MOBILE_MONEY:
@@ -1206,7 +1220,7 @@ def financial_report(request):
                 dispensed_at__date__gte=period_start,
                 dispensed_at__date__lte=period_end,
             ).select_related("drug", "visit__patient").order_by("-dispensed_at")[:800]:
-                day = rx.dispensed_at.date() if rx.dispensed_at else None
+                day = timezone.localdate(rx.dispensed_at) if rx.dispensed_at else None
                 if not day:
                     continue
                 item_name = str(rx.drug) if rx.drug_id else "Unknown Drug"
@@ -1284,8 +1298,8 @@ def financial_report(request):
         "chart_title": chart_title,
         "chart_series_label": chart_series_label,
         "chart_kind": chart_kind,
-        "chart_labels_json": json.dumps(chart_labels),
-        "chart_values_json": json.dumps(chart_values),
+        "chart_labels_json": script_json(chart_labels),
+        "chart_values_json": script_json(chart_values),
         "summary_rows": summary_rows,
         "pharma_sales_list": pharma_sales_list,
     }
@@ -1389,8 +1403,8 @@ def reset_user_password(request, user_id):
             messages.error(request, "Password cannot be empty.")
         elif password1 != password2:
             messages.error(request, "Passwords do not match.")
-        elif len(password1) < 8:
-            messages.error(request, "Password must be at least 8 characters.")
+        elif (problems := _password_problems(password1, user)):
+            messages.error(request, " ".join(problems))
         else:
             user.set_password(password1)
             user.save(update_fields=["password"])
@@ -1416,6 +1430,17 @@ def delete_user(request, user_id):
 
     if request.method == "POST":
         name = user.get_full_name() or user.username
+        if user.salary_records.exists() or user.recorded_payments.exists():
+            # Deleting would erase their salary history and blank out who took
+            # each payment. They keep their record but can no longer sign in.
+            user.is_active = False
+            user.save(update_fields=["is_active"])
+            messages.success(
+                request,
+                f"{name} can no longer sign in. Their account was deactivated rather than deleted "
+                "because it has salary or payment records.",
+            )
+            return redirect("manage_users")
         user.delete()
         messages.success(request, f"{name} has been permanently deleted.")
         return redirect("manage_users")
@@ -1645,8 +1670,8 @@ def manage_expenses(request):
         "expenses": page_obj,
         "page_obj": page_obj,
         "form": form,
-        "chart_labels_json": json.dumps(chart_labels),
-        "chart_values_json": json.dumps(chart_values),
+        "chart_labels_json": script_json(chart_labels),
+        "chart_values_json": script_json(chart_values),
         "search_term": search_term,
         "filter_category": filter_category,
         "category_choices": Expense.CATEGORY_CHOICES,
@@ -1935,7 +1960,7 @@ def inventory_insights(request):
         dispensed_at__date__gte=period_start,
         dispensed_at__date__lte=period_end,
     ).select_related("drug").order_by("dispensed_at"):
-        d = rx.dispensed_at.date() if rx.dispensed_at else None
+        d = timezone.localdate(rx.dispensed_at) if rx.dispensed_at else None
         revenue = rx.total_price or Decimal("0")
         unit_cost = (rx.drug.unit_cost or Decimal("0")) if rx.drug else Decimal("0")
         qty = rx.total_quantity or Decimal("0")
@@ -2008,9 +2033,9 @@ def inventory_insights(request):
     context.update({
         "period_start": period_start.isoformat(),
         "period_end": period_end.isoformat(),
-        "chart_labels_json": json.dumps(chart_labels),
-        "pharma_income_values_json": json.dumps(pharma_income_values),
-        "pharma_profit_values_json": json.dumps(pharma_profit_values),
+        "chart_labels_json": script_json(chart_labels),
+        "pharma_income_values_json": script_json(pharma_income_values),
+        "pharma_profit_values_json": script_json(pharma_profit_values),
         "dispensed_list": drugs_page_obj,
         "drugs_page_obj": drugs_page_obj,
         "restock_page_obj": restock_page_obj,
@@ -2488,7 +2513,7 @@ def report_consultations(request):
         "hospital": hospital,
         "department_revenue": _department_revenue(hospital, date_start, date_end),
         "show_finance_link": request.user.can_access_finance,
-        "chart_json": json.dumps({
+        "chart_json": script_json({
             "labels": [d["name"] for d in doctor_rows],
             "billed": [float(d["billed"]) for d in doctor_rows],
             "collected": [float(d["collected"]) for d in doctor_rows],
@@ -2570,7 +2595,7 @@ def patient_activity_report(request):
         "month_options": list(reversed(list(zip(month_keys, labels)))),
         "total_visits": total_visits,
         "total_billed": total_billed,
-        "chart_json": json.dumps({"labels": labels, "counts": counts, "months": month_keys}),
+        "chart_json": script_json({"labels": labels, "counts": counts, "months": month_keys}),
     })
     return render(request, "admin_dashboard/patient_activity_report.html", context)
 
@@ -2703,7 +2728,7 @@ def visit_summary_report(request):
         "total_amount": total_amount,
         "average_visit_value": average_visit_value,
         "status_summary": status_summary,
-        "chart_json": json.dumps({"labels": labels, "counts": counts, "amounts": amounts}),
+        "chart_json": script_json({"labels": labels, "counts": counts, "amounts": amounts}),
         "recent_visits": recent_visits,
     })
     return render(request, "admin_dashboard/visit_summary_report.html", context)
@@ -3363,7 +3388,7 @@ def generate_invoice(request, hospital_id):
         period_start = timezone.datetime.fromisoformat(period_start_raw).date()
         period_end   = timezone.datetime.fromisoformat(period_end_raw).date()
     except (ValueError, TypeError):
-        today = timezone.now().date()
+        today = timezone.localdate()
         period_start = today.replace(day=1)
         period_end   = hospital.subscription_end_date or today
 
@@ -3500,7 +3525,7 @@ def hospital_modules_json(request, hospital_id):
         }
         for m in modules
     ]
-    today = timezone.now().date().isoformat()
+    today = timezone.localdate().isoformat()
     return JsonResponse({"modules": data, "today": today})
 
 
@@ -3531,7 +3556,6 @@ def manage_hospitals(request):
                         role=User.ROLE_HOSPITAL_ADMIN,
                         hospital=hospital,
                         is_active=True,
-                        is_staff=True,
                         email=form.cleaned_data["email"],
                     )
             except Exception as exc:
@@ -3558,7 +3582,7 @@ def manage_hospitals(request):
         "form": form,
         "query": query,
         "all_modules": Module.objects.filter(is_active=True),
-        "today": timezone.now().date(),
+        "today": timezone.localdate(),
     })
     return render(request, "admin_dashboard/manage_hospitals.html", context)
 
@@ -3587,7 +3611,7 @@ def edit_hospital(request, hospital_id):
         "form": form,
         "hospital": hospital,
         "all_modules": Module.objects.filter(is_active=True),
-        "today": timezone.now().date(),
+        "today": timezone.localdate(),
     })
     return render(request, "admin_dashboard/edit_hospital.html", context)
 
@@ -3604,7 +3628,7 @@ def toggle_hospital_active(request, hospital_id):
         messages.warning(request, f"'{hospital.name}' has been deactivated.")
     else:
         hospital.is_active = True
-        today = date.today()
+        today = timezone.localdate()
         if not hospital.subscription_end_date or hospital.subscription_end_date < today:
             hospital.subscription_end_date = today + timedelta(days=30)
         messages.success(request, f"'{hospital.name}' reactivated — subscription extended to {hospital.subscription_end_date}.")

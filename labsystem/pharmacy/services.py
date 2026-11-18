@@ -130,13 +130,11 @@ def add_by_quantity(visit, drug, quantity, counted_in, actor, notes=""):
     line = VisitService.objects.create(visit=visit, service=service, price_at_time=rx.total_price, notes=f"Pharmacy sale: {rx.quantity_display}")
     rx.billing_visit_service = line
     rx.save(update_fields=["billing_visit_service"])
-    visit.total_amount = Decimal(visit.total_amount or 0) + rx.total_price
-    update_fields = ["total_amount"]
+    visit.adjust_total(rx.total_price)
     # A finished visit now owes more, so it goes back to reception for the new charge.
     if visit.status == Visit.STATUS_COMPLETED:
         visit.status = Visit.STATUS_READY_FOR_BILLING
-        update_fields.append("status")
-    visit.save(update_fields=update_fields)
+        visit.save(update_fields=["status"])
     return rx
 
 
@@ -190,18 +188,19 @@ def change_quantity(prescription, quantity, actor):
     rx.save()
 
     difference = Decimal(rx.total_price) - old_price
+    blocked = visit.removal_blocked_message(-difference)
+    if blocked:
+        raise ValidationError(blocked)
     line = rx.billing_visit_service
     if line is not None:
         line.price_at_time = rx.total_price
         line.notes = f"Pharmacy: {rx.quantity_display}"
         line.save(update_fields=["price_at_time", "notes"])
-    visit.total_amount = max(Decimal(visit.total_amount or 0) + difference, Decimal("0"))
-    update_fields = ["total_amount"]
+    visit.adjust_total(difference)
     # More is owed on a finished visit: it goes back to reception for the difference.
     if visit.status == Visit.STATUS_COMPLETED and not visit.is_fully_paid:
         visit.status = Visit.STATUS_READY_FOR_BILLING
-        update_fields.append("status")
-    visit.save(update_fields=update_fields)
+        visit.save(update_fields=["status"])
     return rx
 
 

@@ -4,6 +4,7 @@ from django import forms
 from django.contrib import messages
 from django.core.exceptions import ValidationError
 from django.forms import inlineformset_factory
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
@@ -73,7 +74,11 @@ def recurring_generate(request):
             messages.info(request, "No monthly invoices are due today.")
         for error in errors:
             messages.error(request, error)
-    return redirect(request.POST.get("next") or "books:recurring_list")
+    # Only back to a page on this site: an unchecked "next" sends people anywhere.
+    next_url = request.POST.get("next") or ""
+    if next_url and url_has_allowed_host_and_scheme(next_url, allowed_hosts={request.get_host()}, require_https=request.is_secure()):
+        return redirect(next_url)
+    return redirect("books:recurring_list")
 
 
 class PlanStartForm(forms.Form):

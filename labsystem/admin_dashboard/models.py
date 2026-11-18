@@ -2,7 +2,7 @@ from decimal import Decimal
 
 from django.apps import apps
 from django.conf import settings
-from django.db import models
+from django.db import models, transaction
 from django.db.models import Sum
 from django.utils import timezone
 
@@ -16,8 +16,12 @@ def sync_hospital_account_balance(hospital):
     Payment = apps.get_model("reception", "Payment")
     account, _ = HospitalAccount.objects.get_or_create(hospital=hospital)
 
+    # Every receipt counts from the moment the money is taken. Counting only
+    # completed visits left out part-payments and paid visits still in a queue.
     income = (
-        Payment.objects.filter(visit__hospital=hospital, visit__status="completed").aggregate(total=models.Sum("amount_paid"))["total"]
+        Payment.objects.filter(visit__hospital=hospital)
+        .exclude(status="waived")
+        .aggregate(total=models.Sum("amount_paid"))["total"]
         or Decimal("0")
     )
     expenses = Expense.objects.filter(hospital=hospital).aggregate(total=models.Sum("amount"))["total"] or Decimal("0")
@@ -29,6 +33,68 @@ def sync_hospital_account_balance(hospital):
     account.balance = income - (expenses + salaries)
     account.save(update_fields=["balance", "updated_at"])
     return account
+
+
+def open_drawer_for(hospital, day, preferred=None):
+    """The open cash drawer to put cash for `day` into, opening one if needed.
+
+    A closed drawer has been counted and signed off, so nothing is added to
+    it: cash taken after closing goes into a new drawer for that day, opening
+    with the last counted balance. The hospital row is locked while choosing,
+    so two first receipts of the day can't each open a drawer."""
+    if preferred is not None and preferred.closed_at is None:
+        return preferred
+    with transaction.atomic():
+        Hospital.objects.select_for_update().filter(pk=hospital.pk).first()
+        drawer = (
+            CashDrawer.objects.filter(hospital=hospital, date=day, closed_at__isnull=True)
+            .order_by("-id").first()
+        )
+        if drawer:
+            return drawer
+        last_with_balance = (
+            CashDrawer.objects.filter(hospital=hospital, closing_balance__isnull=False)
+            .order_by("-date", "-id").first()
+        )
+        opening = last_with_balance.closing_balance if last_with_balance else Decimal("0")
+        return CashDrawer.objects.create(hospital=hospital, date=day, opening_balance=opening)
+
+
+def mirror_cash(source_filter, hospital, day, amount, description, inflow, preferred_drawer=None):
+    """Make the cash drawers show `amount` for one receipt or expense.
+
+    `source_filter` picks its CashTransactions (e.g. {"payment": payment}).
+    What is already in closed drawers stays exactly as counted; only the
+    difference is booked, in an open drawer. `amount` 0 means "no cash for
+    this any more" (deleted, waived, paid another way)."""
+    txns = CashTransaction.objects.filter(**source_filter).select_related("cash_drawer")
+    signed = lambda t: t.amount if t.transaction_type == CashTransaction.TYPE_CASH_IN else -t.amount
+    counted = sum((signed(t) for t in txns if t.cash_drawer.closed_at is not None), Decimal("0"))
+    target = Decimal(amount or 0) if inflow else -Decimal(amount or 0)
+    still_needed = target - counted
+
+    open_txns = [t for t in txns if t.cash_drawer.closed_at is None]
+    if still_needed == 0:
+        CashTransaction.objects.filter(pk__in=[t.pk for t in open_txns]).delete()
+        return
+    drawer = open_drawer_for(hospital, day, preferred=preferred_drawer)
+    kind = CashTransaction.TYPE_CASH_IN if still_needed > 0 else CashTransaction.TYPE_CASH_OUT
+    if counted:
+        description = f"{description} (correction after drawer close)"
+    keep, extra = (open_txns[0], open_txns[1:]) if open_txns else (None, [])
+    if extra:
+        CashTransaction.objects.filter(pk__in=[t.pk for t in extra]).delete()
+    if keep:
+        keep.cash_drawer = drawer
+        keep.amount = abs(still_needed)
+        keep.transaction_type = kind
+        keep.description = description[:200]
+        keep.save(update_fields=["cash_drawer", "amount", "transaction_type", "description"])
+    else:
+        CashTransaction.objects.create(
+            cash_drawer=drawer, amount=abs(still_needed), transaction_type=kind,
+            description=description[:200], **source_filter,
+        )
 
 
 class HospitalAccount(models.Model):
@@ -135,67 +201,37 @@ class Expense(models.Model):
             return f"Drawer {self.cash_drawer.date}"
         return "Not specified"
 
+    @transaction.atomic
     def save(self, *args, **kwargs):
         super().save(*args, **kwargs)
-        # Auto-assign a daily cash statement row if the expense is funded from cash and none was selected.
-        if self.source == self.SOURCE_CASH_DRAWER and not self.cash_drawer_id and self.amount > 0:
-            drawer = CashDrawer.objects.filter(hospital=self.hospital, date=self.date).order_by("-id").first()
-            if not drawer:
-                last_with_balance = (
-                    CashDrawer.objects.filter(hospital=self.hospital, closing_balance__isnull=False)
-                    .order_by("-date", "-id")
-                    .first()
-                )
-                opening = (
-                    last_with_balance.closing_balance
-                    if last_with_balance and last_with_balance.closing_balance is not None
-                    else Decimal("0")
-                )
-                drawer = CashDrawer.objects.create(
-                    hospital=self.hospital,
-                    date=self.date,
-                    opening_balance=opening,
-                )
-            self.cash_drawer = drawer
-            super().save(update_fields=["cash_drawer"])
-
-        # Keep cash drawer statements accurate by mirroring cash-funded expenses as cash-out transactions.
-        if self.source == self.SOURCE_CASH_DRAWER and self.cash_drawer_id and self.amount > 0:
-            existing = (
-                CashTransaction.objects.filter(
-                    expense=self,
-                    transaction_type=CashTransaction.TYPE_CASH_OUT,
-                )
-                .order_by("id")
-                .first()
-            )
-            if existing:
-                existing.cash_drawer = self.cash_drawer
-                existing.amount = self.amount
-                existing.description = self.description
-                existing.save(update_fields=["cash_drawer", "amount", "description"])
-            else:
-                CashTransaction.objects.create(
-                    cash_drawer=self.cash_drawer,
-                    expense=self,
-                    amount=self.amount,
-                    transaction_type=CashTransaction.TYPE_CASH_OUT,
-                    description=self.description,
-                )
-        else:
-            CashTransaction.objects.filter(expense=self).delete()
+        # Cash-funded expenses show as cash out in the drawer. A drawer already
+        # closed keeps what was counted; changes go into an open drawer.
+        is_cash = self.source == self.SOURCE_CASH_DRAWER and self.amount > 0
+        if is_cash and (not self.cash_drawer_id or self.cash_drawer.closed_at is not None):
+            if not CashTransaction.objects.filter(expense=self).exists():
+                self.cash_drawer = open_drawer_for(self.hospital, self.date)
+                super().save(update_fields=["cash_drawer"])
+        mirror_cash(
+            {"expense": self}, self.hospital, self.date,
+            self.amount if is_cash else Decimal("0"),
+            self.description, inflow=False,
+            preferred_drawer=self.cash_drawer if is_cash else None,
+        )
         sync_hospital_account_balance(self.hospital)
 
+    @transaction.atomic
     def delete(self, *args, **kwargs):
         hospital = self.hospital
-        CashTransaction.objects.filter(expense=self).delete()
+        # Cash already counted in a closed drawer is put back by a correction.
+        mirror_cash({"expense": self}, hospital, timezone.localdate(), Decimal("0"), f"Deleted expense: {self.description}", inflow=False)
         super().delete(*args, **kwargs)
         sync_hospital_account_balance(hospital)
 
 
 class Salary(models.Model):
     hospital = models.ForeignKey(Hospital, on_delete=models.CASCADE, related_name="salaries")
-    employee = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="salary_records")
+    # PROTECT: deleting a staff account must not erase their salary history.
+    employee = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="salary_records")
     month = models.DateField()
     amount = models.DecimalField(max_digits=10, decimal_places=2)
     paid = models.BooleanField(default=False)
@@ -338,8 +374,22 @@ class InventoryItem(models.Model):
         return (selling_price / units_per_pack).quantize(Decimal("0.01"))
 
     @property
+    def expired_quantity(self):
+        """Stock on hand in batches past their expiry date. Still counted in
+        current_quantity (it's on the shelf until written off) but never given
+        out: see available_dispense_quantity and consume_stock."""
+        total = self.batches.filter(
+            quantity__gt=0, expiry_date__lt=timezone.localdate(),
+        ).aggregate(total=Sum("quantity"))["total"]
+        return Decimal(total or 0)
+
+    @property
+    def usable_quantity(self):
+        return max(Decimal(self.current_quantity or 0) - self.expired_quantity, Decimal("0"))
+
+    @property
     def available_dispense_quantity(self):
-        quantity = Decimal(self.current_quantity or 0)
+        quantity = self.usable_quantity if self.pk else Decimal(self.current_quantity or 0)
         if self.category == self.CATEGORY_DRUG and self.unit != self.base_unit:
             units_per_pack = Decimal(self.units_per_pack or 0)
             if units_per_pack > 0:
@@ -437,13 +487,39 @@ class InventoryItem(models.Model):
                 unit_cost=self.unit_cost or Decimal("0")
             )
 
+    def _unexpired_batches(self):
+        today = timezone.localdate()
+        return self.batches.filter(models.Q(expiry_date__isnull=True) | models.Q(expiry_date__gte=today))
+
     @property
     def available_batches(self):
-        return self.batches.filter(quantity__gt=0).order_by(
+        """Batches that can be given out, earliest expiry first. Expired ones
+        are left out: they used to be picked first, precisely because they
+        expire soonest."""
+        return self._unexpired_batches().filter(quantity__gt=0).order_by(
             models.F("expiry_date").asc(nulls_last=True),
             "created_at",
             "id",
         )
+
+    @staticmethod
+    def _take_from_batch(batch, wanted):
+        """Take up to `wanted` from one batch in a single conditional UPDATE, so
+        two people dispensing at once can't both take the same units (each used
+        to write back its own "quantity minus what I took")."""
+        available = Decimal(batch.quantity or 0)
+        used = min(available, wanted)
+        if used <= 0:
+            return Decimal("0")
+        taken = InventoryBatch.objects.filter(pk=batch.pk, quantity__gte=used).update(
+            quantity=models.F("quantity") - used, updated_at=timezone.now(),
+        )
+        if not taken:
+            # Someone else took from it first: re-read and take what's left.
+            batch.refresh_from_db(fields=["quantity"])
+            return InventoryItem._take_from_batch(batch, wanted)
+        batch.quantity = available - used
+        return used
 
     def consume_stock(self, quantity_to_deduct, preferred_batch_id=None):
         quantity_to_deduct = Decimal(quantity_to_deduct or 0)
@@ -453,44 +529,31 @@ class InventoryItem(models.Model):
         consumption_log = []
         remaining = quantity_to_deduct
 
-        # If a preferred batch is provided, try to use it first
+        # A batch picked by hand goes first, unless it has expired.
         if preferred_batch_id:
-            try:
-                batch = self.batches.get(pk=preferred_batch_id)
-                available = Decimal(batch.quantity or 0)
-                if available > 0:
-                    used = available if available <= remaining else remaining
-                    batch.quantity = available - used
-                    batch.save(update_fields=["quantity", "updated_at"])
+            batch = self._unexpired_batches().filter(pk=preferred_batch_id).first()
+            if batch is not None:
+                used = self._take_from_batch(batch, remaining)
+                if used > 0:
                     consumption_log.append({"batch": batch, "quantity": used})
                     remaining -= used
-            except InventoryBatch.DoesNotExist:
-                pass
 
         if remaining > 0:
-            positive_batches = list(
-                self.batches.filter(quantity__gt=0).exclude(id=preferred_batch_id).order_by(
-                    models.F("expiry_date").asc(nulls_last=True),
-                    "created_at",
-                    "id",
-                )
-            )
-            
-            for batch in positive_batches:
+            for batch in list(self.available_batches.exclude(id=preferred_batch_id)):
                 if remaining <= 0:
                     break
-                available = Decimal(batch.quantity or 0)
-                if available <= 0:
-                    continue
-                used = available if available <= remaining else remaining
-                batch.quantity = available - used
-                batch.save(update_fields=["quantity", "updated_at"])
-                consumption_log.append({"batch": batch, "quantity": used})
-                remaining -= used
+                used = self._take_from_batch(batch, remaining)
+                if used > 0:
+                    consumption_log.append({"batch": batch, "quantity": used})
+                    remaining -= used
 
-        self.recalculate_current_quantity()
         if remaining > 0:
-            raise ValueError(f"Not enough batch stock available for {self.name}. Remaining: {remaining}")
+            # Nothing taken stays taken: callers run inside a transaction and
+            # this error rolls the partial deductions back.
+            raise ValueError(
+                f"Not enough in-date stock of {self.name}: {remaining} short. Expired batches can't be dispensed."
+            )
+        self.recalculate_current_quantity()
         return consumption_log
 
     def save(self, *args, **kwargs):

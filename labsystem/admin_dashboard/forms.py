@@ -152,7 +152,7 @@ class HospitalForm(forms.ModelForm):
         Uses 30 days per month — standard SaaS billing approximation."""
         from datetime import date, timedelta
         months = self.cleaned_data.get("subscription_months") or 1
-        hospital.subscription_end_date = date.today() + timedelta(days=30 * months)
+        hospital.subscription_end_date = timezone.localdate() + timedelta(days=30 * months)
         hospital.is_active = True
         hospital.save(update_fields=["subscription_end_date", "is_active"])
 

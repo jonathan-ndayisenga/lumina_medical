@@ -257,6 +257,7 @@
         {% else %}
         <form method="post" class="space-y-4">
             {% csrf_token %}
+            <input type="hidden" name="payment_token" value="{{ payment_token }}">
             {% if form.non_field_errors %}
                 <div class="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{{ form.non_field_errors }}</div>
             {% endif %}

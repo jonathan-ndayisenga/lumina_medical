@@ -12,6 +12,7 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 
 import importlib.util
 import os
+import sys
 from pathlib import Path
 
 import dj_database_url
@@ -40,6 +41,39 @@ def env_list(key, default=""):
     return [item.strip() for item in str(raw).split(",") if item.strip()]
 
 
+# Which manage.py command is running, if any ("" under gunicorn).
+_COMMAND = sys.argv[1] if len(sys.argv) > 1 and Path(sys.argv[0]).name == "manage.py" else ""
+# The deploy's build step runs these without the run-time secrets or database.
+_BUILD_COMMANDS = {"collectstatic"}
+# DEBUG defaults on only for manage.py commands on your own machine (runserver,
+# test, migrate...). Requests in production are served by gunicorn, where
+# _COMMAND is "" and DEBUG defaults off.
+_LOCAL_COMMAND = bool(_COMMAND) and _COMMAND not in _BUILD_COMMANDS
+
+
+def _sqlite_config():
+    return {
+        "ENGINE": "django.db.backends.sqlite3",
+        "NAME": BASE_DIR / "db.sqlite3",
+        "OPTIONS": {
+            # Avoid "database is locked" during local dev when requests overlap.
+            "timeout": int(env("SQLITE_TIMEOUT", "30")),
+        },
+    }
+
+
+def _sqlite_fallback(reason):
+    """SQLite only for local work and the build step. In production the
+    container's disk is wiped on every deploy, so running on SQLite there
+    looked healthy while everything typed in was lost at the next deploy."""
+    if DEBUG or _COMMAND in _BUILD_COMMANDS or env_bool("DJANGO_ALLOW_SQLITE", False):
+        return _sqlite_config()
+    raise ImproperlyConfigured(
+        f"{reason} Set DATABASE_URL to the PostgreSQL database. "
+        "(For local work, run with DJANGO_DEBUG=1 or DJANGO_ALLOW_SQLITE=1.)"
+    )
+
+
 def database_config():
     database_url = env("DATABASE_URL")
     if database_url:
@@ -60,25 +94,11 @@ def database_config():
                 break
             database_url = normalized
     if not database_url:
-        return {
-            "ENGINE": "django.db.backends.sqlite3",
-            "NAME": BASE_DIR / "db.sqlite3",
-            "OPTIONS": {
-                # Avoid "database is locked" during local dev when requests overlap.
-                "timeout": int(env("SQLITE_TIMEOUT", "30")),
-            },
-        }
-    # App Platform can leave unresolved bindable placeholders like ${db.DATABASE_URL}
-    # during builds or when the backing resource is missing. Fall back to SQLite
-    # instead of crashing settings import.
+        return _sqlite_fallback("DATABASE_URL is not set.")
+    # App Platform can leave unresolved bindable placeholders like
+    # ${db.DATABASE_URL} during builds or when the backing resource is missing.
     if database_url.startswith("${") and database_url.endswith("}"):
-        return {
-            "ENGINE": "django.db.backends.sqlite3",
-            "NAME": BASE_DIR / "db.sqlite3",
-            "OPTIONS": {
-                "timeout": int(env("SQLITE_TIMEOUT", "30")),
-            },
-        }
+        return _sqlite_fallback(f"DATABASE_URL is an unresolved placeholder ({database_url}).")
     try:
         return dj_database_url.parse(
             database_url,
@@ -92,11 +112,15 @@ def database_config():
 default_dev_secret = "django-insecure-s8c3k38(z(z4z388vh@(z35foyi39o%-4_pe-@-x@d1p#7(0hz"
 SECRET_KEY = env("DJANGO_SECRET_KEY", default_dev_secret)
 
-DEBUG = env_bool("DJANGO_DEBUG", True)
+# Off unless asked for. It used to default to on, so a deploy missing
+# DJANGO_DEBUG ran with tracebacks shown to everyone, non-secure cookies, and
+# the public key above (which lets anyone forge a session).
+DEBUG = env_bool("DJANGO_DEBUG", _LOCAL_COMMAND)
 
-if not DEBUG and SECRET_KEY == default_dev_secret:
+if SECRET_KEY == default_dev_secret and not DEBUG and _COMMAND not in _BUILD_COMMANDS:
     raise ImproperlyConfigured(
-        "Set DJANGO_SECRET_KEY before running in production."
+        "Set DJANGO_SECRET_KEY before running in production "
+        "(for local work, run with DJANGO_DEBUG=1)."
     )
 
 
@@ -136,10 +160,8 @@ INSTALLED_APPS = [
 # Ternah Books is a fully separate, internally-facing module (its own login,
 # its own shell) rather than a per-hospital module gated through the normal
 # Hospital/Module subscription system. Access is restricted to users whose
-# `hospital` is this specific tenant, identified by subdomain, so that
-# is_staff (which is set broadly across every customer hospital's staff —
-# see accounts.models.User.save()) can never be mistaken for authorization
-# into Ternah's own internal books.
+# `hospital` is this specific tenant, identified by subdomain, never by
+# is_staff (kept for platform superadmins only; see accounts.models.User.save()).
 TERNAH_BOOKS_HOSPITAL_SUBDOMAIN = "ternah-books"
 
 # Each product on its own address, e.g. books.ternahworks.com and

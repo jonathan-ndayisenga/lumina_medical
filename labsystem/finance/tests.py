@@ -118,10 +118,17 @@ class JournalReferenceAndIsolationTests(TestCase):
 
         taken = self._entry()
 
-        def duplicate_reference():
+        def duplicate_reference(_instance):
             JournalEntry.objects.create(hospital=self.hospital, description="dup", reference=taken.reference)
 
         with transaction.atomic():
-            _safe_post(duplicate_reference)
+            _safe_post(duplicate_reference, taken)
             # Before the fix this query raised TransactionManagementError.
             self.assertEqual(JournalEntry.objects.filter(hospital=self.hospital).count(), 1)
+
+        # The failure is kept for finance to see and retry, not only logged.
+        from finance.models import PostingFailure
+        failure = PostingFailure.objects.get()
+        self.assertEqual(failure.source_model, "finance.journalentry")
+        self.assertEqual(failure.source_id, taken.pk)
+        self.assertIsNone(failure.resolved_at)

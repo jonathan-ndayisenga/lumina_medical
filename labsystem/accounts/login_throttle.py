@@ -1,8 +1,12 @@
 """Brute-force protection for every sign-in form (hospital, Books, /admin/).
 
-Two counters guard each attempt:
-- per username: 5 failures in 15 minutes locks that username for 15 minutes;
-- per IP address: 20 failures in 15 minutes locks that address for 15 minutes.
+Three counters guard each attempt (each a 15-minute window and lock):
+- per username from one address: 5 failures lock that username, but only for
+  that address. Anyone else can still sign in as that person, so typing
+  someone's username wrong five times no longer locks them out of work;
+- per username from anywhere: 50 failures lock the username everywhere,
+  which still stops guessing spread across many addresses;
+- per IP address: 20 failures lock that address.
 
 Locks are checked *before* the password is hashed. Password hashing is
 deliberately slow, so without this a burst of guesses would pin the droplet's
@@ -17,7 +21,7 @@ from django import forms
 from django.contrib.admin.forms import AdminAuthenticationForm
 from django.contrib.auth.forms import AuthenticationForm
 from django.db import IntegrityError, transaction
-from django.db.models import F
+from django.db.models import F, Q
 from django.utils import timezone
 
 from .models import LoginThrottle
@@ -26,7 +30,8 @@ logger = logging.getLogger("accounts.security")
 
 WINDOW = timedelta(minutes=15)
 LOCKOUT = timedelta(minutes=15)
-MAX_USER_FAILURES = 5
+MAX_USER_FAILURES = 5          # one username, from one address
+MAX_USER_FAILURES_ANYWHERE = 50  # one username, all addresses together
 MAX_IP_FAILURES = 20
 
 
@@ -39,11 +44,19 @@ def client_ip(request):
     return (request.META.get("HTTP_DO_CONNECTING_IP") or request.META.get("REMOTE_ADDR") or "").strip()[:64]
 
 
+def _user_key(username):
+    return f"user:{username.strip().lower()[:150]}"
+
+
 def throttle_keys(request, username):
     keys = []
-    if username:
-        keys.append((f"user:{username.strip().lower()[:150]}", MAX_USER_FAILURES))
     ip = client_ip(request)
+    if username:
+        if ip:
+            keys.append((f"userip:{username.strip().lower()[:150]}|{ip}", MAX_USER_FAILURES))
+            keys.append((_user_key(username), MAX_USER_FAILURES_ANYWHERE))
+        else:
+            keys.append((_user_key(username), MAX_USER_FAILURES))
     if ip:
         keys.append((f"ip:{ip}", MAX_IP_FAILURES))
     return keys
@@ -91,7 +104,9 @@ def record_success(request, username):
     # Only the username counter is cleared: signing in to one account must not
     # reset an attacker's address-wide count.
     if username:
-        LoginThrottle.objects.filter(key=f"user:{username.strip().lower()[:150]}").delete()
+        LoginThrottle.objects.filter(
+            Q(key=_user_key(username)) | Q(key__startswith=f"userip:{username.strip().lower()[:150]}|")
+        ).delete()
 
 
 class ThrottledAuthenticationMixin:

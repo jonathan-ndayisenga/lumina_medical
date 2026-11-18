@@ -63,7 +63,7 @@
                                 {% if log.details %}
                                     <details class="cursor-pointer">
                                         <summary class="text-text-main font-medium">{{ log.details|length }} fields</summary>
-                                        <pre class="text-xs overflow-auto max-h-52 bg-gray-50 mt-2 p-2 rounded border border-gray-200">{{ log.details|safe }}</pre>
+                                        <pre class="text-xs overflow-auto max-h-52 bg-gray-50 mt-2 p-2 rounded border border-gray-200">{{ log.details|pprint }}</pre>
                                     </details>
                                 {% else %}
                                     <span class="text-text-muted">-</span>

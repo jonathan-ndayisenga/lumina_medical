@@ -5,6 +5,7 @@ from django.contrib import messages
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.shortcuts import get_object_or_404, redirect, render
+from django.utils import timezone
 from django.views.decorators.clickjacking import xframe_options_sameorigin
 
 from . import documents
@@ -79,7 +80,7 @@ def _editor(request, quotation=None):
     else:
         defaults = QuotationSettings.load()
         form = QuotationForm(initial={
-            "issue_date": date.today(), "currency": "UGX", "intro": defaults.intro,
+            "issue_date": timezone.localdate(), "currency": "UGX", "intro": defaults.intro,
             "note_left_title": defaults.note_left_title, "note_left_body": defaults.note_left_body,
             "note_right_title": defaults.note_right_title, "note_right_body": defaults.note_right_body,
         })

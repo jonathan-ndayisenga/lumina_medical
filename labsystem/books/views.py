@@ -198,7 +198,7 @@ def product_list(request):
 @books_staff_required
 def client_product_add(request, client_pk):
     client = get_object_or_404(Client, pk=client_pk)
-    form = ClientProductForm(request.POST or None, client=client, initial={"start_date": date.today(), "active": True, "quantity": 1})
+    form = ClientProductForm(request.POST or None, client=client, initial={"start_date": timezone.localdate(), "active": True, "quantity": 1})
     if request.method == "POST" and form.is_valid():
         row = form.save(commit=False)
         row.client = client
@@ -215,7 +215,7 @@ def client_product_edit(request, pk):
     if request.method == "POST" and form.is_valid():
         row = form.save(commit=False)
         # Stopping records when; starting again clears it.
-        row.end_date = None if row.active else (row.end_date or date.today())
+        row.end_date = None if row.active else (row.end_date or timezone.localdate())
         row.save()
         messages.success(request, f"{row.product.name} updated for {row.client.name}.")
         return redirect("books:client_detail", pk=row.client_id)
@@ -375,7 +375,7 @@ def invoice_create(request):
     else:
         client = Client.objects.filter(pk=request.GET.get("client"), active=True).first() if request.GET.get("client", "").isdigit() else None
         lines = ClientProduct.invoice_lines_for(client) if client else []
-        form = InvoiceForm(initial={"issue_date": date.today(), "client": client})
+        form = InvoiceForm(initial={"issue_date": timezone.localdate(), "client": client})
         # One empty line is left after the client's products, for anything extra.
         formset = inlineformset_factory(Invoice, InvoiceLine, form=InvoiceLineForm, extra=len(lines) + 1, can_delete=True)(initial=lines)
         schedule_form = ScheduleForm()
@@ -513,7 +513,7 @@ def wht_credit_create(request, invoice_pk):
             except ValidationError as exc:
                 messages.error(request, "; ".join(exc.messages))
     else:
-        form = WithholdingCreditForm(invoice=invoice, initial={"date": date.today(), "amount": invoice.balance})
+        form = WithholdingCreditForm(invoice=invoice, initial={"date": timezone.localdate(), "amount": invoice.balance})
     return render(request, "books/wht_credit_form.html", {"form": form, "invoice": invoice})
 
 
@@ -545,7 +545,7 @@ def payment_create(request, client_pk=None, invoice_pk=None):
             except ValidationError as exc:
                 messages.error(request, "; ".join(exc.messages))
     else:
-        form = PaymentForm(initial={"date": date.today()}, client=client, invoice=invoice)
+        form = PaymentForm(initial={"date": timezone.localdate()}, client=client, invoice=invoice)
     return render(request, "books/payment_form.html", {"form": form, "client": client, "invoice": invoice})
 
 
@@ -641,7 +641,7 @@ def expense_create(request):
                 return redirect("books:expense_create")
             return redirect("books:expense_list")
     else:
-        form = ExpenseForm(initial={"date": date.today()})
+        form = ExpenseForm(initial={"date": timezone.localdate()})
     return render(request, "books/expense_form.html", {"form": form})
 
 

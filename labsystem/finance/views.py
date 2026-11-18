@@ -25,6 +25,26 @@ def _hospital(request):
     return getattr(request, "hospital", None) or request.user.hospital
 
 
+def _parse_amount(raw):
+    """A money amount typed in a form ("12,500"), or None if it isn't one."""
+    from decimal import InvalidOperation
+
+    try:
+        value = Decimal(str(raw or "0").replace(",", "").strip() or "0")
+    except (InvalidOperation, ValueError):
+        return None
+    return value if value.is_finite() else None
+
+
+def _parse_date(raw):
+    from datetime import date
+
+    try:
+        return date.fromisoformat(str(raw).strip())
+    except (TypeError, ValueError):
+        return None
+
+
 def _require_finance(request):
     user = request.user
     if getattr(user, "role", "") == user.ROLE_OWNER:
@@ -137,7 +157,11 @@ def dashboard(request):
         .order_by("-date", "-id")[:10]
     )
 
+    from .models import PostingFailure
+
     return render(request, "finance/dashboard.html", {
+        "posting_failures": PostingFailure.objects.filter(hospital=hospital, resolved_at__isnull=True)[:10],
+        "posting_failure_count": PostingFailure.objects.filter(hospital=hospital, resolved_at__isnull=True).count(),
         "active_nav": "finance_dashboard",
         "hospital": hospital,
         "today": today,
@@ -274,33 +298,38 @@ def journal_entry_create(request):
         credit_account_id = request.POST.get("credit_account")
         amount_raw = request.POST.get("amount", "0").replace(",", "")
 
-        try:
-            amount = Decimal(amount_raw)
-        except Exception:
-            amount = Decimal("0")
+        amount = _parse_amount(amount_raw)
+        parsed_date = _parse_date(entry_date)
 
         if not description:
             error = "Description is required."
-        elif amount <= 0:
-            error = "Amount must be greater than zero."
+        elif amount is None or amount <= 0:
+            error = "Amount must be a number greater than zero."
+        elif parsed_date is None:
+            error = "Enter the date as YYYY-MM-DD."
+        elif not (str(debit_account_id).isdigit() and str(credit_account_id).isdigit()):
+            error = "Choose both a debit and a credit account."
         elif debit_account_id == credit_account_id:
             error = "Debit and credit accounts must be different."
         else:
             try:
                 dr_acc = Account.objects.get(pk=debit_account_id, hospital=hospital)
                 cr_acc = Account.objects.get(pk=credit_account_id, hospital=hospital)
-                entry = JournalEntry.objects.create(
-                    hospital=hospital,
-                    date=entry_date,
-                    description=description,
-                    source_type=JournalEntry.SOURCE_MANUAL,
-                    posted_by=request.user,
-                )
-                JournalLine.objects.create(entry=entry, account=dr_acc, debit=amount)
-                JournalLine.objects.create(entry=entry, account=cr_acc, credit=amount)
-                return redirect("finance_journal")
             except Account.DoesNotExist:
                 error = "Invalid account selection."
+            else:
+                # Both lines or neither: a one-sided entry would unbalance the books.
+                with transaction.atomic():
+                    entry = JournalEntry.objects.create(
+                        hospital=hospital,
+                        date=parsed_date,
+                        description=description,
+                        source_type=JournalEntry.SOURCE_MANUAL,
+                        posted_by=request.user,
+                    )
+                    JournalLine.objects.create(entry=entry, account=dr_acc, debit=amount)
+                    JournalLine.objects.create(entry=entry, account=cr_acc, credit=amount)
+                return redirect("finance_journal")
 
     return render(request, "finance/journal_entry_form.html", {
         "active_nav": "finance_journal",
@@ -483,11 +512,20 @@ def debtor_collect(request, visit_id):
 
     from reception.forms import CompleteVisitForm
 
+    from reception.views import already_recorded_payment, new_payment_token, payment_token_from
+
     hospital = _hospital(request)
-    visit = get_object_or_404(
-        Visit.objects.select_related("patient").prefetch_related("visit_services__service", "payments", "queue_entries"),
-        pk=visit_id, hospital=hospital,
-    )
+    visit_qs = Visit.objects.select_related("patient").prefetch_related("visit_services__service", "payments", "queue_entries")
+    if request.method == "POST":
+        # Locked so a double-click waits, then sees the first payment.
+        visit_qs = visit_qs.select_for_update(of=("self",))
+    visit = get_object_or_404(visit_qs, pk=visit_id, hospital=hospital)
+    if request.method == "POST":
+        duplicate = already_recorded_payment(request, visit)
+        if duplicate is not None:
+            messages.info(request, "That payment was already recorded.")
+            target = reverse("finance_debtor_patient", args=[visit.patient_id])
+            return redirect(f"{target}?receipt={duplicate.pk}")
     if visit.status == Visit.STATUS_CANCELLED or visit.debt_cleared_at or visit.balance_due <= 0:
         messages.error(request, "This visit has no open debt to collect.")
         return redirect("finance_debtor_patient", patient_id=visit.patient_id)
@@ -510,6 +548,7 @@ def debtor_collect(request, visit_id):
                 mobile_account=form.cleaned_data["mobile_account"],
                 recorded_by=request.user,
                 notes=form.cleaned_data["payment_notes"] or "Debtor balance collected by finance.",
+                idempotency_key=payment_token_from(request),
             )
             visit.refresh_from_db()
             if visit.is_fully_paid:
@@ -527,6 +566,7 @@ def debtor_collect(request, visit_id):
         )
 
     return render(request, "finance/debtor_collect.html", {
+        "payment_token": new_payment_token(),
         "active_nav": "finance_debtors",
         "hospital": hospital,
         "visit": visit,
@@ -897,6 +937,7 @@ def expense_journal(request):
 
 
 @login_required
+@transaction.atomic
 def expense_delete(request, expense_id):
     guard = _require_finance(request)
     if guard:
@@ -1022,44 +1063,57 @@ def opening_balances(request):
     ).order_by("-created_at")
 
     if request.method == "POST":
-        ob_date = request.POST.get("ob_date") or timezone.localdate().isoformat()
+        ob_date_raw = request.POST.get("ob_date") or timezone.localdate().isoformat()
+        ob_date = _parse_date(ob_date_raw)
         lines_data = []
         total_dr = Decimal("0")
         total_cr = Decimal("0")
+        bad_amount = False
 
         for acc in accounts:
-            dr_raw = request.POST.get(f"dr_{acc.pk}", "").strip().replace(",", "")
-            cr_raw = request.POST.get(f"cr_{acc.pk}", "").strip().replace(",", "")
-            try:
-                dr = Decimal(dr_raw) if dr_raw else Decimal("0")
-                cr = Decimal(cr_raw) if cr_raw else Decimal("0")
-            except Exception:
-                dr = cr = Decimal("0")
+            dr_raw = request.POST.get(f"dr_{acc.pk}", "").strip()
+            cr_raw = request.POST.get(f"cr_{acc.pk}", "").strip()
+            dr = _parse_amount(dr_raw) if dr_raw else Decimal("0")
+            cr = _parse_amount(cr_raw) if cr_raw else Decimal("0")
+            if dr is None or cr is None or dr < 0 or cr < 0 or (dr > 0 and cr > 0):
+                bad_amount = True
+                continue
             if dr > 0 or cr > 0:
                 lines_data.append({"account": acc, "debit": dr, "credit": cr})
                 total_dr += dr
                 total_cr += cr
 
-        if not lines_data:
+        if existing.exists():
+            # Posting them again would double every opening figure.
+            error = (
+                f"Opening balances were already posted ({existing.first().reference}). "
+                "Correct them with a journal entry instead."
+            )
+        elif ob_date is None:
+            error = "Enter the date as YYYY-MM-DD."
+        elif bad_amount:
+            error = "Each account takes either a debit or a credit, as a number of zero or more."
+        elif not lines_data:
             error = "Enter at least one opening balance."
         elif total_dr != total_cr:
             error = f"Entry does not balance — debits UGX {total_dr:,.0f}, credits UGX {total_cr:,.0f}. They must be equal."
         else:
-            entry = JournalEntry.objects.create(
-                hospital=hospital,
-                date=ob_date,
-                description=f"Opening balances as of {ob_date}",
-                source_type=JournalEntry.SOURCE_MANUAL,
-                posted_by=request.user,
-            )
-            for ld in lines_data:
-                JournalLine.objects.create(
-                    entry=entry,
-                    account=ld["account"],
-                    debit=ld["debit"],
-                    credit=ld["credit"],
-                    description="Opening balance",
+            with transaction.atomic():
+                entry = JournalEntry.objects.create(
+                    hospital=hospital,
+                    date=ob_date,
+                    description=f"Opening balances as of {ob_date.isoformat()}",
+                    source_type=JournalEntry.SOURCE_MANUAL,
+                    posted_by=request.user,
                 )
+                for ld in lines_data:
+                    JournalLine.objects.create(
+                        entry=entry,
+                        account=ld["account"],
+                        debit=ld["debit"],
+                        credit=ld["credit"],
+                        description="Opening balance",
+                    )
             success = f"Opening balances posted — {entry.reference}"
 
     return render(request, "finance/opening_balances.html", {
@@ -1071,3 +1125,21 @@ def opening_balances(request):
         "success": success,
         "today": timezone.localdate(),
     })
+
+
+@login_required
+def retry_postings(request):
+    """Post again the automatic ledger entries that failed for this hospital."""
+    guard = _require_finance(request)
+    if guard:
+        return guard
+    if request.method != "POST":
+        return redirect("finance_dashboard")
+    from .posting import retry_posting_failures
+
+    fixed, still_failing = retry_posting_failures(hospital=_hospital(request))
+    if still_failing:
+        messages.warning(request, f"Posted {fixed}. {still_failing} still failing: check the accounts named in each error.")
+    else:
+        messages.success(request, f"All {fixed} missed ledger posting(s) are now in the books.")
+    return redirect("finance_dashboard")

@@ -6,10 +6,9 @@ from django.core.exceptions import PermissionDenied
 
 
 def _is_books_user(user) -> bool:
-    """Scoped to one specific hospital tenant, never to the raw is_staff flag —
-    that flag is set broadly across every customer hospital's staff (see
-    accounts.models.User.save()) and would otherwise leak access to Ternah's
-    own internal books to any hospital's receptionist, doctor, nurse, etc."""
+    """Scoped to one specific hospital tenant, never to the raw is_staff flag:
+    access to Ternah's own books comes from belonging to that tenant, not from
+    a flag that says nothing about which hospital someone works for."""
     if not user.is_authenticated or not user.is_active:
         return False
     hospital = getattr(user, "hospital", None)

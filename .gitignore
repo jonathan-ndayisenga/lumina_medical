@@ -24,3 +24,6 @@ labsystem/media/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Database copies and backups (they hold real patient records and password hashes)
+*.sqlite3*
